@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+ <style>
+body {
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 22px;
+  color: #333;
+}
+
+h3 {
+  color: #006bb3;
+  font-size: 18px;
+}
+h4 {
+  color: #006bb3;
+  font-size: 16px;
+}
+
+p {
+  margin: 0px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+td, th {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: center;
+}
+
+th {
+  background-color: #f2f2f2;
+}
+
+a {
+  text-decoration: none; /* 去掉下划线 */
+  color: #006bb3; /* 链接颜色 */
+}
+
+.footer {
+  font-size: 12px;
+  text-align: center;
+  color: #999;
+  margin-top: 20px;
+}
+.highlight {
+  background-color: #f8d7da; /* 浅红色 */
+}
+</style>
+</head>
+<body>
+<div class="div2">
+    <h3>离职用户存储数据移动至备份目录，具体信息如下：</h3>
+    {% if data.storage_back_up_records|length > 0 %}
+    <table>
+        <tr>
+            <th>研发用户名</th>
+            <th>离职天数</th>
+            <th>备份ID</th>
+            <th>源文件夹</th>
+            <th>备份文件夹</th>
+            <th>状态</th>
+        </tr>
+        {% for item in data.storage_back_up_records %}
+            <tr>
+                <td><a href="{{data.domain_name}}/usage/{{item.user.id}}">{{ item.user.rd_username }}</a></td>
+                <td>{{ item.user.get('quit_days')| default(0) }}</td>
+                 <td><a href="{{data.domain_name}}/storage/back-up">{{ item.get('id')| default(0) }}</a></td>
+                <td>{{ item.get('source_path')| default('') }}</td>
+                <td>{{ item.get('destination_path')| default('') }}</td>
+                <td>
+                    {% if item.get('status') == 0 %}
+                        备份失败
+                    {% elif item.get('status') == 1 %}
+                        备份中
+                    {% elif item.get('status') == 2 %}
+                        备份成功
+                    {% else %}
+                        未知状态
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+{% endif %}
+
+
+    <h3 style="color:red;">源文件夹已被移动至备份文件夹。关闭项目组离职备份功能：项目组-编辑-关闭是否启动离职备份功能。</h3>
+    <h3 style="color:red;">备份数据回滚：系统-离职备份-找到备份记录-回滚备份。</h3>
+    <h3>⚠️ 告警规则</h3>
+    <p><strong>告警维度：</strong>所有离职目录,只提醒给管理员</p>
+    <p><strong>告警频率：</strong>离职时间大于{{ data.get('quit_days',30)}}天</p>
+    <p><strong>告警阈值：</strong>每天</p>
+</div>
+
+
+<div style="margin-top:100px">
+    <hr>
+    <small>
+         <p style="margin:0px;border:0px;">
+            <i>本邮件及其附件含有{{data.company}}的<a href="{{data.domain_name}}/dashboard">Disk Monitor</a>相关保密信息，仅限于发送给上面地址中列出的个人或群组。禁止任何其他人以任何形式使用（包括但不限于全部或部分地泄露、复制、或散发）本邮件中的信息。如果您错收了本邮件，请您立即电话或邮件通知发件人并删除本邮件！</i>
+         </p>
+
+         <p style="margin:0px;border:0px;">
+            <i>This e-mail and its attachments contain confidential Disk Monitor information, which is intended only for the person or entity whose address is listed above. Any use of the
+                information contained herein in any way (including, but not limited to, total or partial disclosure,reproduction, or dissemination) by persons other than the intended recipient(s) is prohibited. If you
+                receive this e-mail in error, please notify the sender by phone or email immediately and delete it.
+            </i>
+        </p>
+    </small>
+</div>
+
+
+</body>
+</html>

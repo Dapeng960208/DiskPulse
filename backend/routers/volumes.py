@@ -1,0 +1,66 @@
+# -*- coding: utf-8 -*-
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from typing import List
+from datetime import datetime
+from schemas import volumeSchema, commonSchema
+from crud import volumeCrud
+from dependencies import get_db
+
+router = APIRouter(
+    prefix="/volumes",
+    tags=["volumes"],
+    responses={404: {"description": "Not found"}},
+)
+
+
+@router.post("/", response_model=volumeSchema.Volume)
+def create_volume(volume: volumeSchema.VolumeCreate, db: Session = Depends(get_db)):
+    return volumeCrud.create_volume(db=db, volume=volume)
+
+
+@router.get("/", response_model=commonSchema.ResponseModel)
+def read_volumes(page: int | None = 1, size: int | None = 20, nameLike: str | None = None, prop: str | None = None,
+                 order: str | None = None, storage_cluster_id: int | None = None, db: Session = Depends(get_db)):
+    volumes, total = volumeCrud.get_volumes(db=db, page=page, size=size, nameLike=nameLike, prop=prop, order=order,
+                                           storage_cluster_id=storage_cluster_id)
+    return commonSchema.ResponseModel[volumeSchema.Volume](content=volumes, total=total)
+
+
+@router.get("/{volume_id}", response_model=volumeSchema.Volume)
+def read_volume(volume_id: int, db: Session = Depends(get_db)):
+    db_volume = volumeCrud.get_volume_by_id(db, volume_id=volume_id)
+    if db_volume is None:
+        raise HTTPException(status_code=404, detail="Volume not found")
+    return db_volume
+
+
+@router.get("/{volume_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel)
+def read_volume_realtime_data(volume_id: int, start_time: datetime | None = None,
+                              end_time: datetime | None = None,
+                              indicator: str = 'used', db: Session = Depends(get_db)):
+    db_volume = volumeCrud.get_volume_by_id(db, volume_id=volume_id)
+    if db_volume is None:
+        raise HTTPException(status_code=404, detail="Qtree not found")
+    real_time_data = volumeCrud.get_volume_real_time_data_by_id(db=db, start_time=start_time,
+                                                                end_time=end_time,
+                                                                volume_id=volume_id,
+                                                                indicator=indicator)
+    return commonSchema.ResponseStorageUsageModel[volumeSchema.Volume](data=real_time_data,
+                                                                       info=db_volume)
+
+
+@router.put("/{volume_id}", response_model=volumeSchema.Volume)
+def update_volume(volume_id: int, volume: volumeSchema.VolumeUpdate, db: Session = Depends(get_db)):
+    db_volume = volumeCrud.get_volume_by_id(db, volume_id=volume_id)
+    if db_volume is None:
+        raise HTTPException(status_code=404, detail="Volume not found")
+    return volumeCrud.update_volume(db=db, volume_id=volume_id, volume=volume)
+
+
+@router.delete("/{volume_id}", response_model=volumeSchema.Volume)
+def delete_volume(volume_id: int, db: Session = Depends(get_db)):
+    db_volume = volumeCrud.get_volume_by_id(db, volume_id=volume_id)
+    if db_volume is None:
+        raise HTTPException(status_code=404, detail="Volume not found")
+    return volumeCrud.delete_volume(db=db, volume_id=volume_id)

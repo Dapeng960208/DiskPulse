@@ -1,0 +1,49 @@
+# -*- coding: utf-8 -*-
+from typing import List, Dict
+from typing import TypeVar, Generic
+
+from pydantic import BaseModel
+
+T = TypeVar('T')
+
+
+class ResponseModel(BaseModel, Generic[T]):
+    content: List[T]
+    total: int
+
+
+class ResponseResourceModel(BaseModel):
+    data: Dict | List
+    avg: Dict | None = None
+    tree: List | None = None
+
+
+class ResponseSummary(BaseModel, Generic[T]):
+    info: T | None = None
+    status_summary: Dict
+    alloc_memory_summary: List[Dict]
+    host_summary: List[Dict]
+    queue_summary: List[Dict]
+
+
+class ResponseResourceSummaryModel(BaseModel, Generic[T]):
+    info: T | None = None
+    projects_resource_summary: Dict | None = None
+    hosts_summary: Dict | None = None
+    hosts_status: Dict | None = None
+    tools_summary: List[Dict] | None = None
+    days_summary: List[List] | None = None
+    project_jobs_summary: List | None = None
+
+
+class ResponseStorageUsageModel(BaseModel, Generic[T]):
+    info: T | None = None
+    data: List = None
+
+
+class ResponseSummaryModel(BaseModel):
+    data: Dict | List
+
+
+class ResponseReport(BaseModel):
+    data: List

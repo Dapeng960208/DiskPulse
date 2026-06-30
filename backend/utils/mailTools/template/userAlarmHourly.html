@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+ <style>
+body {
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 22px;
+  color: #333;
+}
+
+h3 {
+  color: #006bb3;
+  font-size: 18px;
+}
+
+p {
+  margin: 0px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+td, th {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: center;
+}
+
+th {
+  background-color: #f2f2f2;
+}
+
+a {
+  text-decoration: none; /* 去掉下划线 */
+  color: #006bb3; /* 链接颜色 */
+}
+
+.footer {
+  font-size: 12px;
+  text-align: center;
+  color: #999;
+  margin-top: 20px;
+}
+.highlight {
+  background-color: #f8d7da; /* 浅红色 */
+}
+.highlight-red {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+.warning-box {
+    background-color: #fff3cd;
+    border-left: 5px solid #ffc107;
+    padding: 12px 16px;
+    margin: 16px 0;
+    font-size: 14px;
+    color: #856404;
+}
+</style>
+</head>
+<body>
+
+<div class="div2">
+    {% if data.has_emergency or data.has_warning %}
+    <div  style="margin-bottom: 25px;">
+        <h3 style="margin: 0 0 10px 0;">
+            {% if data.has_emergency %}
+            <span style="color: #dc3545;">🔥 紧急告警</span>
+            {% elif data.has_warning %}
+            <span style="color: #ff9800;">⚠️ 警告</span>
+            {% endif %}
+            存储使用率超过阈值
+        </h3>
+
+        {% if data.has_emergency > 0 %}
+        <div style="background-color: #f8d7da; border-left: 4px solid #dc3545;
+                padding: 10px 15px; margin-bottom: 10px;">
+            <p style="margin: 0; color: #721c24; font-weight: bold;">
+                用户存储使用率≥95%，请立即处理！
+            </p>
+        </div>
+
+       {% elif data.has_warning %}
+        <div style="background-color: #fff3cd; border-left: 4px solid #ffc107;
+                padding: 10px 15px; margin-bottom: 10px;">
+            <p style="margin: 0; color: #856404;">
+                用户存储使用率≥90%，请关注并处理。
+            </p>
+        </div>
+        {% endif %}
+
+    </div>
+    {% endif %}
+    <p>尊敬的用户：</p>
+    <p>
+        当前存储资源日趋紧张，为保障系统稳定运行及关键业务数据的高效存取，
+        <strong>请高度重视并开展存储清理工作</strong>。
+    </p>
+
+    <div class="warning-box">
+        <strong>【重要提示】</strong><br>
+        若存储使用率达到 <strong>100%</strong>，将无法写入新数据，
+        正在运行的任务可能因存储写满而中断，<strong>严重影响项目进度与数据完整性</strong>。
+    </div>
+
+    <p>如有特殊数据保留需求，请提前向 CAD 运维团队报备说明。</p>
+    <p>感谢您的理解与配合！</p>
+
+
+    <h3>研发存储使用率超过{{ data.threshold }}%，具体信息如下：</h3>
+    <table>
+        <tr>
+            <th>研发用户名</th>
+            <th>域账号</th>
+            <th>Linux 路径</th>
+            <th>限额 (GB)</th>
+            <th>使用量 (GB)</th>
+            <th>使用率 (%)</th>
+           <th>一小时平均使用率 (%)</th>
+            <th>修改时间</th>
+             <th>访问时间</th>
+        </tr>
+        {% for item in data.storage_usages %}
+            <tr class="{% if item.get('use_ratio') and item.get('use_ratio') >= 90 %}highlight{% endif %}">
+                <td><a href="{{data.domain_name}}/usage/{{item.id}}">{{ item.user.rd_username }}</a></td>
+                <td>{{ item.user.username }}</td>
+                <td>{{ item.get('linux_path','') }}</td>
+                <td>{{ item.get('limit','') }}</td>
+                <td>{{ item.get('used','') }}</td>
+                <td>{{ item.get('use_ratio','') }}</td>
+                <td>
+                    <strong>{{ item.get('avg_use_ratio', '') }}</strong>
+                    {% if item.alert_icon %}
+                    <span>{{ item.alert_icon }} {{ item.alert_level }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ item.get('modify_time','') }}</td>
+                <td>{{ item.get('access_time','') }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+    <h3 style="color:red;">请及时清理存储，以免影响业务正常运行</h3>
+    <p>
+        <strong>请用户优先清理存储空间，做好数据归档。</strong><br>
+        如因业务确需扩容，请提交：
+        <a href="{{ data.personal_expand }}">个人扩容电子流</a> 或
+        <a href="{{ data.group_expand }}">项目扩容电子流</a>。
+    </p>
+    <h3>⚠️ 告警规则</h3>
+    <p><strong>告警维度：</strong>按照用户分组，邮箱不为空的用户</p>
+    <p><strong>告警频率：</strong>80%以上一天告警一次，95%以上一小时告警一次</p>
+    <p><strong>告警阈值：</strong>一小时平均值超过{{ data.threshold }}%</p>
+    <p><strong>特别提醒：</strong>若用户持续无视存储告警，未及时清理导致作业中断，相关信息将反馈至相关项目代表和开发代表。</p>
+
+</div>
+
+<div style="margin-top:100px">
+    <hr>
+    <small>
+         <p style="margin:0px;border:0px;">
+            <i>本邮件及其附件含有{{data.company}}的<a href="{{data.domain_name}}/dashboard">Disk Monitor</a>相关保密信息，仅限于发送给上面地址中列出的个人或群组。禁止任何其他人以任何形式使用（包括但不限于全部或部分地泄露、复制、或散发）本邮件中的信息。如果您错收了本邮件，请您立即电话或邮件通知发件人并删除本邮件！</i>
+         </p>
+
+         <p style="margin:0px;border:0px;">
+            <i>This e-mail and its attachments contain confidential Disk Monitor information, which is intended only for the person or entity whose address is listed above. Any use of the
+                information contained herein in any way (including, but not limited to, total or partial disclosure,reproduction, or dissemination) by persons other than the intended recipient(s) is prohibited. If you
+                receive this e-mail in error, please notify the sender by phone or email immediately and delete it.
+            </i>
+        </p>
+    </small>
+</div>
+
+</body>
+</html>

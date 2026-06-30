@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+ <style>
+body {
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 22px;
+  color: #333;
+}
+
+h3 {
+  color: #006bb3;
+  font-size: 18px;
+}
+
+p {
+  margin: 0px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+td, th {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: center;
+}
+
+th {
+  background-color: #f2f2f2;
+}
+
+a {
+  text-decoration: none; /* 去掉下划线 */
+  color: #006bb3; /* 链接颜色 */
+}
+
+.footer {
+  font-size: 12px;
+  text-align: center;
+  color: #999;
+  margin-top: 20px;
+}
+.highlight {
+  background-color: #f8d7da; /* 浅红色 */
+}
+
+</style>
+</head>
+<body>
+<div class="div2">
+  <p>尊敬的领导、项目组代表：</p>
+    <p>  鉴于当前存储资源日趋紧张，为保障系统稳定运行及关键业务数据的高效存取，烦请各部门及项目团队高度重视并协助开展存储空间清理工作。</p>
+    <p>  请督促相关同事及时核查并清理冗余或长期未使用的大型文件，请在<a  href="{{data.domain_name}}/usage/large-files">DiskMonitor-用户-大文件</a>查询用户未清理大文件</p>
+    <p>  如有特殊保留需求，请提前向CAD运维团队报备说明。</p>
+    <p>  感谢您的理解与支持！</p>
+
+
+    <h3>⚠️ 告警规则</h3>
+  <ul>
+    <li><strong>告警频率：</strong>每月14日与28日定期发送提醒通知；</li>
+    <li><strong>告警阈值：</strong>文件最后修改时间超过30天，且单个文件大小超过10GB；</li>
+    <li><strong>扫描范围：</strong>涵盖各研发用户名下所有目录中的文件。</li>
+  </ul>
+</div>
+
+<div style="margin-top:100px">
+    <hr>
+    <small>
+         <p style="margin:0px;border:0px;">
+            <i>本邮件及其附件含有{{data.company}}的<a href="{{data.domain_name}}/dashboard">Disk Monitor</a>相关保密信息，仅限于发送给上面地址中列出的个人或群组。禁止任何其他人以任何形式使用（包括但不限于全部或部分地泄露、复制、或散发）本邮件中的信息。如果您错收了本邮件，请您立即电话或邮件通知发件人并删除本邮件！</i>
+         </p>
+
+         <p style="margin:0px;border:0px;">
+            <i>This e-mail and its attachments contain confidential Disk Monitor information, which is intended only for the person or entity whose address is listed above. Any use of the
+                information contained herein in any way (including, but not limited to, total or partial disclosure,reproduction, or dissemination) by persons other than the intended recipient(s) is prohibited. If you
+                receive this e-mail in error, please notify the sender by phone or email immediately and delete it.
+            </i>
+        </p>
+    </small>
+</div>
+
+</body>
+</html>

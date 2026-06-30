@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+ <style>
+body {
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 22px;
+  color: #333;
+}
+
+h3 {
+  color: #006bb3;
+  font-size: 18px;
+}
+h4 {
+  color: #006bb3;
+  font-size: 16px;
+}
+
+p {
+  margin: 0px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+td, th {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: center;
+}
+
+th {
+  background-color: #f2f2f2;
+}
+
+a {
+  text-decoration: none; /* 去掉下划线 */
+  color: #006bb3; /* 链接颜色 */
+}
+
+.footer {
+  font-size: 12px;
+  text-align: center;
+  color: #999;
+  margin-top: 20px;
+}
+.highlight {
+  background-color: #f8d7da; /* 浅红色 */
+}
+.critical {
+  background-color: #ff4c4c; /* 深红色 */
+  color: white;
+}
+
+.critical-high {
+        background-color: #f8d7da !important;
+        font-weight: bold;
+}
+.warning-box {
+    display: inline-block;
+    animation: blink 2s infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.7; }
+}
+</style>
+</head>
+<body>
+
+<div class="div2">
+    <!-- 高使用率警告头部 -->
+    {% if data.has_high_warning %}
+    <div class="high-warning-header" style="background-color: #fff3cd; border: 2px solid #ffc107;
+            border-radius: 5px; padding: 15px; margin-bottom: 20px;">
+        <h2 style="color: #856404; margin: 0 0 10px 0;">
+            ⚠️ 紧急：发现 {{ data.high_warning_count }} 个聚合使用率超过95%
+        </h2>
+        <p style="color: #856404; margin: 0; font-weight: bold;">
+            请管理员立即检查以下高使用率项目，督促用户清理文件或考虑扩容！
+        </p>
+    </div>
+    {% endif %}
+
+    {% if data.aggregate_usages|length > 0 %}
+        <h3>聚合超额{{ data.threshold }}%告警</h3>
+        <table>
+            <tr>
+                <th>聚合名</th>
+                <th>限额 (TB)</th>
+                <th>使用量 (TB)</th>
+                <th>使用率 (%)</th>
+                <th>近一天平均使用率 (%)</th>
+                <th>状态</th>
+            </tr>
+            {% for item in data.aggregate_usages %}
+                <tr class="{% if item.get('high_warning') %}critical-high{% elif item.get('use_ratio') and item.get('use_ratio') >= 90 %}highlight{% endif %}">
+                    <td><a href="{{data.domain_name}}/storage/aggregate/{{item.get('id')}}">{{ item.name }}</a></td>
+                    <td>{{ (item.get('limit') / 1024) | round(1) }}</td>
+                    <td>{{ (item.get('used') / 1024) | round(1) }}</td>
+                    <td>{{ item.get('use_ratio') }}</td>
+                    <td>
+                        {{ item.get('avg_use_ratio') }}
+                        {% if item.get('avg_use_ratio') >= 95 %}
+                            <span style="color: red; font-weight: bold;">⚠️</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if item.get('high_warning') %}
+                        <div class="warning-box" style="background-color: #f8d7da; color: #721c24;
+                                padding: 5px 10px; border-radius: 3px; font-weight: bold; border: 1px solid #f5c6cb;">
+                            ⚠️ 紧急处理
+                        </div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% if item.get('high_warning') and item.get('warning_message') %}
+                <tr class="warning-message-row">
+                    <td colspan="6" style="background-color: #fff3cd; padding: 10px; color: #856404; font-weight: bold;">
+                        {{ item.warning_message }}
+                    </td>
+                </tr>
+                {% endif %}
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    {% if data.volume_usages|length > 0 %}
+        <h3>Volume超额{{ data.threshold }}%告警</h3>
+        <table>
+            <tr>
+                <th>Volume</th>
+                <th>限额 (TB)</th>
+                <th>已分配 (TB)</th>
+                <th>使用量 (TB)</th>
+                <th>使用率 (%)</th>
+                <th>近一天平均使用率 (%)</th>
+                <th>状态</th>
+            </tr>
+            {% for item in data.volume_usages %}
+                <tr class="{% if item.get('high_warning') %}critical-high{% elif item.get('allocated') > item.get('limit') and item.get('use_ratio') > 95 %}critical{% elif item.get('use_ratio') >= 90 %}highlight{% endif %}">
+                    <td><a href="{{data.domain_name}}/storage/volume/{{item.get('id')}}">{{ item.name }}</a></td>
+                    <td>{{ (item.get('limit') / 1024) | round(1) }}</td>
+                    <td>
+                        {{ (item.get('allocated') / 1024) | round(1) }}
+                        {% if item.get('allocated') > item.get('limit') and item.get('use_ratio') > 95 %}
+                            <span style="color: red; font-weight: bold;">⚠️</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ (item.get('used') / 1024) | round(1) }}</td>
+                    <td>{{ item.get('use_ratio') }}</td>
+                    <td>
+                        {{ item.get('avg_use_ratio') }}
+                        {% if item.get('avg_use_ratio') >= 95 %}
+                            <span style="color: red; font-weight: bold;">⚠️</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if item.get('high_warning') %}
+                        <div class="warning-box" style="background-color: #f8d7da; color: #721c24;
+                                padding: 5px 10px; border-radius: 3px; font-weight: bold; border: 1px solid #f5c6cb;">
+                            ⚠️ 紧急检查
+                        </div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% if item.get('high_warning') and item.get('warning_message') %}
+                <tr class="warning-message-row">
+                    <td colspan="7" style="background-color: #fff3cd; padding: 10px; color: #856404; font-weight: bold;">
+                        {{ item.warning_message }}
+                    </td>
+                </tr>
+                {% endif %}
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    {% if data.qtree_usages|length > 0 %}
+        <h3>Qtree超额{{ data.threshold }}%告警</h3>
+        <table>
+            <tr>
+                <th>Qtree</th>
+                <th>限额 (TB)</th>
+                <th>使用量 (TB)</th>
+                <th>使用率 (%)</th>
+                <th>近一天平均使用率 (%)</th>
+                <th>状态</th>
+            </tr>
+            {% for item in data.qtree_usages %}
+                <tr class="{% if item.get('high_warning') %}critical-high{% elif item.get('use_ratio') >= 90 %}highlight{% endif %}">
+                    <td><a href="{{data.domain_name}}/storage/qtree/{{item.get('id')}}">{{ item.name }}</a></td>
+                    <td>{{ (item.get('limit') / 1024) | round(1) }}</td>
+                    <td>{{ (item.get('used') / 1024) | round(1) }}</td>
+                    <td>{{ item.get('use_ratio') }}</td>
+                    <td>
+                        {{ item.get('avg_use_ratio') }}
+                        {% if item.get('avg_use_ratio') >= 95 %}
+                            <span style="color: red; font-weight: bold;">⚠️</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if item.get('high_warning') %}
+                        <div class="warning-box" style="background-color: #f8d7da; color: #721c24;
+                                padding: 5px 10px; border-radius: 3px; font-weight: bold; border: 1px solid #f5c6cb;">
+                            ⚠️ 需要处理
+                        </div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% if item.get('high_warning') and item.get('warning_message') %}
+                <tr class="warning-message-row">
+                    <td colspan="6" style="background-color: #fff3cd; padding: 10px; color: #856404; font-weight: bold;">
+                        {{ item.warning_message }}
+                    </td>
+                </tr>
+                {% endif %}
+            {% endfor %}
+        </table>
+    {% endif %}
+
+    <!-- 处理建议部分 -->
+    {% if data.has_high_warning %}
+    <div class="action-required" style="background-color: #e7f3ff; border: 2px solid #007bff;
+            border-radius: 5px; padding: 20px; margin-top: 30px;">
+        <h3 style="color: #0056b3; margin-top: 0;">📋 处理建议</h3>
+        <ol style="color: #0056b3;">
+            <li><strong>对于聚合(Aggregate)：</strong>请系统管理员，评估是否需要硬件扩容，及时开展文件清理工作</li>
+            <li><strong>对于Volume：</strong>立即检查关联项目的存储使用情况，清理不必要的文件</li>
+            <li><strong>对于Qtree：</strong>立即检查关联项目的存储使用情况，清理不必要的文件</li>
+            <li><strong>通用建议：</strong>
+                <ul>
+                    <li>检查是否有大文件可以删除或归档</li>
+                    <li>清理临时文件和缓存</li>
+                    <li>考虑使用存储配额限制功能</li>
+                </ul>
+            </li>
+        </ol>
+    </div>
+    {% endif %}
+</div>
+
+<div style="margin-top:100px">
+    <hr>
+    <small>
+         <p style="margin:0px;border:0px;">
+            <i>本邮件及其附件含有{{data.company}}的<a href="{{data.domain_name}}/dashboard">Disk Monitor</a>相关保密信息，仅限于发送给上面地址中列出的个人或群组。禁止任何其他人以任何形式使用（包括但不限于全部或部分地泄露、复制、或散发）本邮件中的信息。如果您错收了本邮件，请您立即电话或邮件通知发件人并删除本邮件！</i>
+         </p>
+
+         <p style="margin:0px;border:0px;">
+            <i>This e-mail and its attachments contain confidential Disk Monitor information, which is intended only for the person or entity whose address is listed above. Any use of the
+                information contained herein in any way (including, but not limited to, total or partial disclosure,reproduction, or dissemination) by persons other than the intended recipient(s) is prohibited. If you
+                receive this e-mail in error, please notify the sender by phone or email immediately and delete it.
+            </i>
+        </p>
+    </small>
+</div>
+
+
+</body>
+</html>

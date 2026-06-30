@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+ <style>
+body {
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 22px;
+  color: #333;
+}
+
+h3 {
+  color: #006bb3;
+  font-size: 18px;
+}
+h4 {
+  color: #006bb3;
+  font-size: 16px;
+}
+
+p {
+  margin: 0px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+td, th {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: center;
+}
+
+th {
+  background-color: #f2f2f2;
+}
+
+a {
+  text-decoration: none; /* 去掉下划线 */
+  color: #006bb3; /* 链接颜色 */
+}
+
+.footer {
+  font-size: 12px;
+  text-align: center;
+  color: #999;
+  margin-top: 20px;
+}
+.highlight {
+  background-color: #f8d7da; /* 浅红色 */
+}
+</style>
+</head>
+<body>
+<div class="div2">
+    {% if data.group_usages %}
+        <h4> 项目组信息 </h4>
+        <table>
+            <tr>
+                <th>项目组</th>
+                <th>项目</th>
+                <th>Linux 路径</th>
+                <th>限额 (GB)</th>
+                <th>使用量 (GB)</th>
+                <th>使用率 (%)</th>
+            </tr>
+
+            <tr class="{% if data.group_usages.get('use_ratio',0) >= 90 %} highlight{% endif %}">
+                <td><a href="{{data.domain_name}}/usage/{{data.group_usages.id}}">{{ data.group_usages.name }}</a></td>
+                <td>{{ data.group_usages.project.name }}</td>
+                <td>{{ data.group_usages.get('linux_path','') }}</td>
+                <td>{{ data.group_usages.get('limit','') }}</td>
+                <td>{{ data.group_usages.get('used','') }}</td>
+                <td>{{ data.group_usages.get('use_ratio','') }}</td>
+            </tr>
+        </table>
+    {% endif %}
+    <h4> 自动化扩容结果反馈 </h4>
+    <table>
+        <tr>
+            <th>是否扩容成功</th>
+             <th>扩容容量(TB)</th>
+            <th>反馈结果</th>
+        </tr>
+        <tr>
+            <td>{{ data.get('flag') }}</td>
+            <td>{{ data.get('size') }}</td>
+            <td>{{ data.get('message') }}</td>
+        </tr>
+    </table>
+</div>
+
+<div style="margin-top:100px">
+    <hr>
+    <small>
+         <p style="margin:0px;border:0px;">
+            <i>本邮件及其附件含有{{data.company}}的<a href="{{data.domain_name}}/dashboard">Disk Monitor</a>相关保密信息，仅限于发送给上面地址中列出的个人或群组。禁止任何其他人以任何形式使用（包括但不限于全部或部分地泄露、复制、或散发）本邮件中的信息。如果您错收了本邮件，请您立即电话或邮件通知发件人并删除本邮件！</i>
+         </p>
+
+         <p style="margin:0px;border:0px;">
+            <i>This e-mail and its attachments contain confidential Disk Monitor information, which is intended only for the person or entity whose address is listed above. Any use of the
+                information contained herein in any way (including, but not limited to, total or partial disclosure,reproduction, or dissemination) by persons other than the intended recipient(s) is prohibited. If you
+                receive this e-mail in error, please notify the sender by phone or email immediately and delete it.
+            </i>
+        </p>
+    </small>
+</div>
+
+
+</body>
+</html>

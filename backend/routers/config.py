@@ -1,0 +1,23 @@
+# -*- coding: utf-8 -*-
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from crud import configCrud
+from dependencies import get_db
+from schemas import configSchemas
+
+router = APIRouter(
+    prefix="/config",
+    tags=["config"],
+    responses={404: {"description": "Not found"}},
+)
+
+
+@router.get("/storage", response_model=configSchemas.StorageConf)
+def read_storage_config(db: Session = Depends(get_db)):
+    return configCrud.get_storage_config(db=db)
+
+
+@router.put("/storage", response_model=configSchemas.StorageConf)
+def update_storage_config(storage_config: configSchemas.StorageConf, db: Session = Depends(get_db)):
+    return configCrud.update_storage_config(db=db, storage_config=storage_config)
