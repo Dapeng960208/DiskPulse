@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
+from typing import Any
+
 from pydantic import BaseModel, Field, computed_field
+
 from schemas import usersSchema
-from typing import List, Dict
 
 
 class ProjectBaseInfo(BaseModel):
@@ -25,26 +26,11 @@ class ProjectBaseInfo(BaseModel):
 
 class ProjectBase(ProjectBaseInfo):
     mem: float | None = None
-    master: bool = False
-    max_swp: float | None = None
-    resources: str | None = None
     run_jobs: int | None = 0
     ssusp_jobs: int | None = 0
     ususp_jobs: int | None = 0
     pend_jobs: int | None = 0
-    rsv: int | None = None
-    r15s: float | None = None
-    r1m: float | None = None
-    r15m: float | None = None
-    ut: float | None = None
-    pg: float | None = None
-    ls: float | None = None
-    it: float | None = None
-    tmp: float | None = None
-    swp: float | None = None
     slot: float | None = None
-    sut: float | None = None
-    mut: float | None = None
     mem_reserved: float | None = None
     slot_reserved: float | None = None
     recipients: str | None = None
@@ -52,12 +38,11 @@ class ProjectBase(ProjectBaseInfo):
     descriptions: str | None = None
     in_charge_user_id: int | None = None
     in_charge_user: usersSchema.OnlyUser | None = None
-    # 增加pt经理
     pt_user_id: int | None = None
     pt_user: usersSchema.OnlyUser | None = None
 
     @computed_field
-    def recipient_ids(self) -> List[int]:
+    def recipient_ids(self) -> list[int]:
         return list(map(int, self.recipients.split())) if self.recipients else []
 
 
@@ -69,7 +54,7 @@ class Project(ProjectBase):
 
 
 class ProjectUpdate(BaseModel):
-    recipient_ids: list = []
+    recipient_ids: list[int] = Field(default_factory=list)
     is_alert: bool | None = False
     descriptions: str | None = None
     name: str
@@ -81,5 +66,5 @@ class ProjectUpdate(BaseModel):
 
 
 class ProjectResource(Project):
-    project_summary: Dict = {}
-    hosts_summary: Dict = {}
+    project_summary: dict[str, Any] = Field(default_factory=dict)
+    hosts_summary: dict[str, Any] = Field(default_factory=dict)

@@ -1,0 +1,108 @@
+import axios from 'axios';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import router from '@/router';
+import { toLoginPage } from '@/utils';
+import { getToken } from '@/utils/authorization';
+
+class RequestBuilder {
+  constructor(options) {
+    this.options = options;
+  }
+
+  build() {
+    // create an axios instance
+    const service = axios.create(this.options);
+
+    // request interceptor
+    service.interceptors.request.use(
+      (config) => {
+        config.headers.Authorization = getToken();
+        return config;
+      },
+      (error) => {
+        console.error(error); // for debug
+        return Promise.reject(error);
+      },
+    );
+
+    // response interceptor
+    service.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        // 处理网络错误或无响应的情况
+        if (!error.response) {
+          console.error('Network Error:', error.message);
+          ElMessage.error('网络连接失败，请检查网络设置');
+          return Promise.reject(error);
+        }
+
+        if (!error.config.errorHandlerDisabled) {
+          const status = error.response.status;
+          const customErrorHandler = error.config.errorHandlers?.[status];
+
+          if (customErrorHandler) {
+            customErrorHandler(error);
+          } else {
+            switch (status) {
+              case 400: {
+                if (error.response.config.redirect) {
+                  router.push('/400');
+                  break;
+                }
+                ElMessage.error(error.response.data.message ||error.response.data.detail|| '请求有误');
+                break;
+              }
+              case 401: {
+                if (error.response.config.redirect) {
+                  router.push('/401');
+                  break;
+                }
+                // to re-login
+                // toLoginPage();
+                break;
+              }
+              case 403: {
+                if (error.response.config.redirect) {
+                  router.push('/403');
+                  break;
+                }
+                ElMessageBox.alert(error.response.data.message || '您当前没有权限进行此操作', '没有权限', {
+                  type: 'warning',
+                  confirmButtonText: '我知道了',
+                  showCancelButton: false,
+                });
+                break;
+              }
+              case 404: {
+                ElMessage.error(error.response.data.message || '请求资源不存在');
+                break;
+              }
+              case 500: {
+                if (error.response.config.redirect) {
+                  router.push('/500');
+                  break;
+                }
+                ElMessage.error(error.response.data.message || '服务器内部错误');
+                break;
+              }
+              default:
+                ElMessage.error('网络错误');
+                break;
+            }
+          }
+        } else {
+          console.error('Error: ', error.message);
+          // toLoginPage();
+        }
+        return Promise.reject(error);
+      },
+    );
+
+    service.all = axios.all;
+    service.spread = axios.spread;
+
+    return service;
+  }
+}
+
+export default RequestBuilder;

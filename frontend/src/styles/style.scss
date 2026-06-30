@@ -1,0 +1,225 @@
+// ============================================
+// 极简科技风 - 全局样式
+// ============================================
+
+// 引入变量和混入
+@import './variables.scss';
+@import './mixins.scss';
+
+@font-face {
+  font-family: Emoji;
+  src: local('Apple Color Emoji'), local('Segoe UI Emoji'), local('Segoe UI Symbol'), local('Noto Color Emoji');
+  unicode-range: U+1F000-1F644, U+203C-3299;
+}
+
+:root {
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  font-size: var(--font-size-base);
+
+  // 字体渲染优化
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+}
+
+// ==================== 基础重置 ====================
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family) !important;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  line-height: var(--line-height-normal);
+}
+
+*, ::before, ::after {
+  box-sizing: border-box;
+  border-width: 0;
+  border-style: solid;
+}
+
+// ==================== 基础元素 ====================
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+p {
+  margin: 0;
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: var(--transition-base);
+
+  &:hover {
+    color: var(--primary-dark);
+  }
+}
+
+// ==================== 自定义滚动条 ====================
+* {
+  @include custom-scrollbar;
+}
+
+// ==================== 动画关键帧 ====================
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+// ==================== Element Plus 主题定制 ====================
+:root {
+  // 主色调
+  --el-color-primary: var(--primary-color);
+  --el-color-primary-light-3: var(--primary-light);
+  --el-color-primary-light-5: var(--primary-lighter);
+  --el-color-primary-light-7: #DBEAFE;
+  --el-color-primary-light-8: #EBF8FF;
+  --el-color-primary-light-9: #F0F9FF;
+  --el-color-primary-dark-2: var(--primary-dark);
+
+  // 成功色
+  --el-color-success: var(--success-color);
+  --el-color-success-light-3: var(--success-light);
+  --el-color-success-light-9: var(--success-bg);
+
+  // 警告色
+  --el-color-warning: var(--warning-color);
+  --el-color-warning-light-3: var(--warning-light);
+  --el-color-warning-light-9: var(--warning-bg);
+
+  // 危险色
+  --el-color-danger: var(--danger-color);
+  --el-color-danger-light-3: var(--danger-light);
+  --el-color-danger-light-9: var(--danger-bg);
+
+  // 信息色
+  --el-color-info: var(--info-color);
+  --el-color-info-light-3: var(--info-light);
+  --el-color-info-light-9: var(--info-bg);
+
+  // 边框
+  --el-border-color: var(--border-color);
+  --el-border-color-light: var(--border-light);
+  --el-border-color-lighter: var(--border-light);
+  --el-border-color-extra-light: var(--bg-tertiary);
+
+  // 文字颜色
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-secondary);
+  --el-text-color-secondary: var(--text-tertiary);
+  --el-text-color-placeholder: var(--text-disabled);
+  --el-text-color-disabled: var(--text-disabled);
+
+  // 背景颜色
+  --el-bg-color: var(--bg-primary);
+  --el-bg-color-page: var(--bg-secondary);
+  --el-bg-color-overlay: var(--bg-primary);
+
+  // 圆角
+  --el-border-radius-base: var(--radius-md);
+  --el-border-radius-small: var(--radius-sm);
+  --el-border-radius-round: var(--radius-full);
+
+  // 阴影
+  --el-box-shadow: var(--shadow-sm);
+  --el-box-shadow-light: var(--shadow-xs);
+  --el-box-shadow-base: var(--shadow-md);
+  --el-box-shadow-dark: var(--shadow-lg);
+
+  // 字体
+  --el-font-size-extra-small: var(--font-size-xs);
+  --el-font-size-small: var(--font-size-sm);
+  --el-font-size-base: var(--font-size-base);
+  --el-font-size-medium: var(--font-size-lg);
+  --el-font-size-large: var(--font-size-xl);
+  --el-font-size-extra-large: var(--font-size-2xl);
+}
+
+// ==================== 工具类 ====================
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+
+.font-normal { font-weight: var(--font-weight-normal); }
+.font-medium { font-weight: var(--font-weight-medium); }
+.font-semibold { font-weight: var(--font-weight-semibold); }
+.font-bold { font-weight: var(--font-weight-bold); }
+
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-tertiary { color: var(--text-tertiary); }
+
+.bg-primary { background-color: var(--bg-primary); }
+.bg-secondary { background-color: var(--bg-secondary); }
+.bg-tertiary { background-color: var(--bg-tertiary); }
+
+.border-primary { border-color: var(--border-color); }
+.rounded { border-radius: var(--radius-md); }
+.rounded-sm { border-radius: var(--radius-sm); }
+.rounded-lg { border-radius: var(--radius-lg); }
+
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+
+.transition { transition: var(--transition-all); }
+
+// ==================== 响应式工具 ====================
+@include mobile {
+  .mobile-hidden { display: none !important; }
+}
+
+@include tablet {
+  .tablet-hidden { display: none !important; }
+}
+
+@include desktop {
+  .desktop-hidden { display: none !important; }
+}

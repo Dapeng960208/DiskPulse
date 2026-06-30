@@ -255,15 +255,6 @@ class StorageUsage(Base):
     storage_cluster = relationship("StorageCluster", back_populates="storage_usages", lazy=True)
 
 
-class StorageRecords(Base):
-    __tablename__ = "storage_records"
-
-    id = Column(Integer, primary_key=True, index=True)
-    linux_path = Column(String)
-    used = Column(Float, default=0)
-    updated_at = Column(DateTime, default=datetime.now)
-
-
 class StorageAlerts(Base):
     __tablename__ = "storage_alerts"
 

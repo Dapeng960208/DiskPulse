@@ -1,0 +1,211 @@
+<script setup>
+import { ref } from 'vue';
+import { ElAside, ElBreadcrumb, ElBreadcrumbItem, ElContainer, ElMain, ElScrollbar, ElSpace } from 'element-plus';
+import AppFooter from './components/AppFooter.vue';
+import AppHeader from './components/AppHeader.vue';
+import RouteMenu from './components/RouteMenu.vue';
+import { useAppSettings } from '@/stores/app-settings';
+
+defineProps({
+  showAside: {
+    type: Boolean,
+    default: true,
+  },
+});
+
+const appSettings = useAppSettings();
+const headerHeight = ref('60px');
+const footerHeight = ref('60px');
+</script>
+
+<template>
+  <ElContainer
+    class="app-layout"
+    direction="vertical">
+    <AppHeader :height="headerHeight" />
+    <ElContainer>
+      <ElAside
+        v-if="showAside"
+        class="!w-auto border-r border-[var(--el-border-color)]">
+        <ElScrollbar class="h-full">
+          <RouterView
+            v-slot="{ Component }"
+            name="aside">
+            <template v-if="Component">
+              <component :is="Component" />
+            </template>
+            <RouteMenu
+              v-else
+              width="240px" />
+          </RouterView>
+        </ElScrollbar>
+      </ElAside>
+      <ElMain class="app-main">
+        <div class="py-4">
+          <ElSpace align="center">
+            <span
+              v-if="showAside"
+              class="cursor-pointer"
+              @click="appSettings.toggleAsideCollapsed()">
+              <i
+                v-if="appSettings.asideCollapsed"
+                class="i-ri-menu-unfold-fill"></i>
+              <i
+                v-else
+                class="i-ri-menu-fold-fill"></i>
+            </span>
+            <ElBreadcrumb>
+              <ElBreadcrumbItem
+                v-for="route of $route.matched"
+                :key="route.name"
+              >
+                {{ route.meta.title }}
+              </ElBreadcrumbItem>
+            </ElBreadcrumb>
+          </ElSpace>
+        </div>
+        <ElScrollbar
+          wrap-class="px-4"
+          view-class="h-full flex flex-col">
+          <div class="flex-1 flex flex-col">
+            <RouterView v-slot="{ Component, route }">
+              <template v-if="Component">
+                <KeepAlive>
+                  <component
+                    :is="Component"
+                    v-if="route.meta.keepAlive"
+                    :key="route.name" />
+                </KeepAlive>
+                <component
+                  :is="Component"
+                  v-if="!route.meta.keepAlive" />
+              </template>
+              <div
+                v-else
+                class="flex justify-center">
+                页面正在建设中...
+              </div>
+            </RouterView>
+          </div>
+          <AppFooter
+            class="flex-shrink-0"
+            :height="footerHeight" />
+        </ElScrollbar>
+      </ElMain>
+    </ElContainer>
+  </ElContainer>
+</template>
+
+<style lang="scss" scoped>
+@import '@/styles/variables.scss';
+@import '@/styles/mixins.scss';
+
+.app-layout {
+  height: 100vh;
+  background: var(--bg-secondary);
+}
+
+.app-main {
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--spacing-lg);
+  height: calc(100vh - v-bind(headerHeight));
+  min-width: 0;
+  background: var(--bg-secondary);
+
+  // 面包屑区域
+  .py-4 {
+    padding: var(--spacing-lg) 0;
+    border-bottom: 1px solid var(--border-light);
+    background: var(--bg-primary);
+    margin: 0 calc(-1 * var(--spacing-lg));
+    padding-left: var(--spacing-lg);
+    padding-right: var(--spacing-lg);
+
+    :deep(.el-breadcrumb) {
+      .el-breadcrumb__item {
+        .el-breadcrumb__inner {
+          color: var(--text-secondary);
+          font-size: var(--font-size-sm);
+          font-weight: var(--font-weight-medium);
+        }
+
+        &:last-child .el-breadcrumb__inner {
+          color: var(--primary-color);
+        }
+      }
+
+      .el-breadcrumb__separator {
+        color: var(--text-tertiary);
+      }
+    }
+
+    // 菜单折叠按钮
+    .cursor-pointer {
+      padding: var(--spacing-sm);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      transition: var(--transition-base);
+
+      &:hover {
+        background: var(--bg-hover);
+        color: var(--primary-color);
+      }
+
+      i {
+        font-size: 18px;
+      }
+    }
+  }
+
+  .app-main__content-container {
+    min-width: 0;
+
+    .app-main__content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+  }
+}
+
+// 侧边栏样式
+:deep(.el-aside) {
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border-color);
+  transition: var(--transition-base);
+
+  .el-scrollbar {
+    .el-scrollbar__wrap {
+      @include custom-scrollbar;
+    }
+  }
+}
+
+// 主内容区滚动条
+:deep(.el-scrollbar) {
+  .el-scrollbar__wrap {
+    @include custom-scrollbar;
+  }
+}
+
+// 响应式设计
+@include mobile {
+  .app-main {
+    padding: 0 var(--spacing-md);
+
+    .py-4 {
+      margin: 0 calc(-1 * var(--spacing-md));
+      padding-left: var(--spacing-md);
+      padding-right: var(--spacing-md);
+    }
+  }
+}
+
+@include tablet {
+  .app-main {
+    padding: 0 var(--spacing-lg);
+  }
+}
+</style>

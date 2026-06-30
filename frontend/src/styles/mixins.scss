@@ -1,0 +1,182 @@
+// ============================================
+// 极简科技风 - SCSS Mixins
+// ============================================
+
+// ==================== 卡片样式 ====================
+@mixin card-base {
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-all);
+}
+
+@mixin card-hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+// ==================== 按钮样式 ====================
+@mixin button-primary {
+  background: var(--primary-gradient);
+  color: white;
+  border: none;
+  transition: var(--transition-all);
+
+  &:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+// ==================== 文字截断 ====================
+@mixin text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@mixin text-ellipsis-multiline($lines: 2) {
+  display: -webkit-box;
+  -webkit-line-clamp: $lines;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// ==================== Flex 布局 ====================
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@mixin flex-start {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+// ==================== 滚动条样式 ====================
+@mixin custom-scrollbar {
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--border-dark);
+    border-radius: var(--radius-sm);
+    transition: var(--transition-base);
+
+    &:hover {
+      background: var(--text-tertiary);
+    }
+  }
+}
+
+// ==================== 响应式断点 ====================
+@mixin mobile {
+  @media (max-width: 768px) {
+    @content;
+  }
+}
+
+@mixin tablet {
+  @media (min-width: 769px) and (max-width: 1024px) {
+    @content;
+  }
+}
+
+@mixin desktop {
+  @media (min-width: 1025px) {
+    @content;
+  }
+}
+
+// ==================== 动画 ====================
+@mixin fade-in($duration: 0.3s) {
+  animation: fadeIn $duration ease-in-out;
+}
+
+@mixin slide-up($duration: 0.3s) {
+  animation: slideUp $duration ease-out;
+}
+
+// ==================== 背景模糊 ====================
+@mixin backdrop-blur {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.8);
+
+  html.dark & {
+    background: rgba(15, 23, 42, 0.8);
+  }
+}
+
+// ==================== 渐变边框 ====================
+@mixin gradient-border($width: 1px) {
+  position: relative;
+  background: var(--bg-primary);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: $width;
+    background: var(--primary-gradient);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+}
+
+// ==================== 悬停效果 ====================
+@mixin hover-lift {
+  transition: var(--transition-all);
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+}
+
+// ==================== 输入框焦点 ====================
+@mixin input-focus {
+  &:focus,
+  &:focus-within {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    outline: none;
+  }
+}
+
+// ==================== 页面容器 ====================
+@mixin page-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  height: 100%;
+  padding: var(--spacing-lg);
+
+  @include mobile {
+    padding: var(--spacing-md);
+    gap: var(--spacing-sm);
+  }
+}

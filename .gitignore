@@ -42,3 +42,9 @@ logs/
 Thumbs.db
 .idea/
 .vscode/
+.idea/
+.codegraph/
+.codex/
+.claude/
+
+coverage/

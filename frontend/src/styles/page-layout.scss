@@ -1,0 +1,18 @@
+// ============================================
+// 查询页面统一布局样式
+// ============================================
+
+// 为所有包含 FilterForm/QueryForm 和 DataTable 的页面提供统一间距
+[class$="-list-page"],
+[class$="-page"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  height: 100%;
+  padding: var(--spacing-lg);
+
+  @media (max-width: 768px) {
+    padding: var(--spacing-md);
+    gap: var(--spacing-sm);
+  }
+}
