@@ -8,13 +8,28 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.isilonClient import IsilonClient
 
-ISILON_HOST = "10.0.20.81"
-ISILON_PORT = 8080
-ISILON_USERNAME = "jianpeng.guo"
-ISILON_PASSWORD = "n@6jTk#TNfk4Etp9"
+ISILON_HOST = os.getenv("ISILON_HOST")
+ISILON_PORT = int(os.getenv("ISILON_PORT", "8080"))
+ISILON_USERNAME = os.getenv("ISILON_USERNAME")
+ISILON_PASSWORD = os.getenv("ISILON_PASSWORD")
+
+
+def require_isilon_config():
+    missing = [
+        name
+        for name, value in {
+            "ISILON_HOST": ISILON_HOST,
+            "ISILON_USERNAME": ISILON_USERNAME,
+            "ISILON_PASSWORD": ISILON_PASSWORD,
+        }.items()
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(f"Missing Isilon environment variables: {', '.join(missing)}")
 
 
 def main():
+    require_isilon_config()
     print("连接 Isilon ...")
     client = IsilonClient(ISILON_HOST, ISILON_USERNAME, ISILON_PASSWORD, port=ISILON_PORT)
 

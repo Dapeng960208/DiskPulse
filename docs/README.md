@@ -19,6 +19,7 @@ docs/
 | 文档 | 说明 |
 | --- | --- |
 | [overview/backend-architecture.md](./overview/backend-architecture.md) | 后端架构、数据层、任务流和维护边界。 |
+| [overview/latest-features.md](./overview/latest-features.md) | 最新功能、用户可见修复和测试覆盖进展。 |
 
 ## 指南
 

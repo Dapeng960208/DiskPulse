@@ -75,11 +75,11 @@ def export_storage_usages(export_type: str = 'pdf', nameLike: str | None = None,
     if export_type == 'pdf':
         content = storageUsageCrud.export_storage_usage_to_pdf(db, nameLike, prop, order, user_id, group_id, storage_cluster_id)
         file_name = f"存储使用明细报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-        media_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        media_type = "application/pdf"
     elif export_type == 'excel':
         content = storageUsageCrud.export_storage_usage_to_excel(db, nameLike, prop, order, user_id, group_id, storage_cluster_id)
         file_name = f"存储使用明细报表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        media_type = "application/pdf"
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     else:
         raise HTTPException(status_code=400, detail=f"No export type like {export_type}")
     encoded_file_name = urllib.parse.quote(file_name)

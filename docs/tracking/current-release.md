@@ -1,5 +1,36 @@
 # 当前交付记录
 
+## 2026-06-30：后端核心接口测试与覆盖率门禁
+
+### 主题
+
+后端核心逻辑审查、核心 API 测试补齐，以及初版核心后端 `70%+` 覆盖率门禁。
+
+### 已完成
+
+- 新增 `backend/test/test_core_api.py`，使用 FastAPI `TestClient`、内存 SQLite 和最小模型种子覆盖核心接口。
+- 覆盖认证保护下的用户列表、项目详情与重复创建拒绝、存储集群 CRUD 和 realtime envelope。
+- 覆盖 aggregate、volume、qtree、group、storage usage、storage alerts、storage backup records、large files 的列表、状态校验、导出和关键失败路径。
+- 修复 `storage-usages/export/` 的 PDF/Excel `Content-Type` 互换问题。
+- 修复 `large-files/export/` 的 `.xlsx` 导出返回 `application/pdf` 的问题。
+- 新增 `.coveragerc`，按本次确认的“核心后端”口径排除外部设备客户端、QuestDB、Celery、迁移和手动脚本。
+- 在 `backend/requirements.txt` 中补充 `coverage==7.13.0`，并已安装到本地 `.venv` 进行验证。
+- 将 NetApp 和 Isilon 手动验证脚本改为读取环境变量，避免真实设备地址、账号和密码进入代码库，并避免自动测试误触外部设备。
+- 新增 `docs/overview/latest-features.md` 并更新 `docs/README.md` 索引。
+
+### 验证状态
+
+- `.\.venv\Scripts\python.exe -m unittest backend.test.test_core_api`：通过。
+- `.\.venv\Scripts\python.exe -m unittest discover -s backend\test -p "test_*.py"`：通过，14 个测试。
+- `.\.venv\Scripts\python.exe -m coverage run -m unittest discover -s backend\test -p "test_*.py"; .\.venv\Scripts\python.exe -m coverage report`：通过，核心后端覆盖率 `73%`。
+
+### 风险与后续
+
+- 覆盖率口径为初版核心后端 `70%+`，未把外部设备客户端、QuestDB、Celery worker、迁移脚本和手动探测脚本纳入门禁。
+- 部分 CRUD 和 router 仍输出 Pydantic v2 `dict()` 弃用告警，当前不影响测试通过，后续可单独改为 `model_dump()`。
+- `docs/standards/domain-terminology.md` 仍缺失，属于既有规范引用缺口。
+- 当前工作区仍存在与本任务无关的未跟踪前端测试文件，本次未纳入也未回退。
+
 ## 2026-06-30：前端清理、结构整理与测试补齐
 
 ### 主题

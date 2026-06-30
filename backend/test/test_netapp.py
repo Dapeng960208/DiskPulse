@@ -3,21 +3,40 @@
 """
 NetApp 接口测试脚本
 """
+import os
+
 from utils.netAppClient import NetAppClient
 
-# 配置连接信息（请填入实际值）
-NETAPP_HOST = "10.8.20.92"
-NETAPP_USERNAME = "jianpeng.guo"
-NETAPP_PASSWORD = "n@6jTk#TNfk4Etp9"
+# 手动集成验证连接信息从环境变量读取，避免真实凭据进入代码库。
+NETAPP_HOST = os.getenv("NETAPP_HOST")
+NETAPP_USERNAME = os.getenv("NETAPP_USERNAME")
+NETAPP_PASSWORD = os.getenv("NETAPP_PASSWORD")
 
-def test_netapp_connection():
+
+def require_netapp_config():
+    missing = [
+        name
+        for name, value in {
+            "NETAPP_HOST": NETAPP_HOST,
+            "NETAPP_USERNAME": NETAPP_USERNAME,
+            "NETAPP_PASSWORD": NETAPP_PASSWORD,
+        }.items()
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(f"Missing NetApp environment variables: {', '.join(missing)}")
+
+
+def connect_netapp():
     """测试 NetApp 连接"""
+    require_netapp_config()
     print("正在连接 NetApp...")
     client = NetAppClient(NETAPP_HOST, NETAPP_USERNAME, NETAPP_PASSWORD)
     print("连接成功！\n")
     return client
 
-def test_get_volumes(client):
+
+def show_volumes(client):
     """测试获取卷信息"""
     print("=" * 50)
     print("测试：获取卷信息")
@@ -29,7 +48,7 @@ def test_get_volumes(client):
     print()
     return volumes
 
-def test_get_qtrees(client):
+def show_qtrees(client):
     """测试获取 qtree 信息"""
     print("=" * 50)
     print("测试：获取 qtree 信息")
@@ -41,7 +60,7 @@ def test_get_qtrees(client):
     print()
     return qtrees
 
-def test_get_aggregates(client):
+def show_aggregates(client):
     """测试获取聚合信息"""
     print("=" * 50)
     print("测试：获取聚合信息")
@@ -53,7 +72,7 @@ def test_get_aggregates(client):
     print()
     return aggregates
 
-def test_get_quota(client):
+def show_quota(client):
     """测试获取quota信息"""
     print("=" * 50)
     print("测试：获取quota信息")
@@ -68,13 +87,13 @@ def test_get_quota(client):
 if __name__ == "__main__":
     try:
         # 连接测试
-        client = test_netapp_connection()
+        client = connect_netapp()
         
         # 测试各个接口
-        test_get_volumes(client)
-        test_get_qtrees(client)
-        test_get_aggregates(client)
-        test_get_quota(client=client)
+        show_volumes(client)
+        show_qtrees(client)
+        show_aggregates(client)
+        show_quota(client=client)
         
         print("=" * 50)
         print("所有测试完成！")

@@ -1,0 +1,28 @@
+[run]
+source = backend
+omit =
+    backend/test/*
+    backend/migrate/*
+    backend/celery_tasks/*
+    backend/celery_worker.py
+    backend/main.py
+    backend/questdb/*
+    backend/crud/questDbCrud.py
+    backend/utils/common.py
+    backend/utils/iam/*
+    backend/utils/isilonClient.py
+    backend/utils/netAppClient.py
+    backend/utils/sshClient.py
+    backend/utils/pdf/*
+    backend/utils/mailTools/*
+    backend/utils/plot.py
+    backend/scripts/*
+    backend/alembic.ini
+
+[report]
+fail_under = 70
+show_missing = True
+skip_empty = True
+exclude_lines =
+    if __name__ == .__main__.:
+    pragma: no cover

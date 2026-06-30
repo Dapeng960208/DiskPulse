@@ -45,7 +45,7 @@ def export_large_files(nameLike: str | None = None, user_id: int | str = Query(N
 
     content = largeFilesCrud.export_large_files(db, nameLike,user_id, group_id)
     file_name = f"大文件_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    media_type = "application/pdf"
+    media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     encoded_file_name = urllib.parse.quote(file_name)
     headers['filename'] = encoded_file_name
     return StreamingResponse(content, media_type=media_type, headers=headers)
