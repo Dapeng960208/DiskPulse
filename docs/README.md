@@ -33,6 +33,7 @@ docs/
 | --- | --- |
 | LDAP 认证 | [features/authentication/backend.md](./features/authentication/backend.md) |
 | 存储集群 | [features/storage-cluster/overview.md](./features/storage-cluster/overview.md) |
+| 存储配额软限额 | [features/storage-quota/overview.md](./features/storage-quota/overview.md) |
 
 ## 规范
 

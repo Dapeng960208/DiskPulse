@@ -90,15 +90,17 @@ def get_export_data(db: Session, nameLike: str | None = None, prop: str | None =
                                               group_id=group_id, storage_cluster_id=storage_cluster_id)
     storage_usages = [storageUsageSchema.StorageUsageExport(linux_path=storage_usage_db.linux_path,
                                                             limit=storage_usage_db.limit,
+                                                            soft_limit=storage_usage_db.soft_limit,
                                                             used=storage_usage_db.used,
                                                             use_ratio=storage_usage_db.use_ratio,
+                                                            soft_use_ratio=storage_usage_db.soft_use_ratio,
                                                             file_used=storage_usage_db.file_used,
                                                             access_time=storage_usage_db.access_time,
                                                             modify_time=storage_usage_db.modify_time) for
                       storage_usage_db in storage_usage_dbs]
     df_storage_usage = pd.DataFrame([storage_usage.dict() for storage_usage in storage_usages])
-    storage_usage_column_headers = {'linux_path': '路径', 'limit': "限额",
-                                    'used': '已使用', 'use_ratio': '使用率',
+    storage_usage_column_headers = {'linux_path': '路径', 'limit': "硬限额", 'soft_limit': "软限额",
+                                    'used': '已使用', 'use_ratio': '硬使用率', 'soft_use_ratio': '软使用率',
                                     'file_used': '文件数', "access_time": "访问时间", "modify_time": "修改时间"}
     df_storage_usage.rename(columns=storage_usage_column_headers, inplace=True)
     return df_storage_usage
@@ -125,7 +127,7 @@ def export_storage_usage_to_pdf(db: Session, nameLike: str | None = None, prop: 
     pdf_generator = PDFReportGenerator(company_name=company_name, logo_path=logo_path, title='存储使用明细报告',
                                        app='Disk Monitor')
     pdf_generator.create_cover_page()
-    resource_quota_col_width_ratios = [0.3, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2]
+    resource_quota_col_width_ratios = [0.24, 0.09, 0.09, 0.09, 0.09, 0.09, 0.11, 0.1, 0.1]
     pdf_generator.add_table([df_storage_usage.columns.tolist()] + df_storage_usage.values.tolist(), '存储使用明细',
                             hint='配额和使用额度单位：GB',
                             col_width_ratios=resource_quota_col_width_ratios)

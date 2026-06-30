@@ -103,6 +103,8 @@ class CoreApiTest(unittest.TestCase):
                 limit=100,
                 used=40,
                 use_ratio=40,
+                soft_limit=80,
+                soft_use_ratio=50,
             )
             cluster = models.StorageCluster(
                 id=1,
@@ -137,6 +139,8 @@ class CoreApiTest(unittest.TestCase):
                 limit=400,
                 used=100,
                 use_ratio=25,
+                soft_limit=320,
+                soft_use_ratio=31.25,
                 allocated=200,
                 updated_at=datetime.fromisoformat(NOW),
             )
@@ -148,6 +152,8 @@ class CoreApiTest(unittest.TestCase):
                 limit=300,
                 used=75,
                 use_ratio=25,
+                soft_limit=240,
+                soft_use_ratio=31.25,
                 style="unix",
                 oplocks="enabled",
                 status="normal",
@@ -165,6 +171,8 @@ class CoreApiTest(unittest.TestCase):
                 limit=300,
                 used=75,
                 use_ratio=25,
+                soft_limit=240,
+                soft_use_ratio=31.25,
                 back_up_enabled=True,
                 updated_at=datetime.fromisoformat(NOW),
             )
@@ -177,6 +185,8 @@ class CoreApiTest(unittest.TestCase):
                 limit=100,
                 used=20,
                 use_ratio=20,
+                soft_limit=80,
+                soft_use_ratio=25,
                 file_used=10,
                 file_limit=1000,
                 updated_at=datetime.fromisoformat(NOW),
@@ -311,6 +321,27 @@ class CoreApiTest(unittest.TestCase):
             self.assertEqual(response.json()["total"], 1, path)
             self.assertEqual(response.json()["content"][0]["name"], expected_name, path)
 
+        volume_response = self.client.get(
+            "/storage-pulse/api/volumes/",
+            params={"prop": "soft_limit", "order": "descending", "page": 1, "size": 10},
+        )
+        self.assertEqual(volume_response.status_code, 200)
+        self.assertEqual(volume_response.json()["content"][0]["soft_limit"], 320)
+
+        qtree_response = self.client.get(
+            "/storage-pulse/api/qtrees/",
+            params={"prop": "soft_use_ratio", "order": "descending", "page": 1, "size": 10},
+        )
+        self.assertEqual(qtree_response.status_code, 200)
+        self.assertEqual(qtree_response.json()["content"][0]["soft_use_ratio"], 31.25)
+
+        group_response = self.client.get(
+            "/storage-pulse/api/groups/",
+            params={"prop": "soft_limit", "order": "descending", "page": 1, "size": 10},
+        )
+        self.assertEqual(group_response.status_code, 200)
+        self.assertEqual(group_response.json()["content"][0]["soft_limit"], 240)
+
     def test_storage_usage_create_list_update_backup_and_export_contracts(self):
         with patch("routers.storage_usage.create_user_folder_by_storage_usage_id", return_value=None):
             create_response = self.client.post(
@@ -336,6 +367,8 @@ class CoreApiTest(unittest.TestCase):
                 "limit": 120,
                 "used": 30,
                 "use_ratio": 25,
+                "soft_limit": 90,
+                "soft_use_ratio": 33.33,
                 "file_used": 11,
                 "file_limit": 1000,
                 "updated_at": NOW,
@@ -344,6 +377,14 @@ class CoreApiTest(unittest.TestCase):
         )
         self.assertEqual(update_response.status_code, 200)
         self.assertEqual(update_response.json()["limit"], 120)
+        self.assertEqual(update_response.json()["soft_limit"], 90)
+
+        soft_sort_response = self.client.get(
+            "/storage-pulse/api/storage-usages/",
+            params={"prop": "soft_use_ratio", "order": "descending", "page": 1, "size": 10},
+        )
+        self.assertEqual(soft_sort_response.status_code, 200)
+        self.assertEqual(soft_sort_response.json()["content"][0]["soft_use_ratio"], 33.33)
 
         with patch("routers.storage_usage.back_up_user_storage_usage_by_storage_usage_id", return_value=None):
             backup_response = self.client.post(

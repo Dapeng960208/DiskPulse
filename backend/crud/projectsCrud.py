@@ -141,30 +141,36 @@ def get_project_tree_summary(db: Session):
             storages = [
                 {
                     "value": convert_GB_to_TB(storage_db.limit),
+                    "soft_limit": convert_GB_to_TB(storage_db.soft_limit),
                     "used": convert_GB_to_TB(storage_db.used),
                     "name": storage_db.user.rd_username if storage_db.user else "",
                     "path": storage_db.linux_path,
                     "used_ratio": storage_db.use_ratio,
+                    "soft_used_ratio": storage_db.soft_use_ratio,
                 }
                 for storage_db in storage_dbs
             ]
             groups.append(
                 {
                     "value": convert_GB_to_TB(group_db.limit),
+                    "soft_limit": convert_GB_to_TB(group_db.soft_limit),
                     "used": convert_GB_to_TB(group_db.used),
                     "name": group_db.name,
                     "path": group_db.linux_path,
                     "used_ratio": group_db.use_ratio,
+                    "soft_used_ratio": group_db.soft_use_ratio,
                     "children": storages,
                 }
             )
         result.append(
             {
                 "value": convert_GB_to_TB(project_db.limit),
+                "soft_limit": convert_GB_to_TB(project_db.soft_limit),
                 "used": convert_GB_to_TB(project_db.used),
                 "name": project_db.name,
                 "path": project_db.name,
                 "used_ratio": project_db.use_ratio,
+                "soft_used_ratio": project_db.soft_use_ratio,
                 "children": groups,
             }
         )
@@ -179,22 +185,26 @@ def get_project_tree_summary_by_id(db: Session, project_id: int, value_type: str
         storages = [
             {
                 "limit": convert_GB_to_TB(storage_db.limit),
+                "soft_limit": convert_GB_to_TB(storage_db.soft_limit),
                 "used": convert_GB_to_TB(storage_db.used),
                 "value": convert_GB_to_TB(getattr(storage_db, value_type, 0)),
                 "name": storage_db.user.rd_username if storage_db.user else "",
                 "path": storage_db.linux_path,
                 "used_ratio": storage_db.use_ratio,
+                "soft_used_ratio": storage_db.soft_use_ratio,
             }
             for storage_db in storage_dbs
         ]
         groups.append(
             {
                 "limit": convert_GB_to_TB(group_db.limit),
+                "soft_limit": convert_GB_to_TB(group_db.soft_limit),
                 "used": convert_GB_to_TB(group_db.used),
                 "value": convert_GB_to_TB(getattr(group_db, value_type, 0)),
                 "name": group_db.name,
                 "path": group_db.linux_path,
                 "used_ratio": group_db.use_ratio,
+                "soft_used_ratio": group_db.soft_use_ratio,
                 "children": storages,
             }
         )

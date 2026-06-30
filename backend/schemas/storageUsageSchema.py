@@ -9,8 +9,10 @@ class StorageUsageBase(BaseModel):
     group_id: int
     linux_path: str
     limit: float | None = None
+    soft_limit: float | None = None
     used: float | None = None
     use_ratio: float | None = None
+    soft_use_ratio: float | None = None
     file_used: float | None = None
     file_limit: float | None = None
     updated_at: datetime
@@ -68,8 +70,10 @@ class StorageUsageExpand(BaseModel):
 class StorageUsageExport(BaseModel):
     linux_path: str
     limit: float | None = 0
+    soft_limit: float | None = None
     used: float | None = 0
     use_ratio: float | None = 0.0
+    soft_use_ratio: float | None = None
     file_used: float | None = 0
     access_time: datetime | str | None = ''
     modify_time: datetime | str | None = ''

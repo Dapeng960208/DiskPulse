@@ -24,6 +24,19 @@ def _bytes_to_gb(value: Any) -> Optional[float]:
         return None
 
 
+def _quota_limit_to_gb(value: Any) -> Optional[float]:
+    """Quota limit 为 0、-1 或缺失时视为未设置。"""
+    if value in (None, 0, -1):
+        return None
+    return _bytes_to_gb(value)
+
+
+def _calculate_use_ratio(used: Optional[float], limit: Optional[float]) -> Optional[float]:
+    if used is None or not limit or limit <= 0:
+        return None
+    return round(used / limit * 100, 2)
+
+
 class StoragePulseMonitor:
     """
     统一的存储监控类，支持 NetApp ONTAP 和 Isilon OneFS。
@@ -250,8 +263,10 @@ class StoragePulseMonitor:
                 name='null',
                 volume_id=vol.id,
                 limit=vol.limit,
+                soft_limit=vol.soft_limit,
                 used=vol.used,
                 use_ratio=vol.use_ratio,
+                soft_use_ratio=vol.soft_use_ratio,
                 style='',
                 oplocks='',
                 status='',
@@ -304,8 +319,10 @@ class StoragePulseMonitor:
                         name='null',
                         volume_id=vol.id,
                         limit=vol.limit,
+                        soft_limit=vol.soft_limit,
                         used=vol.used,
                         use_ratio=vol.use_ratio,
+                        soft_use_ratio=vol.soft_use_ratio,
                         style='',
                         oplocks='',
                         status='',
@@ -376,11 +393,15 @@ class StoragePulseMonitor:
                     if qtree_db:
                         space = rec.get('space', {})
                         used = _bytes_to_gb(space.get('used'))
-                        limit = _bytes_to_gb(space.get('hard_limit')) if space.get('hard_limit', -1) != -1 else None
-                        use_ratio = round(used / limit * 100, 2) if limit and used is not None else None
+                        limit = _quota_limit_to_gb(space.get('hard_limit'))
+                        soft_limit = _quota_limit_to_gb(space.get('soft_limit'))
+                        use_ratio = _calculate_use_ratio(used, limit)
+                        soft_use_ratio = _calculate_use_ratio(used, soft_limit)
                         qtree_db.limit = limit
+                        qtree_db.soft_limit = soft_limit
                         qtree_db.used = used
                         qtree_db.use_ratio = use_ratio
+                        qtree_db.soft_use_ratio = soft_use_ratio
                         self.db.commit()
             
             self.logger.info(f"{self._log_prefix} Fetched {len(result)} user quotas")
@@ -404,8 +425,10 @@ class StoragePulseMonitor:
         
         for qtree_db, volume_db in null_qtrees:
             qtree_db.limit = volume_db.limit
+            qtree_db.soft_limit = volume_db.soft_limit
             qtree_db.used = volume_db.used
             qtree_db.use_ratio = volume_db.use_ratio
+            qtree_db.soft_use_ratio = volume_db.soft_use_ratio
             qtree_db.updated_at = datetime.now()
         
         self.db.commit()
@@ -443,8 +466,10 @@ class StoragePulseMonitor:
             Group.storage_cluster_id == self.storage_cluster_id).all()
         for group_db in case0_dbs:
             group_db.limit = 0
+            group_db.soft_limit = None
             group_db.used = 0
             group_db.use_ratio = 0
+            group_db.soft_use_ratio = None
             self.db.commit()
 
         # case1: 与 volume 直接关联（qtree name == 'null'）
@@ -460,8 +485,10 @@ class StoragePulseMonitor:
             ).all()
         for group_db, qtree_db, volume_db in case1_dbs:
             group_db.limit = volume_db.limit
+            group_db.soft_limit = volume_db.soft_limit
             group_db.used = volume_db.used
             group_db.use_ratio = volume_db.use_ratio
+            group_db.soft_use_ratio = volume_db.soft_use_ratio
             self.db.commit()
 
         # case2: 与 qtree 直接关联
@@ -476,13 +503,15 @@ class StoragePulseMonitor:
             ).all()
         for group_db, qtree_db in case2_dbs:
             group_db.limit = qtree_db.limit
+            group_db.soft_limit = qtree_db.soft_limit
             group_db.used = qtree_db.used
             group_db.use_ratio = qtree_db.use_ratio
+            group_db.soft_use_ratio = qtree_db.soft_use_ratio
             self.db.commit()
 
         # case3: 分组聚合计算
         case3_dbs = self.db.query(
-            Group.id, func.sum(StorageUsage.used), func.sum(StorageUsage.limit)
+            Group.id, func.sum(StorageUsage.used), func.sum(StorageUsage.limit), func.sum(StorageUsage.soft_limit)
         ).join(Group, StorageUsage.group_id == Group.id)\
             .filter(
                 Group.associate_multiple_groups.is_(True),
@@ -490,15 +519,18 @@ class StoragePulseMonitor:
                 Group.qtree_id.isnot(None),
                 Group.storage_cluster_id == self.storage_cluster_id
             ).group_by(Group.id).all()
-        for group_id, sum_used, sum_limit in case3_dbs:
+        for group_id, sum_used, sum_limit, sum_soft_limit in case3_dbs:
             group_db = self.db.query(Group).filter_by(id=group_id).first()
             sum_used = sum_used if sum_used else 0
             sum_limit = sum_limit if sum_limit else 0
+            soft_limit = sum_soft_limit if sum_soft_limit else None
             group_db.used = sum_used
             limit = group_db.limit if group_db.limit is not None else sum_limit
             use_ratio = round((sum_used * 100) / limit, 2) if limit > 0 else 0
             group_db.limit = limit
+            group_db.soft_limit = soft_limit
             group_db.use_ratio = use_ratio
+            group_db.soft_use_ratio = _calculate_use_ratio(sum_used, soft_limit)
             group_db.updated_at = datetime.now()
             self.db.commit()
 
@@ -511,12 +543,13 @@ class StoragePulseMonitor:
             Group.storage_cluster_id == self.storage_cluster_id).all()
         for group_db in group_dbs:
             sum_result = self.db.query(
-                func.sum(StorageUsage.used), func.sum(StorageUsage.limit)
+                func.sum(StorageUsage.used), func.sum(StorageUsage.limit), func.sum(StorageUsage.soft_limit)
             ).filter(StorageUsage.group_id == group_db.id,
                      StorageUsage.storage_cluster_id == self.storage_cluster_id).first()
             
             sum_used = sum_result[0] if sum_result[0] else 0
             sum_limit = sum_result[1] if sum_result[1] else 0
+            sum_soft_limit = sum_result[2] if sum_result[2] else None
             
 
 
@@ -525,7 +558,9 @@ class StoragePulseMonitor:
 
             group_db.used = sum_used
             group_db.limit = limit
+            group_db.soft_limit = sum_soft_limit
             group_db.use_ratio = use_ratio
+            group_db.soft_use_ratio = _calculate_use_ratio(sum_used, sum_soft_limit)
             group_db.updated_at = datetime.now()
             self.db.commit()
         
@@ -543,13 +578,15 @@ class StoragePulseMonitor:
                 group_filter.append(Group.qtree_id.isnot(None))
 
             project_store_dbs = self.db.query(
-                Group.project_id, func.sum(Group.used), func.sum(Group.limit)
+                Group.project_id, func.sum(Group.used), func.sum(Group.limit), func.sum(Group.soft_limit)
             ).filter(*group_filter).group_by(Group.project_id).all()
 
-            for project_id, used, limit in project_store_dbs:
+            for project_id, used, limit, soft_limit in project_store_dbs:
                 use_ratio = round((used * 100 / limit), 2) if limit else None
+                soft_use_ratio = _calculate_use_ratio(used, soft_limit)
                 self.db.query(Project).filter_by(id=project_id).update(
-                    {'limit': limit, 'used': used, 'use_ratio': use_ratio,
+                    {'limit': limit, 'soft_limit': soft_limit, 'used': used,
+                     'use_ratio': use_ratio, 'soft_use_ratio': soft_use_ratio,
                      'updated_at': datetime.now()}
                 )
             self.db.commit()
@@ -607,6 +644,8 @@ class StoragePulseMonitor:
             elif table_name != 'storage_usages':
                 data = [
                     {'used': item.used, 'used_ratio': item.use_ratio,
+                     'soft_limit': getattr(item, 'soft_limit', None),
+                     'soft_use_ratio': getattr(item, 'soft_use_ratio', None),
                      f'{table_name}_id': str(item.id), 'updated_at': datetime.now()}
                     for item in items if item.used
                 ]
@@ -614,6 +653,7 @@ class StoragePulseMonitor:
             else:
                 data = [
                     {'used': item.used, 'used_ratio': item.use_ratio, 'file_used': item.file_used,
+                     'soft_limit': item.soft_limit, 'soft_use_ratio': item.soft_use_ratio,
                      f'{table_name[:-1]}_id': str(item.id), 'updated_at': item.updated_at,
                      'user_id': str(item.user_id)}
                     for item in items if item.used
@@ -694,8 +734,10 @@ class StoragePulseMonitor:
                 return None
             rd_username = record.get('rd_username', '').strip()
             limit = record.get('limit')
+            soft_limit = record.get('soft_limit')
             used = record.get('used')
             use_ratio = record.get('use_ratio')
+            soft_use_ratio = record.get('soft_use_ratio')
             qtree_id = qtree_db.id
             # 判断用户名是否为数字 为数字证明离职
             if rd_username.isdigit():
@@ -734,8 +776,8 @@ class StoragePulseMonitor:
                 linux_path = f"{group_db.linux_path}/{rd_username}".replace('//', '/')
                 return storageUsageSchema.StorageUsageBase(
                     storage_cluster_id=self.storage_cluster_id,
-                    user_id=user_id, group_id=group_id, limit=limit, used=used,
-                    use_ratio=use_ratio, file_used=0, linux_path=linux_path,
+                    user_id=user_id, group_id=group_id, limit=limit, soft_limit=soft_limit, used=used,
+                    use_ratio=use_ratio, soft_use_ratio=soft_use_ratio, file_used=0, linux_path=linux_path,
                     file_limit=0, updated_at=datetime.now()
                 )
         except Exception as e:
@@ -766,9 +808,10 @@ class StoragePulseMonitor:
             space = record.get('space', {})
             used_info = space.get('used', {})
             used = _bytes_to_gb(used_info.get('total')) or 0
-            hard_limit = space.get('hard_limit')
-            limit = _bytes_to_gb(hard_limit) if hard_limit not in (None, -1) else None
-            use_ratio = round(used / limit * 100, 2) if limit and limit > 0 else None
+            limit = _quota_limit_to_gb(space.get('hard_limit'))
+            soft_limit = _quota_limit_to_gb(space.get('soft_limit'))
+            use_ratio = _calculate_use_ratio(used, limit)
+            soft_use_ratio = _calculate_use_ratio(used, soft_limit)
 
             files_rec = record.get('files', {})
             file_used_raw = files_rec.get('used', {})
@@ -812,8 +855,8 @@ class StoragePulseMonitor:
                 linux_path = f"{group_db.linux_path}/{rd_username}".replace('//', '/')
                 return storageUsageSchema.StorageUsageBase(
                     storage_cluster_id=self.storage_cluster_id,
-                    user_id=user_id, group_id=group_id, limit=limit, used=used,
-                    use_ratio=use_ratio, file_used=file_used, linux_path=linux_path,
+                    user_id=user_id, group_id=group_id, limit=limit, soft_limit=soft_limit, used=used,
+                    use_ratio=use_ratio, soft_use_ratio=soft_use_ratio, file_used=file_used, linux_path=linux_path,
                     file_limit=file_limit, updated_at=datetime.now()
                 )
         except Exception as e:
@@ -842,13 +885,12 @@ class StoragePulseMonitor:
                 linked = quota.get('linked',False)
                 usage = quota.get('usage', {})
                 hard_bytes = thresholds.get('hard')
+                soft_bytes = thresholds.get('soft')
                 used_bytes = usage.get('logical')
 
                 used = _bytes_to_gb(used_bytes)
                 hard_limit = _bytes_to_gb(hard_bytes)
-
-                soft_limit =  thresholds.get('soft')
-                soft_limit = _bytes_to_gb(soft_limit) if soft_limit not in (None, 0) else None
+                soft_limit = _quota_limit_to_gb(soft_bytes)
 
                 if quota_type == 'default-user':
                     default_user_quotas_map[path] = {
@@ -877,14 +919,19 @@ class StoragePulseMonitor:
                 path  = quota.get('path')
                 linked = quota.get('linked')
                 hard_limit = quota.get('hard_limit')
+                soft_limit = quota.get('soft_limit')
                 used = quota.get('used')
                 if linked is True:
                     limit = default_user_quotas_map.get(path,{}).get('hard_limit')
+                    soft_limit = default_user_quotas_map.get(path,{}).get('soft_limit')
                 else:
                     limit = hard_limit
-                use_ratio = round(used / limit * 100, 2) if limit and used is not None else None
+                use_ratio = _calculate_use_ratio(used, limit)
+                soft_use_ratio = _calculate_use_ratio(used, soft_limit)
                 quota['use_ratio'] = use_ratio
                 quota['limit'] = limit
+                quota['soft_limit'] = soft_limit
+                quota['soft_use_ratio'] = soft_use_ratio
                 item = self._process_quota_user_isilon(
                     quota, qtree_map, group_map,
                     users_map, users_uid_map, storage_usage_map
@@ -896,9 +943,11 @@ class StoragePulseMonitor:
             for group in group_quotas:
                 path = group.get('path')
                 hard_limit = group.get('hard_limit')
+                soft_limit = group.get('soft_limit')
                 used = group.get('used')
                 limit = hard_limit
-                use_ratio = round(used / limit * 100, 2) if limit and used is not None else None
+                use_ratio = _calculate_use_ratio(used, limit)
+                soft_use_ratio = _calculate_use_ratio(used, soft_limit)
 
                 volumes.append(volumeSchema.VolumeBase(
                     storage_cluster_id=self.storage_cluster_id,
@@ -909,8 +958,10 @@ class StoragePulseMonitor:
                     allocated=limit,
                     aggregate='isilon_cluster',
                     limit=limit,
+                    soft_limit=soft_limit,
                     used=used,
                     use_ratio=use_ratio,
+                    soft_use_ratio=soft_use_ratio,
                     updated_at=datetime.now()
                 ))
 

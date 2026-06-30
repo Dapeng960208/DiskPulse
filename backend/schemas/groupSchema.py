@@ -7,8 +7,10 @@ from schemas.storageClusterSchema import StorageCluster
 class GroupDiskBase(BaseModel):
     id: int
     limit: float | None = None
+    soft_limit: float | None = None
     used: float
     use_ratio: float | None = None
+    soft_use_ratio: float | None = None
     updated_at: datetime
 
 
@@ -20,8 +22,10 @@ class GroupBase(BaseModel):
     linux_path: str | None = None
     back_path: str | None = None
     limit: float | None = 0
+    soft_limit: float | None = None
     used: float | None = 0
     use_ratio: float | None = 0
+    soft_use_ratio: float | None = None
     associated_mail_groups: str | list | None = None
     in_charge_user_id: int | None = None
     associate_multiple_groups: bool = False

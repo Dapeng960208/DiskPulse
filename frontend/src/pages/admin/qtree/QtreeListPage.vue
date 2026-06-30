@@ -8,6 +8,7 @@ import { hasRole } from '@/utils/authorization';
 import { useQuery, useQueryParams } from '@/composables/query';
 import Progress from '@/components/form/Progress.vue'
 import VolumeSelect from '@/components/form/VolumeSelect.vue'
+import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 const router = useRouter();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
@@ -110,17 +111,31 @@ query();
         min-width="50"
       />
       <ElTableColumn
-        label="限额"
+        label="硬限额"
         sortable="custom"
         align="center"
         prop="limit"
         min-width="50"
       >
         <template #default="{ row }">
-          <span v-if="row.limit">{{ row.limit>=1024 ? `${(row.limit/1024).toFixed(1)} T`: `${row.limit} G` }}</span>
+          <span v-if="row.limit">{{ formatQuotaLimit(row.limit) }}</span>
           <ElTag
             v-else
             type="danger">无限额</ElTag>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="软限额"
+        sortable="custom"
+        align="center"
+        prop="soft_limit"
+        min-width="60"
+      >
+        <template #default="{ row }">
+          <span v-if="row.soft_limit">{{ formatQuotaLimit(row.soft_limit, { emptyText: '无软限额' }) }}</span>
+          <ElTag
+            v-else
+            type="info">无软限额</ElTag>
         </template>
       </ElTableColumn>
       <ElTableColumn
@@ -135,7 +150,7 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="利用率(%)"
+        label="硬利用率(%)"
         align="center"
         prop="use_ratio"
         sortable="custom"
@@ -143,10 +158,28 @@ query();
       >
         <template #default="{ row }">
           <Progress
-            v-if="row.limit>=0 && row.used>=0 "
+            v-if="canRenderQuotaProgress({ used: row.used, total: row.limit })"
             :used="row.used"
             :total="row.limit"
             :show-numbers="false" />
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="软利用率(%)"
+        align="center"
+        prop="soft_use_ratio"
+        sortable="custom"
+        width="400"
+      >
+        <template #default="{ row }">
+          <Progress
+            v-if="canRenderQuotaProgress({ used: row.used, total: row.soft_limit })"
+            :used="row.used"
+            :total="row.soft_limit"
+            :show-numbers="false" />
+          <ElTag
+            v-else
+            type="info">无软限额</ElTag>
         </template>
       </ElTableColumn>
       <ElTableColumn

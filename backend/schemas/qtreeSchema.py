@@ -8,8 +8,10 @@ class QtreeVolume(BaseModel):
     name: str
     volume_name: str
     limit: float | None = None
+    soft_limit: float | None = None
     used: float | None = None
     use_ratio: float | None = 0
+    soft_use_ratio: float | None = None
     style: str
     oplocks: str
     status: str
@@ -20,8 +22,10 @@ class QtreeBase(BaseModel):
     volume_id: int
     name: str
     limit: float | None = None
+    soft_limit: float | None = None
     used: float | None = None
     use_ratio: float | None = 0
+    soft_use_ratio: float | None = None
     style: str
     oplocks: str
     status: str

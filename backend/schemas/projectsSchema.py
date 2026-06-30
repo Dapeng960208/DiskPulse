@@ -14,8 +14,10 @@ class ProjectBaseInfo(BaseModel):
     cpuf: float | None = None
     max_mem: float | None = None
     limit: float | None = None
+    soft_limit: float | None = None
     used: float | None = None
     use_ratio: float | None = None
+    soft_use_ratio: float | None = None
     is_common: bool | None = False
     status: int | None = 1
     project_process_code: str | None = None

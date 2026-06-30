@@ -1,5 +1,33 @@
 # 当前交付记录
 
+## 2026-06-30：NetApp/Isilon 软限额持久化与展示
+
+### 主题
+
+为配额链路新增软限额采集、持久化、API 暴露、导出和前端展示，保留现有硬限额告警口径。
+
+### 已完成
+
+- `StorageUsage`、`Qtree`、`Volume`、`Group`、`Project` 新增 `soft_limit` 和 `soft_use_ratio` 字段。
+- `StoragePulseMonitor` 从 NetApp `space.soft_limit` 和 Isilon `thresholds.soft` 获取软限额，linked Isilon 用户继承 default-user 软限额。
+- 项目组、项目汇总和 QuestDB 当前态写入同步携带软限额字段；现有告警任务仍按硬利用率 `use_ratio`。
+- 用户用量、项目组、Qtree、Volume 列表新增软限额/软利用率列，硬限额列文案明确为“硬限额/硬利用率”。
+- 存储使用导出新增“软限额”“软使用率”列。
+- 新增 Alembic migration `f4b2c8d9e701_add_soft_quota_fields.py` 和功能文档 `docs/features/storage-quota/overview.md`。
+
+### 验证状态
+
+- `.\.venv\Scripts\python.exe -m unittest backend.test.test_storage_soft_quota`：通过。
+- `.\.venv\Scripts\python.exe -m unittest backend.test.test_core_api`：通过。
+- `cd frontend && npx vitest run test/unit/utils/quota.test.js --coverage.enabled=false`：通过。
+- `cd frontend && npx vitest run test/unit/smoke/surface-regression.test.js --coverage.enabled=false`：通过。
+
+### 风险与后续
+
+- 未连接真实 NetApp/Isilon 设备做端到端采集验证，本次通过 mock quota payload 覆盖字段解析。
+- 当前工作区已有 `.gitignore` 修改和多份 `backend/migrate/versions/*` 删除，本次未回退也未纳入修复；新增 migration 的 `down_revision` 接到 Git 中既有链路末端 `a1d670c60836`。
+- `docs/standards/domain-terminology.md` 仍缺失，属于既有规范引用缺口。
+
 ## 2026-06-30：后端核心接口测试与覆盖率门禁
 
 ### 主题
