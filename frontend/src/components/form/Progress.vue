@@ -27,12 +27,12 @@ function calculatePercentage(value, total) {
 
 function getColor(percentage) {
   if (percentage < 80) {
-    return '#34D399';
+    return 'var(--chart-color-success)';
   }
   if (percentage < 90) {
-    return '#F59E0B';
+    return 'var(--chart-color-warning)';
   }
-  return '#EF4444';
+  return 'var(--chart-color-danger)';
 }
 </script>
 

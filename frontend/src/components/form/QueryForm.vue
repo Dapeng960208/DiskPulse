@@ -30,6 +30,7 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
             v-if="hasAdvancedSlot"
             type="primary"
             text
+            :aria-expanded="String(showAdvancedFilters)"
             @click="showAdvancedFilters = !showAdvancedFilters"
           >
             更多

@@ -1,6 +1,7 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue';
-import * as echarts from 'echarts';
+import { onMounted, watch } from 'vue';
+import { useEchartsChart } from '@/composables/use-echarts-chart';
+import { getThemeVar, prefersReducedMotion } from '@/lib/echarts';
 
 const props = defineProps({
   text: {
@@ -37,16 +38,13 @@ const props = defineProps({
   },
 });
 
-const chartDom = ref(null);
-let chartInstance = null;
+const { chartDom, initChart, bindWindowResize } = useEchartsChart();
 
-
-function renderChart() {
-  if (chartInstance) {
-    chartInstance.dispose();
-  }
-
-  chartInstance = echarts.init(chartDom.value);
+async function renderChart() {
+  const context = await initChart();
+  if (!context) return;
+  const { chart } = context;
+  const animationDuration = prefersReducedMotion() ? 0 : props.animationDuration;
 
   const option = {
     graphic: {
@@ -62,11 +60,11 @@ function renderChart() {
             lineDash: [0, 200],
             lineDashOffset: 0,
             fill: 'transparent',
-            stroke: props.strokeColor,
+            stroke: props.strokeColor || getThemeVar('--chart-color-primary', '#409eff'),
             lineWidth: 2
           },
           keyframeAnimation: {
-            duration: props.animationDuration,
+            duration: animationDuration,
             loop: true,
             keyframes: [
               {
@@ -86,7 +84,7 @@ function renderChart() {
               {
                 percent: 1,
                 style: {
-                  fill: props.fillColor
+                  fill: props.fillColor || getThemeVar('--chart-color-info', '#a0cfff')
                 }
               }
             ]
@@ -96,18 +94,12 @@ function renderChart() {
     }
   };
 
-  chartInstance.setOption(option);
-}
-
-function resizeChart() {
-  if (chartInstance) {
-    chartInstance.resize();
-  }
+  chart.setOption(option);
 }
 
 onMounted(() => {
     renderChart();
-    window.addEventListener('resize', resizeChart, { passive: true });
+    bindWindowResize();
 });
 
 watch(() => props.width, renderChart);

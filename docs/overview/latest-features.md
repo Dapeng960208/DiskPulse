@@ -1,5 +1,14 @@
 # 最新功能与修复
 
+## 2026-06-30：前端体验、可访问性与构建拆包优化
+
+- 应用壳侧栏折叠控件改为语义化按钮，补充 `aria-expanded`、`aria-controls` 和键盘焦点样式。
+- 查询栏、表格和主题切换补齐响应式与可访问性合同；表格新增统一错误态和紧凑密度。
+- 图表组件统一通过 `frontend/src/lib/echarts.js` 懒加载 ECharts，并复用共享生命周期清理，减少入口包体积压力。
+- 概览页和实时详情页增加页面标题、数据范围/刷新信息，便于运维人员快速判断当前视图范围。
+- 路由标题按 DiskPulse 领域术语统一为“用户目录、卷、qtree”等表达。
+- `vite.config.js` 新增 Vue、Element Plus、ECharts 手动拆包配置。
+
 ## 2026-06-30：NetApp/Isilon 软限额展示与持久化
 
 - 新增配额链路软限额字段 `soft_limit`、`soft_use_ratio`，覆盖用户用量、Qtree/Isilon 目录、项目组和项目汇总。

@@ -36,7 +36,7 @@ export default [
         name: 'Usages',
         component: () => import('@/pages/usage/UsageListPage.vue'),
         meta: {
-          title: '用户',
+          title: '用户目录',
           isRoot: true,
           icon: 'i-ri-user-line',
         },
@@ -175,7 +175,7 @@ export default [
         name: 'Volumes',
         component: () => import('@/pages/admin/volume/VolumeListPage.vue'),
         meta: {
-          title: 'Volume',
+          title: '卷',
         },
       },
       {
@@ -192,7 +192,7 @@ export default [
         name: 'Qtrees',
         component: () => import('@/pages/admin/qtree/QtreeListPage.vue'),
         meta: {
-          title: 'Qtree',
+          title: 'qtree',
         },
       },
       {

@@ -1,7 +1,8 @@
 <script setup>
-import { onMounted, ref, watch, onBeforeUnmount, nextTick } from 'vue';
-import * as echarts from 'echarts';
+import { onMounted, watch, nextTick } from 'vue';
 import AnimatedTextChart from './AnimatedTextChart.vue'
+import { useEchartsChart } from '@/composables/use-echarts-chart';
+import { getChartColors, getThemeVar } from '@/lib/echarts';
 // 定义组件的属性
 const props = defineProps({
   data: {
@@ -26,8 +27,7 @@ const props = defineProps({
   },
 });
 
-const chartDom = ref(null);
-let chartInstance = null;
+const { chartDom, initChart, bindWindowResize } = useEchartsChart();
 
 // 组件挂载时初始化图表
 onMounted(() => {
@@ -37,18 +37,11 @@ onMounted(() => {
   // }, 1200);
   nextTick(() => {
     renderChart();
-    window.addEventListener('resize', resizeChart);
+    bindWindowResize();
   });
 });
 
 // 组件卸载时清理图表实例和事件监听
-onBeforeUnmount(() => {
-  if (chartInstance) {
-    chartInstance.dispose();
-  }
-  window.removeEventListener('resize', resizeChart);
-});
-
 // 监听数据变化重新渲染图表
 watch(() => props.data, () => {
   nextTick(() => {
@@ -57,16 +50,14 @@ watch(() => props.data, () => {
 }, { deep: true });
 
 // 渲染图表
-function renderChart() {
+async function renderChart() {
   if (!props.data || props.data.length === 0) return;
   if (!chartDom.value || !chartDom.value.clientWidth ||!chartDom.value.clientHeight) return;
 
-  if (chartInstance) {
-    chartInstance.dispose();
-  }
-
-  chartInstance = echarts.init(chartDom.value);
-  chartInstance.showLoading();
+  const context = await initChart();
+  if (!context) return;
+  const { chart, echarts } = context;
+  chart.showLoading();
 
   const formatUtil = echarts.format;
 
@@ -94,6 +85,7 @@ function renderChart() {
   }
 
   const option = {
+    color: getChartColors(),
     title: {
       text: props.title,
       left: 'center'
@@ -139,7 +131,7 @@ function renderChart() {
           formatter: '{b}'
         },
         itemStyle: {
-          borderColor: '#fff'
+          borderColor: getThemeVar('--bg-primary', '#fff')
         },
         levels: getLevelOption(),
         data: props.data
@@ -147,16 +139,11 @@ function renderChart() {
     ]
   };
 
-  chartInstance.setOption(option);
-  chartInstance.hideLoading();
+  chart.setOption(option);
+  chart.hideLoading();
 }
 
 // 调整图表大小
-function resizeChart() {
-  if (chartInstance) {
-    chartInstance.resize();
-  }
-}
 </script>
 
 <template>

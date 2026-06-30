@@ -5,8 +5,9 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch, onBeforeUnmount, nextTick } from 'vue';
-import * as echarts from 'echarts';
+import { onMounted, watch } from 'vue';
+import { useEchartsChart } from '@/composables/use-echarts-chart';
+import { getChartColors } from '@/lib/echarts';
 
 const props = defineProps({
   width: {
@@ -19,7 +20,7 @@ const props = defineProps({
   },
   data: {
     type: Array,
-    required: true,
+    default: () => [],
   },
   title: {
     type: String,
@@ -27,18 +28,16 @@ const props = defineProps({
   }
 });
 
-const chartDom = ref(null);
-let chartInstance = null;
+const { chartDom, initChart, bindWindowResize } = useEchartsChart();
 
-function renderChart() {
+async function renderChart() {
   if (!chartDom.value || !props.data || props.data.length===0 ) return;
 
-  if (chartInstance) {
-    chartInstance.dispose();
-  }
-
-  chartInstance = echarts.init(chartDom.value);
+  const context = await initChart();
+  if (!context) return;
+  const { chart } = context;
   const option = {
+    color: getChartColors(),
     legend: {
       top: 'bottom'
     },
@@ -79,18 +78,12 @@ function renderChart() {
     ]
   };
 
-  chartInstance.setOption(option);
-}
-
-function resizeChart() {
-  if (chartInstance) {
-    chartInstance.resize();
-  }
+  chart.setOption(option);
 }
 
 onMounted(() => {
     renderChart();
-    window.addEventListener('resize', resizeChart, { passive: true });
+    bindWindowResize();
 });
 
 watch(() => props.width, renderChart);

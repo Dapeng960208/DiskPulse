@@ -5,8 +5,9 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from 'vue';
-import * as echarts from 'echarts';
+import { onMounted, watch } from 'vue';
+import { useEchartsChart } from '@/composables/use-echarts-chart';
+import { getChartColors, getThemeVar } from '@/lib/echarts';
 
 const props = defineProps({
   data: {
@@ -31,16 +32,14 @@ const props = defineProps({
   },
 });
 
-const chartDom = ref(null);
-let chartInstance = null;
+const { chartDom, initChart, bindWindowResize } = useEchartsChart();
 
-const renderChart = () => {
-  if (chartInstance) {
-    chartInstance.dispose();
-  }
-  chartInstance = echarts.init(chartDom.value);
+const renderChart = async () => {
+  const context = await initChart();
+  if (!context) return;
+  const { chart } = context;
   const option = getOption(props.data);
-  chartInstance.setOption(option);
+  chart.setOption(option);
 };
 
 const createSeries = (data) => {
@@ -71,6 +70,7 @@ const formatDate = (date) => {
 const getOption = (data) => {
   const seriesData = createSeries(data);
   const option = {
+    color: getChartColors(),
     title: {
       text: props.title,
       left: 'center',
@@ -80,7 +80,7 @@ const getOption = (data) => {
       axisPointer: {
         type: 'cross',
         label: {
-          backgroundColor: '#6a7985',
+          backgroundColor: getThemeVar('--text-secondary', '#6a7985'),
         },
       },
       formatter: (params) => {
@@ -126,11 +126,7 @@ const getOption = (data) => {
 
 onMounted(() => {
   renderChart();
-  window.addEventListener('resize', () => {
-    if (chartInstance) {
-      chartInstance.resize();
-    }
-  });
+  bindWindowResize();
 });
 
 watch(() => props.data, renderChart, { deep: true });

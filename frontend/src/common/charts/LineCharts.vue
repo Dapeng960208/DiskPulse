@@ -1,11 +1,12 @@
 <script setup>
-import { onMounted, ref, watch, onBeforeUnmount, nextTick } from 'vue';
-import * as echarts from 'echarts';
+import { onMounted, watch } from 'vue';
 import AnimatedTextChart from './AnimatedTextChart.vue'
+import { useEchartsChart } from '@/composables/use-echarts-chart';
+import { getThemeVar } from '@/lib/echarts';
 const props = defineProps({
   data: {
     type: Array,
-    required: true,
+    default: () => [],
   },
   width: {
     type: String,
@@ -37,26 +38,24 @@ const props = defineProps({
   }
 });
 
-const chartDom = ref(null);
-let chartInstance = null;
+const { chartDom, initChart, bindWindowResize } = useEchartsChart();
 
-function renderChart() {
+async function renderChart() {
   if (props.data && props.data.length > 0) {
-    if (chartInstance) {
-      chartInstance.dispose();
-    }
-    chartInstance = echarts.init(chartDom.value);
-    const option = getOption(props.data);
+    const context = await initChart();
+    if (!context) return;
+    const { chart, echarts } = context;
+    const option = getOption(props.data, echarts);
 
-    chartInstance.showLoading();
-    chartInstance.setOption(option);
-    chartInstance.hideLoading();
+    chart.showLoading();
+    chart.setOption(option);
+    chart.hideLoading();
   }
 }
 
-function getOption(data) {
-  console.log(props.legendName);
-
+function getOption(data, echarts) {
+  const primaryColor = getThemeVar('--chart-color-primary', 'rgb(1, 191, 236)');
+  const successColor = getThemeVar('--chart-color-success', 'rgb(128, 255, 165)');
   const seriesData = {
     name:props.legendName,
     type: 'line',
@@ -64,18 +63,18 @@ function getOption(data) {
     showSymbol: false,
     lineStyle: {
       width: 1,
-      color: 'rgb(1, 191, 236)',
+      color: primaryColor,
     },
     areaStyle: {
       opacity: 0.8,
       color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
         {
           offset: 0,
-          color: 'rgb(128, 255, 165)',
+          color: successColor,
         },
         {
           offset: 1,
-          color: 'rgb(1, 191, 236)',
+          color: primaryColor,
         },
       ]),
     },
@@ -117,7 +116,7 @@ function getOption(data) {
       text: props.title,
       left: 'center',
       textStyle:{
-        color:'#409eff'
+        color:getThemeVar('--primary-color', '#409eff')
       }
     },
     tooltip: {
@@ -125,7 +124,7 @@ function getOption(data) {
       axisPointer: {
         type: 'cross',
         label: {
-          backgroundColor: '#6a7985',
+          backgroundColor: getThemeVar('--text-secondary', '#6a7985'),
         },
       },
     },
@@ -137,7 +136,7 @@ function getOption(data) {
       axisPointer: {
         type: 'cross',
         label: {
-          backgroundColor: '#6a7985',
+          backgroundColor: getThemeVar('--text-secondary', '#6a7985'),
         },
       },
       formatter: (params) => {
@@ -200,7 +199,7 @@ function getOption(data) {
           },
           lineStyle: {
             type: 'dashed',
-            color: 'red'
+            color: getThemeVar('--danger-color', '#EF4444')
           }
         }
       ]
@@ -210,15 +209,9 @@ function getOption(data) {
   return option;
 }
 
-function resizeChart() {
-  if (chartInstance) {
-    chartInstance.resize();
-  }
-}
-
 onMounted(() => {
     renderChart();
-    window.addEventListener('resize', resizeChart, { passive: true });
+    bindWindowResize();
 });
 
 watch(() => props.width, renderChart);

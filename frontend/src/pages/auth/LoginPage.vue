@@ -78,7 +78,7 @@ import { setToken } from '@/utils/authorization';
 import { useCurrentUser } from '@/stores/current-user';
 import ThemeSwitch from '@/components/basic/ThemeSwitch.vue';
 
-const appTitle = import.meta.env.VITE_APP_TITLE || '存储管理系统';
+const appTitle = import.meta.env.VITE_APP_TITLE || 'DiskPulse 管理后台';
 
 const router = useRouter();
 const route = useRoute();

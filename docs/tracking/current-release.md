@@ -1,5 +1,39 @@
 # 当前交付记录
 
+## 2026-06-30：前端体验、可访问性与性能拆包
+
+### 主题
+
+落实前端审查计划，围绕 DiskPulse 管理后台的设计系统、公共组件可访问性、图表加载、页面文案和构建拆包做聚焦改造。
+
+### 已完成
+
+- 新增前端审查合同测试，覆盖应用壳折叠按钮、主题切换、筛选网格、表格错误态/密度、路由术语、ECharts 入口和 Vite 拆包。
+- 应用壳侧栏折叠控件改为语义化按钮，补充 `aria-expanded`、`aria-controls`、`aria-label` 和 `focus-visible`。
+- `ThemeSwitch` 补充 `aria-label`、`aria-pressed`，恢复 `prefers-reduced-motion` 判断，不再因浏览器不支持 View Transition 输出错误日志。
+- `GridContainer`、`QueryForm`、`DataTable` 增强响应式和状态表达，表格支持统一错误态与 `compact` 密度。
+- 图表组件改为通过 `frontend/src/lib/echarts.js` 懒加载 ECharts，并复用 `useEchartsChart` 管理初始化、resize 和销毁。
+- 概览页、实时详情页新增页面标题、数据范围或最近刷新信息。
+- 路由标题和登录页 fallback 文案按 DiskPulse 存储监控术语统一。
+- `vite.config.js` 新增 Vue、Element Plus、ECharts 手动拆包配置。
+- 新增 `docs/standards/domain-terminology.md`，并修正前端规范中的实际技术栈、样式入口和组件目录说明。
+
+### 验证状态
+
+- `cd frontend && npx vitest run test/unit/frontend-audit-contract.test.js test/unit/frontend-audit-static.test.js test/unit/router/routes.test.js --coverage.enabled=false`：通过。
+- `cd frontend && npm run lint`：通过。
+- `cd frontend && npm test`：通过，`25` 个测试文件、`121` 个测试。
+- `cd frontend && npm run test:coverage`：通过，语句覆盖率 `92.43%`、分支覆盖率 `83.22%`、函数覆盖率 `72.58%`、行覆盖率 `92.43%`。
+- `cd frontend && npm run build:test`：通过，主入口 `assets/index-757e3052.js` 为 `31.67 kB`、gzip `8.43 kB`；`echarts`、`element-plus`、`vue-vendor` 和通用 `vendor` 已拆分为独立 chunk。
+- Playwright 浏览器烟测：`http://127.0.0.1:5173/login` 在 `375px`、`768px`、`1440px` 视口可渲染；`http://127.0.0.1:5173/` 可渲染概览页骨架和新标题，未接后端时仅出现预期 API `404`。
+
+### 风险与后续
+
+- 未连接真实后端和真实存储设备进行端到端页面验收；本轮验证以组件合同、静态合同、单测、lint 和构建为准。
+- 图表视觉细节保持现有图形和数据契约，仅收敛加载入口、生命周期和颜色来源。
+- `npm run build:test` 仍保留 Vite 的 `%VITE_APP_TITLE%` 未定义提示和大 vendor chunk 提示；主入口 gzip 已降到规范目标内，后续可继续按业务路由拆页级 chunk。
+- 当前改造在独立 worktree `D:\dev\worktrees\DiskPulse\frontend-audit-implementation` 上完成，未回退主工作区既有未提交改动。
+
 ## 2026-06-30：NetApp/Isilon 软限额持久化与展示
 
 ### 主题

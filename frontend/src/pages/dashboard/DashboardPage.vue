@@ -7,18 +7,28 @@ import StoragePieAndLine from '@/common/charts/StoragePieAndLineCharts.vue';
 import BarStackChart from '@/common/charts/BarStackChart.vue';
 import LoadingCharts from '@/common/charts/LoadingCharts.vue';
 import PieCharts from '@/common/charts/PieCharts.vue';
-const { result:storageSummary, querying:storageSummaryQuerying, query:fetchStorageSummary } = useQuery(() => projectApi.fetchStorageSummary(), {
+const updatedAt = ref('');
+function markUpdatedAt() {
+  updatedAt.value = new Date().toLocaleString('zh-CN', { hour12: false });
+}
+const { result:storageSummary, querying:storageSummaryQuerying, query:fetchStorageSummary } = useQuery(() => projectApi.fetchStorageSummary().then((result) => {
+  markUpdatedAt();
+  return result;
+}), {
   data: [],
   tree:[]
 });
-const { result:groupStorages, querying:groupStorageQuerying, query:fetchGroupStorage } = useQuery(() => projectApi.fetchGroupStorage(), {
+const { result:groupStorages, querying:groupStorageQuerying, query:fetchGroupStorage } = useQuery(() => projectApi.fetchGroupStorage().then((result) => {
+  markUpdatedAt();
+  return result;
+}), {
   data: []
 });
 fetchStorageSummary();
 fetchGroupStorage();
 function transferData(data) {
   if (data.length===0) {
-    return
+    return [];
   }
   const columnNames = data[0].slice(1);
   const sums = Array(columnNames.length).fill(0);
@@ -37,6 +47,13 @@ function transferData(data) {
 </script>
 
 <template>
+  <section class="dashboard-page-header">
+    <div>
+      <h1>存储监控概览</h1>
+      <p>展示项目组容量趋势、当前占比和分组使用情况。</p>
+    </div>
+    <span v-if="updatedAt">最近刷新：{{ updatedAt }}</span>
+  </section>
   <!-- 项目组使用情况 柱状堆叠图 -->
   <ElRow
     v-if="storageSummaryQuerying"
@@ -135,6 +152,30 @@ function transferData(data) {
 @import '@/styles/variables.scss';
 @import '@/styles/mixins.scss';
 
+.dashboard-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+
+  h1 {
+    font-size: var(--font-size-2xl);
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-xs);
+  }
+
+  p,
+  span {
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+  }
+
+  span {
+    white-space: nowrap;
+  }
+}
+
 :deep(.el-card) {
   @include card-base;
   border: 1px solid var(--border-color);
@@ -173,6 +214,12 @@ function transferData(data) {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@include mobile {
+  .dashboard-page-header {
+    flex-direction: column;
   }
 }
 </style>

@@ -1,6 +1,7 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue';
-import * as echarts from 'echarts';
+import { onMounted, watch } from 'vue';
+import { useEchartsChart } from '@/composables/use-echarts-chart';
+import { getChartColors, getThemeVar } from '@/lib/echarts';
 
 const props = defineProps({
   width: {
@@ -13,15 +14,15 @@ const props = defineProps({
   },
   data: {
     type: Array,
-    required: true,
+    default: () => [],
   },
   categories: {
     type: Array,
-    required: true,
+    default: () => [],
   },
   seriesNames: {
     type: Array,
-    required: true,
+    default: () => [],
   },
   seriesMap: {
     type: Object,
@@ -33,10 +34,11 @@ const props = defineProps({
   }
 });
 
-const chartDom = ref(null);
-let chartInstance = null;
+const { chartDom, initChart, bindWindowResize } = useEchartsChart();
 
 function calculateTotalData(rawData) {
+  if (!rawData.length) return [];
+
   const totalData = [];
   for (let i = 0; i < rawData[0].length; ++i) {
     let sum = 0;
@@ -69,25 +71,24 @@ function createSeries(rawData, totalData, seriesNames) {
   });
 }
 
-function renderChart() {
+async function renderChart() {
   if (!chartDom.value) return;
 
-  if (chartInstance) {
-    chartInstance.dispose();
-  }
-
-  chartInstance = echarts.init(chartDom.value);
+  const context = await initChart();
+  if (!context) return;
+  const { chart } = context;
 
   const totalData = calculateTotalData(props.data);
   const series = createSeries(props.data, totalData, props.seriesNames);
 
   const option = {
+    color: getChartColors(),
     title: {
       bottom: 0,
       text: props.title,
       left: 'center',
       textStyle: {
-        color: '#409eff'
+        color: getThemeVar('--primary-color', '#409eff')
       }
     },
     legend: {
@@ -138,18 +139,12 @@ function renderChart() {
     series
   };
 
-  chartInstance.setOption(option);
-}
-
-function resizeChart() {
-  if (chartInstance) {
-    chartInstance.resize();
-  }
+  chart.setOption(option);
 }
 
 onMounted(() => {
   renderChart();
-  window.addEventListener('resize', resizeChart, { passive: true });
+  bindWindowResize();
 });
 
 watch(() => props.width, renderChart);

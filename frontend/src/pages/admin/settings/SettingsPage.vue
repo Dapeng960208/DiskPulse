@@ -4,16 +4,31 @@ import { ref } from 'vue';
 import configApi from '@/api/config-api';
 
 const form =ref({});
+const loading = ref(false);
+const saving = ref(false);
+const errorMessage = ref('');
 function fetchConfig(){
+    loading.value = true;
+    errorMessage.value = '';
     configApi.fetch().then((result)=>{
       form.value = result;
-    })
+    }).catch(() => {
+      errorMessage.value = '配置加载失败，请稍后重试';
+    }).finally(() => {
+      loading.value = false;
+    });
 }
 function updateConfig(){
+  saving.value = true;
+  errorMessage.value = '';
   configApi.updateConfig(form.value).then((result)=>{
     form.value =result;
     ElMessage.success('保存成功');
-  })
+  }).catch(() => {
+    errorMessage.value = '配置保存失败，请检查输入后重试';
+  }).finally(() => {
+    saving.value = false;
+  });
 }
 fetchConfig();
 </script>
@@ -21,9 +36,19 @@ fetchConfig();
   <ElRow class="mt-5">
     <ElCol><ElButton
       type="primary"
+      :loading="saving"
+      :disabled="loading"
       @click="updateConfig">保存</ElButton></ElCol>
   </ElRow>
+  <ElAlert
+    v-if="errorMessage"
+    class="mt-5"
+    :title="errorMessage"
+    type="error"
+    show-icon
+    :closable="false" />
   <ElTabs
+    v-loading="loading"
     type="border-card"
     class="mt-5">
     <ElTabPane label="邮箱配置">
@@ -44,7 +69,8 @@ fetchConfig();
             <ElFormItem label="密码">
               <ElInput
                 v-model="form.mail_password"
-                type="password" />
+                type="password"
+                show-password />
             </ElFormItem>
             <ElFormItem label="抄送">
               <ElInput v-model="form.mail_to" />
@@ -90,7 +116,8 @@ fetchConfig();
             <ElFormItem label="密码">
               <ElInput
                 v-model="form.iam_password"
-                type="password" />
+                type="password"
+                show-password />
             </ElFormItem>
           </ElForm>
         </ElCol>
@@ -114,7 +141,8 @@ fetchConfig();
             <ElFormItem label="密码">
               <ElInput
                 v-model="form.questdb_password"
-                type="password" />
+                type="password"
+                show-password />
             </ElFormItem>
           </ElForm>
         </ElCol>
@@ -138,7 +166,8 @@ fetchConfig();
             <ElFormItem label="密码">
               <ElInput
                 v-model="form.storage_password"
-                type="password" />
+                type="password"
+                show-password />
             </ElFormItem>
           </ElForm>
         </ElCol>
@@ -173,7 +202,8 @@ fetchConfig();
               label="密码">
               <ElInput
                 v-model="form.file_manage_password"
-                type="password" />
+                type="password"
+                show-password />
             </ElFormItem>
             <ElFormItem
               v-if="form.back_up_enabled"
