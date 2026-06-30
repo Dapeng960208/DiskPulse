@@ -32,6 +32,21 @@ describe('router/routes and app shell', () => {
     );
   });
 
+  it('uses consistent DiskPulse domain titles in visible navigation', () => {
+    const rootTitles = routes
+      .flatMap((route) => route.children ?? [route])
+      .filter((route) => route.meta?.isRoot)
+      .map((route) => route.meta.title);
+    const adminRoute = routes.find((route) => route.path === '/admin');
+    const adminTitles = adminRoute.children
+      .filter((route) => !route.meta?.isHidden)
+      .map((route) => route.meta.title);
+
+    expect(rootTitles).toEqual(expect.arrayContaining(['概览', '用户目录', '项目', '项目组', '告警']));
+    expect(adminTitles).toEqual(expect.arrayContaining(['存储集群', '存储一览', '聚合', '卷', 'qtree', '账号管理', '离职备份', '系统设置']));
+    expect([...rootTitles, ...adminTitles]).not.toEqual(expect.arrayContaining(['用户', 'Volume', 'Qtree']));
+  });
+
   it('mounts the root app shell', () => {
     const wrapper = shallowMount(App, {
       global: {
