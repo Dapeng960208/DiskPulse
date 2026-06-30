@@ -20,6 +20,12 @@ describe('utils/time-range', () => {
       '1个月内',
       '3个月内',
     ]);
-    expect(shortcuts[0].value()).toHaveLength(2);
+    shortcuts.forEach((shortcut) => {
+      const range = shortcut.value();
+
+      expect(range).toHaveLength(2);
+      expect(range[0]).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+      expect(range[1]).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    });
   });
 });

@@ -47,6 +47,7 @@
 - 清理明显影响可读性的无用 `import`、调试输出与重复 helper，保持现有页面路径和路由契约不变。
 - 在 `frontend/package.json` 中新增 `npm test`、`npm run test:coverage`、`npm run test:watch` 脚本。
 - 新增 `frontend/vitest.config.js`、`frontend/test/setup.js`、`frontend/test/helpers/mount.js` 以及覆盖 `utils`、`api`、`composables`、`stores`、`router` 和活跃页面 smoke 的测试用例。
+- 新增针对高函数缺口区域的聚焦测试，包括路由懒加载、基础 API 包装、表单对话框事件链和表单选择器搜索/回填行为测试。
 
 ### 验证状态
 
@@ -54,14 +55,14 @@
 - `cd frontend && npm run test:coverage`：通过。
 - `cd frontend && npm run build:test`：通过。
 - `frontend/src` 当前全局覆盖率结果：
-  - `statements`: `89.70%`
-  - `branches`: `81.06%`
-  - `lines`: `89.70%`
-  - `functions`: `47.30%`
+  - `statements`: `91.90%`
+  - `branches`: `84.31%`
+  - `lines`: `91.90%`
+  - `functions`: `71.23%`
 
 ### 风险与后续
 
-- 本轮已满足初版全局 `70%+` 覆盖率目标，但 `functions` 指标仍低于 `70%`，后续需要通过更细粒度的页面交互和事件处理测试继续抬升。
+- 本轮已满足初版全局 `70%+` 覆盖率目标；剩余函数缺口主要集中在图表组件、少量列表页事件处理和部分未细测的表单选择器上，后续可继续按覆盖率报告定点补强。
 - 当前 `vitest` 执行期间仍会输出 Sass legacy JS API 弃用告警，不影响本轮测试通过，但后续升级 Sass/Vite 链路时需要单独消化。
 - `npm run build:test` 已通过，但打包结果仍提示存在 `500 kB+` chunk，后续如继续整理前端结构，建议结合路由懒加载和手动拆包一起处理。
 - 当前工作区仍存在与本任务无关的后端和仓库级未提交改动，本次未回退也未纳入前端交付范围。
