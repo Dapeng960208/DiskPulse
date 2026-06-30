@@ -3,14 +3,31 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from crud import usersCrud
-from dependencies import get_db
+from dependencies import CurrentUserDep, get_db, require_authenticated_request
 from schemas import commonSchema, usersSchema
+from utils.auth_service import build_frontend_profile, login_user
 
 router = APIRouter(
     prefix="/users",
     tags=["users"],
     responses={404: {"description": "Not found"}},
+    dependencies=[Depends(require_authenticated_request)],
 )
+
+
+@router.post("/login")
+def login(payload: usersSchema.LoginIn, db: Session = Depends(get_db)) -> dict:
+    return {"result": login_user(db, username=payload.username, password=payload.password)}
+
+
+@router.post("/logout")
+def logout() -> dict:
+    return {"result": None}
+
+
+@router.get("/current/profile")
+def current_profile(current_user: CurrentUserDep) -> dict:
+    return {"result": build_frontend_profile(current_user)}
 
 
 @router.post("/", response_model=usersSchema.User)

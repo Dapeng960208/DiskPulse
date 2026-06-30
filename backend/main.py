@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 import os
 
-from fastapi import APIRouter, FastAPI, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import DisconnectionError
 
 import models
 from database import Base, SessionLocal, engine
+from dependencies import require_authenticated_request
 from questdb.database import QuestDBBase, questdb_engine
 from routers import (
     aggregate,
@@ -35,7 +36,7 @@ app = FastAPI(
     contact={"name": "guojianpeng"},
 )
 
-storage_router = APIRouter(prefix="/storage-pulse/api")
+storage_router = APIRouter(prefix="/storage-pulse/api", dependencies=[Depends(require_authenticated_request)])
 storage_router.include_router(users.router)
 storage_router.include_router(projects.router)
 storage_router.include_router(config.router)
