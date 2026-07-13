@@ -54,7 +54,12 @@ class StorageAlert:
             joinedload(StorageUsage.group).joinedload(Group.storage_cluster),
             joinedload(StorageUsage.group).joinedload(Group.volume),
             joinedload(StorageUsage.group).joinedload(Group.qtree).joinedload(Qtree.volume),
-        ).filter(StorageUsage.id.in_(storage_usage_ids)).all() if storage_usage_ids else []
+        ).join(
+            Group, StorageUsage.group_id == Group.id
+        ).filter(
+            StorageUsage.id.in_(storage_usage_ids),
+            Group.enable_monitoring.is_(True),
+        ).all() if storage_usage_ids else []
         storage_usage_by_id = {
             storage_usage.id: storage_usage for storage_usage in storage_usage_dbs
         }
@@ -190,7 +195,10 @@ class StorageAlert:
             joinedload(Group.volume),
             joinedload(Group.qtree).joinedload(Qtree.volume),
             joinedload(Group.in_charge_user),
-        ).filter(Group.id.in_(group_ids)).all() if group_ids else []
+        ).filter(
+            Group.id.in_(group_ids),
+            Group.enable_monitoring.is_(True),
+        ).all() if group_ids else []
         group_by_id = {group.id: group for group in group_dbs}
         for storage_usage_quest_db in storage_usage_quest_dbs:
             group_id, avg_use_ratio = storage_usage_quest_db
@@ -321,7 +329,7 @@ class StorageAlert:
                         storage_usage_dbs = top_usages_by_group.get(group_id, [])
 
                         group_dict['storage_usages'] = [
-                            storageUsageSchema.StorageUsage.model_validate(storage_usage_db).default_dict()
+                            storageUsageSchema.StorageUsage.model_validate(storage_usage_db).model_dump()
                             for storage_usage_db in storage_usage_dbs
                         ]
 

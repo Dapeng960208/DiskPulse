@@ -470,7 +470,7 @@ def test_group_alarm_batches_independent_top20_storage_usage_queries(
         def __init__(self, storage_usage):
             self.storage_usage = storage_usage
 
-        def default_dict(self):
+        def model_dump(self):
             payload = {
                 "id": self.storage_usage.id,
                 "used": self.storage_usage.used,
