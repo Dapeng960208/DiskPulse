@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import List
 
@@ -12,20 +12,10 @@ class UserBase(BaseModel):
     email: str | None = None
     department: str | None = None
     is_alert: bool | None = True
-    run_jobs: int | None = 0
-    ssusp_jobs: int | None = 0
-    pend_jobs: int | None = 0
-    done_jobs: int | None = 0
-    exit_jobs: int | None = 0
     user_type: int | None = 2
     storage_used: float | None = 0
     quit_days: int | None = 0
     updated_at: datetime | None = Field(default_factory=datetime.now)
-
-    @field_validator('run_jobs', 'ssusp_jobs', 'pend_jobs', 'done_jobs', 'exit_jobs', mode='before')
-    def set_default_jobs(cls, v):
-        return v if v is not None else 0
-
 
 class OnlyUser(BaseModel):
     id: int

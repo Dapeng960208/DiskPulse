@@ -51,8 +51,6 @@ def seed_security_data(session_factory):
                 iam_password="iam-secret",
                 mail_user="mail-user",
                 mail_password="mail-secret",
-                questdb_user="quest-user",
-                questdb_password="quest-secret",
                 storage_user="storage-user",
                 storage_password="storage-secret",
                 file_manage_user="file-user",
@@ -105,7 +103,6 @@ def test_config_response_redacts_secret_fields(security_client):
     for key in (
         "iam_password",
         "mail_password",
-        "questdb_password",
         "storage_password",
         "file_manage_password",
     ):

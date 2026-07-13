@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 import ast
+import importlib.util
 from pathlib import Path
+
+import sqlalchemy as sa
+from alembic.ddl.base import DropColumn
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from sqlalchemy.dialects import mysql, postgresql, sqlite
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +53,13 @@ REMOVED_MODEL_FIELDS = {
         "questdb_password",
     },
     "User": {"run_jobs", "ssusp_jobs", "pend_jobs", "done_jobs", "exit_jobs"},
+}
+REMOVED_DATABASE_FIELDS = {
+    "hosts": REMOVED_MODEL_FIELDS["Host"],
+    "projects": REMOVED_MODEL_FIELDS["Project"],
+    "storage_back_up_records": REMOVED_MODEL_FIELDS["StorageBackUpRecord"],
+    "storage_conf": REMOVED_MODEL_FIELDS["StorageConf"],
+    "users": REMOVED_MODEL_FIELDS["User"],
 }
 REMOVED_SCHEMA_FIELDS = {
     ("schemas/configSchemas.py", "StorageConf"): REMOVED_MODEL_FIELDS["StorageConf"],
@@ -110,6 +124,39 @@ def _class_names(module: ast.Module) -> set[str]:
     return {node.name for node in module.body if isinstance(node, ast.ClassDef)}
 
 
+def _migration_columns(function: ast.FunctionDef, operation: str) -> dict[str, set[str]]:
+    columns = {}
+    for node in function.body:
+        if not isinstance(node, ast.With) or len(node.items) != 1:
+            continue
+        context = node.items[0].context_expr
+        if (
+            not isinstance(context, ast.Call)
+            or not isinstance(context.func, ast.Attribute)
+            or context.func.attr != "batch_alter_table"
+            or not context.args
+            or not isinstance(context.args[0], ast.Constant)
+        ):
+            continue
+        table_name = context.args[0].value
+        table_columns = set()
+        for call in ast.walk(node):
+            if (
+                not isinstance(call, ast.Call)
+                or not isinstance(call.func, ast.Attribute)
+                or call.func.attr != operation
+                or not call.args
+            ):
+                continue
+            argument = call.args[0]
+            if operation == "add_column" and isinstance(argument, ast.Call):
+                argument = argument.args[0]
+            if isinstance(argument, ast.Constant):
+                table_columns.add(argument.value)
+        columns[table_name] = table_columns
+    return columns
+
+
 def test_unused_storage_records_model_is_removed():
     module = _parse_backend_file("models.py")
 
@@ -155,27 +202,50 @@ def test_unused_field_cleanup_migration_covers_all_removed_database_columns():
         for node in module.body
         if isinstance(node, ast.FunctionDef) and node.name == "downgrade"
     )
-    expected_fields = set().union(*REMOVED_MODEL_FIELDS.values())
-    dropped_fields = {
-        call.args[0].value
-        for call in ast.walk(upgrade)
-        if isinstance(call, ast.Call)
-        and isinstance(call.func, ast.Attribute)
-        and call.func.attr == "drop_column"
-        and call.args
-        and isinstance(call.args[0], ast.Constant)
-    }
-    restored_fields = {
-        call.args[0].args[0].value
-        for call in ast.walk(downgrade)
-        if isinstance(call, ast.Call)
-        and isinstance(call.func, ast.Attribute)
-        and call.func.attr == "add_column"
-        and call.args
-        and isinstance(call.args[0], ast.Call)
-        and call.args[0].args
-        and isinstance(call.args[0].args[0], ast.Constant)
-    }
+    assert _migration_columns(upgrade, "drop_column") == REMOVED_DATABASE_FIELDS
+    assert _migration_columns(downgrade, "add_column") == REMOVED_DATABASE_FIELDS
 
-    assert dropped_fields == expected_fields
-    assert restored_fields == expected_fields
+
+def test_unused_field_cleanup_migration_applies_and_rolls_back_on_sqlite():
+    migration_path = next(MIGRATION_ROOT.glob("*_remove_unused_fields.py"))
+    spec = importlib.util.spec_from_file_location("unused_field_cleanup", migration_path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    metadata = sa.MetaData()
+    for table_name, field_names in REMOVED_DATABASE_FIELDS.items():
+        sa.Table(
+            table_name,
+            metadata,
+            sa.Column("id", sa.Integer(), primary_key=True),
+            *(sa.Column(name, sa.String()) for name in field_names),
+        )
+
+    with sa.create_engine("sqlite://").begin() as connection:
+        metadata.create_all(connection)
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        inspector = sa.inspect(connection)
+        for table_name, field_names in REMOVED_DATABASE_FIELDS.items():
+            columns = {column["name"] for column in inspector.get_columns(table_name)}
+            assert columns.isdisjoint(field_names)
+
+        migration.downgrade()
+        inspector.clear_cache()
+        for table_name, field_names in REMOVED_DATABASE_FIELDS.items():
+            columns = {column["name"] for column in inspector.get_columns(table_name)}
+            assert field_names <= columns
+
+
+def test_drop_column_ddl_compiles_for_supported_dialects():
+    metadata = sa.MetaData()
+    table = sa.Table(
+        "cleanup_target",
+        metadata,
+        sa.Column("unused_field", sa.String(64)),
+    )
+
+    for dialect in (sqlite.dialect(), postgresql.dialect(), mysql.dialect()):
+        sql = str(
+            DropColumn(table.name, table.c.unused_field).compile(dialect=dialect)
+        )
+        assert "DROP COLUMN unused_field" in sql

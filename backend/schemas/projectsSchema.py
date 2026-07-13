@@ -9,10 +9,6 @@ from schemas import usersSchema
 class ProjectBaseInfo(BaseModel):
     id: int
     name: str
-    ncpus: int | None = 72
-    max_jobs: int | None = 0
-    cpuf: float | None = None
-    max_mem: float | None = None
     limit: float | None = None
     soft_limit: float | None = None
     used: float | None = None
@@ -27,14 +23,6 @@ class ProjectBaseInfo(BaseModel):
 
 
 class ProjectBase(ProjectBaseInfo):
-    mem: float | None = None
-    run_jobs: int | None = 0
-    ssusp_jobs: int | None = 0
-    ususp_jobs: int | None = 0
-    pend_jobs: int | None = 0
-    slot: float | None = None
-    mem_reserved: float | None = None
-    slot_reserved: float | None = None
     recipients: str | None = None
     is_alert: bool | None = False
     descriptions: str | None = None

@@ -1,5 +1,11 @@
 # 最新功能与修复
 
+## 2026-07-13：清理未使用字段和无效 QuestDB 配置
+
+- 删除 `Project`、`User`、`Host` 和 `StorageBackUpRecord` 中确认没有业务读写的 `20` 个字段，并同步收紧 API schema。
+- 管理设置页和 `/config/storage` 不再暴露 `questdb_host`、`questdb_port`、`questdb_user`、`questdb_password`；QuestDB 连接统一由 `backend/config.yml` 的 `database.questdb` 配置。
+- 新增 Alembic 清理迁移，删除对应 `24` 个数据库列并提供结构回滚。
+
 ## 2026-06-30：后端安全默认值与敏感信息保护
 
 - 配置和存储集群接口响应不再返回密码字段，降低前端和日志链路泄露风险。

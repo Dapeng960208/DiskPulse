@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 from datetime import datetime
 from schemas.usersSchema import OnlyUser
 
@@ -11,7 +11,6 @@ class StorageBackUpRecordBase(BaseModel):
     end_time: datetime
     # 0 移动失败 1 移动中 2 移动成功 3 已删除
     status: int = 1
-    is_deleted: bool = False
     process_uid: str | None = None
 
 

@@ -15,10 +15,6 @@ class StorageConf(BaseModel):
     mail_to: str | None = None
     mail_user: str | None = None
     mail_password: str | None = None
-    questdb_host: str | None = None
-    questdb_port: int = 8812
-    questdb_user: str | None = "admin"
-    questdb_password: str | None = "quest"
     storage_host: str | None = None
     storage_port: int | None = 22
     storage_user: str | None = None
@@ -51,9 +47,6 @@ class StorageConfPublic(BaseModel):
     mail_port: int = 587
     mail_to: str | None = None
     mail_user: str | None = None
-    questdb_host: str | None = None
-    questdb_port: int = 8812
-    questdb_user: str | None = "admin"
     storage_host: str | None = None
     storage_port: int | None = 22
     storage_user: str | None = None

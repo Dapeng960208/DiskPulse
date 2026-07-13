@@ -32,14 +32,36 @@
 
 ### 风险与后续
 
-- 未执行生产 Alembic upgrade、migration upgrade/downgrade 演练，也未对生产历史数据运行审计或 `--apply` 回填；上线前必须先备份、审计阻塞项并演练迁移与回滚。
-- M3 仅在生产审计、回填计数、migration upgrade/downgrade 和回滚演练通过后执行；届时才把 `groups.project_environment_id` 收紧为 `NOT NULL`、停止兼容双写并移除旧字段。
+- 当前项目仍处于开发阶段；按本轮约定，生产历史数据回填、字段废弃兼容和 M3 收紧不作为当前交付门槛，`backfill_project_storage_environments.py` 仅保留为集成环境审计工具。
+- 如果后续接入已有生产历史数据，再单独恢复备份、审计、回填计数、migration upgrade/downgrade 和回滚演练要求。
 - 未连接真实 PostgreSQL、QuestDB、NetApp 或 Isilon 做端到端验证；外部连接、实际设备返回、QuestDB 表结构和跨库最终一致性仍需在集成环境验收。
 - 未执行外部浏览器 smoke；当前结果不包含仓库外浏览器交互或 E2E 验收。
 - `StoragePulseMonitor` 的逐 Volume/Group/Project 查询和 UPDATE 已验证结果正确，但尚未按生产数据规模做性能压测；legacy 或未调度 monitor 不在本次完成口径。
 - 当前 `backend/celery_worker.py` 只启用 60 秒一次的 `storages_schedule_fetching_task`；告警、周报和定时备份 beat 条目仍为注释状态，优化后的路径尚未通过真实 Celery beat/worker 调度验收。
 - `npm run build:prod` 虽成功，但仍有既有的 `%VITE_APP_TITLE%` 未定义、chunk 大于 `500 kB` 和 Sass legacy JS API 弃用警告，本次未处理。
 - 本次自动化测试覆盖模型、迁移契约、API、前端交互、采集事务和聚合边界，不等同于生产容量数据验收。
+
+## 2026-07-13：项目未使用字段审计与清理
+
+### 已完成
+
+- 审计 `backend/models.py` 的 `14` 个 ORM 模型、`221` 个数据库字段，并追踪后端 CRUD/service/Celery 与前端 `frontend/src` 的生产引用。
+- 形成 `docs/tracking/unused-field-audit-2026-07-13.md`：记录 `20` 个无业务读写字段、`4` 个运行时不生效的 QuestDB 重复配置字段和 `1` 个无业务语义的单例配置名称字段。
+- 复核 `ProjectStorageEnvironment` 新增字段；身份、绑定、容量、采集状态和最近成功采集时间均有明确链路，未发现可直接删除的环境核心字段。
+- 已从 ORM、Pydantic schema 和数据库迁移删除 `20` 个无业务读写字段；备份生命周期继续只使用 `status`。
+- 已从 `StorageConf`、配置 API schema 和设置页面删除 `4` 个运行时不生效的 `questdb_*` 字段；QuestDB 连接继续只读取 `backend/config.yml` 的 `database.questdb`。
+- 新增 `b7c9e2d4f610_remove_unused_fields.py`，统一删除 `24` 个数据库列并提供 downgrade 结构回滚；未增加历史数据回填、废弃兼容层或动态重连逻辑。
+- `StorageConf.name` 属于单独的无业务语义结构字段，不在本轮指定的两类删除范围内，继续保留。
+
+### 验证状态
+
+- 已通过精确字段搜索核对候选字段的声明、业务读写和前端展示位置。
+- 已复核 `backend/appConfig.py`、`backend/questdb/database.py` 和 `backend/dependencies.py`，确认 QuestDB 连接只读取 `config.yml`，不会读取 `StorageConf.questdb_*`。
+- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test/test_backend_schema_contract.py backend/test/test_security_regressions.py backend/test/test_core_api.py -q`：通过，`20` 个测试；其中迁移在临时 SQLite 完成 upgrade/downgrade，并通过 SQLite、PostgreSQL、MySQL 删除列 DDL 编译检查。
+- `cd frontend; npx vitest run test/unit/settings-config.test.js --coverage.enabled=false`：通过，`1` 个测试。
+- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic -c backend/alembic.ini heads` 和 `history`：通过，唯一 head 为 `b7c9e2d4f610`；`compileall -q backend` 通过。
+- `cd frontend; npm run build:prod`：通过；仍有既有的 `%VITE_APP_TITLE%` 未定义和大 chunk 警告。
+- 尚未连接真实 PostgreSQL 执行 migration upgrade/downgrade；物理列删除和回滚仍需在集成数据库验证。
 
 ## 2026-07-13：登录后 profile 请求补齐 Bearer scheme
 

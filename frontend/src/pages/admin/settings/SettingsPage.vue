@@ -96,30 +96,6 @@ fetchConfig();
         </ElCol>
       </ElRow>
     </ElTabPane>
-    <ElTabPane label="时序数据库配置">
-      <ElRow class="mt-5">
-        <ElCol>
-          <ElForm
-            :model="form"
-            label-width="auto">
-            <ElFormItem label="域名/IP">
-              <ElInput v-model="form.questdb_host" />
-            </ElFormItem>
-            <ElFormItem label="端口号">
-              <ElInput v-model="form.questdb_port" />
-            </ElFormItem>
-            <ElFormItem label="账号">
-              <ElInput v-model="form.questdb_user" />
-            </ElFormItem>
-            <ElFormItem label="密码">
-              <ElInput
-                v-model="form.questdb_password"
-                type="password" />
-            </ElFormItem>
-          </ElForm>
-        </ElCol>
-      </ElRow>
-    </ElTabPane>
     <ElTabPane label="存储配置">
       <ElRow class="mt-5">
         <ElCol>

@@ -47,13 +47,13 @@ master, max_swp, resources, rsv, r15s, r1m, r15m, ut, pg, ls, it, tmp, swp, sut,
 
 这些字段不在 `Project` ORM 中，也没有当前后端计算逻辑。继续暴露会让 API 契约看起来像包含持久化字段。
 
-保留字段：
+2026-07-13 后续清理字段：
 
 ```text
 mem, mem_reserved, slot, slot_reserved, run_jobs, ssusp_jobs, ususp_jobs, pend_jobs
 ```
 
-这些字段存在于 `projects` 表或仍属于当前项目资源契约。
+这些字段在 2026-06-30 审查时仍存在于 `projects` 表；后续审计确认没有业务读写，现已从 ORM、API schema 和清理迁移中删除，详见 `unused-field-audit-2026-07-13.md`。
 
 ## 已审查但保留
 

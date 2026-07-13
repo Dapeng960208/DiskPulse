@@ -55,6 +55,7 @@ docs/
 | [tracking/current-release.md](./tracking/current-release.md) | 当前交付、风险和验证状态。 |
 | [tracking/error-log.md](./tracking/error-log.md) | 可复现错误、环境问题和规范缺口记录。 |
 | [tracking/backend-schema-review-2026-06-30.md](./tracking/backend-schema-review-2026-06-30.md) | 后端 schema 审查记录。 |
+| [tracking/unused-field-audit-2026-07-13.md](./tracking/unused-field-audit-2026-07-13.md) | ORM 未使用字段、无效重复配置和后续清理范围审计。 |
 
 ## 维护规则
 
