@@ -40,10 +40,26 @@ class StorageAlert:
         storage_usage_quest_dbs = get_high_avg_usage(
             table_prefix='storage_usage', storage_config=self.config, threshold=threshold, end_time=end_time
         )
+        storage_usage_ids = {
+            storage_usage_id for storage_usage_id, _avg_use_ratio in storage_usage_quest_dbs
+        }
+        storage_usage_dbs = self.db.query(StorageUsage).options(
+            joinedload(StorageUsage.user),
+            joinedload(StorageUsage.storage_cluster),
+            joinedload(StorageUsage.group).joinedload(Group.project),
+            joinedload(StorageUsage.group).joinedload(Group.project_environment).joinedload(
+                ProjectStorageEnvironment.storage_cluster
+            ),
+            joinedload(StorageUsage.group).joinedload(Group.storage_cluster),
+            joinedload(StorageUsage.group).joinedload(Group.volume),
+            joinedload(StorageUsage.group).joinedload(Group.qtree).joinedload(Qtree.volume),
+        ).filter(StorageUsage.id.in_(storage_usage_ids)).all() if storage_usage_ids else []
+        storage_usage_by_id = {
+            storage_usage.id: storage_usage for storage_usage in storage_usage_dbs
+        }
         for storage_usage_quest_db in storage_usage_quest_dbs:
             storage_usage_id, avg_use_ratio = storage_usage_quest_db
-            storage_usage_db = self.db.query(StorageUsage).filter(
-                StorageUsage.id == storage_usage_id).first()
+            storage_usage_db = storage_usage_by_id.get(storage_usage_id)
             if not storage_usage_db or storage_usage_db.user.is_alert is False:
                 continue
             email = storage_usage_db.user.email or 'admin'
@@ -467,9 +483,14 @@ class StorageAlert:
         project_quest_dbs = get_high_avg_usage(
             table_prefix='project', storage_config=self.config, threshold=0, end_time=end_time
         )
+        project_ids = {project_id for project_id, _avg_use_ratio in project_quest_dbs}
+        project_dbs = self.db.query(Project).options(
+            joinedload(Project.in_charge_user)
+        ).filter(Project.id.in_(project_ids)).all() if project_ids else []
+        project_by_id = {project.id: project for project in project_dbs}
         for project_quest_db in project_quest_dbs:
             project_id, avg_use_ratio = project_quest_db
-            project_db = self.db.query(Project).filter(Project.id == project_id).first()
+            project_db = project_by_id.get(project_id)
             if not project_db:
                 continue
             project_charge_email = project_db.in_charge_user.email if project_db.in_charge_user and project_db.in_charge_user.email else 'admin'
@@ -497,10 +518,32 @@ class StorageAlert:
             aggregate_quest_dbs, volume_quest_dbs, qtree_quest_dbs = self.get_system_alarm_data(threshold=threshold)
             aggregate_usages, volume_usages, qtree_usages = [], [], []
             aggregate_result, volume_result, qtree_result = [], [], []
+            aggregate_ids = {item_id for item_id, _ratio in aggregate_quest_dbs}
+            volume_ids = {item_id for item_id, _ratio in volume_quest_dbs}
+            qtree_ids = {item_id for item_id, _ratio in qtree_quest_dbs}
+            aggregate_by_id = {
+                item.id: item
+                for item in self.db.query(Aggregate).options(
+                    joinedload(Aggregate.storage_cluster)
+                ).filter(Aggregate.id.in_(aggregate_ids)).all()
+            } if aggregate_ids else {}
+            volume_by_id = {
+                item.id: item
+                for item in self.db.query(Volume).options(
+                    joinedload(Volume.storage_cluster)
+                ).filter(Volume.id.in_(volume_ids)).all()
+            } if volume_ids else {}
+            qtree_by_id = {
+                item.id: item
+                for item in self.db.query(Qtree).options(
+                    joinedload(Qtree.volume),
+                    joinedload(Qtree.storage_cluster),
+                ).filter(Qtree.id.in_(qtree_ids)).all()
+            } if qtree_ids else {}
 
             # 处理聚合数据
             for aggregate_id, avg_use_ratio in aggregate_quest_dbs:
-                aggregate_db = self.db.query(Aggregate).filter_by(id=aggregate_id).first()
+                aggregate_db = aggregate_by_id.get(aggregate_id)
                 if aggregate_db is None:
                     continue
                 aggregate_dict = aggregateSchema.Aggregate.model_validate(aggregate_db).model_dump()
@@ -522,7 +565,7 @@ class StorageAlert:
 
             # 处理Volume数据
             for volume_id, avg_use_ratio in volume_quest_dbs:
-                volume_db = self.db.query(Volume).filter_by(id=volume_id).first()
+                volume_db = volume_by_id.get(volume_id)
                 if volume_db is None:
                     continue
                 volume_dict = volumeSchema.Volume.model_validate(volume_db).model_dump()
@@ -547,7 +590,7 @@ class StorageAlert:
 
             # 处理Qtree数据
             for qtree_id, avg_use_ratio in qtree_quest_dbs:
-                qtree_db = self.db.query(Qtree).filter_by(id=qtree_id).first()
+                qtree_db = qtree_by_id.get(qtree_id)
                 if qtree_db is None:
                     continue
                 qtree_dict = qtreeSchema.Qtree.model_validate(qtree_db).model_dump()

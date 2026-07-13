@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from schemas import storageBackUpRecordSchema
 from utils.mailTools.emailNotification import EmailNotification
 from sqlalchemy import and_, or_
+from sqlalchemy.orm import joinedload
 from utils.iam.iamApi import IamApi
 from appConfig import base_config
 
@@ -199,6 +200,25 @@ class RemoteFileManager:
         storage_usage_db = self.db.query(StorageUsage).filter_by(id=storage_usage_id).first()
         if not storage_usage_db:
             self.logger.warning("Storage not exited.")
+            return False, None
+        storage_back_up_record = self.db.query(StorageBackUpRecord).filter(
+            StorageBackUpRecord.source_path == storage_usage_db.linux_path
+        ).first()
+        return self._back_up_user_directory(
+            storage_usage_db,
+            storage_back_up_record=storage_back_up_record,
+            closed=closed,
+        )
+
+    def _back_up_user_directory(
+        self,
+        storage_usage_db,
+        *,
+        storage_back_up_record=None,
+        closed=False,
+        commit=True,
+    ):
+        back_up_dir = self.storage_config.back_up_dir
         user_path = storage_usage_db.linux_path
         destination_path = self._build_back_up_destination_path(storage_usage_db, back_up_dir)
         group_back_dir = os.path.dirname(destination_path)
@@ -216,8 +236,6 @@ class RemoteFileManager:
                 f'User directory {user_path} not exit')
             return False, None
         start_time = datetime.now()
-        storage_back_up_record = self.db.query(StorageBackUpRecord).filter(
-            StorageBackUpRecord.source_path == user_path).first()
         status = 10 if closed is True else 1
         self.logger.info(f"status:{status},{storage_back_up_record is None} {destination_path}")
         if storage_back_up_record is None:
@@ -229,7 +247,9 @@ class RemoteFileManager:
             storage_back_up_record.status = status
             storage_back_up_record.start_time = start_time
             storage_back_up_record.end_time = start_time
-        self.db.commit()
+        self.db.flush()
+        if commit:
+            self.db.commit()
         # self.logger.info(f"status:{status},{storage_back_up_record is None} {destination_path}")
         if status == 10:
             return True, storage_back_up_record
@@ -245,7 +265,9 @@ class RemoteFileManager:
             else:
                 storage_back_up_record.status = 2
                 storage_back_up_record.end_time = datetime.now()
-        self.db.commit()
+        self.db.flush()
+        if commit:
+            self.db.commit()
         self.change_owner(path=destination_path, user=self.storage_config.file_manage_user)
         return True, storage_back_up_record
 
@@ -299,34 +321,62 @@ class RemoteFileManager:
             self.logger.warning(
                 "The project team disables the user backup function. Please check the project team Settings.")
             return False
+        if not self.storage_config.back_up_dir:
+            return False
         quit_days = self.storage_config.back_up_quit_days if self.storage_config.back_up_quit_days else 30
-        users = self.db.query(User).filter(User.user_type == 0, User.quit_days > quit_days).all()
-        if len(users) == 0:
+        storage_usages_dbs = self.db.query(StorageUsage).options(
+            joinedload(StorageUsage.user),
+            joinedload(StorageUsage.group).joinedload(Group.project),
+            joinedload(StorageUsage.group).joinedload(Group.project_environment),
+        ).join(User, StorageUsage.user_id == User.id).join(
+            Group, Group.id == StorageUsage.group_id
+        ).filter(
+            User.user_type == 0,
+            User.quit_days > quit_days,
+            Group.back_up_enabled == 1,
+        ).all()
+        if len(storage_usages_dbs) == 0:
             self.logger.warning(
                 "No user data need to be back up.")
             return
+        source_paths = {storage_usage.linux_path for storage_usage in storage_usages_dbs}
+        existing_records = self.db.query(StorageBackUpRecord).options(
+            joinedload(StorageBackUpRecord.user)
+        ).filter(StorageBackUpRecord.source_path.in_(source_paths)).all()
+        record_by_source = {}
+        completed_by_source_and_user = {}
+        for record in existing_records:
+            record_by_source.setdefault(record.source_path, record)
+            if record.status == 2:
+                completed_by_source_and_user[(record.source_path, record.user_id)] = record
         storage_back_up_records = []
-        for user in users:
-            storage_usages_dbs = self.db.query(StorageUsage).join(Group, Group.id == StorageUsage.group_id).filter(
-                StorageUsage.user_id == user.id, Group.back_up_enabled == 1).all()
-            for storage_usages_db in storage_usages_dbs:
-                linux_path = storage_usages_db.linux_path
-                exit_record = self.db.query(StorageBackUpRecord).filter(StorageBackUpRecord.source_path == linux_path,
-                                                                        StorageBackUpRecord.user_id == user.id,
-                                                                        StorageBackUpRecord.status == 2).first()
-                if exit_record:
-                    self.logger.warning(f"Source path {linux_path} has been moved {exit_record.destination_path}")
-                    continue
-                move_flag, storage_back_up_record = self.back_up_user_directory_by_storage_usage_id(
-                    storage_usage_id=storage_usages_db.id)
-                if move_flag is False:
-                    continue
-                storage_back_up_records.append(
-                    storageBackUpRecordSchema.StorageBackUpRecord.from_orm(storage_back_up_record).model_dump())
+        for storage_usage_db in storage_usages_dbs:
+            linux_path = storage_usage_db.linux_path
+            exit_record = completed_by_source_and_user.get(
+                (linux_path, storage_usage_db.user_id)
+            )
+            if exit_record:
+                self.logger.warning(
+                    f"Source path {linux_path} has been moved {exit_record.destination_path}"
+                )
+                continue
+            move_flag, storage_back_up_record = self._back_up_user_directory(
+                storage_usage_db,
+                storage_back_up_record=record_by_source.get(linux_path),
+                commit=False,
+            )
+            if move_flag is False:
+                continue
+            storage_back_up_records.append(
+                storageBackUpRecordSchema.StorageBackUpRecord.model_validate(
+                    storage_back_up_record
+                ).model_dump()
+            )
         if len(storage_back_up_records) == 0:
             self.logger.warning(
                 "No data need to be back up.")
             return
+        self.db.commit()
         data = {}
         recipient = [email.strip() for email in (self.storage_config.mail_to or "").split() if email.strip()]
         subject = f"【重要】离职用户数据备份提醒"
