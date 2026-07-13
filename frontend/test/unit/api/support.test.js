@@ -106,7 +106,7 @@ describe('api/support', () => {
     const config = requestHandlers.fulfilled({ headers: {} });
 
     expect(builtService).toBe(service);
-    expect(config.headers.Authorization).toBe('auth-token');
+    expect(config.headers.Authorization).toBe('Bearer auth-token');
 
     await expect(responseHandlers.rejected({ message: 'network', config: {} })).rejects.toBeTruthy();
     expect(errorMessage).toHaveBeenCalled();
