@@ -1,7 +1,20 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import backref, relationship
 
 from database import Base
@@ -112,6 +125,7 @@ class Project(Base):
     updated_at = Column(DateTime, default=datetime.now)
 
     groups = relationship("Group", back_populates="project", lazy=True)
+    environments = relationship("ProjectStorageEnvironment", back_populates="project", lazy=True)
     in_charge_user = relationship("User", foreign_keys=[in_charge_user_id], lazy=True)
     pt_user = relationship("User", foreign_keys=[pt_user_id], lazy=True)
 
@@ -139,6 +153,78 @@ class StorageCluster(Base):
     qtrees = relationship("Qtree", back_populates="storage_cluster", lazy=True)
     storage_usages = relationship("StorageUsage", back_populates="storage_cluster", lazy=True)
     groups = relationship("Group", back_populates="storage_cluster", lazy=True)
+    environments = relationship(
+        "ProjectStorageEnvironment", back_populates="storage_cluster", lazy=True
+    )
+
+
+class ProjectStorageEnvironment(Base):
+    __tablename__ = "project_storage_environments"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "name",
+            name="uq_project_storage_environment_project_name",
+        ),
+        UniqueConstraint(
+            "project_id",
+            "storage_cluster_id",
+            name="uq_project_storage_environment_project_cluster",
+        ),
+        CheckConstraint(
+            "collection_status IN ('pending', 'success', 'failed')",
+            name="ck_project_storage_environment_collection_status",
+        ),
+        Index(
+            "ix_project_storage_environment_project_active_id",
+            "project_id",
+            "is_active",
+            "id",
+        ),
+        Index(
+            "ix_project_storage_environment_cluster_project",
+            "storage_cluster_id",
+            "project_id",
+        ),
+        Index(
+            "ix_project_storage_environment_project_collection_active",
+            "project_id",
+            "collection_status",
+            "is_active",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(
+        Integer,
+        ForeignKey("projects.id", name="fk_project_storage_environment_project"),
+        nullable=False,
+    )
+    storage_cluster_id = Column(
+        Integer,
+        ForeignKey(
+            "storage_clusters.id", name="fk_project_storage_environment_cluster"
+        ),
+        nullable=False,
+    )
+    name = Column(String(128), nullable=False)
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    limit = Column(Float, nullable=True)
+    soft_limit = Column(Float, nullable=True)
+    used = Column(Float, nullable=True)
+    use_ratio = Column(Float, nullable=True)
+    soft_use_ratio = Column(Float, nullable=True)
+    collection_status = Column(String(16), default="pending", nullable=False)
+    last_collected_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    project = relationship("Project", back_populates="environments", lazy=True)
+    storage_cluster = relationship(
+        "StorageCluster", back_populates="environments", lazy=True
+    )
+    groups = relationship("Group", back_populates="project_environment", lazy=True)
 
 
 class Aggregate(Base):
@@ -204,8 +290,21 @@ class Group(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    project_environment_id = Column(
+        Integer,
+        ForeignKey(
+            "project_storage_environments.id",
+            name="fk_group_project_storage_environment",
+        ),
+        nullable=True,
+    )
     monitor_host_id = Column(Integer, nullable=True)
     storage_cluster_id = Column(Integer, ForeignKey("storage_clusters.id"), nullable=True, index=True)
+    volume_id = Column(
+        Integer,
+        ForeignKey("volumes.id", name="fk_group_volume"),
+        nullable=True,
+    )
     qtree_id = Column(Integer, ForeignKey("qtrees.id"), nullable=True)
     in_charge_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     name = Column(String, index=True)
@@ -225,6 +324,10 @@ class Group(Base):
 
     qtree = relationship("Qtree", back_populates="groups", lazy=True)
     project = relationship("Project", back_populates="groups", lazy=True)
+    project_environment = relationship(
+        "ProjectStorageEnvironment", back_populates="groups", lazy=True
+    )
+    volume = relationship("Volume", lazy=True)
     storage_usages = relationship("StorageUsage", back_populates="group", lazy=True)
     in_charge_user = relationship("User", backref=backref("owned_groups", passive_deletes=True))
     storage_cluster = relationship("StorageCluster", back_populates="groups", lazy=True)
