@@ -1,0 +1,58 @@
+application:
+  mode: test
+  company_name: DiskPulse Test
+  cors_origins:
+    - http://localhost:5173
+
+database:
+  create_tables: false
+  postgres:
+    host: localhost
+    port: 5432
+    name: diskpulse_test
+    user: test
+    password: test
+    pool_size: 5
+    max_overflow: 0
+    pool_timeout: 5
+  questdb:
+    host: localhost
+    port: 8812
+    user: test
+    password: test
+    pool_size: 5
+    max_overflow: 0
+    pool_timeout: 5
+    pool_recycle: 300
+
+redis:
+  host: localhost
+
+jwt:
+  secret_key: test-secret
+  access_ttl_minutes: 60
+
+ldap:
+  uri: ldap://dc.example.com
+  starttls: true
+  timeout_seconds: 5
+  bind_dn: CN=Service,OU=IT,DC=example,DC=com
+  bind_password_file: ./ldap-password.test
+  user_bases:
+    - OU=Users,DC=example,DC=com
+  group_bases:
+    - OU=Groups,DC=example,DC=com
+  user_class: user
+  user_name_attribute: sAMAccountName
+  user_fullname_attribute: cn
+  user_extra_filters:
+    - (!(objectClass=computer))
+    - (!(objectClass=group))
+  lookup_user_dn: true
+  lookup_as_user: false
+
+storage:
+  isilon_session_cache: false
+
+super_admin_usernames:
+  - alice

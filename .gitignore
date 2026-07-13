@@ -46,6 +46,8 @@ frontend/builds/
 .env.*
 *.env
 !*.env.example
+/backend/config.yml
+/backend/ldap-password*
 
 # Logs and runtime files
 logs/

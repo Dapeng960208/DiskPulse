@@ -1,82 +1,97 @@
 # -*- coding: utf-8 -*-
-# config.py
-
-import os
-from dotenv import load_dotenv, dotenv_values
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any
 from urllib.parse import quote_plus
 
-current_file_path = os.path.realpath(__file__)
-app_root_path = os.path.dirname(current_file_path)
+import yaml
 
-class ConfigSingleton:
-    _instance = None
 
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = super(ConfigSingleton, cls).__new__(cls)
-        return cls._instance
+APP_ROOT_PATH = Path(__file__).resolve().parent
+DEFAULT_CONFIG_PATH = APP_ROOT_PATH / "config.yml"
 
-    def __init__(self, model: Optional[str] = None):
-        if not hasattr(self, 'config_loaded'):
-            self.config_loaded = True
-            self.config = {}
-            self.load_environment_variables(model)
 
-    def load_environment_variables(self, model: Optional[str] = None):
-        model = model or os.environ.get('MODEL', 'dev').lower()
-        os.environ['MODEL'] = model
-        self.config['MODEL'] = model
-        env_file_path = self.get_env_file_path(model=model)
-        load_dotenv(env_file_path, override=True)
+class Config:
+    def __init__(self, path: str | Path | None = None):
+        self.path = Path(path) if path is not None else DEFAULT_CONFIG_PATH
+        self.config: dict[str, Any] = {}
+        self._loaded = False
+        if path is not None:
+            self.load()
 
-        self.populate_config(env_file_path)
+    def load(self, path: str | Path | None = None) -> None:
+        if path is not None:
+            self.path = Path(path)
+        try:
+            loaded = yaml.safe_load(self.path.read_text(encoding="utf-8"))
+        except FileNotFoundError as error:
+            raise FileNotFoundError(f"Configuration file not found: {self.path}") from error
+        except yaml.YAMLError as error:
+            raise ValueError(f"Invalid YAML configuration: {self.path}") from error
+        if not isinstance(loaded, dict):
+            raise ValueError(f"Invalid YAML configuration: root must be a mapping: {self.path}")
 
-    @staticmethod
-    def get_env_file_path(model: Optional[str] = None) -> str:
-        paths = {
-            'dev': "development.env",
-            'test': "test.env",
-        }
-        return os.path.join(app_root_path,paths.get(model))
+        ldap = loaded.get("ldap")
+        if isinstance(ldap, dict) and (
+            ldap.get("lookup_user_dn") is not True or ldap.get("lookup_as_user") is not False
+        ):
+            raise ValueError("LDAP requires lookup_user_dn=true and lookup_as_user=false")
 
-    def populate_config(self, env_file_path: str):
-        env_vars = dotenv_values(env_file_path)
+        self.config = loaded
+        self._loaded = True
 
-        for key, value in env_vars.items():
-            self.config[key] = value
-
-        self.config['SQL_DATABASE_URL'] = (
-            f"postgresql+psycopg2://{self.config.get('PG_USER', '')}:"
-            f"{quote_plus(self.config.get('PG_PASSWORD', ''))}@{self.config.get('PG_IP', '')}:"
-            f"{self.config.get('PG_PORT', '5432')}/{self.config.get('DATABASE_NAME', '')}"
-        )
-
-        self.config['QUEST_DATABASE_URL'] = (
-            f"questdb://{self.config['QUEST_USER']}:"
-            f"{quote_plus(self.config['QUEST_PASSWORD'])}@{self.config['QUEST_IP']}:"
-            f"{self.config['QUEST_PORT']}/qdb?timezone=UTC"
-        )
+    def _ensure_loaded(self) -> None:
+        if not self._loaded:
+            self.load()
 
     def get(self, key: str, default: Any = None) -> Any:
-        return self.config.get(key, default)
+        self._ensure_loaded()
+        value: Any = self.config
+        for part in key.split("."):
+            if not isinstance(value, dict) or part not in value:
+                return default
+            value = value[part]
+        return value
 
     def set(self, key: str, value: Any) -> None:
-        self.config[key] = value
-        os.environ[key] = str(value)
+        self._ensure_loaded()
+        target = self.config
+        parts = key.split(".")
+        for part in parts[:-1]:
+            target = target.setdefault(part, {})
+        target[parts[-1]] = value
+
+    def resolve_path(self, key: str) -> Path | None:
+        value = self.get(key)
+        if not value:
+            return None
+        path = Path(str(value)).expanduser()
+        return path if path.is_absolute() else self.path.parent / path
+
+    @property
+    def app_root_path(self) -> Path:
+        return APP_ROOT_PATH
+
+    @property
+    def app_logo_path(self) -> Path:
+        logo = "gt_logo.png" if self.get("application.mode", "dev") == "gt" else "logo.png"
+        return APP_ROOT_PATH / "static" / "images" / logo
 
     def get_sqlalchemy_database_url(self) -> str:
-        return self.get('SQL_DATABASE_URL')
+        prefix = "database.postgres"
+        user = quote_plus(str(self.get(f"{prefix}.user", "")))
+        password = quote_plus(str(self.get(f"{prefix}.password", "")))
+        host = self.get(f"{prefix}.host", "")
+        port = self.get(f"{prefix}.port", 5432)
+        database = self.get(f"{prefix}.name", "")
+        return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
 
     def get_quest_db_url(self) -> str:
-        return self.get('QUEST_DATABASE_URL')
+        prefix = "database.questdb"
+        user = quote_plus(str(self.get(f"{prefix}.user", "")))
+        password = quote_plus(str(self.get(f"{prefix}.password", "")))
+        host = self.get(f"{prefix}.host", "")
+        port = self.get(f"{prefix}.port", 8812)
+        return f"questdb://{user}:{password}@{host}:{port}/qdb?timezone=UTC"
 
-    def get_info(self):
-        return [(key, value) for key, value in self.config.items()]
 
-
-base_config = ConfigSingleton(model=os.environ.get('MODEL', 'dev'))
-base_config.set('APP_ROOT_PATH', app_root_path)
-
-app_logo_path = 'gt_logo.png' if os.environ['MODEL'] == 'gt' else 'logo.png'
-base_config.set('APP_LOGO_PATH', os.path.join(app_root_path, 'static', 'images', app_logo_path))
+base_config = Config()

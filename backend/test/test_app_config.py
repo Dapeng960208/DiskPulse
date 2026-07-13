@@ -85,6 +85,7 @@ def test_loads_grouped_yaml_without_environment_override(tmp_path, monkeypatch):
 
 def test_resolves_secret_file_relative_to_yaml(tmp_path):
     config_path = _write_config(tmp_path / "config.yml")
+    config = Config(config_path)
 
     assert config.resolve_path("ldap.bind_password_file") == tmp_path / "ldap-password.dev"
 

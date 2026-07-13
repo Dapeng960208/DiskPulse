@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
-import os
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from appConfig import base_config
 from crud import usersCrud
 from models import User
 from utils import ldap_directory
@@ -24,9 +24,9 @@ SUPERADMIN_ROLE = "superadmin"
 SUPERADMIN_PERMISSION = ["*", "*", "*"]
 
 
-def _env_list(key: str) -> list[str]:
-    value = os.getenv(key, "")
-    return [item.strip() for item in value.replace("\n", ";").split(";") if item.strip()]
+def is_super_admin(user: User) -> bool:
+    rd_username = user.rd_username or user.username or ""
+    return rd_username in set(base_config.get("super_admin_usernames", []))
 
 
 def _iter_ldap_users(username: str):
@@ -134,7 +134,7 @@ def build_frontend_profile(user: User) -> dict:
     common_name = user.username or user.rd_username or ""
     role_codes: list[str] = []
     permission_codes: list[list[str]] = []
-    if rd_username in set(_env_list("SUPER_ADMIN_USERNAMES")):
+    if is_super_admin(user):
         role_codes = [SUPERADMIN_ROLE]
         permission_codes = [SUPERADMIN_PERMISSION]
 

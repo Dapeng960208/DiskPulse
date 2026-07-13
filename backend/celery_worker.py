@@ -5,7 +5,7 @@ import redis
 from celery.schedules import crontab
 from appConfig import base_config
 
-redis_ip = base_config.get('REDIS_IP')
+redis_ip = base_config.get('redis.host')
 lsf_app = Celery(
     "resource_worker",
     broker=f"redis://{redis_ip}:6379/5",

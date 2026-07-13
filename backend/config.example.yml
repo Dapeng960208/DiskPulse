@@ -1,0 +1,59 @@
+application:
+  mode: dev
+  company_name: DiskPulse
+  cors_origins:
+    - http://localhost:5173
+    - http://127.0.0.1:5173
+
+database:
+  create_tables: false
+  postgres:
+    host: localhost
+    port: 5432
+    name: diskpulse
+    user: diskpulse
+    password: change-me
+    pool_size: 20
+    max_overflow: 10
+    pool_timeout: 10
+  questdb:
+    host: localhost
+    port: 8812
+    user: admin
+    password: change-me
+    pool_size: 20
+    max_overflow: 0
+    pool_timeout: 60
+    pool_recycle: 300
+
+redis:
+  host: localhost
+
+jwt:
+  secret_key: change-me-with-a-random-secret
+  access_ttl_minutes: 60
+
+ldap:
+  uri: ldap://dc.example.com
+  starttls: true
+  timeout_seconds: 5
+  bind_dn: CN=Service Account,OU=IT,DC=example,DC=com
+  bind_password_file: ./ldap-password.dev
+  user_bases:
+    - OU=Users,DC=example,DC=com
+  group_bases:
+    - OU=Groups,DC=example,DC=com
+  user_class: user
+  user_name_attribute: sAMAccountName
+  user_fullname_attribute: cn
+  user_extra_filters:
+    - (!(objectClass=computer))
+    - (!(objectClass=group))
+  lookup_user_dn: true
+  lookup_as_user: false
+
+storage:
+  isilon_session_cache: false
+
+super_admin_usernames:
+  - admin

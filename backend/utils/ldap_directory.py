@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
-import os
 import warnings
-
-import yaml
 
 from appConfig import base_config
 
@@ -15,98 +11,63 @@ DEFAULT_LDAP_USER_EXTRA_FILTERS = [
 ]
 
 
-def _config_value(key: str, default: str = "") -> str:
-    value = os.getenv(key)
-    if value is not None:
-        return value
-    configured = base_config.get(key, default)
-    return str(configured) if configured is not None else default
-
-
-def _config_bool(key: str, default: bool = False) -> bool:
-    value = _config_value(key, "true" if default else "false")
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _config_int(key: str, default: int) -> int:
-    try:
-        return int(_config_value(key, str(default)))
-    except (TypeError, ValueError):
-        return default
-
-
-def _config_list(key: str, default: list[str] | None = None) -> list[str]:
-    value = _config_value(key, "")
-    if not value.strip():
-        return list(default or [])
-    if "\n" in value:
-        items = []
-        for line in value.splitlines():
-            item = line.strip()
-            if item.startswith("- "):
-                item = item[2:].strip()
-            if item:
-                items.append(item)
-        return items
-    try:
-        loaded = yaml.safe_load(value)
-    except yaml.YAMLError:
-        loaded = None
-    if isinstance(loaded, list):
-        return [str(item).strip() for item in loaded if str(item).strip()]
-    if isinstance(loaded, str) and loaded.strip() != value.strip():
-        return [loaded.strip()]
-    return [item.strip() for item in value.split(";") if item.strip()]
-
-
 def ldap_server_url() -> str:
-    return _config_value("LDAP_SERVER_URL", _config_value("LDAP_URI", "")).strip()
+    return str(base_config.get("ldap.uri", "")).strip()
 
 
 def ldap_start_tls() -> bool:
-    return _config_bool("LDAP_START_TLS")
+    return base_config.get("ldap.starttls", False) is True
+
+
+def require_secure_ldap_transport() -> None:
+    server_url = ldap_server_url().lower()
+    if server_url.startswith("ldaps://") or ldap_start_tls():
+        return
+    if server_url:
+        raise RuntimeError("LDAP_START_TLS must be enabled for ldap:// servers")
 
 
 def ldap_timeout_seconds() -> int:
-    return _config_int("LDAP_TIMEOUT_SECONDS", 5)
+    return base_config.get("ldap.timeout_seconds", 5)
 
 
 def ldap_bind_dn() -> str:
-    return _config_value("LDAP_BIND_DN").strip()
+    return str(base_config.get("ldap.bind_dn", "")).strip()
 
 
 def ldap_bind_password() -> str:
-    password = _config_value("LDAP_BIND_PASSWORD").strip()
+    password = str(base_config.get("ldap.bind_password", "")).strip()
     if password:
         return password
-    password_file = _config_value("LDAP_BIND_PASSWORD_FILE").strip()
+    password_file = base_config.resolve_path("ldap.bind_password_file")
     if password_file:
-        return Path(password_file).read_text(encoding="utf-8").strip()
+        return password_file.read_text(encoding="utf-8").strip()
     return ""
 
 
 def ldap_ca_cert_path() -> str:
-    return _config_value("LDAP_CA_CERT_PATH").strip()
+    path = base_config.resolve_path("ldap.ca_cert_path")
+    return str(path) if path else ""
 
 
 def ldap_user_bases() -> list[str]:
-    return _config_list("LDAP_USER_BASES")
+    return base_config.get("ldap.user_bases", [])
 
 
 def ldap_user_class() -> str:
-    return _config_value("LDAP_USER_CLASS", "user").strip() or "user"
+    return str(base_config.get("ldap.user_class", "user")).strip() or "user"
 
 
 def ldap_user_name_attribute() -> str:
-    return _config_value("LDAP_USER_NAME_ATTRIBUTE", "sAMAccountName").strip() or "sAMAccountName"
+    return str(base_config.get("ldap.user_name_attribute", "sAMAccountName")).strip() or "sAMAccountName"
 
 
 def ldap_user_fullname_attribute() -> str:
-    return _config_value("LDAP_USER_FULLNAME_ATTRIBUTE", "cn").strip() or "cn"
+    return str(base_config.get("ldap.user_fullname_attribute", "cn")).strip() or "cn"
 
 
 def ldap_user_extra_filters() -> list[str]:
-    return _config_list("LDAP_USER_EXTRA_FILTERS", DEFAULT_LDAP_USER_EXTRA_FILTERS)
+    return base_config.get("ldap.user_extra_filters", DEFAULT_LDAP_USER_EXTRA_FILTERS)
 
 
 def escape_ldap_filter_value(value: str) -> str:
@@ -146,7 +107,8 @@ def _ldap_runtime_primitives() -> tuple[Any, Any, Any, dict[str, Any]]:
 def _ldap_server() -> Any:
     server_url = ldap_server_url()
     if not server_url:
-        raise RuntimeError("missing LDAP_SERVER_URL")
+        raise RuntimeError("missing ldap.uri")
+    require_secure_ldap_transport()
 
     Server, _Connection, Tls, constants = _ldap_runtime_primitives()
     tls = None
@@ -165,7 +127,7 @@ def _service_bind_ldap() -> Any:
     bind_dn = ldap_bind_dn()
     bind_password = ldap_bind_password()
     if not bind_dn:
-        raise RuntimeError("missing LDAP_BIND_DN")
+        raise RuntimeError("missing ldap.bind_dn")
     if not bind_password:
         raise RuntimeError("missing LDAP bind password")
 
