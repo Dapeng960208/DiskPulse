@@ -341,8 +341,20 @@ class StorageAlert:
             description = description_template.format(
                 name=related_db.linux_path if model.__name__ == StorageUsage.__name__ else related_db.name,
                 avg_use_ratio=avg_use_ratio)
+            related_info = None
             if model.__name__ == Group.__name__:
                 description = f"{related_db.project.name}" + description
+                environment = related_db.project_environment
+                project = environment.project if environment is not None else related_db.project
+                related_info = {
+                    "project": {"id": project.id, "name": project.name},
+                    "project_environment": (
+                        {"id": environment.id, "name": environment.name}
+                        if environment is not None
+                        else None
+                    ),
+                    "group": {"id": related_db.id, "name": related_db.name},
+                }
             related_id = related_db.id
             alert = StorageAlerts(
                 alert_level=alert_level,
@@ -352,6 +364,7 @@ class StorageAlert:
                 avg_use_ratio=avg_use_ratio,
                 related_id=related_id,
                 related_type=model.__name__,
+                related_info=related_info,
                 updated_at=datetime.now()
             )
             alerts.append(alert)

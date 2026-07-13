@@ -26,8 +26,24 @@ class StorageUsageCreate(BaseModel):
     group_id: int
 
 
-class StorageUsageUpdate(StorageUsageBase):
-    pass
+class StorageUsageUpdate(BaseModel):
+    user_id: int
+    group_id: int
+    linux_path: str | None = None
+    limit: float | None = None
+    soft_limit: float | None = None
+    used: float | None = None
+    use_ratio: float | None = None
+    soft_use_ratio: float | None = None
+    file_used: float | None = None
+    file_limit: float | None = None
+    updated_at: datetime | None = None
+    storage_cluster_id: int | None = None
+
+
+class ProjectSummary(BaseModel):
+    id: int
+    name: str
 
 
 class StorageUsage(StorageUsageBase):
@@ -48,6 +64,7 @@ class StorageUsage(StorageUsageBase):
     birth_time: datetime | None = None
     user: usersSchema.OnlyUser
     group: groupSchema.GroupBase
+    project: ProjectSummary | None = None
     project_environment: groupSchema.ProjectEnvironmentSummary | None = None
     storage_cluster: groupSchema.StorageClusterSummary | None = None
     storage_target: groupSchema.StorageTargetSummary | None = None

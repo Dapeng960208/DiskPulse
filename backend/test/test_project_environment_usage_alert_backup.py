@@ -204,6 +204,7 @@ def test_storage_usage_response_uses_redacted_environment_and_target_summaries(u
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["project"] == {"id": 1, "name": "project-a"}
     assert payload["project_environment"] == {"id": 1, "name": "environment-a"}
     assert payload["storage_cluster"] == {
         "id": 1,
@@ -232,8 +233,6 @@ def test_storage_usage_create_and_update_derive_cluster_and_target_from_group(us
         json={
             "user_id": 3,
             "group_id": 2,
-            "linux_path": "/data/qtree-group/carol",
-            "updated_at": NOW.isoformat(),
         },
     )
 
@@ -331,6 +330,27 @@ def test_group_alert_data_includes_volume_bound_groups(usage_scope, monkeypatch)
 
     assert list(alarm_data) == ["admin"]
     assert alarm_data["admin"][0][0].id == 1
+
+
+def test_group_alert_persists_minimal_project_environment_context(usage_scope):
+    alert = object.__new__(StorageAlert)
+    alert.db = usage_scope
+    alert.logger = Mock()
+    group = usage_scope.get(models.Group, 1)
+
+    alert.write_alerts_to_mysql(
+        data=[(group, 91.0)],
+        model=models.Group,
+        threshold=80,
+        description_template="项目组{name}使用率达到{avg_use_ratio}%",
+    )
+
+    stored = usage_scope.query(models.StorageAlerts).one()
+    assert stored.related_info == {
+        "project": {"id": 1, "name": "project-a"},
+        "project_environment": {"id": 1, "name": "environment-a"},
+        "group": {"id": 1, "name": "volume-group"},
+    }
 
 
 def test_environment_alert_is_stored_against_project_storage_environment(usage_scope):

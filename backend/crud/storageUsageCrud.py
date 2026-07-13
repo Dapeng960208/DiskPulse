@@ -127,13 +127,18 @@ def serialize_storage_usage(storage_usage: StorageUsage) -> dict:
     result["user"] = storage_usage.user
     result["group"] = storage_usage.group
     if storage_usage.group is None:
-        result.update(project_environment=None, storage_cluster=None, storage_target=None)
+        result.update(project=None, project_environment=None, storage_cluster=None, storage_target=None)
         return result
 
     resolved = resolve_group_storage_target(storage_usage.group)
     target = resolved["target"]
     cluster = resolved["storage_cluster"]
-    result["project_environment"] = storage_usage.group.project_environment
+    environment = storage_usage.group.project_environment
+    project = environment.project if environment is not None else storage_usage.group.project
+    result["project"] = (
+        {"id": project.id, "name": project.name} if project is not None else None
+    )
+    result["project_environment"] = environment
     result["storage_cluster"] = cluster
     result["storage_cluster_id"] = cluster.id if cluster is not None else None
     result["storage_target"] = (
