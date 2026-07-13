@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import event
 
 from appConfig import base_config
+from celery_tasks.manager import remoteFileManager as remote_file_manager_module
 from celery_tasks.manager import storageAlert as storage_alert_module
 from celery_tasks.manager.remoteFileManager import RemoteFileManager
 from celery_tasks.manager.storageAlert import StorageAlert
@@ -410,6 +411,114 @@ def test_group_alert_resolves_questdb_ids_with_one_batched_group_query(
     assert len(selects_from(statements, "groups")) == 1
 
 
+def test_group_alarm_batches_independent_top20_storage_usage_queries(
+    usage_scope, monkeypatch
+):
+    usage_scope.query(models.StorageUsage).update({models.StorageUsage.used: 0})
+    usage_scope.add_all(
+        [
+            models.StorageUsage(
+                id=100 + (group_id - 1) * 22 + rank,
+                storage_cluster_id=1,
+                user_id=1,
+                group_id=group_id,
+                linux_path=f"/data/group-{group_id}/user-{rank}",
+                used=float(rank),
+                use_ratio=float(rank),
+                updated_at=NOW,
+            )
+            for group_id in (1, 2)
+            for rank in range(1, 23)
+        ]
+    )
+    usage_scope.commit()
+    groups = [usage_scope.get(models.Group, group_id) for group_id in (1, 2)]
+    alert = object.__new__(StorageAlert)
+    alert.db = usage_scope
+    alert.logger = Mock()
+    alert.config = SimpleNamespace(mail_to="ops@example.com")
+    alert.model = "dev"
+    alert.email = Mock()
+    alert.get_project_group_alarm_data = Mock(
+        return_value={"admin": [(groups[0], 91.0), (groups[1], 92.0)]}
+    )
+    alert.add_email_company_info = lambda data, threshold=None: data
+    alert.write_alerts_to_mysql = Mock()
+    serialized_usages = []
+
+    class SerializedUsage:
+        def __init__(self, storage_usage):
+            self.storage_usage = storage_usage
+
+        def default_dict(self):
+            payload = {
+                "id": self.storage_usage.id,
+                "used": self.storage_usage.used,
+                "user": self.storage_usage.user.rd_username,
+                "group_id": self.storage_usage.group.id,
+            }
+            serialized_usages.append(payload)
+            return payload
+
+    monkeypatch.setattr(
+        storage_alert_module.storageUsageSchema.StorageUsage,
+        "model_validate",
+        SerializedUsage,
+    )
+    usage_scope.expire_all()
+
+    with capture_select_statements(usage_scope) as statements:
+        alert.group_alarm_daily(threshold=90, end_time=NOW)
+
+    top20_by_group = {
+        group_id: [usage["used"] for usage in serialized_usages if usage["group_id"] == group_id]
+        for group_id in (1, 2)
+    }
+    assert top20_by_group == {
+        1: [float(value) for value in range(22, 2, -1)],
+        2: [float(value) for value in range(22, 2, -1)],
+    }
+    assert len(selects_from(statements, "storage_usages")) == 1
+    assert len(selects_from(statements, "users")) <= 1
+    assert len(selects_from(statements, "groups")) <= 1
+
+
+def test_group_alarm_completes_without_undefined_importance_counter(
+    usage_scope, monkeypatch
+):
+    group = usage_scope.get(models.Group, 1)
+    alert = object.__new__(StorageAlert)
+    alert.db = usage_scope
+    alert.logger = Mock()
+    alert.config = SimpleNamespace(mail_to="ops@example.com")
+    alert.model = "dev"
+    alert.email = Mock()
+    alert.get_project_group_alarm_data = Mock(
+        return_value={"admin": [(group, 91.0)]}
+    )
+    alert.add_email_company_info = lambda data, threshold=None: data
+    alert.write_alerts_to_mysql = Mock()
+
+    class SerializedUsage:
+        def __init__(self, storage_usage):
+            self.storage_usage = storage_usage
+
+        def default_dict(self):
+            return {"id": self.storage_usage.id, "used": self.storage_usage.used}
+
+    monkeypatch.setattr(
+        storage_alert_module.storageUsageSchema.StorageUsage,
+        "model_validate",
+        SerializedUsage,
+    )
+
+    alert.group_alarm_daily(threshold=90, end_time=NOW)
+
+    assert alert.logger.error.call_args_list == []
+    assert alert.email.send_email_via_template.call_count == 1
+    assert alert.write_alerts_to_mysql.call_count == 1
+
+
 def test_group_alert_reads_current_environment_and_target_by_stable_id(
     usage_scope, session_factory, monkeypatch
 ):
@@ -797,6 +906,109 @@ def test_quit_user_backup_batches_current_usages_and_completed_records(
             source_path="/data/volume-group/carol"
         ).one()
         assert "environment-current" in completed.destination_path
+        assert (
+            len(selects_from(statements, "storage_usages")),
+            len(selects_from(statements, "storage_back_up_records")),
+        ) == (1, 1)
+
+
+def test_delete_backup_reuses_expired_records_without_id_requeries(usage_scope):
+    expired_at = NOW.replace(year=2025)
+    existing = usage_scope.get(models.StorageBackUpRecord, 1)
+    existing.end_time = expired_at
+    existing.status = 2
+    usage_scope.add(
+        models.StorageBackUpRecord(
+            id=2,
+            user_id=2,
+            source_path="/data/qtree-group/bob",
+            destination_path="/backup/project/environment/group/bob",
+            start_time=expired_at,
+            end_time=expired_at,
+            status=2,
+        )
+    )
+    usage_scope.commit()
+    manager = object.__new__(RemoteFileManager)
+    manager.db = usage_scope
+    manager.logger = Mock()
+    manager.storage_config = SimpleNamespace(
+        back_up_enabled=True,
+        back_up_duration=30,
+        mail_to="",
+    )
+    manager.email = Mock()
+    manager.add_email_company_info = lambda data: data
+    manager.delete_directory = Mock(return_value=True)
+    usage_scope.expire_all()
+
+    with capture_select_statements(usage_scope) as statements:
+        manager.delete_back_up()
+
+    sent = manager.email.send_email_via_template.call_args.kwargs["data"]
+    assert {record["id"] for record in sent["storage_back_up_records"]} == {1, 2}
+    assert {record["status"] for record in sent["storage_back_up_records"]} == {5}
+    assert len(selects_from(statements, "storage_back_up_records")) == 1
+
+
+def test_bpm_backup_batches_current_usages_records_and_destination_paths(
+    usage_scope, session_factory, monkeypatch
+):
+    users = usage_scope.query(models.User).filter(models.User.id.in_([2, 3])).all()
+    for user in users:
+        user.user_type = 0
+        user.quit_days = 10
+    usage_scope.get(models.Group, 1).in_charge_user_id = 2
+    usage_scope.add(
+        models.StorageUsage(
+            id=4,
+            storage_cluster_id=1,
+            user_id=3,
+            group_id=1,
+            linux_path="/data/volume-group/carol",
+            used=15,
+            use_ratio=15,
+            updated_at=NOW,
+        )
+    )
+    usage_scope.commit()
+    with session_factory() as writer:
+        writer.get(models.ProjectStorageEnvironment, 1).name = "environment-current"
+        writer.commit()
+
+    class FakeIamApi:
+        def __init__(self, **_kwargs):
+            pass
+
+        def set_up(self):
+            pass
+
+        def initiating_bpm_process(self, data):
+            return f"bpm-{data['formData']['storageUsageId']}"
+
+    monkeypatch.setattr(remote_file_manager_module, "IamApi", FakeIamApi)
+    with session_factory() as task_db:
+        manager = object.__new__(RemoteFileManager)
+        manager.db = task_db
+        manager.logger = Mock()
+        manager.storage_config = SimpleNamespace(
+            back_up_enabled=True,
+            back_up_quit_days=30,
+            back_up_dir="/backup",
+        )
+        manager.directory_exists = Mock(return_value=True)
+
+        with capture_select_statements(task_db) as statements:
+            manager.initiating_quit_users_bpm_process()
+
+        created = task_db.query(models.StorageBackUpRecord).filter(
+            models.StorageBackUpRecord.process_uid.isnot(None)
+        ).all()
+        assert {record.source_path for record in created} == {
+            "/data/qtree-group/bob",
+            "/data/volume-group/carol",
+        }
+        assert all("environment-current" in record.destination_path for record in created)
         assert (
             len(selects_from(statements, "storage_usages")),
             len(selects_from(statements, "storage_back_up_records")),
