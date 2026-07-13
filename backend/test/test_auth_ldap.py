@@ -176,3 +176,38 @@ def test_bind_ldap_user_starts_tls_before_user_bind():
         "bind:CN=Root Admin,OU=Users,DC=example,DC=com:secret",
         "unbind",
     ]
+
+
+def test_bind_ldap_user_logs_safe_rejection_reason(caplog):
+    from utils import auth_service
+
+    class FakeConnection:
+        bound = False
+        result = {"result": 49, "description": "invalidCredentials"}
+
+        def __init__(self, server, user=None, password=None, auto_bind=False, receive_timeout=None):
+            pass
+
+        def start_tls(self):
+            return True
+
+        def bind(self):
+            return False
+
+        def unbind(self):
+            pass
+
+    base_config.set("ldap.uri", "ldap://dc.example.com")
+    base_config.set("ldap.starttls", True)
+    caplog.set_level("WARNING", logger="app:auth")
+    with patch.object(auth_service, "_ldap_server", lambda: object()):
+        with patch.object(
+            auth_service,
+            "_ldap_runtime_primitives",
+            lambda: (object, FakeConnection, object, {"auto_bind_no_tls": object()}),
+        ):
+            assert auth_service._bind_ldap_user("CN=Root Admin,OU=Users,DC=example,DC=com", "secret") is False
+
+    assert "LDAP user bind rejected: result=49 description=invalidCredentials" in caplog.text
+    assert "CN=Root Admin" not in caplog.text
+    assert "secret" not in caplog.text
