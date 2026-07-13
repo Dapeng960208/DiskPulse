@@ -1,5 +1,11 @@
 # 当前交付记录
 
+## 2026-07-13：登录后 profile 请求补齐 Bearer scheme
+
+- 修复前端请求拦截器发送裸 JWT，导致登录成功后 `/users/current/profile` 返回 `401` 的问题。
+- 有 token 时统一发送 `Authorization: Bearer <token>`；登录响应和 profile API 契约不变。
+- `npx vitest run test/unit/api/support.test.js test/unit/auth-login.test.js`：通过，3 个测试。
+
 ## 2026-07-13：LDAP 登录失败日志补齐
 
 ### 已完成

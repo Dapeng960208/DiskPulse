@@ -1,5 +1,13 @@
 # 错误记录
 
+### 2026-07-13：LDAP 登录成功后 profile 请求返回 401
+- 触发：LDAP 登录接口返回 `200` 后，前端立即请求 `/storage-pulse/api/users/current/profile`。
+- 现象：登录成功，但 profile 请求返回 `401 Unauthorized`。
+- 根因：前端请求拦截器把 JWT 直接写入 `Authorization`，后端只接受 `Bearer <token>`。
+- 修复：有 token 时统一添加 `Bearer` scheme。
+- 验证：`npx vitest run test/unit/api/support.test.js test/unit/auth-login.test.js` 通过，3 个测试。
+- 风险：未执行真实浏览器自动化；开发环境需刷新页面后重新登录。
+
 ### 2026-07-13：LDAP 用户 bind 失败无服务端原因日志
 - 触发：使用可被域控查询到的用户调用 `POST /storage-pulse/api/users/login`。
 - 现象：接口返回 `401 Unauthorized`，控制台仅显示访问日志，无法区分 STARTTLS、凭据拒绝或运行时异常；首次补充的 `app:auth` warning 在 Uvicorn 控制台仍不可见。
