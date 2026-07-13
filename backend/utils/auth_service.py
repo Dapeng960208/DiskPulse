@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import logging
 from datetime import datetime
 
 from fastapi import HTTPException, status
@@ -22,6 +23,7 @@ from utils.security import issue_token
 
 SUPERADMIN_ROLE = "superadmin"
 SUPERADMIN_PERMISSION = ["*", "*", "*"]
+logger = logging.getLogger("app:auth")
 
 
 def is_super_admin(user: User) -> bool:
@@ -55,11 +57,24 @@ def _bind_ldap_user(user_dn: str, password: str) -> bool:
             receive_timeout=ldap_timeout_seconds(),
         )
         if ldap_start_tls() and hasattr(connection, "start_tls") and not connection.start_tls():
+            result = getattr(connection, "result", {}) or {}
+            logger.warning(
+                "LDAP user STARTTLS rejected: result=%s description=%s",
+                result.get("result"),
+                result.get("description"),
+            )
             return False
         if ldap_start_tls() and hasattr(connection, "bind") and not connection.bind():
+            result = getattr(connection, "result", {}) or {}
+            logger.warning(
+                "LDAP user bind rejected: result=%s description=%s",
+                result.get("result"),
+                result.get("description"),
+            )
             return False
         return bool(getattr(connection, "bound", True))
-    except Exception:
+    except Exception as error:
+        logger.warning("LDAP user bind failed: exception=%s", type(error).__name__)
         return False
     finally:
         if connection is not None and hasattr(connection, "unbind"):
