@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import {
   computed,
   defineComponent,
@@ -20,6 +20,14 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/utils/authorization', () => ({
   hasRole: () => true,
+}));
+
+vi.mock('@/api/support/base-request', () => ({
+  default: {},
+}));
+
+vi.mock('@/api/support/auth-request', () => ({
+  default: {},
 }));
 
 const tableRowKey = Symbol('project-storage-environment-row');
@@ -233,7 +241,7 @@ describe('project storage environment frontend contract', () => {
     }));
 
     const source = readFileSync(
-      fileURLToPath(new URL('../../src/pages/project/components/ProjectStorageEnvironmentTable.vue', import.meta.url)),
+      resolve(process.cwd(), 'src/pages/project/components/ProjectStorageEnvironmentTable.vue'),
       'utf8',
     );
     expect(source).not.toMatch(/storage_host|storage_user|storage_password/);
@@ -367,7 +375,7 @@ describe('project storage environment frontend contract', () => {
     });
 
     const source = readFileSync(
-      fileURLToPath(new URL('../../src/pages/project/components/ProjectStorageEnvironmentFormDialog.vue', import.meta.url)),
+      resolve(process.cwd(), 'src/pages/project/components/ProjectStorageEnvironmentFormDialog.vue'),
       'utf8',
     );
     expect(source).not.toMatch(/storage_host|storage_user|storage_password/);
