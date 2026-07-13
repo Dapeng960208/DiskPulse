@@ -498,3 +498,158 @@ def test_unused_storage_config_is_not_loaded_or_carried_in_collection_snapshot()
         for argument in (*run_round.args.args, *run_round.args.kwonlyargs)
     }
     assert "storage_config" not in parameters
+
+
+class DummyLogger:
+    def info(self, *_args, **_kwargs):
+        pass
+
+    def error(self, *_args, **_kwargs):
+        pass
+
+
+def test_isilon_collection_uses_volume_target_without_creating_null_qtree():
+    monitor = object.__new__(storages.StoragePulseMonitor)
+    monitor.storage_type = "isilon"
+    monitor.fetch_aggregates = lambda: []
+    monitor.fetch_user_quotas = lambda: ([object()], [])
+    synced_models = []
+
+    def sync(_data, model, *_args, **_kwargs):
+        synced_models.append(model)
+
+    monitor.sync_data_to_postgres = sync
+    monitor._create_null_qtrees_for_volumes = lambda: pytest.fail(
+        "Isilon must not create name='null' qtrees"
+    )
+    monitor.fetch_qtrees = lambda: pytest.fail("Isilon must not fetch qtrees")
+    monitor.update_null_qtree_from_volume = lambda: None
+    monitor.calculate_volume_allocation = lambda: None
+    monitor.aggregate_group_usage = lambda: None
+    monitor.aggregate_environment_usage = lambda: None
+    monitor.aggregate_cluster_usage = lambda **_kwargs: None
+
+    monitor.execute_data_collection(include_questdb=False)
+
+    assert models.Volume in synced_models
+    assert models.Qtree not in synced_models
+
+
+def test_environment_aggregation_counts_shared_volume_once(db_session):
+    cluster = models.StorageCluster(
+        id=1, name="isilon-a", storage_type="isilon", is_active=True
+    )
+    project = models.Project(id=1, name="project-volume")
+    environment = models.ProjectStorageEnvironment(
+        id=1,
+        project_id=1,
+        storage_cluster_id=1,
+        name="isilon-a",
+        is_active=True,
+    )
+    volume = models.Volume(
+        id=1,
+        storage_cluster_id=1,
+        name="/ifs/project",
+        limit=100,
+        soft_limit=80,
+        used=50,
+        use_ratio=50,
+        soft_use_ratio=62.5,
+    )
+    groups = [
+        models.Group(
+            id=group_id,
+            project_id=1,
+            project_environment_id=1,
+            storage_cluster_id=1,
+            volume_id=1,
+            name=f"group-{group_id}",
+            enable_monitoring=True,
+            associate_multiple_groups=False,
+            limit=100,
+            soft_limit=80,
+            used=50,
+            use_ratio=50,
+            soft_use_ratio=62.5,
+        )
+        for group_id in (1, 2)
+    ]
+    db_session.add_all([cluster, project, environment, volume, *groups])
+    db_session.commit()
+    monitor = object.__new__(storages.StoragePulseMonitor)
+    monitor.db = db_session
+    monitor.storage_cluster_id = 1
+
+    monitor.aggregate_environment_usage()
+    db_session.expire(environment)
+
+    assert (
+        environment.limit,
+        environment.soft_limit,
+        environment.used,
+        environment.use_ratio,
+        environment.soft_use_ratio,
+    ) == (100, 80, 50, 50, 62.5)
+
+
+def test_netapp_regular_qtree_remains_the_group_storage_target(db_session):
+    cluster = models.StorageCluster(
+        id=1, name="netapp-a", storage_type="netapp", is_active=True
+    )
+    project = models.Project(id=1, name="project-qtree")
+    environment = models.ProjectStorageEnvironment(
+        id=1,
+        project_id=1,
+        storage_cluster_id=1,
+        name="netapp-a",
+        is_active=True,
+    )
+    volume = models.Volume(id=1, storage_cluster_id=1, name="volume-a")
+    qtree = models.Qtree(
+        id=1,
+        storage_cluster_id=1,
+        volume_id=1,
+        name="qtree-a",
+        limit=100,
+        soft_limit=80,
+        used=25,
+        use_ratio=25,
+        soft_use_ratio=31.25,
+    )
+    group = models.Group(
+        id=1,
+        project_id=1,
+        project_environment_id=1,
+        storage_cluster_id=1,
+        qtree_id=1,
+        name="group-qtree",
+        enable_monitoring=True,
+        associate_multiple_groups=False,
+    )
+    db_session.add_all([cluster, project, environment, volume, qtree, group])
+    db_session.commit()
+    snapshot = {
+        "storage_type": "netapp",
+        "storage_cluster_name": "netapp-a",
+        "rows": ({"group_id": 1, "project_environment_id": 1},),
+    }
+    monitor = storages.StoragePulseMonitor(
+        db_session,
+        DummyLogger(),
+        storage_cluster_id=1,
+        snapshot=snapshot,
+    )
+
+    monitor._aggregate_group_usage_netapp()
+    db_session.expire(group)
+
+    assert group.qtree_id == 1
+    assert group.volume_id is None
+    assert (
+        group.limit,
+        group.soft_limit,
+        group.used,
+        group.use_ratio,
+        group.soft_use_ratio,
+    ) == (100, 80, 25, 25, 31.25)
