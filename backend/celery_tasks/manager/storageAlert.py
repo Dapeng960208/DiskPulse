@@ -8,6 +8,7 @@ from schemas import storageUsageSchema, groupSchema, projectsSchema, aggregateSc
     qtreeSchema
 from datetime import datetime, timedelta
 from appConfig import base_config
+from utils.storageTarget import resolve_group_storage_target
 
 
 class StorageAlert:
@@ -160,8 +161,8 @@ class StorageAlert:
         )
         for storage_usage_quest_db in storage_usage_quest_dbs:
             group_id, avg_use_ratio = storage_usage_quest_db
-            group_db = self.db.query(Group).filter(Group.id == group_id, Group.qtree_id.isnot(None)).first()
-            if not group_db:
+            group_db = self.db.query(Group).filter(Group.id == group_id).first()
+            if not group_db or resolve_group_storage_target(group_db)["target"] is None:
                 continue
             group_charge_email = group_db.in_charge_user.email if group_db.in_charge_user and group_db.in_charge_user.email else 'admin'
             if group_charge_email not in alarm_data:

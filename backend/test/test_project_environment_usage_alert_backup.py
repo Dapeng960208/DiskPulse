@@ -262,6 +262,29 @@ def test_storage_usage_export_starts_with_traceable_environment_columns(usage_sc
     assert set(exported["项目环境"]) == {"environment-a"}
 
 
+def test_storage_usage_export_preserves_legacy_rows_without_group(usage_scope):
+    usage_scope.add(
+        models.StorageUsage(
+            id=4,
+            storage_cluster_id=1,
+            user_id=1,
+            group_id=None,
+            linux_path="/legacy/orphan/admin",
+            used=5,
+            use_ratio=5,
+            updated_at=NOW,
+        )
+    )
+    usage_scope.commit()
+
+    exported = storageUsageCrud.get_export_data(usage_scope)
+
+    legacy = exported.loc[exported["路径"] == "/legacy/orphan/admin"].iloc[0]
+    assert legacy["项目环境"] == ""
+    assert legacy["Volume"] == ""
+    assert legacy["Qtree"] == ""
+
+
 @pytest.mark.parametrize(
     ("group_id", "expected_type", "expected_target_id"),
     [(1, "volume", 1), (2, "qtree", 1)],

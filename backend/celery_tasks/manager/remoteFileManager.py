@@ -170,10 +170,18 @@ class RemoteFileManager:
             return False, None
         # delete space of project name
         project_name = group.project.name.replace(' ', '_')
+        environment_name = (
+            group.project_environment.name.replace(' ', '_')
+            if group.project_environment is not None
+            else None
+        )
         group_name = group.name
         user_path = storage_usage_db.linux_path
         base_name = os.path.basename(user_path)
-        group_back_dir = os.path.join(back_up_dir, project_name, group_name)
+        path_parts = [back_up_dir, project_name]
+        if environment_name is not None:
+            path_parts.append(environment_name)
+        group_back_dir = os.path.join(*path_parts, group_name)
         destination_path = os.path.join(group_back_dir, base_name)
         return destination_path
 

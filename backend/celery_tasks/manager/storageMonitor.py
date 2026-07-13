@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field
 from utils.mailTools.emailNotification import EmailNotification
 from typing import Any, Dict, Optional, Tuple, List
+from utils.storageTarget import resolve_group_storage_target
 
 
 class DataParser(ABC):
@@ -843,10 +844,14 @@ class StorageManagement:
         if group_db is None:
             return False, 'Group does not exist'
 
-        if group_db.qtree.name != 'null':
-            flag, message = self._expand_qtree(qtree_id=group_db.qtree_id, size=size)
+        resolved = resolve_group_storage_target(group_db)
+        target = resolved["target"]
+        if target is None:
+            return False, 'Group storage target does not exist'
+        if resolved["target_type"] == "qtree":
+            flag, message = self._expand_qtree(qtree_id=target.id, size=size)
         else:
-            flag, message = self._expand_volume(volume_id=group_db.qtree.volume.id, size=size)
+            flag, message = self._expand_volume(volume_id=target.id, size=size)
         if flag:
             limit = round(group_db.limit / 1024, 2)
             size = limit + size

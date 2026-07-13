@@ -39,33 +39,41 @@ def create_storage_usage(storage_usage: storageUsageSchema.StorageUsageCreate, b
         raise HTTPException(status_code=404, detail="Group not found")
     linux_path = os.path.join(group_db.linux_path, user_db.rd_username)
     storage_exit, storage_usage_db = storageUsageCrud.create_storage_usage(db=db, storage_usage=storage_usage,
-                                                                           linux_path=linux_path)
+                                                                           linux_path=linux_path,
+                                                                           group=group_db)
     if storage_exit is True:
         raise HTTPException(status_code=400, detail="Folder exited .")
     if not storage_usage_db:
         raise HTTPException(status_code=400, detail="Failed to create user folder")
     background_tasks.add_task(create_user_folder_by_storage_usage_id, logger, storage_usage_db.id)
-    return storage_usage_db
+    return storageUsageCrud.serialize_storage_usage(storage_usage_db)
 
 
 @router.get("/", response_model=commonSchema.ResponseModel)
 @handle_exceptions
 def read_storage_usages(page: int | None = 1, size: int | None = 20, nameLike: str | None = None,
-                        prop: str | None = None,
-                        order: str | None = None, user_id: int | str = Query(None), group_id: int | None = None,
-                        storage_cluster_id: int | None = None, db: Session = Depends(get_db)):
+                         prop: str | None = None,
+                         order: str | None = None, user_id: int | str = Query(None), group_id: int | None = None,
+                         storage_cluster_id: int | None = None, project_id: int | None = None,
+                         project_environment_id: int | None = None, db: Session = Depends(get_db)):
     if user_id == "":
         user_id = None
     storage_usages, total = storageUsageCrud.get_storage_usages(db=db, page=page, size=size, nameLike=nameLike,
-                                                                prop=prop, order=order, user_id=user_id,
-                                                                group_id=group_id, storage_cluster_id=storage_cluster_id)
-    return commonSchema.ResponseModel[storageUsageSchema.StorageUsage](content=storage_usages, total=total)
+                                                                 prop=prop, order=order, user_id=user_id,
+                                                                 group_id=group_id, storage_cluster_id=storage_cluster_id,
+                                                                 project_id=project_id,
+                                                                 project_environment_id=project_environment_id)
+    return commonSchema.ResponseModel[storageUsageSchema.StorageUsage](
+        content=[storageUsageCrud.serialize_storage_usage(item) for item in storage_usages],
+        total=total,
+    )
 
 
 @router.get("/export/")
 def export_storage_usages(export_type: str = 'pdf', nameLike: str | None = None, prop: str | None = None,
                           order: str | None = None, user_id: int | str = Query(None), group_id: int | None = None,
-                          storage_cluster_id: int | None = None, db: Session = Depends(get_db)):
+                          storage_cluster_id: int | None = None, project_id: int | None = None,
+                          project_environment_id: int | None = None, db: Session = Depends(get_db)):
     if user_id == "":
         user_id = None
     headers = {
@@ -73,11 +81,17 @@ def export_storage_usages(export_type: str = 'pdf', nameLike: str | None = None,
         "Access-Control-Expose-Headers": "Content-Disposition, Filename",
     }
     if export_type == 'pdf':
-        content = storageUsageCrud.export_storage_usage_to_pdf(db, nameLike, prop, order, user_id, group_id, storage_cluster_id)
+        content = storageUsageCrud.export_storage_usage_to_pdf(
+            db, nameLike, prop, order, user_id, group_id, storage_cluster_id,
+            project_id, project_environment_id,
+        )
         file_name = f"存储使用明细报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         media_type = "application/pdf"
     elif export_type == 'excel':
-        content = storageUsageCrud.export_storage_usage_to_excel(db, nameLike, prop, order, user_id, group_id, storage_cluster_id)
+        content = storageUsageCrud.export_storage_usage_to_excel(
+            db, nameLike, prop, order, user_id, group_id, storage_cluster_id,
+            project_id, project_environment_id,
+        )
         file_name = f"存储使用明细报表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     else:
@@ -93,7 +107,7 @@ def read_storage_usage(storage_usage_id: int, db: Session = Depends(get_db)):
     if db_storage_usage is None:
         raise HTTPException(status_code=404, detail="StorageUsage not found")
 
-    return db_storage_usage
+    return storageUsageCrud.serialize_storage_usage(db_storage_usage)
 
 
 @router.post("/{storage_usage_id}/back-up", status_code=status.HTTP_200_OK)
@@ -125,7 +139,7 @@ def read_storage_usage_realtime_data(storage_usage_id: int, start_time: datetime
                                                                               start_time=start_time, end_time=end_time,
                                                                               indicator=indicator)
     return commonSchema.ResponseStorageUsageModel[storageUsageSchema.StorageUsage](data=real_time_data,
-                                                                                   info=db_storage_usage)
+                                                                                   info=storageUsageCrud.serialize_storage_usage(db_storage_usage))
 
 
 @router.post("/expand")
@@ -189,7 +203,10 @@ def update_storage_usage(storage_usage_id: int, storage_usage: storageUsageSchem
     db_storage_usage = storageUsageCrud.get_storage_usage_by_id(db, storage_usage_id=storage_usage_id)
     if db_storage_usage is None:
         raise HTTPException(status_code=404, detail="StorageUsage not found")
-    return storageUsageCrud.update_storage_usage(db=db, storage_usage_id=storage_usage_id, storage_usage=storage_usage)
+    updated = storageUsageCrud.update_storage_usage(
+        db=db, storage_usage_id=storage_usage_id, storage_usage=storage_usage
+    )
+    return storageUsageCrud.serialize_storage_usage(updated)
 
 
 @router.delete("/{storage_usage_id}", response_model=storageUsageSchema.StorageUsage)

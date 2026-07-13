@@ -8,6 +8,7 @@ from sqlalchemy import or_, desc, asc
 from datetime import datetime, timedelta
 from crud.questDbCrud import get_real_time_data_by_id
 from utils.query import get_sort_column
+from utils.storageTarget import resolve_group_storage_target
 
 
 def get_group_by_id(db: Session, group_id: int):
@@ -143,19 +144,16 @@ def serialize_group(group: Group) -> dict:
     result["project_environment"] = group.project_environment
     result["storage_cluster"] = group.storage_cluster
 
-    if group.volume_id is not None:
+    resolved = resolve_group_storage_target(group)
+    target = resolved["target"]
+    if target is not None:
         result["storage_target"] = {
-            "type": "volume",
-            "id": group.volume.id,
-            "name": group.volume.name,
+            "type": resolved["target_type"],
+            "id": target.id,
+            "name": target.name,
         }
-    elif group.qtree_id is not None:
-        result["qtree"] = group.qtree
-        result["storage_target"] = {
-            "type": "qtree",
-            "id": group.qtree.id,
-            "name": group.qtree.name,
-        }
+        if resolved["target_type"] == "qtree":
+            result["qtree"] = target
     else:
         result["storage_target"] = None
     return result

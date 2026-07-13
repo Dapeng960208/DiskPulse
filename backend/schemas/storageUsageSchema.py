@@ -2,7 +2,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from schemas import usersSchema, groupSchema
-from schemas.storageClusterSchema import StorageCluster
 
 class StorageUsageBase(BaseModel):
     user_id: int
@@ -49,7 +48,9 @@ class StorageUsage(StorageUsageBase):
     birth_time: datetime | None = None
     user: usersSchema.OnlyUser
     group: groupSchema.GroupBase
-    storage_cluster: StorageCluster | None = None
+    project_environment: groupSchema.ProjectEnvironmentSummary | None = None
+    storage_cluster: groupSchema.StorageClusterSummary | None = None
+    storage_target: groupSchema.StorageTargetSummary | None = None
 
     class Config:
         from_attributes = True
