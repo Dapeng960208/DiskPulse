@@ -3,6 +3,7 @@ from datetime import datetime
 from unittest.mock import Mock
 
 import pytest
+from fastapi import HTTPException
 
 from appConfig import base_config
 from crud import questDbCrud
@@ -177,3 +178,17 @@ def test_storage_environment_summary_and_realtime_return_404_when_missing(
 
     assert response.status_code == 404
     assert "environment" in response.text.lower()
+
+
+def test_project_environment_questdb_table_prefix_maps_to_expected_table():
+    assert questDbCrud._table_info("project_environment") == (
+        "project_environment",
+        "project_environment_storage_usages",
+    )
+
+
+def test_questdb_table_prefix_still_rejects_arbitrary_values():
+    with pytest.raises(HTTPException) as error:
+        questDbCrud._table_info("project_environment; DROP TABLE users")
+
+    assert error.value.status_code == 400
