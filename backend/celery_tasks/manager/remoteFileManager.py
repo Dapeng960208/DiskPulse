@@ -155,15 +155,7 @@ class RemoteFileManager:
             return False
         return True
 
-    def get_back_up_destination_path_by_id(self, storage_usage_id):
-        back_up_dir = self.storage_config.back_up_dir
-        if not back_up_dir:
-            return None
-        self.logger.info(f"Back up dir :{back_up_dir}")
-        storage_usage_db = self.db.query(StorageUsage).filter_by(id=storage_usage_id).first()
-        if not storage_usage_db:
-            self.logger.warning("Storage not exited.")
-            return False, None
+    def _build_back_up_destination_path(self, storage_usage_db, back_up_dir):
         group = storage_usage_db.group
         if not group or not group.project:
             self.logger.warning("group or project not exited.")
@@ -185,6 +177,17 @@ class RemoteFileManager:
         destination_path = os.path.join(group_back_dir, base_name)
         return destination_path
 
+    def get_back_up_destination_path_by_id(self, storage_usage_id):
+        back_up_dir = self.storage_config.back_up_dir
+        if not back_up_dir:
+            return None
+        self.logger.info(f"Back up dir :{back_up_dir}")
+        storage_usage_db = self.db.query(StorageUsage).filter_by(id=storage_usage_id).first()
+        if not storage_usage_db:
+            self.logger.warning("Storage not exited.")
+            return False, None
+        return self._build_back_up_destination_path(storage_usage_db, back_up_dir)
+
     def back_up_user_directory_by_storage_usage_id(self, storage_usage_id, closed=False):
         if not self.storage_config.back_up_enabled:
             self.logger.warning(
@@ -197,7 +200,7 @@ class RemoteFileManager:
         if not storage_usage_db:
             self.logger.warning("Storage not exited.")
         user_path = storage_usage_db.linux_path
-        destination_path = self.get_back_up_destination_path_by_id(storage_usage_id=storage_usage_id)
+        destination_path = self._build_back_up_destination_path(storage_usage_db, back_up_dir)
         group_back_dir = os.path.dirname(destination_path)
         if not self.directory_exists(group_back_dir):
             if not self.create_directory(group_back_dir):

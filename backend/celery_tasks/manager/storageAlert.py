@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 
-from models import StorageUsage, Group, Project, Aggregate, Volume, Qtree, StorageAlerts, User
+from models import (
+    StorageUsage, Group, Project, ProjectStorageEnvironment, Aggregate, Volume,
+    Qtree, StorageAlerts, User,
+)
+from sqlalchemy.orm import joinedload
 from crud.questDbCrud import get_high_avg_usage
 from crud.configCrud import get_storage_config
 from utils.mailTools.emailNotification import EmailNotification
@@ -159,9 +163,21 @@ class StorageAlert:
         storage_usage_quest_dbs = get_high_avg_usage(
             table_prefix='group', storage_config=self.config, threshold=threshold, end_time=end_time
         )
+        group_ids = {group_id for group_id, _avg_use_ratio in storage_usage_quest_dbs}
+        group_dbs = self.db.query(Group).options(
+            joinedload(Group.project),
+            joinedload(Group.project_environment).joinedload(
+                ProjectStorageEnvironment.storage_cluster
+            ),
+            joinedload(Group.storage_cluster),
+            joinedload(Group.volume),
+            joinedload(Group.qtree).joinedload(Qtree.volume),
+            joinedload(Group.in_charge_user),
+        ).filter(Group.id.in_(group_ids)).all() if group_ids else []
+        group_by_id = {group.id: group for group in group_dbs}
         for storage_usage_quest_db in storage_usage_quest_dbs:
             group_id, avg_use_ratio = storage_usage_quest_db
-            group_db = self.db.query(Group).filter(Group.id == group_id).first()
+            group_db = group_by_id.get(group_id)
             if not group_db or resolve_group_storage_target(group_db)["target"] is None:
                 continue
             group_charge_email = group_db.in_charge_user.email if group_db.in_charge_user and group_db.in_charge_user.email else 'admin'
@@ -374,6 +390,23 @@ class StorageAlert:
 
     def project_alarm_weekly(self):
         alarm_data = self.get_project_alarm_data()
+        project_ids = {
+            project_db.id
+            for project_dbs in alarm_data.values()
+            for project_db, _avg_use_ratio in project_dbs
+        }
+        all_group_dbs = self.db.query(Group).options(
+            joinedload(Group.project),
+            joinedload(Group.project_environment),
+            joinedload(Group.storage_cluster),
+            joinedload(Group.qtree).joinedload(Qtree.volume),
+            joinedload(Group.in_charge_user),
+        ).filter(Group.project_id.in_(project_ids)).order_by(
+            Group.project_id, Group.used.desc()
+        ).all() if project_ids else []
+        groups_by_project = {}
+        for group_db in all_group_dbs:
+            groups_by_project.setdefault(group_db.project_id, []).append(group_db)
         result = []
         for email, project_dbs in alarm_data.items():
             try:
@@ -387,9 +420,7 @@ class StorageAlert:
                 for project_db, avg_use_ratio in project_dbs:
                     project_dict = projectsSchema.Project.model_validate(project_db).model_dump()
                     project_dict['avg_use_ratio'] = round(avg_use_ratio, 2)
-                    group_dbs = self.db.query(Group).filter(
-                        Group.project_id == project_db.id
-                    ).order_by(Group.used.desc()).all()
+                    group_dbs = groups_by_project.get(project_db.id, [])
                     group_usages = [groupSchema.Group.model_validate(group_db).model_dump() for group_db in group_dbs]
                     environment_usages = {}
                     for group_db, group_usage in zip(group_dbs, group_usages):
