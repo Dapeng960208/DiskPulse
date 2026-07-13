@@ -199,7 +199,7 @@ def test_bind_ldap_user_logs_safe_rejection_reason(caplog):
 
     base_config.set("ldap.uri", "ldap://dc.example.com")
     base_config.set("ldap.starttls", True)
-    caplog.set_level("WARNING", logger="app:auth")
+    caplog.set_level("WARNING", logger="uvicorn.error")
     with patch.object(auth_service, "_ldap_server", lambda: object()):
         with patch.object(
             auth_service,
@@ -209,5 +209,6 @@ def test_bind_ldap_user_logs_safe_rejection_reason(caplog):
             assert auth_service._bind_ldap_user("CN=Root Admin,OU=Users,DC=example,DC=com", "secret") is False
 
     assert "LDAP user bind rejected: result=49 description=invalidCredentials" in caplog.text
+    assert caplog.records[-1].name == "uvicorn.error"
     assert "CN=Root Admin" not in caplog.text
     assert "secret" not in caplog.text
