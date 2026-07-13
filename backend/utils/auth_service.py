@@ -89,7 +89,9 @@ def ldap_authenticate(username: str, password: str) -> dict | None:
     if not normalized or not password:
         return None
 
+    found_directory_user = False
     for candidate in _iter_ldap_users(normalized):
+        found_directory_user = True
         if _bind_ldap_user(str(candidate["user_dn"]), password):
             profile = {
                 "username": candidate["username"],
@@ -101,6 +103,8 @@ def ldap_authenticate(username: str, password: str) -> dict | None:
             if email:
                 profile["email"] = email
             return profile
+    if not found_directory_user:
+        logger.warning("LDAP authentication failed: directory user not found")
     return None
 
 
