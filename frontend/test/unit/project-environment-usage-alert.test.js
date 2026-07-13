@@ -77,6 +77,17 @@ const ElDialogStub = defineComponent({
   },
 });
 
+const ElSelectStub = defineComponent({
+  name: 'ElSelect',
+  props: {
+    modelValue: { type: [Number, String], default: null },
+  },
+  emits: ['update:modelValue'],
+  setup(_, { slots }) {
+    return () => h('select', slots.default?.());
+  },
+});
+
 function selectStub(name) {
   return defineComponent({
     name,
@@ -109,7 +120,7 @@ const commonStubs = {
   ElInput: true,
   ElLink: true,
   ElOption: true,
-  ElSelect: true,
+  ElSelect: ElSelectStub,
   ElTableColumn: ElTableColumnStub,
   ElTag: true,
   ExportDialog: true,
@@ -143,7 +154,21 @@ describe('project environment usage and alert frontend contract', () => {
   });
 
   it('scopes usage filters and export to project, environment, group, cluster, and user', async () => {
-    const { storageUsageApi, wrapper } = await mountUsageList();
+    const { ElMessageBox } = await import('element-plus');
+    const confirm = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue();
+    const { storageUsageApi, wrapper } = await mountUsageList({
+      content: [{
+        id: 1,
+        linux_path: '/project/env/group/alice',
+        user: { rd_username: 'alice', user_type: 2 },
+        project: { id: 42, name: 'Alpha' },
+        project_environment: { id: 7, name: '生产环境' },
+        group: { id: 31, name: '研发组' },
+        storage_cluster: { id: 9, name: 'netapp-a', storage_type: 'netapp' },
+        storage_target: { type: 'volume', id: 3, name: 'vol-a' },
+      }],
+      total: 1,
+    });
     const project = wrapper.findComponent({ name: 'ProjectSelect' });
     expect(project.exists()).toBe(true);
     project.vm.$emit('update:modelValue', 42);
@@ -179,6 +204,9 @@ describe('project environment usage and alert frontend contract', () => {
       storage_cluster_id: 9,
       user_id: 5,
     }));
+
+    await wrapper.findAll('button').find((button) => button.text() === '移至备份').trigger('click');
+    expect(confirm).toHaveBeenCalled();
   });
 
   it('derives the create payload from an environment-scoped group without cluster override', async () => {
@@ -305,5 +333,14 @@ describe('project environment usage and alert frontend contract', () => {
     expect(alertApi.fetch.mock.calls.at(-1)[0]).not.toHaveProperty('project_environment_id');
     expect(wrapper.text()).toContain('Alpha');
     expect(wrapper.text()).toContain('生产环境');
+
+    const alertSelects = wrapper.findAllComponents(ElSelectStub);
+    alertSelects[0].vm.$emit('update:modelValue', 'report');
+    alertSelects[1].vm.$emit('update:modelValue', 'Group');
+    wrapper.findComponent(FilterFormStub).vm.$emit('reset');
+    await flushPromises();
+    expect(alertApi.fetch).toHaveBeenLastCalledWith(expect.objectContaining({
+      alert_type: '',
+    }));
   });
 });

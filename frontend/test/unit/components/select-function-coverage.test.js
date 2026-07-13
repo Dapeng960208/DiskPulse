@@ -284,5 +284,19 @@ describe('form select function coverage', () => {
       project_id: 31,
       project_environment_id: 8,
     });
+
+    const select = wrapper.findComponent({ name: 'ElSelect' });
+    await select.props('remoteMethod')('ops');
+    await flushPromises();
+    select.vm.$emit('update:modelValue', 12);
+
+    expect(groupApi.fetch).toHaveBeenLastCalledWith({
+      page: 1,
+      size: 20,
+      project_id: 31,
+      project_environment_id: 8,
+      nameLike: 'ops',
+    });
+    expect(wrapper.emitted('update:modelValue')).toContainEqual([12]);
   });
 });
