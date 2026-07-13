@@ -411,6 +411,26 @@ def test_group_alert_resolves_questdb_ids_with_one_batched_group_query(
     assert len(selects_from(statements, "groups")) == 1
 
 
+def test_disabled_group_is_excluded_from_group_and_user_alarm_data(
+    usage_scope, monkeypatch
+):
+    group = usage_scope.get(models.Group, 1)
+    group.enable_monitoring = False
+    usage_scope.get(models.User, 1).is_alert = True
+    usage_scope.commit()
+    alert = object.__new__(StorageAlert)
+    alert.db = usage_scope
+    alert.config = SimpleNamespace()
+    monkeypatch.setattr(
+        storage_alert_module,
+        "get_high_avg_usage",
+        lambda **_kwargs: [(1, 91.0)],
+    )
+
+    assert alert.get_project_group_alarm_data(threshold=90, end_time=NOW) == {}
+    assert alert.get_user_alarm_data(threshold=90, end_time=NOW) == {}
+
+
 def test_group_alarm_batches_independent_top20_storage_usage_queries(
     usage_scope, monkeypatch
 ):
@@ -483,8 +503,8 @@ def test_group_alarm_batches_independent_top20_storage_usage_queries(
     assert len(selects_from(statements, "groups")) <= 1
 
 
-def test_group_alarm_completes_without_undefined_importance_counter(
-    usage_scope, monkeypatch
+def test_group_alarm_real_storage_usage_schema_completes_email_and_persistence(
+    usage_scope,
 ):
     group = usage_scope.get(models.Group, 1)
     alert = object.__new__(StorageAlert)
@@ -498,19 +518,6 @@ def test_group_alarm_completes_without_undefined_importance_counter(
     )
     alert.add_email_company_info = lambda data, threshold=None: data
     alert.write_alerts_to_mysql = Mock()
-
-    class SerializedUsage:
-        def __init__(self, storage_usage):
-            self.storage_usage = storage_usage
-
-        def default_dict(self):
-            return {"id": self.storage_usage.id, "used": self.storage_usage.used}
-
-    monkeypatch.setattr(
-        storage_alert_module.storageUsageSchema.StorageUsage,
-        "model_validate",
-        SerializedUsage,
-    )
 
     alert.group_alarm_daily(threshold=90, end_time=NOW)
 
