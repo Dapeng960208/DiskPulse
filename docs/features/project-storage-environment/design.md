@@ -1,6 +1,6 @@
 # DiskPulse 项目多存储环境统一展示优化方案
 
-> 文档状态：仅设计，待实现
+> 文档状态：已实施，待生产与外部验证
 > 适用范围：`D:\dev\DiskPulse`
 > 核心场景：一个项目包含四套相互独立的存储环境，其中两套 Isilon、两套 NetApp。
 
@@ -35,7 +35,7 @@ erDiagram
 
 ### 1.1 可行性结论与实施门槛
 
-方案在现有 FastAPI、SQLAlchemy、Celery、Vue 3 和 Vitest 技术栈内可实现，不需要新增前端依赖，也不需要为配置快照新增 Redis 缓存。当前结论仍为**仅设计、待实现、待验证**，实施前必须先冻结数据库和 API 契约。
+方案已在现有 FastAPI、SQLAlchemy、Celery、Vue 3 和 Vitest 技术栈内实施，不需要新增前端依赖，也没有为配置快照新增 Redis 缓存。当前自动化范围已完成，生产数据库审计、migration 演练和外部系统验证仍待执行。
 
 实施成功标准：
 
@@ -1085,22 +1085,22 @@ docs/tracking/current-release.md
 
 ## 19. 当前状态与未验证范围
 
-截至 2026-07-13，当前分支已完成本设计的核心模型、接口、采集和前端工作区实现，但生产迁移、真实外部系统和剩余前端范围仍未完成验收。
+截至 2026-07-13，当前分支已完成本设计的核心模型、接口、采集、前端工作区、Dashboard 和 F4 下游适配；剩余实现项仅为 M3，生产迁移和真实外部系统仍未完成验收。
 
 ### 19.1 已完成
 
 - M0-M2：完成审计与回填工具、Expand 模型和 migration。`e6a1b2c3d4f5` 已创建 `project_storage_environments`，为 `groups` 增加环境和 Volume 绑定字段；回填脚本支持默认审计、阻塞项检查和显式 `--apply`，相关迁移与回填契约已有自动化测试。
-- B1/B2：完成项目存储环境 CRUD、权限校验、重复环境冲突、删除保护，以及 Group 对环境和单一 Volume/Qtree 目标的绑定、过滤和统一目标响应；Isilon 只允许绑定 Volume。F4 所列 Usage/Alert/导出页面与下游契约不包含在此完成口径中。
+- B1/B2：完成项目存储环境 CRUD、权限校验、重复环境冲突、删除保护，以及 Group 对环境和单一 Volume/Qtree 目标的绑定、过滤和统一目标响应；Isilon 只允许绑定 Volume。
 - C1/C2：完成环境和完整轮次 Project 汇总、环境 QuestDB 读写入口、每轮新鲜标量快照、短读取会话、分集群事务和失败隔离。PostgreSQL 先提交，QuestDB 后写入；部分集群失败时保留成功集群结果，只有全部启用环境本轮成功的项目才刷新汇总。
+- Celery 主链路读取优化：任务按稳定 ID 和短会话重新读取当前数据库绑定；Group/User/Project/System 告警、项目周报、单次与批量备份、BPM 和删除流程批量预加载关联并复用当前 ORM 快照；Group TOP20 使用一次窗口查询；`enable_monitoring=false` 的 Group 不进入 Group/User 告警。该完成口径不代表整个 `celery_tasks` 目录已消除 N+1。
 - F1/F2：完成环境 API wrapper、管理表单与列表，以及项目→环境→目标类型→Volume/Qtree 的项目组级联绑定；Isilon 环境固定选择 Volume。
-- F3 已完成范围：完成项目列表环境概览、项目详情环境工作台和 `RealTimePage` 环境趋势接入，包括有效环境 URL 保留、无效环境回退和仅加载当前环境。
+- F3：完成项目列表环境概览、项目详情环境工作台、`RealTimePage` 环境趋势和 Dashboard 环境维度接入，包括有效环境 URL 保留、无效环境回退、仅加载当前环境、项目/环境筛选、环境独立容量展示，以及使用 `project_environment_id:group_id` 稳定 key 隔离跨环境同名 Group。
+- F4：完成 Usage、Alert 和导出的环境筛选、环境内 Group 约束与环境列；监控/扩容下游统一解析 Volume/Qtree 目标，备份路径增加环境目录，项目周报按环境分组。
 - V 已完成范围：后端和前端自动化测试、前端 lint 与生产构建已通过。该结论只覆盖仓库自动化门禁，不代表 migration 或外部系统验收完成。
 
 ### 19.2 待实现
 
-- F3 剩余范围：Dashboard 的环境维度筛选、系列拆分和同名项目组跨环境隔离仍待实现或验证，不能按已完成 Dashboard 交付。
-- F4：Usage、Alert 和导出的环境筛选、环境内项目组约束、周报分组及导出列仍待实现。
-- M3：`groups.project_environment_id` 尚未收紧为 `NOT NULL`，兼容旧字段仍未停止，旧列清理 migration 尚未实施。
+- M3：仅在生产数据审计、回填计数、migration upgrade/downgrade 和回滚演练通过后执行；届时把 `groups.project_environment_id` 收紧为 `NOT NULL`，停止兼容双写，并通过后续 migration 移除重复的 `project_id/storage_cluster_id` 旧字段。
 
 ### 19.3 待验证
 
@@ -1108,3 +1108,5 @@ docs/tracking/current-release.md
 - 尚未对生产历史数据执行审计和回填，生产 PostgreSQL 实际数据质量、回填计数和回滚路径仍待确认。
 - 尚未执行外部浏览器烟测。
 - 尚未连接真实 PostgreSQL、QuestDB、NetApp 或 Isilon 做端到端验收；外部连接、设备资源标识、目录映射、QuestDB 表结构和跨库最终一致性均待验证。
+- `StoragePulseMonitor` 仍包含逐 Volume/Group/Project 的查询和 UPDATE；当前结果正确性已有测试覆盖，但真实性能仍需结合生产规模压测后优化。legacy 或未调度 monitor 不在本次完成口径。
+- 当前 beat schedule 只启用 60 秒一次的 `storages_schedule_fetching_task`；告警、周报和定时备份条目仍为注释状态，尚未通过真实 Celery beat/worker 调度验收。
