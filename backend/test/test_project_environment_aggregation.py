@@ -593,6 +593,57 @@ def test_environment_aggregation_counts_shared_volume_once(db_session):
     ) == (100, 80, 50, 50, 62.5)
 
 
+def test_isilon_multi_group_without_usage_resets_stale_totals(db_session):
+    cluster = models.StorageCluster(
+        id=1, name="isilon-a", storage_type="isilon", is_active=True
+    )
+    project = models.Project(id=1, name="project-empty-usage")
+    environment = models.ProjectStorageEnvironment(
+        id=1,
+        project_id=1,
+        storage_cluster_id=1,
+        name="isilon-a",
+        is_active=True,
+    )
+    group = models.Group(
+        id=1,
+        project_id=1,
+        project_environment_id=1,
+        storage_cluster_id=1,
+        name="group-empty-usage",
+        enable_monitoring=True,
+        associate_multiple_groups=True,
+        limit=100,
+        soft_limit=80,
+        used=50,
+        use_ratio=50,
+        soft_use_ratio=62.5,
+    )
+    db_session.add_all([cluster, project, environment, group])
+    db_session.commit()
+    monitor = storages.StoragePulseMonitor(
+        db_session,
+        DummyLogger(),
+        storage_cluster_id=1,
+        snapshot={
+            "storage_type": "isilon",
+            "storage_cluster_name": "isilon-a",
+            "rows": ({"group_id": 1, "project_environment_id": 1},),
+        },
+    )
+
+    monitor._aggregate_group_usage_isilon()
+    db_session.expire(group)
+
+    assert (
+        group.limit,
+        group.soft_limit,
+        group.used,
+        group.use_ratio,
+        group.soft_use_ratio,
+    ) == (0, None, 0, 0, None)
+
+
 def test_netapp_regular_qtree_remains_the_group_storage_target(db_session):
     cluster = models.StorageCluster(
         id=1, name="netapp-a", storage_type="netapp", is_active=True
@@ -642,7 +693,9 @@ def test_netapp_regular_qtree_remains_the_group_storage_target(db_session):
     )
 
     monitor._aggregate_group_usage_netapp()
+    monitor.aggregate_environment_usage()
     db_session.expire(group)
+    db_session.expire(environment)
 
     assert group.qtree_id == 1
     assert group.volume_id is None
@@ -652,4 +705,11 @@ def test_netapp_regular_qtree_remains_the_group_storage_target(db_session):
         group.used,
         group.use_ratio,
         group.soft_use_ratio,
+    ) == (100, 80, 25, 25, 31.25)
+    assert (
+        environment.limit,
+        environment.soft_limit,
+        environment.used,
+        environment.use_ratio,
+        environment.soft_use_ratio,
     ) == (100, 80, 25, 25, 31.25)

@@ -166,17 +166,19 @@ def test_isilon_linked_user_and_directory_quotas_capture_soft_limits(db_session)
     seed_quota_data(db_session, "netapp")
     db_session.query(models.StorageCluster).filter_by(id=1).update({"storage_type": "isilon"})
     db_session.query(models.Volume).filter_by(id=1).update({"name": "/ifs/team"})
-    db_session.query(models.Qtree).filter_by(id=1).update({"name": "null"})
+    db_session.query(models.Group).filter_by(id=1).update(
+        {"volume_id": 1, "qtree_id": None}
+    )
     db_session.commit()
 
     monitor = build_monitor(db_session, "isilon")
     monitor.client = FakeIsilonClient()
-    qtree = db_session.query(models.Qtree).filter_by(id=1).one()
+    volume = db_session.query(models.Volume).filter_by(id=1).one()
     group = db_session.query(models.Group).filter_by(id=1).one()
 
     volumes, quotas = monitor._fetch_user_quotas_isilon(
-        {("/ifs/team", "null"): qtree},
-        {qtree.id: [group]},
+        {"/ifs/team": volume},
+        {volume.id: [group]},
         {"alice": 1},
         {"1001": db_session.query(models.User).filter_by(id=1).one()},
         {},
