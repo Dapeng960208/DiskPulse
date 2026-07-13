@@ -2,6 +2,7 @@
 import importlib
 import os
 from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -369,6 +370,79 @@ def test_environment_alert_is_stored_against_project_storage_environment(usage_s
     stored = usage_scope.query(models.StorageAlerts).one()
     assert stored.related_type == "ProjectStorageEnvironment"
     assert stored.related_id == 1
+
+
+def test_project_weekly_report_keeps_flat_groups_and_sections_by_environment(usage_scope):
+    usage_scope.add(
+        models.ProjectStorageEnvironment(
+            id=3,
+            project_id=1,
+            storage_cluster_id=2,
+            name="environment-c",
+            created_at=NOW,
+            updated_at=NOW,
+        )
+    )
+    usage_scope.flush()
+    usage_scope.add(
+        models.Group(
+            id=4,
+            project_id=1,
+            project_environment_id=3,
+            storage_cluster_id=2,
+            volume_id=2,
+            name="volume-group",
+            linux_path="/data/environment-c/volume-group",
+            limit=1024,
+        )
+    )
+    usage_scope.commit()
+
+    alert = object.__new__(StorageAlert)
+    alert.db = usage_scope
+    alert.logger = Mock()
+    alert.config = SimpleNamespace(mail_to="ops@example.com")
+    alert.model = "dev"
+    alert.email = Mock()
+    project = usage_scope.get(models.Project, 1)
+    alert.get_project_alarm_data = Mock(return_value={"admin": [(project, 55.0)]})
+    alert.add_email_company_info = lambda data: data
+    alert.write_alerts_to_mysql = Mock()
+
+    alert.project_alarm_weekly()
+
+    sent = alert.email.send_email_via_template.call_args.kwargs
+    assert sent["recipient"] == ["ops@example.com"]
+    project_data = sent["data"]["project_usages"][0]
+    assert {group["id"] for group in project_data["group_usages"]} == {1, 2, 4}
+
+    sections = {
+        section["project_environment"]["id"]: section
+        for section in project_data["environment_usages"]
+    }
+    assert sections[1]["project_environment"] == {"id": 1, "name": "environment-a"}
+    assert {group["id"] for group in sections[1]["group_usages"]} == {1, 2}
+    assert {group["name"] for group in sections[1]["group_usages"]} == {
+        "volume-group",
+        "qtree-group",
+    }
+    assert sections[3]["project_environment"] == {"id": 3, "name": "environment-c"}
+    assert {group["id"] for group in sections[3]["group_usages"]} == {4}
+    assert {group["name"] for group in sections[3]["group_usages"]} == {"volume-group"}
+
+
+def test_project_weekly_template_renders_environment_sections():
+    template = (
+        Path(__file__).resolve().parents[1]
+        / "utils"
+        / "mailTools"
+        / "template"
+        / "projectAlarmWeekly.html"
+    ).read_text(encoding="utf-8")
+
+    assert "project.environment_usages" in template
+    assert "environment.project_environment.name" in template
+    assert "environment.group_usages" in template
 
 
 def test_new_backup_path_includes_environment_without_moving_legacy_record(usage_scope):
