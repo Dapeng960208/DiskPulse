@@ -1,5 +1,13 @@
 # 错误记录
 
+### 2026-07-13：LDAP 用户 bind 失败无服务端原因日志
+- 触发：使用可被域控查询到的用户调用 `POST /storage-pulse/api/users/login`。
+- 现象：接口返回 `401 Unauthorized`，控制台仅显示访问日志，无法区分 STARTTLS、凭据拒绝或运行时异常。
+- 根因：`_bind_ldap_user()` 对 bind 失败直接返回 `False`，并吞掉所有异常。
+- 修复：在共享用户 bind 函数记录安全的失败阶段、LDAP result code/description 或异常类型，不记录用户名、DN 和密码。
+- 验证：真实服务账号查询得到一个用户结果；`..\.venv\Scripts\python.exe -m pytest test\test_auth_ldap.py -q` 通过，7 个测试。
+- 风险：未获取用户密码，无法替用户执行真实用户 bind；下一次登录日志可进一步确认是否为 `invalidCredentials`。
+
 ### 2026-07-13：YAML 配置测试漏建配置实例
 - 触发：执行 `.\.venv\Scripts\python.exe -m pytest backend\test\test_app_config.py -q`。
 - 现象：`test_resolves_secret_file_relative_to_yaml` 报错 `NameError: name 'config' is not defined`。

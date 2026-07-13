@@ -1,5 +1,17 @@
 # 当前交付记录
 
+## 2026-07-13：LDAP 登录失败日志补齐
+
+### 已完成
+
+- 确认服务账号 STARTTLS、bind 和用户查询正常，`guojianpeng` 可被目录检索到；登录失败发生在用户账号 bind 阶段。
+- 用户 STARTTLS 或 bind 被拒绝时记录 LDAP result code/description，异常时仅记录异常类型；日志不包含用户名、DN 或密码。
+- 登录接口仍统一返回 `401 invalid credentials`，不向客户端泄露认证细节。
+
+### 验证状态
+
+- `..\.venv\Scripts\python.exe -m pytest test\test_auth_ldap.py -q`：通过，7 个测试。
+
 ## 2026-07-13：后端运行配置迁移为分类 YAML
 
 ### 主题
