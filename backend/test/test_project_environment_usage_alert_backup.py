@@ -431,6 +431,44 @@ def test_project_weekly_report_keeps_flat_groups_and_sections_by_environment(usa
     assert {group["name"] for group in sections[3]["group_usages"]} == {"volume-group"}
 
 
+def test_project_weekly_report_keeps_legacy_groups_in_unbound_environment_section(usage_scope):
+    usage_scope.add(
+        models.Group(
+            id=5,
+            project_id=1,
+            project_environment_id=None,
+            storage_cluster_id=1,
+            qtree_id=1,
+            name="legacy-group",
+            linux_path="/legacy/group",
+            limit=1024,
+        )
+    )
+    usage_scope.commit()
+
+    alert = object.__new__(StorageAlert)
+    alert.db = usage_scope
+    alert.logger = Mock()
+    alert.config = SimpleNamespace(mail_to="ops@example.com")
+    alert.model = "dev"
+    alert.email = Mock()
+    project = usage_scope.get(models.Project, 1)
+    alert.get_project_alarm_data = Mock(return_value={"admin": [(project, 55.0)]})
+    alert.add_email_company_info = lambda data: data
+    alert.write_alerts_to_mysql = Mock()
+
+    alert.project_alarm_weekly()
+
+    project_data = alert.email.send_email_via_template.call_args.kwargs["data"]["project_usages"][0]
+    section = next(
+        item
+        for item in project_data["environment_usages"]
+        if item["project_environment"]["id"] is None
+    )
+    assert section["project_environment"] == {"id": None, "name": "未绑定环境"}
+    assert {group["id"] for group in section["group_usages"]} == {5}
+
+
 def test_project_weekly_template_renders_environment_sections():
     template = (
         Path(__file__).resolve().parents[1]

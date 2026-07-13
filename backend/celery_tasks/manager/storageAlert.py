@@ -387,14 +387,33 @@ class StorageAlert:
                 for project_db, avg_use_ratio in project_dbs:
                     project_dict = projectsSchema.Project.model_validate(project_db).model_dump()
                     project_dict['avg_use_ratio'] = round(avg_use_ratio, 2)
-                    group_dbs = self.db.query(Group).filter(Group.project_id == project_db.id,
-                                                            Group.qtree_id.isnot(None)).order_by(
-                        Group.used.desc()).all()
+                    group_dbs = self.db.query(Group).filter(
+                        Group.project_id == project_db.id
+                    ).order_by(Group.used.desc()).all()
                     group_usages = [groupSchema.Group.model_validate(group_db).model_dump() for group_db in group_dbs]
+                    environment_usages = {}
+                    for group_db, group_usage in zip(group_dbs, group_usages):
+                        environment = group_db.project_environment
+                        environment_key = environment.id if environment is not None else 0
+                        section = environment_usages.setdefault(
+                            environment_key,
+                            {
+                                'project_environment': {
+                                    'id': environment.id if environment is not None else None,
+                                    'name': environment.name if environment is not None else '未绑定环境',
+                                },
+                                'group_usages': [],
+                            },
+                        )
+                        section['group_usages'].append(group_usage)
                     if self.model != 'dev':
                         recipient += [group_db.in_charge_user.email for group_db in group_dbs if
                                       group_db.in_charge_user and group_db.in_charge_user.email]
                     project_dict['group_usages'] = group_usages
+                    project_dict['environment_usages'] = [
+                        environment_usages[environment_id]
+                        for environment_id in sorted(environment_usages)
+                    ]
                     project_usages.append(project_dict)
                 if len(project_usages) == 0:
                     continue
