@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
-from crud.configCrud import get_storage_config
 from sqlalchemy.exc import SQLAlchemyError
 
 from schemas.storageUsageSchema import StorageUsageBase
@@ -8,8 +7,8 @@ from schemas.volumeSchema import VolumeBase
 from utils.netAppClient import NetAppClient
 from utils.isilonClient import IsilonClient
 from schemas import aggregateSchema, volumeSchema, qtreeSchema, storageUsageSchema
-from models import Aggregate, Volume, Qtree, Group, StorageUsage, User, Project, StorageCluster
-from sqlalchemy import func, text
+from models import Aggregate, Volume, Qtree, Group, StorageUsage, User, Project, ProjectStorageEnvironment, StorageCluster
+from sqlalchemy import func, text, update
 from dependencies import QuestDBSession
 from typing import List, Dict, Any, Optional
 
@@ -43,7 +42,7 @@ class StoragePulseMonitor:
     通过 REST API 采集存储数据，并写入 PostgreSQL 和 QuestDB。
     """
 
-    def __init__(self, db, logger, storage_cluster_id: int):
+    def __init__(self, db, logger, storage_cluster_id: int, snapshot=None):
         """
         初始化存储监控器
 
@@ -55,12 +54,22 @@ class StoragePulseMonitor:
         self.db = db
         self.logger = logger
         self.storage_cluster_id = storage_cluster_id
+        self.snapshot = snapshot
+        self.group_snapshots = {
+            row["group_id"]: row
+            for row in (snapshot or {}).get("rows", ())
+            if row.get("group_id") is not None
+        }
         self.storage_cluster: StorageCluster = db.query(StorageCluster).filter_by(
-            id=storage_cluster_id).first()
+            id=storage_cluster_id, is_active=True).first()
         if self.storage_cluster is None:
             raise ValueError(f"StorageCluster with id={storage_cluster_id} not found")
-        self.storage_type = self.storage_cluster.storage_type.lower()
-        self.config = None   # 全局配置（QuestDB 等），在 setup() 中加载
+        self.storage_type = (
+            (snapshot or {}).get("storage_type") or self.storage_cluster.storage_type
+        ).lower()
+        self.storage_cluster_name = (
+            (snapshot or {}).get("storage_cluster_name") or self.storage_cluster.name
+        )
         self.client = None
 
         if self.storage_type not in ('netapp', 'isilon'):
@@ -70,7 +79,7 @@ class StoragePulseMonitor:
     def _log_prefix(self):
         """日志前缀"""
         type_name = 'NetApp' if self.storage_type == 'netapp' else 'Isilon'
-        return f"[StoragePulse|{type_name}|{self.storage_cluster.name}]"
+        return f"[StoragePulse|{type_name}|{self.storage_cluster_name}]"
 
     # ------------------------------------------------------------------
     # 生命周期
@@ -82,43 +91,74 @@ class StoragePulseMonitor:
         self.execute_data_collection()
         self.cleanup()
 
+    def collect_postgres(self):
+        """Collect and flush PostgreSQL data inside the caller's transaction."""
+        self.setup()
+        self.execute_data_collection(include_questdb=False)
+        return None
+
+    def write_questdb(self, _metrics=None):
+        """Write time-series data after the PostgreSQL transaction committed."""
+        self.insert_metrics_to_questdb('storage_usages', self.db.query(StorageUsage).filter(
+            StorageUsage.used > 0, StorageUsage.storage_cluster_id == self.storage_cluster_id).all())
+        self.insert_metrics_to_questdb('qtree', self.db.query(Qtree).filter(
+            Qtree.used >= 0, Qtree.storage_cluster_id == self.storage_cluster_id).all())
+        self.insert_metrics_to_questdb('volume', self.db.query(Volume).filter(
+            Volume.used >= 0, Volume.storage_cluster_id == self.storage_cluster_id).all())
+        self.insert_metrics_to_questdb(
+            'project_environment',
+            self.db.query(ProjectStorageEnvironment).filter(
+                ProjectStorageEnvironment.used >= 0,
+                ProjectStorageEnvironment.storage_cluster_id == self.storage_cluster_id,
+            ).all(),
+        )
+        group_query = self.db.query(Group).filter(
+            Group.enable_monitoring.is_(True),
+            Group.storage_cluster_id == self.storage_cluster_id)
+        if self.storage_type == 'netapp':
+            group_query = group_query.filter(Group.qtree_id.isnot(None))
+        self.insert_metrics_to_questdb('group', group_query.all())
+        self.insert_metrics_to_questdb('aggregate', self.db.query(Aggregate).filter(
+            Aggregate.used >= 0, Aggregate.storage_cluster_id == self.storage_cluster_id).all())
+        self.insert_metrics_to_questdb('storage_cluster', [self.storage_cluster])
+
     def setup(self):
         """初始化客户端连接"""
-        # 全局配置仅用于 QuestDB 连接
-        self.config = get_storage_config(db=self.db)
-
-        cluster = self.storage_cluster
+        cluster = self.snapshot or {}
+        hostname = cluster.get("storage_host", self.storage_cluster.storage_host)
+        username = cluster.get("storage_user", self.storage_cluster.storage_user)
+        password = cluster.get("storage_password", self.storage_cluster.storage_password)
+        configured_port = cluster.get("storage_port", self.storage_cluster.storage_port)
         if self.storage_type == 'netapp':
             self.client = NetAppClient(
-                hostname=cluster.storage_host,
-                username=cluster.storage_user,
-                password=cluster.storage_password,
-                port=cluster.storage_port or 443,
+                hostname=hostname,
+                username=username,
+                password=password,
+                port=configured_port or 443,
                 logger=self.logger
             )
         else:  # isilon
             self.client = IsilonClient(
-                hostname=cluster.storage_host,
-                username=cluster.storage_user,
-                password=cluster.storage_password,
-                port=cluster.storage_port or 8080,
+                hostname=hostname,
+                username=username,
+                password=password,
+                port=configured_port or 8080,
                 logger=self.logger
             )
 
-        port = cluster.storage_port or (443 if self.storage_type == 'netapp' else 8080)
-        self.logger.info(f"{self._log_prefix} Client initialized: {cluster.storage_host}:{port}")
+        port = configured_port or (443 if self.storage_type == 'netapp' else 8080)
+        self.logger.info(f"{self._log_prefix} Client initialized: {hostname}:{port}")
 
     def cleanup(self):
         """清理资源"""
         if self.client:
             self.client.close()
-        self.db.commit()
 
     # ------------------------------------------------------------------
     # 数据采集主流程
     # ------------------------------------------------------------------
 
-    def execute_data_collection(self):
+    def execute_data_collection(self, include_questdb=True):
         """执行数据采集流程"""
         aggregates = self.fetch_aggregates()
 
@@ -141,25 +181,10 @@ class StoragePulseMonitor:
                                     exclude_keys=['group_id', 'user_id','storage_cluster_id'])
 
         self.aggregate_group_usage()
-        self.aggregate_project_usage()
-        self.aggregate_cluster_usage()
-
-        self.insert_metrics_to_questdb('storage_usages', self.db.query(StorageUsage).filter(
-            StorageUsage.used > 0, StorageUsage.storage_cluster_id == self.storage_cluster_id).all())
-        self.insert_metrics_to_questdb('qtree', self.db.query(Qtree).filter(
-            Qtree.used >= 0, Qtree.storage_cluster_id == self.storage_cluster_id).all())
-        self.insert_metrics_to_questdb('volume', self.db.query(Volume).filter(
-            Volume.used >= 0, Volume.storage_cluster_id == self.storage_cluster_id).all())
-        self.insert_metrics_to_questdb('project', self.db.query(Project).filter(Project.used >= 0).all())
-        # Isilon 没有 qtree，不过滤 qtree_id；NetApp 需要 qtree_id 不为空
-        group_query = self.db.query(Group).filter(
-            Group.enable_monitoring.is_(True),
-            Group.storage_cluster_id == self.storage_cluster_id)
-        if self.storage_type == 'netapp':
-            group_query = group_query.filter(Group.qtree_id.isnot(None))
-        self.insert_metrics_to_questdb('group', group_query.all())
-        self.insert_metrics_to_questdb('aggregate', self.db.query(Aggregate).filter(
-            Aggregate.used >= 0, Aggregate.storage_cluster_id == self.storage_cluster_id).all())
+        self.aggregate_environment_usage()
+        self.aggregate_cluster_usage(include_questdb=False)
+        if include_questdb:
+            self.write_questdb()
 
     # ------------------------------------------------------------------
     # 数据获取方法
@@ -402,7 +427,7 @@ class StoragePulseMonitor:
                         qtree_db.used = used
                         qtree_db.use_ratio = use_ratio
                         qtree_db.soft_use_ratio = soft_use_ratio
-                        self.db.commit()
+                        self.db.flush()
             
             self.logger.info(f"{self._log_prefix} Fetched {len(result)} user quotas")
         except Exception as e:
@@ -431,7 +456,7 @@ class StoragePulseMonitor:
             qtree_db.soft_use_ratio = volume_db.soft_use_ratio
             qtree_db.updated_at = datetime.now()
         
-        self.db.commit()
+        self.db.flush()
         self.logger.info(f"{self._log_prefix} Updated {len(null_qtrees)} null qtrees from volumes")
 
     def calculate_volume_allocation(self):
@@ -448,7 +473,7 @@ class StoragePulseMonitor:
                 Qtree.used > 0
             ).scalar()
             volume_db.allocated = qtree_sum if qtree_sum else volume_db.limit
-            self.db.commit()
+            self.db.flush()
         self.logger.info(f"{self._log_prefix} Calculated allocation for {len(volume_dbs)} volumes")
 
     def aggregate_group_usage(self):
@@ -458,6 +483,21 @@ class StoragePulseMonitor:
         else:
             self._aggregate_group_usage_isilon()
 
+    def _apply_group_update(self, group_id, values):
+        snapshot = self.group_snapshots.get(group_id)
+        if snapshot is None:
+            return False
+        result = self.db.execute(
+            update(Group)
+            .where(
+                Group.id == group_id,
+                Group.project_environment_id == snapshot["project_environment_id"],
+                Group.enable_monitoring.is_(True),
+            )
+            .values(**values)
+        )
+        return result.rowcount > 0
+
     def _aggregate_group_usage_netapp(self):
         """NetApp 组使用量聚合"""
         # case0: qtree_id 为空
@@ -465,12 +505,14 @@ class StoragePulseMonitor:
             Group.enable_monitoring.is_(True), Group.qtree_id.is_(None),
             Group.storage_cluster_id == self.storage_cluster_id).all()
         for group_db in case0_dbs:
-            group_db.limit = 0
-            group_db.soft_limit = None
-            group_db.used = 0
-            group_db.use_ratio = 0
-            group_db.soft_use_ratio = None
-            self.db.commit()
+            self._apply_group_update(group_db.id, {
+                "limit": 0,
+                "soft_limit": None,
+                "used": 0,
+                "use_ratio": 0,
+                "soft_use_ratio": None,
+                "updated_at": datetime.now(),
+            })
 
         # case1: 与 volume 直接关联（qtree name == 'null'）
         case1_dbs = self.db.query(Group, Qtree, Volume)\
@@ -484,12 +526,14 @@ class StoragePulseMonitor:
                 Group.storage_cluster_id == self.storage_cluster_id
             ).all()
         for group_db, qtree_db, volume_db in case1_dbs:
-            group_db.limit = volume_db.limit
-            group_db.soft_limit = volume_db.soft_limit
-            group_db.used = volume_db.used
-            group_db.use_ratio = volume_db.use_ratio
-            group_db.soft_use_ratio = volume_db.soft_use_ratio
-            self.db.commit()
+            self._apply_group_update(group_db.id, {
+                "limit": volume_db.limit,
+                "soft_limit": volume_db.soft_limit,
+                "used": volume_db.used,
+                "use_ratio": volume_db.use_ratio,
+                "soft_use_ratio": volume_db.soft_use_ratio,
+                "updated_at": datetime.now(),
+            })
 
         # case2: 与 qtree 直接关联
         case2_dbs = self.db.query(Group, Qtree)\
@@ -502,12 +546,14 @@ class StoragePulseMonitor:
                 Group.storage_cluster_id == self.storage_cluster_id
             ).all()
         for group_db, qtree_db in case2_dbs:
-            group_db.limit = qtree_db.limit
-            group_db.soft_limit = qtree_db.soft_limit
-            group_db.used = qtree_db.used
-            group_db.use_ratio = qtree_db.use_ratio
-            group_db.soft_use_ratio = qtree_db.soft_use_ratio
-            self.db.commit()
+            self._apply_group_update(group_db.id, {
+                "limit": qtree_db.limit,
+                "soft_limit": qtree_db.soft_limit,
+                "used": qtree_db.used,
+                "use_ratio": qtree_db.use_ratio,
+                "soft_use_ratio": qtree_db.soft_use_ratio,
+                "updated_at": datetime.now(),
+            })
 
         # case3: 分组聚合计算
         case3_dbs = self.db.query(
@@ -524,15 +570,16 @@ class StoragePulseMonitor:
             sum_used = sum_used if sum_used else 0
             sum_limit = sum_limit if sum_limit else 0
             soft_limit = sum_soft_limit if sum_soft_limit else None
-            group_db.used = sum_used
             limit = group_db.limit if group_db.limit is not None else sum_limit
             use_ratio = round((sum_used * 100) / limit, 2) if limit > 0 else 0
-            group_db.limit = limit
-            group_db.soft_limit = soft_limit
-            group_db.use_ratio = use_ratio
-            group_db.soft_use_ratio = _calculate_use_ratio(sum_used, soft_limit)
-            group_db.updated_at = datetime.now()
-            self.db.commit()
+            self._apply_group_update(group_id, {
+                "used": sum_used,
+                "limit": limit,
+                "soft_limit": soft_limit,
+                "use_ratio": use_ratio,
+                "soft_use_ratio": _calculate_use_ratio(sum_used, soft_limit),
+                "updated_at": datetime.now(),
+            })
 
         self.logger.info(f"{self._log_prefix} Aggregated usage for groups")
 
@@ -556,15 +603,55 @@ class StoragePulseMonitor:
             limit = sum_limit
             use_ratio = round((sum_used * 100) / limit, 2) if limit > 0 else 0
 
-            group_db.used = sum_used
-            group_db.limit = limit
-            group_db.soft_limit = sum_soft_limit
-            group_db.use_ratio = use_ratio
-            group_db.soft_use_ratio = _calculate_use_ratio(sum_used, sum_soft_limit)
-            group_db.updated_at = datetime.now()
-            self.db.commit()
+            self._apply_group_update(group_db.id, {
+                "used": sum_used,
+                "limit": limit,
+                "soft_limit": sum_soft_limit,
+                "use_ratio": use_ratio,
+                "soft_use_ratio": _calculate_use_ratio(sum_used, sum_soft_limit),
+                "updated_at": datetime.now(),
+            })
         
         self.logger.info(f"{self._log_prefix} Aggregated usage for {len(group_dbs)} groups")
+
+    def aggregate_environment_usage(self):
+        """Refresh only active environments owned by this cluster."""
+        collected_at = datetime.now()
+        rows = self.db.query(
+            ProjectStorageEnvironment.id,
+            func.sum(Group.limit),
+            func.sum(Group.soft_limit),
+            func.sum(Group.used),
+        ).outerjoin(
+            Group,
+            (Group.project_environment_id == ProjectStorageEnvironment.id)
+            & Group.enable_monitoring.is_(True),
+        ).filter(
+            ProjectStorageEnvironment.storage_cluster_id == self.storage_cluster_id,
+            ProjectStorageEnvironment.is_active.is_(True),
+        ).group_by(ProjectStorageEnvironment.id).all()
+        for environment_id, limit, soft_limit, used in rows:
+            limit = limit or 0
+            used = used or 0
+            self.db.execute(
+                update(ProjectStorageEnvironment)
+                .where(
+                    ProjectStorageEnvironment.id == environment_id,
+                    ProjectStorageEnvironment.storage_cluster_id == self.storage_cluster_id,
+                    ProjectStorageEnvironment.is_active.is_(True),
+                )
+                .values(
+                    limit=limit,
+                    soft_limit=soft_limit,
+                    used=used,
+                    use_ratio=round(used * 100 / limit, 2) if limit else None,
+                    soft_use_ratio=_calculate_use_ratio(used, soft_limit),
+                    collection_status="success",
+                    last_collected_at=collected_at,
+                    updated_at=collected_at,
+                )
+            )
+        self.db.flush()
 
     def aggregate_project_usage(self):
         """聚合计算项目的存储使用量"""
@@ -589,14 +676,14 @@ class StoragePulseMonitor:
                      'use_ratio': use_ratio, 'soft_use_ratio': soft_use_ratio,
                      'updated_at': datetime.now()}
                 )
-            self.db.commit()
+            self.db.flush()
             self.logger.info(f"{self._log_prefix} Aggregated usage for {len(project_store_dbs)} projects")
             return True
         except SQLAlchemyError as e:
             self.logger.error(f"{self._log_prefix} Failed to aggregate project usage: {e}")
             return False
 
-    def aggregate_cluster_usage(self):
+    def aggregate_cluster_usage(self, include_questdb=True):
         """按 Aggregate 聚合计算 StorageCluster 的总使用量，更新 PostgreSQL 并写入 QuestDB"""
         try:
             result = self.db.query(
@@ -614,10 +701,10 @@ class StoragePulseMonitor:
             self.storage_cluster.limit = total_limit
             self.storage_cluster.use_ratio = use_ratio
             self.storage_cluster.updated_at = datetime.now()
-            self.db.commit()
+            self.db.flush()
 
-            # 写入 QuestDB storage_cluster_storage_usages
-            self.insert_metrics_to_questdb('storage_cluster', [self.storage_cluster])
+            if include_questdb:
+                self.insert_metrics_to_questdb('storage_cluster', [self.storage_cluster])
 
             self.logger.info(
                 f"{self._log_prefix} Aggregated cluster usage: "
@@ -714,13 +801,12 @@ class StoragePulseMonitor:
                         self.db.delete(item)
                     self.logger.info(f"{self._log_prefix} Deleted {len(extra_data)} redundant {model.__name__} records")
 
-            self.db.commit()
+            self.db.flush()
             self.logger.info(f"{self._log_prefix} Synced {len(data)} {model.__name__} records to PostgreSQL")
             return True
         except SQLAlchemyError as e:
-            self.db.rollback()
             self.logger.error(f"{self._log_prefix} Failed to sync {model.__name__} to PostgreSQL: {e}")
-            return False
+            raise
 
     def _process_quota_user_isilon(self, record: Dict, qtree_map: Dict, group_map: Dict,
                                     users_map: Dict, users_uid_map: Dict,
@@ -751,7 +837,7 @@ class StoragePulseMonitor:
                 if not user_id:
                     new_user = User(rd_username=rd_username, updated_at=datetime.now())
                     self.db.add(new_user)
-                    self.db.commit()
+                    self.db.flush()
                     user_id = new_user.id
                     users_map[rd_username] = user_id
             # qtree 可能对应多个 group
@@ -832,7 +918,7 @@ class StoragePulseMonitor:
                 if not user_id:
                     new_user = User(rd_username=rd_username, updated_at=datetime.now())
                     self.db.add(new_user)
-                    self.db.commit()
+                    self.db.flush()
                     user_id = new_user.id
                     users_map[rd_username] = user_id
 
