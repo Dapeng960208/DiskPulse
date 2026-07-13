@@ -9,9 +9,16 @@ vi.mock('element-plus', () => ({
   ElCard: commonStubs.ElCard,
   ElPagination: commonStubs.ElPagination,
   ElTable: commonStubs.ElTable,
+  ElTableColumn: commonStubs.ElCard,
   ElForm: commonStubs.ElForm,
   ElConfigProvider: commonStubs.ElConfigProvider,
+  ElDescriptions: commonStubs.ElDescriptions,
   ElDescriptionsItem: commonStubs.ElDescriptionsItem,
+  ElEmpty: commonStubs.ElCard,
+  ElMessage: { error: vi.fn() },
+  ElTabPane: commonStubs.ElCard,
+  ElTabs: commonStubs.ElCard,
+  ElTag: commonStubs.ElCard,
 }));
 
 vi.mock('@/stores/app-settings', () => ({
@@ -30,9 +37,24 @@ vi.mock('vue-router', async () => {
       params: {
         id: '12',
       },
+      query: {},
     }),
+    useRouter: () => ({ replace: vi.fn(() => Promise.resolve()) }),
   };
 });
+
+vi.mock('@/api/project-storage-environment-api', () => ({
+  default: {
+    fetchByProject: vi.fn(() => Promise.resolve({ content: [], total: 0 })),
+    fetchSummaryById: vi.fn(() => Promise.resolve({})),
+  },
+}));
+
+vi.mock('@/api/group-api.js', () => ({
+  default: {
+    fetch: vi.fn(() => Promise.resolve({ content: [], total: 0 })),
+  },
+}));
 
 vi.mock('@/pages/common/RealTimePage.vue', () => ({
   default: {

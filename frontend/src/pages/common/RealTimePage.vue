@@ -20,6 +20,7 @@ import alertApi from '@/api/alert-api.js';
 import aggregateApi from '@/api/aggregate-api.js';
 import projectApi from '@/api/project-api.js';
 import storageUsageApi from '@/api/storage-usage-api.js';
+import projectStorageEnvironmentApi from '@/api/project-storage-environment-api';
 import { getDefaultTime } from '@/composables/common';
 import { useQuery, useQueryParams } from '@/composables/query';
 
@@ -27,7 +28,14 @@ const props = defineProps({
   apiType: {
     type: String,
     required: true,
-    validator: (value) => ['volume', 'qtree', 'aggregate', 'project', 'storage-usage'].includes(value),
+    validator: (value) => [
+      'volume',
+      'qtree',
+      'aggregate',
+      'project',
+      'project-environment',
+      'storage-usage',
+    ].includes(value),
   },
   label: {
     type: String,
@@ -46,6 +54,7 @@ const apiMap = {
   qtree: qtreeApi,
   aggregate: aggregateApi,
   project: projectApi,
+  'project-environment': projectStorageEnvironmentApi,
   group: groupApi,
   'storage-usage': storageUsageApi
 };
@@ -55,6 +64,7 @@ const selectMap = {
   qtree: QtreeSelect,
   aggregate: AggregateSelect,
   project: ProjectSelect,
+  'project-environment': null,
   group: GroupSelect,
   'storage-usage': StorageUsageSelect
 };
@@ -64,6 +74,7 @@ const relatedTypeMap = {
   qtree: 'Qtree',
   aggregate: 'Aggregate',
   project: 'Project',
+  'project-environment': 'ProjectStorageEnvironment',
   group: 'Group',
   'storage-usage': 'StorageUsage',
 };
@@ -147,6 +158,9 @@ watch(attributeId, () => {
   query();
   alertQuery();
 }, { deep: true });
+watch(() => props.attributeId, (value) => {
+  attributeId.value = Array.isArray(value) ? value : [value];
+}, { deep: true });
 const yAxisUnit = computed(() => {
   return queryParams.value.indicator === 'used' ? 'G' : queryParams.value.indicator === 'use_ratio' ? '%' : '';
 });
@@ -158,6 +172,7 @@ const yAxisUnit = computed(() => {
       @query="query();alertQuery();"
       @reset="reset(); query();alertQuery();">
       <ElFormItem
+        v-if="selectedSelect"
         :label="props.label"
         class="w-120">
         <component

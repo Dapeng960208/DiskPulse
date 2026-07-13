@@ -9,6 +9,14 @@ class ProjectStorageEnvironmentApi extends BaseApi {
     return super.post(`/projects/${projectId}/storage-environments`, data);
   }
 
+  fetchSummaryById(id) {
+    return super.get(`/storage-environments/${id}/summary`);
+  }
+
+  fetchStorageRealTimeDataById(id, queryParams) {
+    return super.get(`/storage-environments/${id}/realtime`, queryParams);
+  }
+
   replace(id, data) {
     return super.put(`/storage-environments/${id}`, data);
   }

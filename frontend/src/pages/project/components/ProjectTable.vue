@@ -68,6 +68,55 @@ query();
         min-width="80"
       />
       <ElTableColumn
+        label="存储环境"
+        align="center"
+        min-width="130">
+        <template #default="{ row }">
+          启用 {{ row.active_storage_environment_count || 0 }} /
+          总量 {{ row.storage_environment_count || 0 }}
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="集群类型"
+        align="center"
+        min-width="120">
+        <template #default="{ row }">
+          <ElTag
+            v-for="storageType in row.storage_cluster_types"
+            :key="storageType"
+            class="mr-1"
+            type="info">
+            {{ storageType }}
+          </ElTag>
+          <span v-if="!row.storage_cluster_types?.length">-</span>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="环境状态"
+        align="center"
+        min-width="260">
+        <template #default="{ row }">
+          <ElTag type="warning">
+            pending {{ row.storage_environment_status_counts?.pending || 0 }}
+          </ElTag>
+          <ElTag
+            class="ml-1"
+            type="success">
+            success {{ row.storage_environment_status_counts?.success || 0 }}
+          </ElTag>
+          <ElTag
+            class="ml-1"
+            type="danger">
+            failed {{ row.storage_environment_status_counts?.failed || 0 }}
+          </ElTag>
+          <ElTag
+            class="ml-1"
+            type="info">
+            inactive {{ row.storage_environment_status_counts?.inactive || 0 }}
+          </ElTag>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
         label="PT经理"
         align="center"
         sortable
