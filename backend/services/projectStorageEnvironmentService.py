@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from crud import (
     projectStorageEnvironmentCrud,
     projectsCrud,
+    questDbCrud,
     storageClusterCrud,
 )
 from models import Project, ProjectStorageEnvironment, User
@@ -76,6 +77,55 @@ def get_environment_for_user(
     environment = _get_environment(db, environment_id)
     _require_project_reader(_get_project(db, environment.project_id), current_user)
     return environment
+
+
+def get_environment_summary(
+    db: Session,
+    *,
+    environment_id: int,
+    current_user: User,
+) -> ProjectStorageEnvironment:
+    return get_environment_for_user(
+        db,
+        environment_id=environment_id,
+        current_user=current_user,
+    )
+
+
+def get_environment_realtime(
+    db: Session,
+    *,
+    environment_id: int,
+    current_user: User,
+    start_time: datetime | None,
+    end_time: datetime | None,
+    indicator: str,
+) -> dict:
+    if (start_time is None) != (end_time is None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="start_time and end_time must be provided together",
+        )
+    if start_time is not None and start_time > end_time:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="start_time must not be after end_time",
+        )
+
+    environment = get_environment_for_user(
+        db,
+        environment_id=environment_id,
+        current_user=current_user,
+    )
+    data = questDbCrud.get_real_time_data_by_id(
+        db=db,
+        attribute_id=environment.id,
+        start_time=start_time,
+        end_time=end_time,
+        indicator=indicator,
+        table_prefix="project_environment",
+    )
+    return {"info": environment, "data": data}
 
 
 def _check_create_conflicts(

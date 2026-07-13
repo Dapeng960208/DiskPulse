@@ -60,3 +60,23 @@ class ProjectStorageEnvironment(BaseModel):
 class ProjectStorageEnvironmentPage(BaseModel):
     content: list[ProjectStorageEnvironment]
     total: int
+
+
+class ProjectStorageEnvironmentSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    limit: float | None
+    soft_limit: float | None
+    used: float | None
+    use_ratio: float | None
+    soft_use_ratio: float | None
+    collection_status: str
+    last_collected_at: datetime | None
+    storage_cluster: StorageClusterSummary
+
+
+class ProjectStorageEnvironmentRealtime(BaseModel):
+    info: ProjectStorageEnvironmentSummary
+    data: list[list[str | int | float | None]]

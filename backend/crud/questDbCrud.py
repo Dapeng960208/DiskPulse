@@ -8,7 +8,15 @@ from sqlalchemy import  text
 from utils.query import require_allowed
 
 
-ALLOWED_TABLE_PREFIXES = {"storage_usage", "aggregate", "volume", "qtree", "project", "group"}
+ALLOWED_TABLE_PREFIXES = {
+    "storage_usage",
+    "aggregate",
+    "volume",
+    "qtree",
+    "project",
+    "project_environment",
+    "group",
+}
 ALLOWED_INDICATORS = {"used", "used_ratio", "file_used"}
 
 

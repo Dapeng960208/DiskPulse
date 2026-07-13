@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
@@ -65,6 +66,47 @@ def get_project_storage_environment(
         db,
         environment_id=environment_id,
         current_user=current_user,
+    )
+
+
+@router.get(
+    "/storage-environments/{environment_id}/summary",
+    response_model=projectStorageEnvironmentSchema.ProjectStorageEnvironmentSummary,
+)
+def get_project_storage_environment_summary(
+    environment_id: int,
+    current_user: CurrentUserDep,
+    db: DBDep,
+):
+    return projectStorageEnvironmentService.get_environment_summary(
+        db,
+        environment_id=environment_id,
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/storage-environments/{environment_id}/realtime",
+    response_model=projectStorageEnvironmentSchema.ProjectStorageEnvironmentRealtime,
+)
+def get_project_storage_environment_realtime(
+    environment_id: int,
+    current_user: CurrentUserDep,
+    db: DBDep,
+    start_time: Annotated[datetime | None, Query()] = None,
+    end_time: Annotated[datetime | None, Query()] = None,
+    indicator: Annotated[
+        Literal["used", "use_ratio", "used_ratio"],
+        Query(),
+    ] = "used",
+):
+    return projectStorageEnvironmentService.get_environment_realtime(
+        db,
+        environment_id=environment_id,
+        current_user=current_user,
+        start_time=start_time,
+        end_time=end_time,
+        indicator=indicator,
     )
 
 
