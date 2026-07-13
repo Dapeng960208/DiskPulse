@@ -355,6 +355,41 @@ def test_group_alert_data_includes_volume_bound_groups(usage_scope, monkeypatch)
     assert alarm_data["admin"][0][0].id == 1
 
 
+def test_user_alert_batches_questdb_ids_and_preloads_current_storage_scope(
+    usage_scope, monkeypatch
+):
+    usage_scope.query(models.User).update({models.User.is_alert: True})
+    usage_scope.commit()
+    alert = object.__new__(StorageAlert)
+    alert.db = usage_scope
+    alert.config = SimpleNamespace()
+    monkeypatch.setattr(
+        storage_alert_module,
+        "get_high_avg_usage",
+        lambda **_kwargs: [(1, 91.0), (2, 92.0), (3, 93.0)],
+    )
+    usage_scope.expire_all()
+
+    with capture_select_statements(usage_scope) as statements:
+        alarm_data = alert.get_user_alarm_data(threshold=90, end_time=NOW)
+        resolved = [
+            importlib.import_module("utils.storageTarget").resolve_group_storage_target(
+                storage_usage.group
+            )
+            for items in alarm_data.values()
+            for storage_usage, _avg_use_ratio in items
+        ]
+
+    assert sum(len(items) for items in alarm_data.values()) == 3
+    assert {item["target"].id for item in resolved} == {1, 2}
+    assert len(selects_from(statements, "storage_usages")) == 1
+    assert len(selects_from(statements, "users")) <= 1
+    assert len(selects_from(statements, "groups")) <= 1
+    assert len(selects_from(statements, "project_storage_environments")) <= 1
+    assert len(selects_from(statements, "volumes")) <= 1
+    assert len(selects_from(statements, "qtrees")) <= 1
+
+
 def test_group_alert_resolves_questdb_ids_with_one_batched_group_query(
     usage_scope, monkeypatch
 ):
@@ -416,6 +451,29 @@ def test_group_alert_reads_current_environment_and_target_by_stable_id(
         assert target["storage_cluster"].id == 2
 
 
+def test_project_alert_batches_questdb_ids_and_preloads_owner(usage_scope, monkeypatch):
+    usage_scope.get(models.Project, 1).in_charge_user_id = 2
+    usage_scope.get(models.Project, 2).in_charge_user_id = 3
+    usage_scope.commit()
+    alert = object.__new__(StorageAlert)
+    alert.db = usage_scope
+    alert.config = SimpleNamespace()
+    monkeypatch.setattr(
+        storage_alert_module,
+        "get_high_avg_usage",
+        lambda **_kwargs: [(1, 51.0), (2, 52.0)],
+    )
+    usage_scope.expire_all()
+
+    with capture_select_statements(usage_scope) as statements:
+        alarm_data = alert.get_project_alarm_data(end_time=NOW)
+
+    assert sum(len(items) for items in alarm_data.values()) == 2
+    assert set(alarm_data) == {"bob@example.com", "carol@example.com"}
+    assert len(selects_from(statements, "projects")) == 1
+    assert len(selects_from(statements, "users")) <= 1
+
+
 def test_group_alert_persists_minimal_project_environment_context(usage_scope):
     alert = object.__new__(StorageAlert)
     alert.db = usage_scope
@@ -453,6 +511,58 @@ def test_environment_alert_is_stored_against_project_storage_environment(usage_s
     stored = usage_scope.query(models.StorageAlerts).one()
     assert stored.related_type == "ProjectStorageEnvironment"
     assert stored.related_id == 1
+
+
+def test_system_alert_batches_each_questdb_resource_type_once(usage_scope):
+    for volume in usage_scope.query(models.Volume).all():
+        volume.vserver = "svm"
+        volume.aggregate = "aggregate"
+        volume.type = "rw"
+        volume.state = "online"
+    usage_scope.get(models.Qtree, 1).style = "unix"
+    usage_scope.get(models.Qtree, 1).oplocks = "enabled"
+    usage_scope.get(models.Qtree, 1).status = "normal"
+    usage_scope.add_all(
+        [
+            models.Aggregate(id=1, storage_cluster_id=1, name="aggregate-a", used=10),
+            models.Aggregate(id=2, storage_cluster_id=2, name="aggregate-b", used=20),
+            models.Qtree(
+                id=2,
+                storage_cluster_id=2,
+                volume_id=2,
+                name="qtree-b",
+                limit=2048,
+                style="unix",
+                oplocks="enabled",
+                status="normal",
+            ),
+        ]
+    )
+    usage_scope.commit()
+    alert = object.__new__(StorageAlert)
+    alert.db = usage_scope
+    alert.logger = Mock()
+    alert.email = Mock()
+    alert.get_system_alarm_data = Mock(
+        return_value=(
+            [(1, 91.0), (2, 92.0)],
+            [(1, 91.0), (2, 92.0)],
+            [(1, 91.0), (2, 92.0)],
+        )
+    )
+    alert.write_alerts_to_mysql = Mock()
+    alert.add_email_company_info = lambda data, threshold=None: data
+    usage_scope.expire_all()
+
+    with capture_select_statements(usage_scope) as statements:
+        alert.system_alarm_daily(threshold=90)
+
+    assert alert.email.send_email_via_template.call_count == 1
+    assert (
+        len(selects_from(statements, "aggregates")),
+        len(selects_from(statements, "volumes")),
+        len(selects_from(statements, "qtrees")),
+    ) == (1, 1, 1)
 
 
 def test_project_weekly_report_keeps_flat_groups_and_sections_by_environment(usage_scope):
@@ -624,3 +734,70 @@ def test_backup_by_stable_usage_id_reads_storage_usage_once(usage_scope):
 
     assert result[0] is True
     assert len(selects_from(statements, "storage_usages")) == 1
+
+
+def test_quit_user_backup_batches_current_usages_and_completed_records(
+    usage_scope, session_factory
+):
+    users = usage_scope.query(models.User).filter(models.User.id.in_([2, 3])).all()
+    for user in users:
+        user.user_type = 0
+        user.quit_days = 40
+    usage_scope.add(
+        models.StorageUsage(
+            id=4,
+            storage_cluster_id=1,
+            user_id=3,
+            group_id=1,
+            linux_path="/data/volume-group/carol",
+            used=15,
+            use_ratio=15,
+            updated_at=NOW,
+        )
+    )
+    usage_scope.add(
+        models.StorageBackUpRecord(
+            id=2,
+            user_id=2,
+            source_path="/data/qtree-group/bob",
+            destination_path="/backup/already-complete/bob",
+            start_time=NOW,
+            end_time=NOW,
+            status=2,
+        )
+    )
+    usage_scope.commit()
+    with session_factory() as writer:
+        writer.get(models.ProjectStorageEnvironment, 1).name = "environment-current"
+        writer.commit()
+
+    with session_factory() as task_db:
+        manager = object.__new__(RemoteFileManager)
+        manager.db = task_db
+        manager.logger = Mock()
+        manager.storage_config = SimpleNamespace(
+            back_up_enabled=True,
+            back_up_quit_days=30,
+            back_up_dir="/backup",
+            file_manage_user="backup",
+            mail_to="",
+        )
+        manager.email = Mock()
+        manager.add_email_company_info = lambda data: data
+        manager.directory_exists = Mock(return_value=True)
+        manager.rsync_directory = Mock(return_value=True)
+        manager.delete_directory = Mock(return_value=True)
+        manager.change_owner = Mock(return_value=True)
+        manager.change_permissions = Mock(return_value=True)
+
+        with capture_select_statements(task_db) as statements:
+            assert manager.back_up_quit_users_storage_usages() is True
+
+        completed = task_db.query(models.StorageBackUpRecord).filter_by(
+            source_path="/data/volume-group/carol"
+        ).one()
+        assert "environment-current" in completed.destination_path
+        assert (
+            len(selects_from(statements, "storage_usages")),
+            len(selects_from(statements, "storage_back_up_records")),
+        ) == (1, 1)
