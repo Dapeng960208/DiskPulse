@@ -23,7 +23,7 @@ from utils.security import issue_token
 
 SUPERADMIN_ROLE = "superadmin"
 SUPERADMIN_PERMISSION = ["*", "*", "*"]
-logger = logging.getLogger("app:auth")
+logger = logging.getLogger("uvicorn.error")
 
 
 def is_super_admin(user: User) -> bool:
