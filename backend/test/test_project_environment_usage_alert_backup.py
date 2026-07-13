@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 import importlib
 import os
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from sqlalchemy import event
 
 from appConfig import base_config
 from celery_tasks.manager import storageAlert as storage_alert_module
@@ -21,6 +23,26 @@ from utils.security import issue_token
 
 NOW = datetime.fromisoformat("2026-07-13T10:00:00")
 API_PREFIX = "/storage-pulse/api"
+
+
+@contextmanager
+def capture_select_statements(db):
+    statements = []
+    engine = db.get_bind()
+
+    def record_select(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(" ".join(statement.lower().split()))
+
+    event.listen(engine, "before_cursor_execute", record_select)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", record_select)
+
+
+def selects_from(statements, table_name):
+    return [statement for statement in statements if f" from {table_name}" in statement]
 
 
 @pytest.fixture
@@ -333,6 +355,67 @@ def test_group_alert_data_includes_volume_bound_groups(usage_scope, monkeypatch)
     assert alarm_data["admin"][0][0].id == 1
 
 
+def test_group_alert_resolves_questdb_ids_with_one_batched_group_query(
+    usage_scope, monkeypatch
+):
+    alert = object.__new__(StorageAlert)
+    alert.db = usage_scope
+    alert.config = SimpleNamespace()
+    monkeypatch.setattr(
+        storage_alert_module,
+        "get_high_avg_usage",
+        lambda **_kwargs: [(1, 91.0), (2, 92.0), (3, 93.0)],
+    )
+    usage_scope.expire_all()
+
+    with capture_select_statements(usage_scope) as statements:
+        alarm_data = alert.get_project_group_alarm_data(threshold=90, end_time=NOW)
+
+    assert sum(len(items) for items in alarm_data.values()) == 3
+    assert len(selects_from(statements, "groups")) == 1
+
+
+def test_group_alert_reads_current_environment_and_target_by_stable_id(
+    usage_scope, session_factory, monkeypatch
+):
+    with session_factory() as writer:
+        writer.add(
+            models.ProjectStorageEnvironment(
+                id=3,
+                project_id=1,
+                storage_cluster_id=2,
+                name="environment-current",
+                created_at=NOW,
+                updated_at=NOW,
+            )
+        )
+        group = writer.get(models.Group, 1)
+        group.project_environment_id = 3
+        group.storage_cluster_id = 2
+        group.volume_id = 2
+        group.qtree_id = None
+        writer.commit()
+
+    monkeypatch.setattr(
+        storage_alert_module,
+        "get_high_avg_usage",
+        lambda **_kwargs: [(1, 91.0)],
+    )
+    with session_factory() as task_db:
+        alert = object.__new__(StorageAlert)
+        alert.db = task_db
+        alert.config = SimpleNamespace()
+
+        alarm_data = alert.get_project_group_alarm_data(threshold=90, end_time=NOW)
+        group = next(iter(alarm_data.values()))[0][0]
+        target = importlib.import_module("utils.storageTarget").resolve_group_storage_target(group)
+
+        assert group.project_environment.name == "environment-current"
+        assert target["target_type"] == "volume"
+        assert target["target"].id == 2
+        assert target["storage_cluster"].id == 2
+
+
 def test_group_alert_persists_minimal_project_environment_context(usage_scope):
     alert = object.__new__(StorageAlert)
     alert.db = usage_scope
@@ -469,6 +552,29 @@ def test_project_weekly_report_keeps_legacy_groups_in_unbound_environment_sectio
     assert {group["id"] for group in section["group_usages"]} == {5}
 
 
+def test_project_weekly_report_batches_groups_and_preloads_environment_and_owner(usage_scope):
+    alert = object.__new__(StorageAlert)
+    alert.db = usage_scope
+    alert.logger = Mock()
+    alert.config = SimpleNamespace(mail_to="ops@example.com")
+    alert.model = "dev"
+    alert.email = Mock()
+    alert.add_email_company_info = lambda data: data
+    alert.write_alerts_to_mysql = Mock()
+    projects = [usage_scope.get(models.Project, project_id) for project_id in (1, 2)]
+    alert.get_project_alarm_data = Mock(
+        return_value={"admin": [(projects[0], 55.0), (projects[1], 45.0)]}
+    )
+    usage_scope.expire_all()
+
+    with capture_select_statements(usage_scope) as statements:
+        alert.project_alarm_weekly()
+
+    assert len(selects_from(statements, "groups")) == 1
+    assert len(selects_from(statements, "project_storage_environments")) <= 1
+    assert len(selects_from(statements, "users")) <= 1
+
+
 def test_project_weekly_template_renders_environment_sections():
     template = (
         Path(__file__).resolve().parents[1]
@@ -497,3 +603,24 @@ def test_new_backup_path_includes_environment_without_moving_legacy_record(usage
     assert usage_scope.get(models.StorageBackUpRecord, 1).destination_path == (
         "/legacy/project-a/volume-group/admin"
     )
+
+
+def test_backup_by_stable_usage_id_reads_storage_usage_once(usage_scope):
+    manager = object.__new__(RemoteFileManager)
+    manager.db = usage_scope
+    manager.storage_config = SimpleNamespace(
+        back_up_enabled=True,
+        back_up_dir="/backup",
+    )
+    manager.logger = Mock()
+    manager.directory_exists = Mock(return_value=True)
+    usage_scope.expire_all()
+
+    with capture_select_statements(usage_scope) as statements:
+        result = manager.back_up_user_directory_by_storage_usage_id(
+            storage_usage_id=1,
+            closed=True,
+        )
+
+    assert result[0] is True
+    assert len(selects_from(statements, "storage_usages")) == 1
