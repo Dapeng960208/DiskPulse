@@ -1085,20 +1085,26 @@ docs/tracking/current-release.md
 
 ## 19. 当前状态与未验证范围
 
-当前仅完成设计和代码影响面审查，功能尚未实现。
+截至 2026-07-13，当前分支已完成本设计的核心模型、接口、采集和前端工作区实现，但生产迁移、真实外部系统和剩余前端范围仍未完成验收。
 
-已核对：
+### 19.1 已完成
 
-- 当前 ORM 关系。
-- Group/Qtree 强依赖调用点。
-- 主采集入口和 Celery 调度方式。
-- 项目、项目组、用户用量、趋势和 Dashboard 前端入口。
-- QuestDB 当前 Project/Group 时序模型。
-- 告警、扩容和备份对旧关系的依赖。
+- M0-M2：完成审计与回填工具、Expand 模型和 migration。`e6a1b2c3d4f5` 已创建 `project_storage_environments`，为 `groups` 增加环境和 Volume 绑定字段；回填脚本支持默认审计、阻塞项检查和显式 `--apply`，相关迁移与回填契约已有自动化测试。
+- B1/B2：完成项目存储环境 CRUD、权限校验、重复环境冲突、删除保护，以及 Group 对环境和单一 Volume/Qtree 目标的绑定、过滤和统一目标响应；Isilon 只允许绑定 Volume。F4 所列 Usage/Alert/导出页面与下游契约不包含在此完成口径中。
+- C1/C2：完成环境和完整轮次 Project 汇总、环境 QuestDB 读写入口、每轮新鲜标量快照、短读取会话、分集群事务和失败隔离。PostgreSQL 先提交，QuestDB 后写入；部分集群失败时保留成功集群结果，只有全部启用环境本轮成功的项目才刷新汇总。
+- F1/F2：完成环境 API wrapper、管理表单与列表，以及项目→环境→目标类型→Volume/Qtree 的项目组级联绑定；Isilon 环境固定选择 Volume。
+- F3 已完成范围：完成项目列表环境概览、项目详情环境工作台和 `RealTimePage` 环境趋势接入，包括有效环境 URL 保留、无效环境回退和仅加载当前环境。
+- V 已完成范围：后端和前端自动化测试、前端 lint 与生产构建已通过。该结论只覆盖仓库自动化门禁，不代表 migration 或外部系统验收完成。
 
-未验证：
+### 19.2 待实现
 
-- 生产 PostgreSQL 实际数据质量。
-- 生产 Alembic 版本链。
-- 四套真实 NetApp/Isilon 的资源标识和目录映射。
-- 现网是否仍调用旧 `NetAppMonitor`、`IsilonMonitor`、`StoreMonitor`。
+- F3 剩余范围：Dashboard 的环境维度筛选、系列拆分和同名项目组跨环境隔离仍待实现或验证，不能按已完成 Dashboard 交付。
+- F4：Usage、Alert 和导出的环境筛选、环境内项目组约束、周报分组及导出列仍待实现。
+- M3：`groups.project_environment_id` 尚未收紧为 `NOT NULL`，兼容旧字段仍未停止，旧列清理 migration 尚未实施。
+
+### 19.3 待验证
+
+- 尚未执行 migration upgrade/downgrade 演练，也未核对生产 `alembic_version` 或执行生产 Alembic upgrade。
+- 尚未对生产历史数据执行审计和回填，生产 PostgreSQL 实际数据质量、回填计数和回滚路径仍待确认。
+- 尚未执行外部浏览器烟测。
+- 尚未连接真实 PostgreSQL、QuestDB、NetApp 或 Isilon 做端到端验收；外部连接、设备资源标识、目录映射、QuestDB 表结构和跨库最终一致性均待验证。
