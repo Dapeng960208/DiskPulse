@@ -4,6 +4,7 @@ from models import (
     StorageUsage, Group, Project, ProjectStorageEnvironment, Aggregate, Volume,
     Qtree, StorageAlerts, User,
 )
+from sqlalchemy import func, inspect as sa_inspect
 from sqlalchemy.orm import joinedload
 from crud.questDbCrud import get_high_avg_usage
 from crud.configCrud import get_storage_config
@@ -216,6 +217,43 @@ class StorageAlert:
             emergency_count = 0
             warning_count = 0
             important_count = 0
+            group_ids = {
+                sa_inspect(group_db).identity[0]
+                for group_dbs in alarm_data.values()
+                for group_db, _avg_use_ratio in group_dbs
+            }
+            ranked_usages = self.db.query(
+                StorageUsage.id.label("storage_usage_id"),
+                func.row_number().over(
+                    partition_by=StorageUsage.group_id,
+                    order_by=StorageUsage.used.desc(),
+                ).label("usage_rank"),
+            ).filter(
+                StorageUsage.group_id.in_(group_ids),
+                StorageUsage.used > 0,
+            ).subquery()
+            top_storage_usages = self.db.query(StorageUsage).options(
+                joinedload(StorageUsage.user),
+                joinedload(StorageUsage.group).joinedload(Group.project),
+                joinedload(StorageUsage.group).joinedload(Group.project_environment),
+                joinedload(StorageUsage.group).joinedload(Group.storage_cluster),
+                joinedload(StorageUsage.group).joinedload(Group.volume),
+                joinedload(StorageUsage.group).joinedload(Group.qtree).joinedload(Qtree.volume),
+                joinedload(StorageUsage.group).joinedload(Group.in_charge_user),
+            ).join(
+                ranked_usages,
+                ranked_usages.c.storage_usage_id == StorageUsage.id,
+            ).filter(
+                ranked_usages.c.usage_rank <= 20
+            ).order_by(
+                StorageUsage.group_id,
+                StorageUsage.used.desc(),
+            ).all() if group_ids else []
+            top_usages_by_group = {}
+            for storage_usage in top_storage_usages:
+                top_usages_by_group.setdefault(storage_usage.group_id, []).append(
+                    storage_usage
+                )
 
             for email, group_dbs in alarm_data.items():
                 try:
@@ -223,6 +261,7 @@ class StorageAlert:
                     # 统计该邮件的告警级别
                     emergency_in_this_email = 0
                     warning_in_this_email = 0
+                    important_in_this_email = 0
 
                     for _, avg_use_ratio in group_dbs:
                         if avg_use_ratio >= 95:
@@ -231,6 +270,9 @@ class StorageAlert:
                         elif avg_use_ratio >= 90:
                             warning_in_this_email += 1
                             warning_count += 1
+                        else:
+                            important_in_this_email += 1
+                            important_count += 1
         
                     # 确定最高级别告警
                     has_emergency = emergency_in_this_email > 0
@@ -275,9 +317,8 @@ class StorageAlert:
                             group_dict['alert_icon'] = ''
 
                         # 获取存储使用TOP20（保持原有逻辑）
-                        storage_usage_dbs = self.db.query(StorageUsage).filter(
-                            StorageUsage.group_id == group_db.id, StorageUsage.used > 0
-                        ).order_by(StorageUsage.used.desc()).limit(20).all()
+                        group_id = sa_inspect(group_db).identity[0]
+                        storage_usage_dbs = top_usages_by_group.get(group_id, [])
 
                         group_dict['storage_usages'] = [
                             storageUsageSchema.StorageUsage.model_validate(storage_usage_db).default_dict()

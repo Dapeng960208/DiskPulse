@@ -7,7 +7,7 @@ from models import StorageUsage, StorageBackUpRecord, User, Group
 from datetime import datetime, timedelta
 from schemas import storageBackUpRecordSchema
 from utils.mailTools.emailNotification import EmailNotification
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, update
 from sqlalchemy.orm import joinedload
 from utils.iam.iamApi import IamApi
 from appConfig import base_config
@@ -276,19 +276,42 @@ class RemoteFileManager:
             StorageBackUpRecord.id == storage_back_up_record_id).first()
         if not storage_back_up_record_db or storage_back_up_record_db.status != 2:
             return False
-        back_up_dir = storage_back_up_record_db.destination_path
-        storage_back_up_record_db.status = 4
-        storage_back_up_record_db.start_time = datetime.now()
-        storage_back_up_record_db.end_time = datetime.now()
-        self.db.commit()
-        delete_flag = self.delete_directory(path=back_up_dir)
-        if delete_flag is True:
-            storage_back_up_record_db.status = 5
-        else:
-            storage_back_up_record_db.status = 3
-        storage_back_up_record_db.end_time = datetime.now()
-        self.db.commit()
+        self._delete_back_up_record(
+            storage_back_up_record_db.id,
+            destination_path=storage_back_up_record_db.destination_path,
+        )
         return True
+
+    def _delete_back_up_record(self, storage_back_up_record_id, *, destination_path):
+        start_time = datetime.now()
+        self.db.execute(
+            update(StorageBackUpRecord).where(
+                StorageBackUpRecord.id == storage_back_up_record_id
+            ).values(
+                status=4,
+                start_time=start_time,
+                end_time=start_time,
+            ),
+            execution_options={"synchronize_session": False},
+        )
+        self.db.commit()
+        delete_flag = self.delete_directory(path=destination_path)
+        if delete_flag is True:
+            status = 5
+        else:
+            status = 3
+        end_time = datetime.now()
+        self.db.execute(
+            update(StorageBackUpRecord).where(
+                StorageBackUpRecord.id == storage_back_up_record_id
+            ).values(
+                status=status,
+                end_time=end_time,
+            ),
+            execution_options={"synchronize_session": False},
+        )
+        self.db.commit()
+        return status, start_time, end_time
 
     def rollback_back_up_by_id(self, storage_back_up_record_id):
         storage_back_up_record_db = self.db.query(StorageBackUpRecord).filter(
@@ -428,19 +451,38 @@ class RemoteFileManager:
             return False
         back_up_duration = self.storage_config.back_up_duration if self.storage_config.back_up_duration else 60
         start_time = datetime.now() - timedelta(days=back_up_duration)
-        storage_back_up_record_dbs = self.db.query(StorageBackUpRecord).filter(StorageBackUpRecord.status == 2,
-                                                                               StorageBackUpRecord.end_time < start_time).all()
+        storage_back_up_record_dbs = self.db.query(StorageBackUpRecord).options(
+            joinedload(StorageBackUpRecord.user)
+        ).filter(
+            StorageBackUpRecord.status == 2,
+            StorageBackUpRecord.end_time < start_time,
+        ).all()
         if len(storage_back_up_record_dbs) == 0:
             self.logger.warning(
                 "No storage back up records  deleted")
             return False
+        prepared_records = [
+            (
+                storage_back_up_record_db.id,
+                storage_back_up_record_db.destination_path,
+                storageBackUpRecordSchema.StorageBackUpRecord.model_validate(
+                    storage_back_up_record_db
+                ).model_dump(),
+            )
+            for storage_back_up_record_db in storage_back_up_record_dbs
+        ]
         storage_back_up_records = []
-        for storage_back_up_record_db in storage_back_up_record_dbs:
-            self.delete_back_up_destination_path_by_id(storage_back_up_record_id=storage_back_up_record_db.id)
-            new_storage_back_up_record_db = self.db.query(StorageBackUpRecord).filter(
-                StorageBackUpRecord.id == storage_back_up_record_db.id).first()
-            storage_back_up_records.append(
-                storageBackUpRecordSchema.StorageBackUpRecord.from_orm(new_storage_back_up_record_db).model_dump())
+        for storage_back_up_record_id, destination_path, record_data in prepared_records:
+            status, record_start_time, record_end_time = self._delete_back_up_record(
+                storage_back_up_record_id,
+                destination_path=destination_path,
+            )
+            record_data.update(
+                status=status,
+                start_time=record_start_time,
+                end_time=record_end_time,
+            )
+            storage_back_up_records.append(record_data)
         data = {}
         recipient = [email.strip() for email in (self.storage_config.mail_to or "").split() if email.strip()]
         subject = f"【重要】数据备份已删除提醒"
@@ -462,54 +504,80 @@ class RemoteFileManager:
                 "The project team disables the user backup function. Please check the project team Settings.")
             return False
         quit_days = self.storage_config.back_up_quit_days if self.storage_config.back_up_quit_days else 30
-        users = self.db.query(User).filter(User.user_type == 0, User.quit_days <= quit_days).all()
+        storage_usage_dbs = self.db.query(StorageUsage).options(
+            joinedload(StorageUsage.user),
+            joinedload(StorageUsage.group).joinedload(Group.project),
+            joinedload(StorageUsage.group).joinedload(Group.project_environment),
+            joinedload(StorageUsage.group).joinedload(Group.in_charge_user),
+        ).join(
+            User, StorageUsage.user_id == User.id
+        ).join(
+            Group, Group.id == StorageUsage.group_id
+        ).filter(
+            StorageUsage.used > 0,
+            User.user_type == 0,
+            User.quit_days <= quit_days,
+            Group.back_up_enabled == 1,
+        ).all()
         iam = IamApi(db=self.db, logger=self.logger, type='storage')
         iam.set_up()
-        if len(users) == 0:
+        if len(storage_usage_dbs) == 0:
             self.logger.warning(f'No quit users')
             return
-        for user in users:
-            storage_usage_dbs = self.db.query(StorageUsage).filter(StorageUsage.used > 0).join(User,
-                                                                                               StorageUsage.user_id == user.id).join(
-                Group,
-                Group.id == StorageUsage.group_id).filter(
-                Group.back_up_enabled == 1).all()
-            # if user.rd_username != 'diskmonitor':
-            #     continue
-            if len(storage_usage_dbs) == 0:
+        source_paths = {storage_usage.linux_path for storage_usage in storage_usage_dbs}
+        existing_records = self.db.query(StorageBackUpRecord).filter(
+            StorageBackUpRecord.source_path.in_(source_paths)
+        ).all()
+        existing_by_source = {record.source_path: record for record in existing_records}
+        candidates = []
+        for storage_usage_db in storage_usage_dbs:
+            group = storage_usage_db.group
+            if group is None or group.in_charge_user_id is None or storage_usage_db.linux_path is None:
+                self.logger.warning(
+                    f"Storage usage ({storage_usage_db.id}) group is None or charge user is None or linux path is None"
+                )
                 continue
-            for storage_usage_db in storage_usage_dbs:
-                if storage_usage_db.group is None or storage_usage_db.group.in_charge_user_id is None or storage_usage_db.linux_path is None:
-                    self.logger.warning(
-                        f"Storage usage ({storage_usage_db.id}) group is None or charge user is None or linux path is None")
-                    continue
-                user_path = storage_usage_db.linux_path
-                if self.directory_exists(user_path) is False:
-                    self.logger.warning(
-                        f'User directory {user_path} not exit')
-                    continue
-                storage_back_up_record_db = self.db.query(StorageBackUpRecord).filter(
-                    StorageBackUpRecord.source_path == user_path).first()
-                if storage_back_up_record_db:
-                    self.logger.warning(
-                        f'Storage back up record {storage_back_up_record_db.id} exited ')
-                    continue
-                data = {
-                    "formData": {
-                        "groupId": storage_usage_db.group.id,
-                        "rdUsernameId": user.id,
-                        "storageUsageId": storage_usage_db.id,
-                        "inChargeUserId": storage_usage_db.group.in_charge_user.iam_id
+            user_path = storage_usage_db.linux_path
+            if self.directory_exists(user_path) is False:
+                self.logger.warning(f'User directory {user_path} not exit')
+                continue
+            storage_back_up_record_db = existing_by_source.get(user_path)
+            if storage_back_up_record_db:
+                self.logger.warning(
+                    f'Storage back up record {storage_back_up_record_db.id} exited '
+                )
+                continue
+            candidates.append(
+                {
+                    "form_data": {
+                        "formData": {
+                            "groupId": group.id,
+                            "rdUsernameId": storage_usage_db.user_id,
+                            "storageUsageId": storage_usage_db.id,
+                            "inChargeUserId": group.in_charge_user.iam_id,
+                        },
                     },
+                    "source_path": user_path,
+                    "destination_path": self._build_back_up_destination_path(
+                        storage_usage_db,
+                        self.storage_config.back_up_dir,
+                    ),
+                    "user_id": storage_usage_db.user_id,
                 }
-
-                bpm_uid = iam.initiating_bpm_process(data=data)
-                if bpm_uid is None:
-                    continue
-                destination_path = self.get_back_up_destination_path_by_id(storage_usage_id=storage_usage_db.id)
-                start_time = datetime.now()
-                storage_back_up_record = StorageBackUpRecord(source_path=user_path, destination_path=destination_path,
-                                                             start_time=start_time, user_id=storage_usage_db.user_id,
-                                                             end_time=start_time, status=9, process_uid=bpm_uid)
-                self.db.add(storage_back_up_record)
-                self.db.commit()
+            )
+        for candidate in candidates:
+            bpm_uid = iam.initiating_bpm_process(data=candidate["form_data"])
+            if bpm_uid is None:
+                continue
+            start_time = datetime.now()
+            storage_back_up_record = StorageBackUpRecord(
+                source_path=candidate["source_path"],
+                destination_path=candidate["destination_path"],
+                start_time=start_time,
+                user_id=candidate["user_id"],
+                end_time=start_time,
+                status=9,
+                process_uid=bpm_uid,
+            )
+            self.db.add(storage_back_up_record)
+            self.db.commit()
