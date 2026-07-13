@@ -2,11 +2,17 @@
 from datetime import datetime
 from typing import Any, List
 
-from sqlalchemy import asc, desc
+from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import Session
 
 from crud.questDbCrud import get_real_time_data_by_id
-from models import Group, Project, StorageUsage
+from models import (
+    Group,
+    Project,
+    ProjectStorageEnvironment,
+    StorageCluster,
+    StorageUsage,
+)
 from schemas import projectsSchema
 from utils.common import convert_GB_to_TB
 from utils.query import get_sort_column, require_allowed
@@ -99,7 +105,69 @@ def get_projects(
         query = query.order_by(Project.name.asc())
 
     projects_db = query.offset((page - 1) * size).limit(size).all()
+    _attach_storage_environment_overviews(db, projects_db)
     return projects_db, total
+
+
+def _attach_storage_environment_overviews(
+    db: Session,
+    projects: list[Project],
+) -> None:
+    overviews = {
+        project.id: {
+            "storage_environment_count": 0,
+            "active_storage_environment_count": 0,
+            "storage_cluster_types": set(),
+            "storage_environment_status_counts": {
+                "pending": 0,
+                "success": 0,
+                "failed": 0,
+                "inactive": 0,
+            },
+        }
+        for project in projects
+    }
+    if not overviews:
+        return
+
+    rows = (
+        db.query(
+            ProjectStorageEnvironment.project_id,
+            ProjectStorageEnvironment.is_active,
+            ProjectStorageEnvironment.collection_status,
+            StorageCluster.storage_type,
+            func.count(ProjectStorageEnvironment.id),
+        )
+        .join(
+            StorageCluster,
+            StorageCluster.id == ProjectStorageEnvironment.storage_cluster_id,
+        )
+        .filter(ProjectStorageEnvironment.project_id.in_(overviews))
+        .group_by(
+            ProjectStorageEnvironment.project_id,
+            ProjectStorageEnvironment.is_active,
+            ProjectStorageEnvironment.collection_status,
+            StorageCluster.storage_type,
+        )
+        .all()
+    )
+    for project_id, is_active, collection_status, storage_type, count in rows:
+        overview = overviews[project_id]
+        overview["storage_environment_count"] += count
+        overview["storage_cluster_types"].add(storage_type)
+        if is_active:
+            overview["active_storage_environment_count"] += count
+            overview["storage_environment_status_counts"][collection_status] += count
+        else:
+            overview["storage_environment_status_counts"]["inactive"] += count
+
+    for project in projects:
+        overview = overviews[project.id]
+        overview["storage_cluster_types"] = sorted(
+            overview["storage_cluster_types"]
+        )
+        for field, value in overview.items():
+            setattr(project, field, value)
 
 
 def get_common_project(db: Session):

@@ -34,7 +34,10 @@ def read_projects(
         prop=prop,
         order=order,
     )
-    return commonSchema.ResponseModel[projectsSchema.Project](content=projects, total=total)
+    return commonSchema.ResponseModel[projectsSchema.ProjectOverview](
+        content=projects,
+        total=total,
+    )
 
 
 @router.post("/", response_model=projectsSchema.Project)
