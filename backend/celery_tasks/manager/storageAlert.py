@@ -16,15 +16,15 @@ class StorageAlert:
         self.logger = logger
         self.config = get_storage_config(db=self.db)
         self.email = EmailNotification(db=self.db, type='storage_usage')
-        self.model = base_config.get('MODEL')
+        self.model = base_config.get('application.mode')
 
     def add_email_company_info(self, data: dict, threshold=None):
         data['company'] = self.config.company if self.config.company else "新华三半导体技术有限公司"
-        data['domain_name'] = self.config.domain_name if self.config.domain_name else "https://disk-monitor.engiant.com"
+        data['domain_name'] = self.config.domain_name if self.config.domain_name else "http://localhost:5173"
         data[
-            'personal_expand'] = self.config.person_expand if self.config.person_expand else "https://bpm.engiant.com/workbench/processes/28"
+            'personal_expand'] = self.config.person_expand if self.config.person_expand else ""
         data[
-            'group_expand'] = self.config.group_expand if self.config.group_expand else "https://bpm.engiant.com/workbench/processes/29"
+            'group_expand'] = self.config.group_expand if self.config.group_expand else ""
         if threshold:
             data['threshold'] = threshold
         return data
@@ -102,7 +102,7 @@ class StorageAlert:
                     else:
                         recipient.append(email.strip())
                 else:
-                    recipient = ['guo.jianpeng@engiant.com'] if self.model == 'dev' else self.config.mail_to.split()
+                    recipient = [email.strip() for email in (self.config.mail_to or "").split() if email.strip()]
 
                 # 构建存储使用数据
                 storage_usages = []
@@ -291,9 +291,6 @@ class StorageAlert:
     #         return
     #     quit_days = self.config.back_up_quit_days if self.config.back_up_quit_days else 30
     #     for group_db, storage_usages_dbs in alarm_data.items():
-    #         recipient = ['guo.jianpeng@engiant.com', 'gt.huangkai@engiant.com', 'gt.shenhuitao@engiant.com',
-    #                      'zhao.xinyu@engiant.com']
-    #         recipient = ['guo.jianpeng@engiant.com']
     #         data = {'group_usage': groupSchema.Group.model_validate(group_db).model_dump()}
     #         email = group_db.in_charge_user.email
     #         subject = f"[{group_db.project.name}]-[{group_db.name}] 离职用户存储数据清理 "
@@ -371,7 +368,7 @@ class StorageAlert:
                 if email != 'admin' and self.model != 'dev':
                     recipient.append(email)
                 else:
-                    recipient.append('guo.jianpeng@engiant.com')
+                    recipient.extend(email.strip() for email in (self.config.mail_to or "").split() if email.strip())
                 project_usages = []
                 for project_db, avg_use_ratio in project_dbs:
                     project_dict = projectsSchema.Project.model_validate(project_db).model_dump()

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from schemas import largeFileSchema
 from io import BytesIO
 import pandas as pd
+from utils.query import get_sort_column
 
 
 def get_large_files(db: Session, page: int | None = None, size: int | None = None, nameLike: str | None = None,
@@ -20,11 +21,12 @@ def get_large_files(db: Session, page: int | None = None, size: int | None = Non
         conditions.append(LargeFiles.group_id == group_id)
     query = query.filter(*conditions)
     total = query.count()
-    if prop:
+    sort_column = get_sort_column(LargeFiles, prop)
+    if sort_column is not None:
         if order and order.lower() == 'descending':
-            query = query.order_by(desc(getattr(LargeFiles, prop)))
+            query = query.order_by(desc(sort_column))
         else:
-            query = query.order_by(asc(getattr(LargeFiles, prop)))
+            query = query.order_by(asc(sort_column))
     else:
         query = query.order_by(LargeFiles.size.desc())
     if page and size:

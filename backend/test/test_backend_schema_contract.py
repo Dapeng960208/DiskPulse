@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import ast
-import unittest
 from pathlib import Path
 
 
@@ -47,20 +46,16 @@ def _class_names(module: ast.Module) -> set[str]:
     return {node.name for node in module.body if isinstance(node, ast.ClassDef)}
 
 
-class BackendSchemaContractTest(unittest.TestCase):
-    def test_unused_storage_records_model_is_removed(self):
-        module = _parse_backend_file("models.py")
+def test_unused_storage_records_model_is_removed():
+    module = _parse_backend_file("models.py")
 
-        self.assertNotIn("StorageRecords", _class_names(module))
-
-    def test_project_schema_exposes_only_persisted_or_computed_fields(self):
-        module = _parse_backend_file("schemas/projectsSchema.py")
-        project_base = _class_node(module, "ProjectBase")
-
-        project_fields = _annotated_fields(project_base)
-
-        self.assertTrue(project_fields.isdisjoint(LEGACY_PROJECT_RESOURCE_FIELDS))
+    assert "StorageRecords" not in _class_names(module)
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_project_schema_exposes_only_persisted_or_computed_fields():
+    module = _parse_backend_file("schemas/projectsSchema.py")
+    project_base = _class_node(module, "ProjectBase")
+
+    project_fields = _annotated_fields(project_base)
+
+    assert project_fields.isdisjoint(LEGACY_PROJECT_RESOURCE_FIELDS)

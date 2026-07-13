@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
 from schemas import storageBackUpRecordSchema, commonSchema
 from crud import storageBackUpRecordCrud, usersCrud, groupCrud
-from dependencies import get_db
+from dependencies import get_db, require_super_admin
 import logging
 from routers.common import delete_storage_back_up_record_by_storage_usage_id,rollback_storage_back_up_record_by_storage_usage_id
 
@@ -33,6 +33,7 @@ def read_storage_back_up_records(page: int | None = 1, size: int | None = 20, na
 
 @router.delete("/{storage_back_up_record_id}", status_code=status.HTTP_200_OK)
 def delete_storage_usage(storage_back_up_record_id: int, background_tasks: BackgroundTasks,
+                         _admin: None = Depends(require_super_admin),
                          db: Session = Depends(get_db)):
     db_storage_usage = storageBackUpRecordCrud.get_storage_back_up_record_by_id(db, storage_back_up_record_id)
     if db_storage_usage is None:
@@ -40,12 +41,13 @@ def delete_storage_usage(storage_back_up_record_id: int, background_tasks: Backg
     if db_storage_usage.status != 2:
         raise HTTPException(status_code=400,
                             detail="A directory can be deleted only when it is backed up successfully .")
-    background_tasks.add_task(delete_storage_back_up_record_by_storage_usage_id, db, logger, storage_back_up_record_id)
+    background_tasks.add_task(delete_storage_back_up_record_by_storage_usage_id, logger, storage_back_up_record_id)
     return Response(status_code=status.HTTP_200_OK)
 
 
 @router.post("/{storage_back_up_record_id}/rollback", status_code=status.HTTP_200_OK)
 def delete_storage_usage(storage_back_up_record_id: int, background_tasks: BackgroundTasks,
+                         _admin: None = Depends(require_super_admin),
                          db: Session = Depends(get_db)):
     db_storage_usage = storageBackUpRecordCrud.get_storage_back_up_record_by_id(db, storage_back_up_record_id)
     if db_storage_usage is None:
@@ -53,5 +55,5 @@ def delete_storage_usage(storage_back_up_record_id: int, background_tasks: Backg
     if db_storage_usage.status != 2:
         raise HTTPException(status_code=400,
                             detail="A directory can be rolled back only when it is backed up successfully .")
-    background_tasks.add_task(rollback_storage_back_up_record_by_storage_usage_id, db, logger, storage_back_up_record_id)
+    background_tasks.add_task(rollback_storage_back_up_record_by_storage_usage_id, logger, storage_back_up_record_id)
     return Response(status_code=status.HTTP_200_OK)

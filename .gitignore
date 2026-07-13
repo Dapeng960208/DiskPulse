@@ -59,6 +59,7 @@ log/
 # Local scratch and tool state
 .tmp/
 .cache/
+.isilon_cache/
 .codegraph/
 .codex/
 .claude/

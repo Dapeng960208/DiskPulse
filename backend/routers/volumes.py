@@ -5,7 +5,7 @@ from typing import List
 from datetime import datetime
 from schemas import volumeSchema, commonSchema
 from crud import volumeCrud
-from dependencies import get_db
+from dependencies import get_db, require_super_admin
 
 router = APIRouter(
     prefix="/volumes",
@@ -15,7 +15,11 @@ router = APIRouter(
 
 
 @router.post("/", response_model=volumeSchema.Volume)
-def create_volume(volume: volumeSchema.VolumeCreate, db: Session = Depends(get_db)):
+def create_volume(
+    volume: volumeSchema.VolumeCreate,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     return volumeCrud.create_volume(db=db, volume=volume)
 
 
@@ -51,7 +55,12 @@ def read_volume_realtime_data(volume_id: int, start_time: datetime | None = None
 
 
 @router.put("/{volume_id}", response_model=volumeSchema.Volume)
-def update_volume(volume_id: int, volume: volumeSchema.VolumeUpdate, db: Session = Depends(get_db)):
+def update_volume(
+    volume_id: int,
+    volume: volumeSchema.VolumeUpdate,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     db_volume = volumeCrud.get_volume_by_id(db, volume_id=volume_id)
     if db_volume is None:
         raise HTTPException(status_code=404, detail="Volume not found")
@@ -59,7 +68,11 @@ def update_volume(volume_id: int, volume: volumeSchema.VolumeUpdate, db: Session
 
 
 @router.delete("/{volume_id}", response_model=volumeSchema.Volume)
-def delete_volume(volume_id: int, db: Session = Depends(get_db)):
+def delete_volume(
+    volume_id: int,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     db_volume = volumeCrud.get_volume_by_id(db, volume_id=volume_id)
     if db_volume is None:
         raise HTTPException(status_code=404, detail="Volume not found")

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
-from pydantic import BaseModel, Field
 from typing import List
 
 
@@ -45,7 +44,7 @@ class OnlyUser(BaseModel):
 class User(UserBase):
     id: int
 
-    user_group_ids: List[int] = []
+    user_group_ids: List[int] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
@@ -76,7 +75,7 @@ class UserId(BaseModel):
 
 
 class UsersIds(BaseModel):
-    ids: List[int] = []
+    ids: List[int] = Field(default_factory=list)
 
 
 class IamUser(BaseModel):

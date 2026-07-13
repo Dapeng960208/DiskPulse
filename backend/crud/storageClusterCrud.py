@@ -4,6 +4,7 @@ from sqlalchemy import desc, asc
 from models import StorageCluster
 from schemas.storageClusterSchema import StorageClusterCreate, StorageClusterUpdate
 from typing import Optional, List
+from utils.query import get_sort_column
 
 
 def get_storage_cluster(db: Session, storage_cluster_id: int) -> Optional[StorageCluster]:
@@ -19,11 +20,12 @@ def get_storage_clusters(db: Session, page: int | None = None, size: int | None 
     if nameLike and len(nameLike.strip()) > 0:
         query = query.filter(StorageCluster.name.like(f"%{nameLike}%"))
     total = query.count()
-    if prop:
+    sort_column = get_sort_column(StorageCluster, prop)
+    if sort_column is not None:
         if order and order.lower() == 'descending':
-            query = query.order_by(desc(getattr(StorageCluster, prop)))
+            query = query.order_by(desc(sort_column))
         else:
-            query = query.order_by(asc(getattr(StorageCluster, prop)))
+            query = query.order_by(asc(sort_column))
     else:
         query = query.order_by(StorageCluster.use_ratio.desc())
     if page and size:
@@ -35,7 +37,7 @@ def get_storage_clusters(db: Session, page: int | None = None, size: int | None 
 
 def create_storage_cluster(db: Session, storage_cluster: StorageClusterCreate) -> StorageCluster:
 
-    db_storage_cluster = StorageCluster(**storage_cluster.dict())
+    db_storage_cluster = StorageCluster(**storage_cluster.model_dump())
     db.add(db_storage_cluster)
     db.commit()
     db.refresh(db_storage_cluster)
@@ -45,7 +47,7 @@ def create_storage_cluster(db: Session, storage_cluster: StorageClusterCreate) -
 def update_storage_cluster(db: Session, storage_cluster_id: int, storage_cluster: StorageClusterUpdate) -> Optional[StorageCluster]:
     db_storage_cluster = get_storage_cluster(db, storage_cluster_id)
     if db_storage_cluster:
-        update_data = storage_cluster.dict(exclude_unset=True)
+        update_data = storage_cluster.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             setattr(db_storage_cluster, key, value)
         db.commit()

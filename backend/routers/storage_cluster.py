@@ -6,7 +6,7 @@ from typing import List, Optional
 from schemas import storageClusterSchema, commonSchema
 from crud import storageClusterCrud
 from crud.questDbCrud import get_storage_cluster_real_time
-from dependencies import get_db
+from dependencies import get_db, require_super_admin
 
 router = APIRouter(
     prefix="/storage-clusters",
@@ -32,6 +32,7 @@ def read_storage_clusters(
 @router.post("/", response_model=storageClusterSchema.StorageCluster)
 def create_storage_cluster(
     storage_cluster: storageClusterSchema.StorageClusterCreate,
+    _admin: None = Depends(require_super_admin),
     db: Session = Depends(get_db)
 ):
     return storageClusterCrud.create_storage_cluster(db=db, storage_cluster=storage_cluster)
@@ -49,6 +50,7 @@ def read_storage_cluster(storage_cluster_id: int, db: Session = Depends(get_db))
 def update_storage_cluster(
     storage_cluster_id: int,
     storage_cluster: storageClusterSchema.StorageClusterUpdate,
+    _admin: None = Depends(require_super_admin),
     db: Session = Depends(get_db)
 ):
     db_cluster = storageClusterCrud.get_storage_cluster(db, storage_cluster_id=storage_cluster_id)
@@ -59,7 +61,11 @@ def update_storage_cluster(
 
 
 @router.delete("/{storage_cluster_id}")
-def delete_storage_cluster(storage_cluster_id: int, db: Session = Depends(get_db)):
+def delete_storage_cluster(
+    storage_cluster_id: int,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     db_cluster = storageClusterCrud.get_storage_cluster(db, storage_cluster_id=storage_cluster_id)
     if db_cluster is None:
         raise HTTPException(status_code=404, detail="StorageCluster not found")

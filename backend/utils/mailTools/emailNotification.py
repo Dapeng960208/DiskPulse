@@ -120,7 +120,7 @@ class EmailNotification:
                 self.logger.warning('Data for template rendering is None')
                 return None
 
-            template_dir = os.path.join(self.base_config.get('APP_ROOT_PATH'), 'utils', 'mailTools', 'template')
+            template_dir = os.path.join(self.base_config.app_root_path, 'utils', 'mailTools', 'template')
             j2loader = FileSystemLoader(template_dir)
             env = Environment(loader=j2loader)
             template_path = f"{template_name}.html"
@@ -160,7 +160,7 @@ class EmailNotification:
             if not recipient:
                 recipient = []
             # self.logger.info(f"{recipient} {cc_admin}")
-            if self.to and cc_admin is True and self.base_config.get('MODEL') != 'dev':
+            if self.to and cc_admin is True and self.base_config.get('application.mode') != 'dev':
                 to_list = self.to.split(';') if ';' in self.to else self.to.split()
                 recipient.extend(to_list)
             # Use OrderedDict to maintain order and remove duplicates
@@ -231,6 +231,6 @@ class EmailNotification:
                 smtp.sendmail(sender, recipient_emails, message.as_string())
         except Exception as e:
             self.logger.error(f"Send Mail Error: {e}")
-            self.logger.info(f"[host:{self.host}:{self.port}][user:{sender} {password}][recipients:{recipient_emails}]")
+            self.logger.info(f"[host:{self.host}:{self.port}][user:{sender}][recipients:{recipient_emails}]")
             return False
         return True

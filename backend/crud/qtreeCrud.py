@@ -4,6 +4,7 @@ from models import Qtree, Volume
 from schemas import qtreeSchema
 from sqlalchemy import or_, desc, asc
 from crud.questDbCrud import get_real_time_data_by_id
+from utils.query import get_sort_column
 from datetime import datetime, timedelta
 
 
@@ -24,11 +25,12 @@ def get_qtrees(db: Session, page: int, size: int, nameLike: str | None = None, p
         conditions.append(Qtree.storage_cluster_id == storage_cluster_id)
     query = query.filter(*conditions)
     total = query.count()
-    if prop:
+    sort_column = get_sort_column(Qtree, prop)
+    if sort_column is not None:
         if order and order.lower() == 'descending':
-            query = query.order_by(desc(getattr(Qtree, prop)))
+            query = query.order_by(desc(sort_column))
         else:
-            query = query.order_by(asc(getattr(Qtree, prop)))
+            query = query.order_by(asc(sort_column))
     else:
         query = query.order_by(Qtree.use_ratio.desc())
     qtrees = query.offset((page - 1) * size).limit(size).all()
@@ -43,7 +45,7 @@ def get_qtree_real_time_data_by_id(db: Session, qtree_id: int, start_time: datet
 
 
 def create_qtree(db: Session, qtree: qtreeSchema.QtreeCreate):
-    db_qtree = Qtree(**qtree.dict())
+    db_qtree = Qtree(**qtree.model_dump())
     db.add(db_qtree)
     db.commit()
     db.refresh(db_qtree)
@@ -53,7 +55,7 @@ def create_qtree(db: Session, qtree: qtreeSchema.QtreeCreate):
 def update_qtree(db: Session, qtree_id: int, qtree: qtreeSchema.QtreeUpdate):
     db_qtree = db.query(Qtree).filter(Qtree.id == qtree_id).first()
     if db_qtree:
-        for key, value in qtree.dict().items():
+        for key, value in qtree.model_dump().items():
             setattr(db_qtree, key, value)
         db.commit()
         db.refresh(db_qtree)

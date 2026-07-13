@@ -7,6 +7,7 @@ from utils.common import convert_GB_to_TB
 from typing import List
 from datetime import datetime
 from crud.questDbCrud import get_real_time_data_by_id
+from utils.query import get_sort_column
 
 
 def get_volume_by_id(db: Session, volume_id: int):
@@ -21,11 +22,12 @@ def get_volumes(db: Session, page: int, size: int, nameLike: str | None = None, 
     if storage_cluster_id:
         query = query.filter(Volume.storage_cluster_id == storage_cluster_id)
     total = query.count()
-    if prop:
+    sort_column = get_sort_column(Volume, prop)
+    if sort_column is not None:
         if order and order.lower() == 'descending':
-            query = query.order_by(desc(getattr(Volume, prop)))
+            query = query.order_by(desc(sort_column))
         else:
-            query = query.order_by(asc(getattr(Volume, prop)))
+            query = query.order_by(asc(sort_column))
     else:
         query = query.order_by(Volume.use_ratio.desc())
     volumes = query.offset((page - 1) * size).limit(size).all()
@@ -34,7 +36,7 @@ def get_volumes(db: Session, page: int, size: int, nameLike: str | None = None, 
 
 
 def create_volume(db: Session, volume: volumeSchema.VolumeCreate):
-    db_volume = Volume(**volume.dict())
+    db_volume = Volume(**volume.model_dump())
     db.add(db_volume)
     db.commit()
     db.refresh(db_volume)
@@ -44,7 +46,7 @@ def create_volume(db: Session, volume: volumeSchema.VolumeCreate):
 def update_volume(db: Session, volume_id: int, volume: volumeSchema.VolumeUpdate):
     db_volume = db.query(Volume).filter(Volume.id == volume_id).first()
     if db_volume:
-        for key, value in volume.dict().items():
+        for key, value in volume.model_dump().items():
             setattr(db_volume, key, value)
         db.commit()
         db.refresh(db_volume)

@@ -1,19 +1,32 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 from dependencies import QuestDBSession
 from typing import List, Any, Dict
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from crud.configCrud import get_storage_config
 from sqlalchemy import  text
+from utils.query import require_allowed
+
+
+ALLOWED_TABLE_PREFIXES = {"storage_usage", "aggregate", "volume", "qtree", "project", "group"}
+ALLOWED_INDICATORS = {"used", "used_ratio", "file_used"}
+
+
+def _normalize_indicator(indicator: str) -> str:
+    if indicator == "use_ratio":
+        return "used_ratio"
+    return require_allowed(indicator, ALLOWED_INDICATORS, "indicator")
+
+
+def _table_info(table_prefix: str) -> tuple[str, str]:
+    table_prefix = require_allowed(table_prefix, ALLOWED_TABLE_PREFIXES, "table_prefix")
+    if table_prefix == "storage_usage":
+        return "storage_usage", "storage_usages"
+    return table_prefix, f"{table_prefix}_storage_usages"
 
 def get_storage_real_time(columns: List[str], table_prefix: str, attribute_id: int, start_time: datetime,
                           end_time: datetime, storage_config: Any):
-    if table_prefix == "storage_usage":
-        attribute = 'storage_usage'
-        table_name = 'storage_usages'
-    else:
-        attribute = table_prefix
-        table_name = f"{table_prefix}_storage_usages"
+    attribute, table_name = _table_info(table_prefix)
     if isinstance(start_time, str):
         start_time = datetime.fromisoformat(start_time)
     if isinstance(end_time, str):
@@ -24,17 +37,21 @@ def get_storage_real_time(columns: List[str], table_prefix: str, attribute_id: i
         sample_by = " SAMPLE BY 1h"
     else:
         sample_by = " SAMPLE BY 1m"
+    columns = [_normalize_indicator(column) for column in columns]
     max_columns = [f"max({column})" for column in columns]
     columns_str = ",".join(max_columns)
     select_command = f"""
             SELECT {columns_str}, updated_at
-            FROM {table_name} 
-            WHERE {attribute}_id = '{attribute_id}' 
-            AND updated_at BETWEEN '{start_time}' AND '{end_time}'
+            FROM {table_name}
+            WHERE {attribute}_id = :attribute_id
+            AND updated_at BETWEEN :start_time AND :end_time
             {sample_by};
             """
     with QuestDBSession(config=storage_config) as conn:
-        result = conn.execute(text(select_command)).fetchall()
+        result = conn.execute(
+            text(select_command),
+            {"attribute_id": str(attribute_id), "start_time": str(start_time), "end_time": str(end_time)},
+        ).fetchall()
     return result
 
 
@@ -56,6 +73,7 @@ def get_real_time_data_by_id(db: Session, attribute_id: int, start_time: datetim
         end_time = datetime.now()
         start_time = end_time - timedelta(hours=24)
     storage_config = get_storage_config(db=db)
+    indicator = _normalize_indicator(indicator)
     columns = [indicator]
     result = get_storage_real_time(columns=columns, attribute_id=attribute_id,
                                    start_time=start_time, end_time=end_time, table_prefix=table_prefix,
@@ -72,6 +90,7 @@ def get_real_time_data_by_ids(db: Session, attribute_ids: list[int], start_time:
         end_time = datetime.now()
         start_time = end_time - timedelta(hours=24)
     storage_config = get_storage_config(db=db)
+    indicator = _normalize_indicator(indicator)
     columns = [indicator]
     for attribute_id in attribute_ids:
         result = get_storage_real_time(columns=columns, attribute_id=attribute_id,
@@ -85,30 +104,25 @@ def get_real_time_data_by_ids(db: Session, attribute_ids: list[int], start_time:
 
 def get_high_avg_usage(table_prefix: str, storage_config: Any, end_time: datetime = datetime.now() - timedelta(hours=1),
                        threshold: int = 90):
-    if table_prefix == "storage_usage":
-        table_name = 'storage_usages'
-        attribute = 'storage_usage'
-    else:
-        table_name = f"{table_prefix}_storage_usages"
-        attribute = table_prefix
+    attribute, table_name = _table_info(table_prefix)
     select_command = f"""
-        SELECT {attribute}_id,avg_use_ratio 
+        SELECT {attribute}_id,avg_use_ratio
         FROM (
-            SELECT 
-                {attribute}_id, 
-                avg(use_ratio) AS avg_use_ratio 
-            FROM 
-                {table_name} 
-            WHERE 
-                updated_at > '{end_time}'
-            GROUP BY 
+            SELECT
+                {attribute}_id,
+                avg(used_ratio) AS avg_use_ratio
+            FROM
+                {table_name}
+            WHERE
+                updated_at > :end_time
+            GROUP BY
                 {attribute}_id
-        ) 
-        WHERE 
-            avg_use_ratio >= {threshold};
+        )
+        WHERE
+            avg_use_ratio >= :threshold;
     """
     with QuestDBSession(config=storage_config) as conn:
-        result = conn.execute(text(select_command)).fetchall()
+        result = conn.execute(text(select_command), {"end_time": str(end_time), "threshold": threshold}).fetchall()
     return result
 
 
@@ -116,24 +130,24 @@ def get_cluster_storage_real_time(start_time: datetime,
                                   end_time: datetime, storage_config: Any, group_by_day: bool = False):
     sample_by = "SAMPLE BY 1d " if group_by_day is True else "SAMPLE BY 1m"
     select_command = f"""
-            SELECT 
+            SELECT
                 SUM(max_used) AS total_max_used,
                  updated_at,
             FROM (
-                SELECT 
-                    max(used) as max_used, 
+                SELECT
+                    max(used) as max_used,
                     updated_at as updated_at,
                     aggregate_id,
-                FROM 
-                    aggregate_storage_usages 
-                WHERE  updated_at BETWEEN '{start_time}' AND '{end_time}'
+                FROM
+                    aggregate_storage_usages
+                WHERE  updated_at BETWEEN :start_time AND :end_time
                 {sample_by}
             )
             GROUP BY updated_at
             ORDER BY updated_at;
     """
     with QuestDBSession(config=storage_config) as conn:
-        result = conn.execute(text(select_command)).fetchall()
+        result = conn.execute(text(select_command), {"start_time": str(start_time), "end_time": str(end_time)}).fetchall()
     return result
 
 
@@ -183,6 +197,7 @@ def get_project_storage_usage(storage_config: Any, start_time: datetime | None =
 
 def get_storage_cluster_real_time(db: Session, storage_cluster_id: int, start_time: datetime | None = None,
                                   end_time: datetime | None = None, indicator: str = 'used'):
+    indicator = _normalize_indicator(indicator)
     if start_time is None and end_time is None:
         end_time = datetime.now()
         start_time = end_time - timedelta(hours=24)
@@ -190,24 +205,27 @@ def get_storage_cluster_real_time(db: Session, storage_cluster_id: int, start_ti
         start_time = datetime.fromisoformat(start_time)
     if isinstance(end_time, str):
         end_time = datetime.fromisoformat(end_time)
-    
+
     if end_time - timedelta(days=30) > start_time:
         sample_by = " SAMPLE BY 1d"
     elif end_time - timedelta(days=7) > start_time:
         sample_by = " SAMPLE BY 1h"
     else:
         sample_by = " SAMPLE BY 1m"
-    
+
     storage_config = get_storage_config(db=db)
     select_command = f"""
         SELECT max({indicator}), updated_at
-        FROM storage_cluster_storage_usages 
-        WHERE storage_cluster_id = '{storage_cluster_id}' 
-        AND updated_at BETWEEN '{start_time}' AND '{end_time}'
+        FROM storage_cluster_storage_usages
+        WHERE storage_cluster_id = :storage_cluster_id
+        AND updated_at BETWEEN :start_time AND :end_time
         {sample_by};
     """
-    
+
     with QuestDBSession(config=storage_config) as conn:
-        result = conn.execute(text(select_command)).fetchall()
-    
+        result = conn.execute(
+            text(select_command),
+            {"storage_cluster_id": str(storage_cluster_id), "start_time": str(start_time), "end_time": str(end_time)},
+        ).fetchall()
+
     return [[item[1].strftime("%Y-%m-%d %H:%M:00"), item[0]] for item in result]

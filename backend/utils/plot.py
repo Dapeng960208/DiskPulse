@@ -77,7 +77,7 @@ def plot_real_time_line(data: list, model_db: Any, role: str, message: str | Non
                         logger: logging.Logger | None = None):
     today_str = datetime.now().strftime("%Y%m%d")
 
-    root_path = base_config.get('APP_ROOT_PATH') if base_config.get('APP_ROOT_PATH') else '/srv/prod/lsf/lsf-api'
+    root_path = base_config.app_root_path
     image_dir = os.path.join(root_path, 'static', 'generate_images')
     os.makedirs(image_dir, exist_ok=True)
 

@@ -1,22 +1,19 @@
 # -*- coding: utf-8 -*-
 import requests
-import urllib3
 from typing import List, Dict, Optional
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class NetAppClient:
     """NetApp ONTAP REST API client (ONTAP 9.6+)."""
 
-    def __init__(self, hostname: str, username: str, password: str, port: int = 443, logger=None):
+    def __init__(self, hostname: str, username: str, password: str, port: int = 443, logger=None, tls_verify=True):
         self.hostname = hostname
         self.port = port
         self.logger = logger
         self.base_url = f"https://{hostname}:{port}/api"
         self.session = requests.Session()
         self.session.auth = (username, password)
-        self.session.verify = False
+        self.session.verify = tls_verify
         self.session.headers.update({
             'Content-Type': 'application/json',
             'Accept': 'application/json'

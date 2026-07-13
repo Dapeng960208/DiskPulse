@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 # -*- coding: utf-8 -*-
-import json
 import os.path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
 from schemas import storageUsageSchema, commonSchema
 from crud import storageUsageCrud, usersCrud, groupCrud
-from dependencies import get_db
+from dependencies import get_db, require_super_admin
 from datetime import datetime, timedelta
 from utils.plot import plot_real_time_line
 from utils.common import convert_timestamp_to_datetime
@@ -30,6 +29,7 @@ router = APIRouter(
 @router.post("/", response_model=storageUsageSchema.StorageUsage)
 @handle_exceptions
 def create_storage_usage(storage_usage: storageUsageSchema.StorageUsageCreate, background_tasks: BackgroundTasks,
+                         _admin: None = Depends(require_super_admin),
                          db: Session = Depends(get_db)):
     user_db = usersCrud.get_user_by_id(db, storage_usage.user_id)
     if not user_db:
@@ -44,7 +44,7 @@ def create_storage_usage(storage_usage: storageUsageSchema.StorageUsageCreate, b
         raise HTTPException(status_code=400, detail="Folder exited .")
     if not storage_usage_db:
         raise HTTPException(status_code=400, detail="Failed to create user folder")
-    background_tasks.add_task(create_user_folder_by_storage_usage_id, db, logger, storage_usage_db.id)
+    background_tasks.add_task(create_user_folder_by_storage_usage_id, logger, storage_usage_db.id)
     return storage_usage_db
 
 
@@ -99,6 +99,7 @@ def read_storage_usage(storage_usage_id: int, db: Session = Depends(get_db)):
 @router.post("/{storage_usage_id}/back-up", status_code=status.HTTP_200_OK)
 def back_up_storage_usage(storage_usage_id: int, background_tasks: BackgroundTasks,
                           storage_usage: storageUsageSchema.BackUp,
+                          _admin: None = Depends(require_super_admin),
                           db: Session = Depends(get_db)):
     db_storage_usage = storageUsageCrud.get_storage_usage_by_id(db, storage_usage_id=storage_usage_id)
     if db_storage_usage is None:
@@ -109,8 +110,7 @@ def back_up_storage_usage(storage_usage_id: int, background_tasks: BackgroundTas
                             detail="The project team disables the user backup function. Please check the project team Settings.")
     logger.warning(f"closed:{storage_usage.closed}")
     closed = False if storage_usage.closed is None else storage_usage.closed
-    background_tasks.add_task(back_up_user_storage_usage_by_storage_usage_id, db, logger, storage_usage_id,
-                              closed)
+    background_tasks.add_task(back_up_user_storage_usage_by_storage_usage_id, logger, storage_usage_id, closed)
     return Response(status_code=status.HTTP_200_OK)
 
 
@@ -129,33 +129,29 @@ def read_storage_usage_realtime_data(storage_usage_id: int, start_time: datetime
 
 
 @router.post("/expand")
-async def expand_storage_usage_limit(request: Request, db: Session = Depends(get_db)):
-    # 读取原始请求体
-    request_body = await  request.body()
-    request_data = json.loads(request_body)
-
-    # 记录请求参数
-    logger.info(f"Received request data: {request_data}")
-
-    expand_id = request_data.get("expand_id")
-    expand_type = request_data.get("expand_type")
-    size = float(request_data.get("size"))
+def expand_storage_usage_limit(
+    payload: storageUsageSchema.StorageUsageExpand,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    expand_id = payload.expand_id
+    expand_type = payload.expand_type
+    size = payload.size
     manage = StorageManagement(db, logger)
     try:
         manage.expand(expand_id=expand_id, size=size, expand_type=expand_type)
         result = {"id": expand_id, "size": size, "type": expand_type, "message": "Expansion successful"}
     except Exception as e:
         logger.error(f"Error expanding storage: {e}")
-        result = {"id": expand_id, "size": size, "type": expand_type, "message": "Expansion failed"}
+        raise HTTPException(status_code=400, detail="Expansion failed") from e
 
-    return Response(content=json.dumps(result), media_type="application/json", status_code=200)
+    return result
 
 
 @router.get("/{storage_usage_id}/image")
 def get_storage_usage_image_by_id(storage_usage_id: int, end_time: str | None = None, role: str = 'manager',
                                   db: Session = Depends(get_db)):
     try:
-        print(storage_usage_id, end_time)
         if end_time is None:
             end_time = datetime.now()
         else:
@@ -182,11 +178,13 @@ def get_storage_usage_image_by_id(storage_usage_id: int, end_time: str | None = 
                                          message=message, role=role, logger=logger)
         return FileResponse(image_path, media_type='image/png')
     except Exception as e:
-        print(e)
+        logger.exception("Failed to generate storage usage image")
+        raise HTTPException(status_code=500, detail="Failed to generate storage usage image") from e
 
 
 @router.put("/{storage_usage_id}", response_model=storageUsageSchema.StorageUsage)
 def update_storage_usage(storage_usage_id: int, storage_usage: storageUsageSchema.StorageUsageUpdate,
+                         _admin: None = Depends(require_super_admin),
                          db: Session = Depends(get_db)):
     db_storage_usage = storageUsageCrud.get_storage_usage_by_id(db, storage_usage_id=storage_usage_id)
     if db_storage_usage is None:
@@ -195,7 +193,11 @@ def update_storage_usage(storage_usage_id: int, storage_usage: storageUsageSchem
 
 
 @router.delete("/{storage_usage_id}", response_model=storageUsageSchema.StorageUsage)
-def delete_storage_usage(storage_usage_id: int, db: Session = Depends(get_db)):
+def delete_storage_usage(
+    storage_usage_id: int,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     db_storage_usage = storageUsageCrud.get_storage_usage_by_id(db, storage_usage_id=storage_usage_id)
     if db_storage_usage is None:
         raise HTTPException(status_code=404, detail="StorageUsage not found")

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from schemas import usersSchema, groupSchema
 from schemas.storageClusterSchema import StorageCluster
@@ -40,13 +40,13 @@ class StorageUsage(StorageUsageBase):
     type: str | None = ''
     device: str | None = ''
     inode: str | None = ''
-    links: int | None = ''
+    links: int | None = None
     access: str | None = ''
     gid: str | None = ''
-    access_time: datetime | None = ''
-    modify_time: datetime | None = ''
-    change_time: datetime | None = ''
-    birth_time: datetime | None = ''
+    access_time: datetime | None = None
+    modify_time: datetime | None = None
+    change_time: datetime | None = None
+    birth_time: datetime | None = None
     user: usersSchema.OnlyUser
     group: groupSchema.GroupBase
     storage_cluster: StorageCluster | None = None
@@ -62,9 +62,9 @@ StorageUsage.model_rebuild()
 
 
 class StorageUsageExpand(BaseModel):
-    expand_id: int | str
-    expand_type: str
-    size: int | str
+    expand_id: int = Field(gt=0)
+    expand_type: str = Field(pattern="^(StorageUsage|Group|Volume|Qtree)$")
+    size: float = Field(gt=0)
 
 
 class StorageUsageExport(BaseModel):

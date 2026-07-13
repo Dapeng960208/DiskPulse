@@ -9,6 +9,7 @@ from crud.questDbCrud import get_real_time_data_by_id
 from models import Group, Project, StorageUsage
 from schemas import projectsSchema
 from utils.common import convert_GB_to_TB
+from utils.query import get_sort_column, require_allowed
 
 
 def get_project_by_name(db: Session, name: str):
@@ -91,8 +92,8 @@ def get_projects(
         query = query.filter(Project.status == status)
 
     total = query.count()
-    if prop and hasattr(Project, prop):
-        sort_column = getattr(Project, prop)
+    sort_column = get_sort_column(Project, prop)
+    if sort_column is not None:
         query = query.order_by(desc(sort_column) if order and order.lower() == "descending" else asc(sort_column))
     else:
         query = query.order_by(Project.name.asc())
@@ -178,6 +179,7 @@ def get_project_tree_summary(db: Session):
 
 
 def get_project_tree_summary_by_id(db: Session, project_id: int, value_type: str) -> List:
+    value_type = require_allowed(value_type, {"limit", "used", "use_ratio", "soft_limit", "soft_use_ratio"}, "value_type")
     group_dbs = db.query(Group).filter(Group.project_id == project_id).all()
     groups = []
     for group_db in group_dbs:

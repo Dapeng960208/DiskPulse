@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-import os
-
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import DisconnectionError
 
 import models
+from appConfig import base_config
 from database import Base, SessionLocal, engine
 from dependencies import require_authenticated_request
 from questdb.database import QuestDBBase, questdb_engine
@@ -24,7 +23,7 @@ from routers import (
     volumes,
 )
 
-if os.getenv("DISKPULSE_CREATE_TABLES", "false").lower() == "true":
+if base_config.get("database.create_tables", False):
     Base.metadata.create_all(bind=engine)
     QuestDBBase.metadata.create_all(bind=questdb_engine)
 
@@ -33,7 +32,7 @@ app = FastAPI(
     description="DiskPulse storage monitoring API",
     summary="DiskPulse API",
     version="1.0.0",
-    contact={"name": "guojianpeng"},
+    contact={"name": "DiskPulse Maintainers"},
 )
 
 storage_router = APIRouter(prefix="/storage-pulse/api", dependencies=[Depends(require_authenticated_request)])
@@ -51,9 +50,11 @@ storage_router.include_router(storage_back_up_records.router)
 storage_router.include_router(large_files.router)
 app.include_router(storage_router)
 
+cors_origins = base_config.get("application.cors_origins", [])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -72,6 +73,9 @@ async def db_session_middleware(request: Request, call_next):
             request.state.db.close()
             request.state.db = SessionLocal()
             response = await call_next(request)
+    except Exception:
+        request.state.db.rollback()
+        raise
     finally:
         request.state.db.close()
     return response

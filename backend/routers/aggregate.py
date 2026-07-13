@@ -5,7 +5,7 @@ from typing import List
 from datetime import datetime
 from schemas import aggregateSchema, commonSchema
 from crud import aggregateCrud
-from dependencies import get_db
+from dependencies import get_db, require_super_admin
 
 router = APIRouter(
     prefix="/aggregates",
@@ -15,7 +15,11 @@ router = APIRouter(
 
 
 @router.post("/", response_model=aggregateSchema.Aggregate)
-def create_aggregate(aggregate: aggregateSchema.AggregateCreate, db: Session = Depends(get_db)):
+def create_aggregate(
+    aggregate: aggregateSchema.AggregateCreate,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     return aggregateCrud.create_aggregate(db=db, aggregate=aggregate)
 
 
@@ -51,7 +55,12 @@ def read_aggregate_realtime_data(aggregate_id: int, start_time: datetime | None 
 
 
 @router.put("/{aggregate_id}", response_model=aggregateSchema.Aggregate)
-def update_aggregate(aggregate_id: int, aggregate: aggregateSchema.AggregateUpdate, db: Session = Depends(get_db)):
+def update_aggregate(
+    aggregate_id: int,
+    aggregate: aggregateSchema.AggregateUpdate,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     db_aggregate = aggregateCrud.get_aggregate_by_id(db, aggregate_id=aggregate_id)
     if db_aggregate is None:
         raise HTTPException(status_code=404, detail="Aggregate not found")
@@ -59,7 +68,11 @@ def update_aggregate(aggregate_id: int, aggregate: aggregateSchema.AggregateUpda
 
 
 @router.delete("/{aggregate_id}", response_model=aggregateSchema.Aggregate)
-def delete_aggregate(aggregate_id: int, db: Session = Depends(get_db)):
+def delete_aggregate(
+    aggregate_id: int,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     db_aggregate = aggregateCrud.get_aggregate_by_id(db, aggregate_id=aggregate_id)
     if db_aggregate is None:
         raise HTTPException(status_code=404, detail="Aggregate not found")

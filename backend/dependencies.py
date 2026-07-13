@@ -6,6 +6,7 @@ from database import SessionLocal
 from questdb.database import QuestDBSessionLocal, questdb_engine
 from crud import usersCrud
 from models import User
+from utils.auth_service import is_super_admin
 from utils.security import decode_token, parse_authorization_token
 
 
@@ -24,7 +25,6 @@ def get_db(request: Request):
 
 PUBLIC_AUTH_PATHS = {
     "/storage-pulse/api/users/login",
-    "/storage-pulse/api/users/logout",
 }
 
 
@@ -45,6 +45,20 @@ def get_current_user(
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+
+def get_current_token(
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+) -> str:
+    return parse_authorization_token(authorization)
+
+
+CurrentTokenDep = Annotated[str, Depends(get_current_token)]
+
+
+def require_super_admin(current_user: CurrentUserDep) -> None:
+    if not is_super_admin(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super admin permission required")
 
 
 def require_authenticated_request(

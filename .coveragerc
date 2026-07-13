@@ -20,7 +20,7 @@ omit =
     backend/alembic.ini
 
 [report]
-fail_under = 70
+fail_under = 80
 show_missing = True
 skip_empty = True
 exclude_lines =

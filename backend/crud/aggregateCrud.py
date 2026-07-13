@@ -7,6 +7,7 @@ from utils.common import convert_GB_to_TB
 from typing import List
 from datetime import datetime
 from crud.questDbCrud import get_real_time_data_by_id
+from utils.query import get_sort_column, require_allowed
 
 
 def get_aggregate_by_id(db: Session, aggregate_id: int):
@@ -21,11 +22,12 @@ def get_aggregates(db: Session, page: int, size: int, nameLike: str | None = Non
     if storage_cluster_id:
         query = query.filter(Aggregate.storage_cluster_id == storage_cluster_id)
     total = query.count()
-    if prop:
+    sort_column = get_sort_column(Aggregate, prop)
+    if sort_column is not None:
         if order and order.lower() == 'descending':
-            query = query.order_by(desc(getattr(Aggregate, prop)))
+            query = query.order_by(desc(sort_column))
         else:
-            query = query.order_by(asc(getattr(Aggregate, prop)))
+            query = query.order_by(asc(sort_column))
     else:
         query = query.order_by(Aggregate.use_ratio.desc())
     aggregates = query.offset((page - 1) * size).limit(size).all()
@@ -34,7 +36,7 @@ def get_aggregates(db: Session, page: int, size: int, nameLike: str | None = Non
 
 
 def create_aggregate(db: Session, aggregate: aggregateSchema.AggregateCreate):
-    db_aggregate = Aggregate(**aggregate.dict())
+    db_aggregate = Aggregate(**aggregate.model_dump())
     db.add(db_aggregate)
     db.commit()
     db.refresh(db_aggregate)
@@ -44,7 +46,7 @@ def create_aggregate(db: Session, aggregate: aggregateSchema.AggregateCreate):
 def update_aggregate(db: Session, aggregate_id: int, aggregate: aggregateSchema.AggregateUpdate):
     db_aggregate = db.query(Aggregate).filter(Aggregate.id == aggregate_id).first()
     if db_aggregate:
-        for key, value in aggregate.dict().items():
+        for key, value in aggregate.model_dump().items():
             setattr(db_aggregate, key, value)
         db.commit()
         db.refresh(db_aggregate)
@@ -60,6 +62,7 @@ def delete_aggregate(db: Session, aggregate_id: int):
 
 
 def get_aggregate_tree_summary(db: Session, value_type: str) -> List:
+    value_type = require_allowed(value_type, {"limit", "used", "use_ratio", "soft_limit", "soft_use_ratio"}, "value_type")
     volume_dbs = db.query(Volume).filter(Volume.used >= 0).all()
     volumes = []
     for volume_db in volume_dbs:
@@ -86,6 +89,7 @@ def get_aggregate_tree_summary(db: Session, value_type: str) -> List:
 
 
 def get_aggregate_tree_summary_by_name(db: Session, aggregate_name: str, value_type: str) -> List:
+    value_type = require_allowed(value_type, {"limit", "used", "use_ratio", "soft_limit", "soft_use_ratio"}, "value_type")
     volume_dbs = db.query(Volume).filter(Volume.aggregate == aggregate_name, Volume.used >= 0).all()
     volumes = []
     for volume_db in volume_dbs:

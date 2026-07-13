@@ -2,7 +2,7 @@
 """Isilon OneFS REST API client — pure requests, no SDK dependency.
 
 Auth     : Session-based (POST /session/1/session).
-           Session cookies are cached to <project>/.isilon_cache/cache.json.
+           Session cookies are cached only when storage.isilon_session_cache is true.
            On startup, GET /session/1/session is used to verify the cached
            session; if expired (401/403) a fresh login is performed.
 
@@ -14,13 +14,11 @@ Endpoints:
 import json
 import os
 import requests
-import urllib3
 from typing import List, Dict, Optional
 from appConfig import base_config
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Cache file: <project root>/.isilon_cache/cache.json
-_PROJECT_ROOT = base_config.get('APP_ROOT_PATH') or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Optional cache file: <project root>/.isilon_cache/cache.json
+_PROJECT_ROOT = str(base_config.app_root_path)
 _CACHE_DIR = os.path.join(_PROJECT_ROOT, ".isilon_cache")
 _CACHE_FILE = os.path.join(_CACHE_DIR, "cache.json")
 
@@ -28,9 +26,7 @@ _CACHE_FILE = os.path.join(_CACHE_DIR, "cache.json")
 class IsilonClient:
     """Thin REST client for Isilon OneFS PAPI.
 
-    Session cookies are persisted to .isilon_cache/cache.json (keyed by
-    host:port:username) so that multiple process restarts share the same
-    authenticated session.
+    Session cookies are persisted only when storage.isilon_session_cache is true.
 
     Startup logic:
       1. Load cached cookies for this host/user.
@@ -43,7 +39,7 @@ class IsilonClient:
     """
 
     def __init__(self, hostname: str, username: str, password: str,
-                 port: int = 8080, logger=None):
+                 port: int = 8080, logger=None, tls_verify=True):
         self.hostname = hostname
         self.port = port
         self.username = username
@@ -52,12 +48,13 @@ class IsilonClient:
         self.base_url = f"https://{hostname}:{port}/platform"
         self._session_url = f"https://{hostname}:{port}/session/1/session"
         self.api_version: str = "1"  # updated by _probe()
+        self._session_cache_enabled = base_config.get("storage.isilon_session_cache", False)
 
         # Cache key unique per host/port/user
         self._cache_key = f"{hostname}:{port}:{username}"
 
         self.session = requests.Session()
-        self.session.verify = False
+        self.session.verify = tls_verify
         self.session.headers.update({
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -85,6 +82,8 @@ class IsilonClient:
 
     def _read_cache(self) -> Dict:
         """Read the full cache file; return empty dict on any error."""
+        if not self._session_cache_enabled:
+            return {}
         try:
             with open(_CACHE_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
@@ -93,6 +92,8 @@ class IsilonClient:
 
     def _write_cache(self, data: Dict):
         """Write the full cache dict to disk."""
+        if not self._session_cache_enabled:
+            return
         try:
             os.makedirs(_CACHE_DIR, exist_ok=True)
             with open(_CACHE_FILE, 'w', encoding='utf-8') as f:
@@ -102,6 +103,8 @@ class IsilonClient:
 
     def _save_session_cache(self):
         """Persist current session cookies + CSRF token for this host/user."""
+        if not self._session_cache_enabled:
+            return
         cache = self._read_cache()
         cache[self._cache_key] = {
             'cookies': dict(self.session.cookies),
@@ -112,6 +115,8 @@ class IsilonClient:
 
     def _clear_cache_entry(self):
         """Remove the cache entry for this host/user."""
+        if not self._session_cache_enabled:
+            return
         cache = self._read_cache()
         if self._cache_key in cache:
             del cache[self._cache_key]
@@ -135,6 +140,8 @@ class IsilonClient:
 
         Returns True if the cached session is still valid, False otherwise.
         """
+        if not self._session_cache_enabled:
+            return False
         cache = self._read_cache()
         entry = cache.get(self._cache_key)
         if not entry:
@@ -309,6 +316,6 @@ class IsilonClient:
         return result
 
     def close(self):
-        """Close the HTTP session (cached cookies remain valid on disk)."""
+        """Close the HTTP session."""
         if self.session:
             self.session.close()

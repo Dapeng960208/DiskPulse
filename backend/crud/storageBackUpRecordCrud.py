@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from sqlalchemy.orm import Session
+from utils.query import get_sort_column
 from models import StorageBackUpRecord
 from schemas import storageBackUpRecordSchema
 from sqlalchemy import or_, desc, asc
@@ -24,11 +25,12 @@ def get_storage_back_up_records(db: Session, page: int | None = None, size: int 
         conditions.append(StorageBackUpRecord.user_id == user_id)
     query = query.filter(*conditions)
     total = query.count()
-    if prop:
+    sort_column = get_sort_column(StorageBackUpRecord, prop)
+    if sort_column is not None:
         if order and order.lower() == 'descending':
-            query = query.order_by(desc(getattr(StorageBackUpRecord, prop)))
+            query = query.order_by(desc(sort_column))
         else:
-            query = query.order_by(asc(getattr(StorageBackUpRecord, prop)))
+            query = query.order_by(asc(sort_column))
     else:
         query = query.order_by(StorageBackUpRecord.end_time.desc())
     if page and size:

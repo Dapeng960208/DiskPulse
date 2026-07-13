@@ -1,0 +1,230 @@
+# -*- coding: utf-8 -*-
+import base64
+import hmac
+import json
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+from fastapi import APIRouter
+
+from appConfig import base_config
+import models
+from celery_tasks.manager.remoteFileManager import RemoteFileManager
+from routers import common, config, storage_cluster
+from utils.netAppClient import NetAppClient
+from utils.security import decode_token, issue_token
+
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _b64encode(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def seed_security_data(session_factory):
+    session = session_factory()
+    try:
+        session.add(
+            models.User(
+                id=1,
+                rd_username="secadmin",
+                username="Security Admin",
+                user_type=1,
+                is_alert=True,
+            )
+        )
+        session.add(
+            models.User(
+                id=2,
+                rd_username="viewer",
+                username="Viewer",
+                user_type=2,
+                is_alert=True,
+            )
+        )
+        session.add(
+            models.StorageConf(
+                name="storage conf",
+                iam_account="iam-user",
+                iam_password="iam-secret",
+                mail_user="mail-user",
+                mail_password="mail-secret",
+                questdb_user="quest-user",
+                questdb_password="quest-secret",
+                storage_user="storage-user",
+                storage_password="storage-secret",
+                file_manage_user="file-user",
+                file_manage_password="file-secret",
+            )
+        )
+        session.add(
+            models.StorageCluster(
+                name="cluster-a",
+                storage_type="netapp",
+                storage_host="storage.local",
+                storage_port=443,
+                storage_user="svc",
+                storage_password="cluster-secret",
+            )
+        )
+        session.commit()
+    finally:
+        session.close()
+
+
+def security_route_setup(storage_router: APIRouter):
+    @storage_router.get("/boom")
+    @common.handle_exceptions
+    def boom():
+        raise RuntimeError("secret-token-value")
+
+
+@pytest.fixture
+def security_client(api_client_factory, session_factory):
+    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("super_admin_usernames", ["secadmin"])
+    seed_security_data(session_factory)
+    client = api_client_factory(
+        [config.router, storage_cluster.router],
+        authenticated=True,
+        route_setup=security_route_setup,
+    )
+    return client
+
+
+def test_config_response_redacts_secret_fields(security_client):
+    response = security_client.get(
+        "/storage-pulse/api/config/storage",
+        headers={"Authorization": f"Bearer {issue_token(1)}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    for key in (
+        "iam_password",
+        "mail_password",
+        "questdb_password",
+        "storage_password",
+        "file_manage_password",
+    ):
+        assert key not in payload
+    assert "secret" not in response.text
+
+
+def test_storage_cluster_response_redacts_password(security_client):
+    response = security_client.get(
+        "/storage-pulse/api/storage-clusters/1",
+        headers={"Authorization": f"Bearer {issue_token(1)}"},
+    )
+
+    assert response.status_code == 200
+    assert "storage_password" not in response.json()
+    assert "cluster-secret" not in response.text
+
+
+def test_exception_handler_does_not_return_internal_exception_text(security_client):
+    response = security_client.get(
+        "/storage-pulse/api/boom",
+        headers={"Authorization": f"Bearer {issue_token(1)}"},
+    )
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal Server Error"}
+    assert "secret-token-value" not in response.text
+
+
+def test_jwt_decoder_rejects_unexpected_header_algorithm():
+    base_config.set("jwt.secret_key", "test-secret")
+    token = issue_token(1)
+    _header, encoded_payload, _signature = token.split(".")
+    encoded_header = _b64encode(json.dumps({"alg": "none", "typ": "JWT"}).encode("utf-8"))
+    message = f"{encoded_header}.{encoded_payload}".encode("ascii")
+    signature = _b64encode(hmac.new(b"test-secret", message, "sha256").digest())
+
+    with pytest.raises(Exception):
+        decode_token(f"{encoded_header}.{encoded_payload}.{signature}")
+
+
+def test_netapp_client_verifies_tls_by_default():
+    client = NetAppClient("storage.local", "svc", "secret")
+
+    assert client.session.verify is True
+
+
+def test_remote_file_manager_quotes_shell_path_arguments():
+    class FakeSSH:
+        def __init__(self):
+            self.commands = []
+
+        def exec_command(self, command):
+            self.commands.append(command)
+
+            class Stream:
+                def read(self):
+                    return b""
+
+            return None, Stream(), Stream()
+
+    manager = object.__new__(RemoteFileManager)
+    manager.client = type("Client", (), {"ssh": FakeSSH()})()
+    manager.logger = type(
+        "Logger",
+        (),
+        {"error": lambda *args: None, "info": lambda *args: None, "warning": lambda *args: None},
+    )()
+
+    manager.create_directory("/data/a path; rm -rf /")
+
+    command = manager.client.ssh.commands[-1]
+    assert "'/data/a path; rm -rf /'" in command
+    assert "mkdir -p /data/a path; rm -rf /" not in command
+
+
+def test_bare_authorization_token_is_rejected(security_client):
+    base_config.set("jwt.secret_key", "test-secret")
+    admin_token = issue_token(1)
+    response = security_client.get(
+        "/storage-pulse/api/storage-clusters/1",
+        headers={"Authorization": admin_token},
+    )
+
+    assert response.status_code == 401
+
+
+def test_sensitive_config_requires_super_admin(security_client):
+    response = security_client.get(
+        "/storage-pulse/api/config/storage",
+        headers={"Authorization": f"Bearer {issue_token(2)}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_manual_integration_checks_are_not_collected_as_unit_tests():
+    assert not (BACKEND_ROOT / "test" / "test_netapp.py").exists()
+    assert not (BACKEND_ROOT / "test" / "test_isilon.py").exists()
+
+
+def test_backend_sources_do_not_contain_legacy_product_or_personal_contact_defaults():
+    forbidden = (
+        "disk-monitor.engiant.com",
+        "guo.jianpeng@engiant.com",
+        "Disk Monitor",
+        "engiant.com",
+        "grandtrans.com",
+        "gention.com",
+    )
+    scanned = []
+    for path in BACKEND_ROOT.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in {".py", ".html", ".txt"}:
+            continue
+        if path.parts[-2:] == ("test", "test_security_regressions.py"):
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for value in forbidden:
+            if value in text:
+                scanned.append(f"{path.relative_to(BACKEND_ROOT)} contains {value}")
+
+    assert scanned == []

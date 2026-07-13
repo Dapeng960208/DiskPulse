@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta, timezone
+import shlex
 
 from schemas.storageUsageSchema import StorageUsageBase
 from utils.common import format_to_gb
@@ -357,9 +358,9 @@ class StoreMonitor:
                 item_db = existing_data_map.get(item_key)
 
                 if item_db is None:
-                    new_data.append(model(**item.dict()))
+                    new_data.append(model(**item.model_dump()))
                 else:
-                    for key, value in item.dict(exclude=exclude_keys).items():
+                    for key, value in item.model_dump(exclude=exclude_keys).items():
                         setattr(item_db, key, value)
                     self.db.merge(item_db)
             if new_data:
@@ -601,7 +602,7 @@ class SynchronousPathState:
                     exit_storage_usage_map[user_db.id] = storage_usage_db
                 else:
                     exit_user_ids.discard(user_db.id)
-                for key, value in path_info.dict(exclude={'file'}).items():
+                for key, value in path_info.model_dump(exclude={'file'}).items():
                     setattr(storage_usage_db, key, value)
                 storage_usage_db.linux_path = user_path
                 self.db.commit()
@@ -717,11 +718,11 @@ class StorageManagement:
 
     def add_email_company_info(self, data: Dict[str, Any], threshold: Optional[int] = None) -> Dict[str, Any]:
         data['company'] = self.config.company if self.config.company else "新华三半导体技术有限公司"
-        data['domain_name'] = self.config.domain_name if self.config.domain_name else "https://disk-monitor.engiant.com"
+        data['domain_name'] = self.config.domain_name if self.config.domain_name else "http://localhost:5173"
         data[
-            'personal_expand'] = self.config.person_expand if self.config.person_expand else "https://bpm.engiant.com/workbench/processes/28"
+            'personal_expand'] = self.config.person_expand if self.config.person_expand else ""
         data[
-            'group_expand'] = self.config.group_expand if self.config.group_expand else "https://bpm.engiant.com/workbench/processes/29"
+            'group_expand'] = self.config.group_expand if self.config.group_expand else ""
         if threshold:
             data['threshold'] = threshold
         return data
@@ -878,7 +879,7 @@ class StorageManagement:
         }
         if expand_type == StorageUsage.__name__:
             storage_usage_db = self.db.query(StorageUsage).filter_by(id=related_id).first()
-            storage_usages = storageUsageSchema.StorageUsage.from_orm(storage_usage_db).dict()
+            storage_usages = storageUsageSchema.StorageUsage.from_orm(storage_usage_db).model_dump()
             data['storage_usages'] = storage_usages
             self.email.send_email_via_template(
                 subject=f"【自动化扩容】【用户】【{storage_usage_db.linux_path}】结果反馈",
@@ -888,7 +889,7 @@ class StorageManagement:
             )
         elif expand_type == Group.__name__:
             group_db = self.db.query(Group).filter_by(id=related_id).first()
-            group_usages = groupSchema.Group.from_orm(group_db).dict()
+            group_usages = groupSchema.Group.from_orm(group_db).model_dump()
             data['group_usages'] = group_usages
             self.email.send_email_via_template(
                 subject=f"【自动化扩容】【项目组】【{group_db.linux_path}】结果反馈",
@@ -900,13 +901,14 @@ class StorageManagement:
     @staticmethod
     def build_command(volume_name: str, qtree_name: str, name: str, size: float = 0, action: str = 'show',
                       type: str = 'user') -> str:
-        command = f"volume quota policy rule {action} -vserver * -policy-name default -volume {volume_name}"
-        if action == 'create':
-            command = command.replace('-vserver *', '')
+        command = f"volume quota policy rule {shlex.quote(action)}"
+        if action != 'create':
+            command += " -vserver '*'"
+        command += f" -policy-name default -volume {shlex.quote(str(volume_name))}"
         if qtree_name != 'null':
-            command += f' -qtree {qtree_name}'
+            command += f' -qtree {shlex.quote(str(qtree_name))}'
         elif action == 'create' and qtree_name == 'null':
-            command += f' -qtree ""'
+            command += " -qtree ''"
         if action != 'show':
             if 0 < size < 1:
                 command += f" -disk-limit {int(1024 * size)}g"
@@ -915,11 +917,11 @@ class StorageManagement:
             else:
                 command += " -disk-limit 10g"
         if type == 'user':
-            command += f" -type {type} -target {name}"
+            command += f" -type {shlex.quote(type)} -target {shlex.quote(str(name))}"
         else:
-            command += f" -target {name}"
+            command += f" -target {shlex.quote(str(name))}"
         return command
 
     @staticmethod
     def build_resize_command(volume_name: str) -> str:
-        return f"volume quota resize -vserver * -volume {volume_name}"
+        return f"volume quota resize -vserver '*' -volume {shlex.quote(str(volume_name))}"

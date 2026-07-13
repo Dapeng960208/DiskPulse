@@ -2,6 +2,7 @@
 from crud.configCrud import get_storage_config
 from utils.sshClient import SSHClientBase
 import os
+import shlex
 from models import StorageUsage, StorageBackUpRecord, User, Group
 from datetime import datetime, timedelta
 from schemas import storageBackUpRecordSchema
@@ -18,7 +19,7 @@ class RemoteFileManager:
         self.storage_config = get_storage_config(db=self.db)
         self.client = self.create_ssh()
         self.email = EmailNotification(db=self.db, type='storage_usage')
-        self.model = base_config.get('MODEL')
+        self.model = base_config.get('application.mode')
 
     def create_ssh(self):
         hostname = self.storage_config.file_manage_host
@@ -36,11 +37,11 @@ class RemoteFileManager:
     def add_email_company_info(self, data: dict):
         data['company'] = self.storage_config.company if self.storage_config.company else "新华三半导体技术有限公司"
         data[
-            'domain_name'] = self.storage_config.domain_name if self.storage_config.domain_name else "https://disk-monitor.engiant.com"
+            'domain_name'] = self.storage_config.domain_name if self.storage_config.domain_name else "http://localhost:5173"
         data[
-            'personal_expand'] = self.storage_config.person_expand if self.storage_config.person_expand else "https://bpm.engiant.com/workbench/processes/28"
+            'personal_expand'] = self.storage_config.person_expand if self.storage_config.person_expand else ""
         data[
-            'group_expand'] = self.storage_config.group_expand if self.storage_config.group_expand else "https://bpm.engiant.com/workbench/processes/29"
+            'group_expand'] = self.storage_config.group_expand if self.storage_config.group_expand else ""
         return data
 
     def close_ssh_connection(self):
@@ -50,12 +51,23 @@ class RemoteFileManager:
         stdin, stdout, stderr = self.client.ssh.exec_command(command)
         return stdout.read().decode(), stderr.read().decode()
 
+    @staticmethod
+    def _shell_arg(value) -> str:
+        return shlex.quote(str(value))
+
+    @staticmethod
+    def _permissions_arg(permissions) -> str:
+        permissions = str(permissions)
+        if not permissions.isdigit():
+            raise ValueError("permissions must use numeric mode")
+        return permissions
+
     def directory_exists(self, path):
-        stdout, stderr = self.execute_command(f"""bash -c 'if [ -d "{path}" ]; then echo "exists"; fi'""")
+        stdout, stderr = self.execute_command(f"test -d {self._shell_arg(path)} && echo exists")
         return "exists" in stdout
 
     def create_directory(self, path):
-        stdout, stderr = self.execute_command(f'sudo mkdir -p {path}')
+        stdout, stderr = self.execute_command(f"sudo mkdir -p {self._shell_arg(path)}")
         if stderr:
             self.logger.error(f"Error creating directory {path} : {stderr}")
             return False
@@ -63,7 +75,9 @@ class RemoteFileManager:
         return True
 
     def change_permissions(self, path, permissions):
-        stdout, stderr = self.execute_command(f'sudo chmod {permissions} -R {path}')
+        stdout, stderr = self.execute_command(
+            f"sudo chmod {self._permissions_arg(permissions)} -R {self._shell_arg(path)}"
+        )
         if stderr:
             self.logger.error(f"Error changing permissions for {path} to {permissions}: {stderr}")
             return False
@@ -71,7 +85,7 @@ class RemoteFileManager:
         return True
 
     def change_owner(self, path, user):
-        stdout, stderr = self.execute_command(f'sudo chown {user}:ic -R {path}')
+        stdout, stderr = self.execute_command(f"sudo chown {self._shell_arg(f'{user}:ic')} -R {self._shell_arg(path)}")
         if stderr:
             self.logger.error(f"Error changing owner of {path} to {user}: {stderr}")
             return False
@@ -86,7 +100,9 @@ class RemoteFileManager:
             self.logger.warning(f"Destination directory {destination} does not exist.")
             return False
 
-        stdout, stderr = self.execute_command(f'sudo mv -f {source} {destination}')
+        stdout, stderr = self.execute_command(
+            f"sudo mv -f {self._shell_arg(source)} {self._shell_arg(destination)}"
+        )
         if stderr:
             self.logger.error(f"Error moving directory from {source} to {destination}: {stderr}")
             return False
@@ -102,7 +118,9 @@ class RemoteFileManager:
             self.logger.warning(f"Destination directory {destination} does not exist.")
             return False
 
-        stdout, stderr = self.execute_command(f'sudo rsync -av --remove-source-files {source} {destination}')
+        stdout, stderr = self.execute_command(
+            f"sudo rsync -av --remove-source-files {self._shell_arg(source)} {self._shell_arg(destination)}"
+        )
         if stderr:
             self.logger.error(f"Error syncing directory from {source} to {destination}: {stderr}")
             return False
@@ -111,7 +129,7 @@ class RemoteFileManager:
         return True
 
     def delete_directory(self, path, force=True):
-        delete_command = f'sudo rm -rf {path}' if force is True else f'sudo rm -r {path}'
+        delete_command = f"sudo rm -rf {self._shell_arg(path)}" if force is True else f"sudo rm -r {self._shell_arg(path)}"
         if not self.directory_exists(path):
             self.logger.warning(f"Directory does not exist: {path}")
             return False
@@ -293,15 +311,13 @@ class RemoteFileManager:
                 if move_flag is False:
                     continue
                 storage_back_up_records.append(
-                    storageBackUpRecordSchema.StorageBackUpRecord.from_orm(storage_back_up_record).dict())
-        # recipient = ['guo.jianpeng@engiant.com', 'gt.huangkai@engiant.com', 'gt.shenhuitao@engiant.com',
-        #              'zhao.xinyu@engiant.com']
+                    storageBackUpRecordSchema.StorageBackUpRecord.from_orm(storage_back_up_record).model_dump())
         if len(storage_back_up_records) == 0:
             self.logger.warning(
                 "No data need to be back up.")
             return
         data = {}
-        recipient = ['guo.jianpeng@engiant.com']
+        recipient = [email.strip() for email in (self.storage_config.mail_to or "").split() if email.strip()]
         subject = f"【重要】离职用户数据备份提醒"
         data['storage_back_up_records'] = storage_back_up_records
         data['quit_days'] = quit_days
@@ -324,7 +340,7 @@ class RemoteFileManager:
                                                                                StorageBackUpRecord.end_time.between(
                                                                                    start_time, end_time)).all()
         storage_back_up_records = [
-            storageBackUpRecordSchema.StorageBackUpRecord.from_orm(storage_back_up_record_db).dict() for
+            storageBackUpRecordSchema.StorageBackUpRecord.from_orm(storage_back_up_record_db).model_dump() for
             storage_back_up_record_db in storage_back_up_record_dbs]
         if len(storage_back_up_record_dbs) == 0:
             self.logger.warning(
@@ -334,7 +350,7 @@ class RemoteFileManager:
             storage_back_up_record['duration'] = (datetime.now() - storage_back_up_record.get(
                 'end_time')).days if storage_back_up_record.get('end_time') else 60
         data = {}
-        recipient = ['guo.jianpeng@engiant.com']
+        recipient = [email.strip() for email in (self.storage_config.mail_to or "").split() if email.strip()]
         subject = f"【重要】数据备份即将删除提醒"
         data['storage_back_up_records'] = storage_back_up_records
         data['back_up_duration'] = back_up_duration
@@ -363,9 +379,9 @@ class RemoteFileManager:
             new_storage_back_up_record_db = self.db.query(StorageBackUpRecord).filter(
                 StorageBackUpRecord.id == storage_back_up_record_db.id).first()
             storage_back_up_records.append(
-                storageBackUpRecordSchema.StorageBackUpRecord.from_orm(new_storage_back_up_record_db).dict())
+                storageBackUpRecordSchema.StorageBackUpRecord.from_orm(new_storage_back_up_record_db).model_dump())
         data = {}
-        recipient = ['guo.jianpeng@engiant.com']
+        recipient = [email.strip() for email in (self.storage_config.mail_to or "").split() if email.strip()]
         subject = f"【重要】数据备份已删除提醒"
         data['storage_back_up_records'] = storage_back_up_records
         data['back_up_duration'] = back_up_duration

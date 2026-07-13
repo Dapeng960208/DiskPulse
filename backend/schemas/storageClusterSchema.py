@@ -10,14 +10,13 @@ class StorageClusterBase(BaseModel):
     storage_host: str | None = None
     storage_port: int | None = 22
     storage_user: str | None = None
-    storage_password: str | None = None
     description: Optional[str] = None
     is_active: bool = True
     limit: Optional[float] = None
 
 
 class StorageClusterCreate(StorageClusterBase):
-    pass
+    storage_password: str | None = None
 
 
 class StorageClusterUpdate(BaseModel):

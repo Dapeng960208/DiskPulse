@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from crud import projectsCrud
-from dependencies import get_db
+from dependencies import get_db, require_super_admin
 from schemas import commonSchema, projectsSchema
 
 router = APIRouter(
@@ -38,7 +38,11 @@ def read_projects(
 
 
 @router.post("/", response_model=projectsSchema.Project)
-def create_project(project: projectsSchema.ProjectUpdate, db: Session = Depends(get_db)):
+def create_project(
+    project: projectsSchema.ProjectUpdate,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     if projectsCrud.get_project_by_name(db=db, name=project.name) is not None:
         raise HTTPException(status_code=400, detail="The project exists")
     return projectsCrud.create_project(db=db, project=project)
@@ -87,7 +91,12 @@ def read_project_by_id(project_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{project_id}", response_model=projectsSchema.Project)
-def update_project_by_id(project_id: int, project: projectsSchema.ProjectUpdate, db: Session = Depends(get_db)):
+def update_project_by_id(
+    project_id: int,
+    project: projectsSchema.ProjectUpdate,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     project_db = projectsCrud.get_project_by_id(db=db, id=project_id)
     if project_db is None:
         raise HTTPException(status_code=404, detail="The project was not found")

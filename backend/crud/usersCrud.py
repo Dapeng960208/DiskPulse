@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from models import StorageUsage, User
 from schemas import usersSchema
+from utils.query import get_sort_column
 
 
 def get_user_by_rd_username(db: Session, rd_username: str | None):
@@ -52,8 +53,8 @@ async def get_users(
         query = query.filter(User.user_type == user_type)
 
     total = query.count()
-    if prop and hasattr(User, prop):
-        sort_column = getattr(User, prop)
+    sort_column = get_sort_column(User, prop)
+    if sort_column is not None:
         query = query.order_by(desc(sort_column) if order and order.lower() == "descending" else asc(sort_column))
     else:
         query = query.order_by(desc(User.storage_used))

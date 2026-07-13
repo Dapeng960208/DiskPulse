@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from schemas import groupSchema, commonSchema
 from crud import groupCrud
-from dependencies import get_db
+from dependencies import get_db, require_super_admin
 import logging
 from utils.common import convert_timestamp_to_datetime
 from utils.plot import plot_real_time_line
@@ -19,7 +19,11 @@ router = APIRouter(
 
 
 @router.post("/", response_model=groupSchema.Group)
-def create_group(group: groupSchema.GroupCreate, db: Session = Depends(get_db)):
+def create_group(
+    group: groupSchema.GroupCreate,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     return groupCrud.create_group(db=db, group=group)
 
 
@@ -55,7 +59,12 @@ def read_group_realtime_data(group_id: int, start_time: datetime | None = None, 
 
 
 @router.put("/{group_id}", response_model=groupSchema.Group)
-def update_group(group_id: int, group: groupSchema.GroupUpdate, db: Session = Depends(get_db)):
+def update_group(
+    group_id: int,
+    group: groupSchema.GroupUpdate,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     db_group = groupCrud.get_group_by_id(db, group_id=group_id)
     if db_group is None:
         raise HTTPException(status_code=404, detail="Group not found")
@@ -63,7 +72,11 @@ def update_group(group_id: int, group: groupSchema.GroupUpdate, db: Session = De
 
 
 @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_group(group_id: int, db: Session = Depends(get_db)):
+def delete_group(
+    group_id: int,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     db_group = groupCrud.get_group_by_id(db, group_id=group_id)
     if db_group is None:
         raise HTTPException(status_code=404, detail="Group not found")

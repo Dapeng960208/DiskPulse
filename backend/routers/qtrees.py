@@ -5,7 +5,7 @@ from typing import List
 
 from schemas import qtreeSchema, commonSchema
 from crud import qtreeCrud
-from dependencies import get_db
+from dependencies import get_db, require_super_admin
 from datetime import datetime
 import logging
 logger = logging.getLogger('app:qtrees')
@@ -17,7 +17,11 @@ router = APIRouter(
 
 
 @router.post("/", response_model=qtreeSchema.Qtree)
-def create_qtree(qtree: qtreeSchema.QtreeCreate, db: Session = Depends(get_db)):
+def create_qtree(
+    qtree: qtreeSchema.QtreeCreate,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     return qtreeCrud.create_qtree(db=db, qtree=qtree)
 
 
@@ -53,7 +57,12 @@ def read_qtree_realtime_data(qtree_id: int, start_time: datetime | None = None,
 
 
 @router.put("/{qtree_id}", response_model=qtreeSchema.Qtree)
-def update_qtree(qtree_id: int, qtree: qtreeSchema.QtreeUpdate, db: Session = Depends(get_db)):
+def update_qtree(
+    qtree_id: int,
+    qtree: qtreeSchema.QtreeUpdate,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     db_qtree = qtreeCrud.get_qtree_by_id(db, qtree_id=qtree_id)
     if db_qtree is None:
         raise HTTPException(status_code=404, detail="Qtree not found")
@@ -61,7 +70,11 @@ def update_qtree(qtree_id: int, qtree: qtreeSchema.QtreeUpdate, db: Session = De
 
 
 @router.delete("/{qtree_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_qtree(qtree_id: int, db: Session = Depends(get_db)):
+def delete_qtree(
+    qtree_id: int,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
     db_qtree = qtreeCrud.get_qtree_by_id(db, qtree_id=qtree_id)
     if db_qtree is None:
         raise HTTPException(status_code=404, detail="Qtree not found")

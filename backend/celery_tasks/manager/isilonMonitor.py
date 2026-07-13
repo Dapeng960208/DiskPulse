@@ -206,9 +206,9 @@ class IsilonMonitor:
                 item_key = tuple(getattr(item, key) for key in unique_keys)
                 item_db = existing_data_map.get(item_key)
                 if item_db is None:
-                    new_data.append(model(**item.dict()))
+                    new_data.append(model(**item.model_dump()))
                 else:
-                    for key, value in item.dict(exclude=set(exclude_keys)).items():
+                    for key, value in item.model_dump(exclude=set(exclude_keys)).items():
                         setattr(item_db, key, value)
                     self.db.merge(item_db)
             if new_data:

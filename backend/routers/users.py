@@ -3,9 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from crud import usersCrud
-from dependencies import CurrentUserDep, get_db, require_authenticated_request
+from dependencies import CurrentTokenDep, CurrentUserDep, get_db, require_authenticated_request, require_super_admin
 from schemas import commonSchema, usersSchema
 from utils.auth_service import build_frontend_profile, login_user
+from utils.security import revoke_token
 
 router = APIRouter(
     prefix="/users",
@@ -21,7 +22,8 @@ def login(payload: usersSchema.LoginIn, db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/logout")
-def logout() -> dict:
+def logout(token: CurrentTokenDep) -> dict:
+    revoke_token(token)
     return {"result": None}
 
 
@@ -30,7 +32,7 @@ def current_profile(current_user: CurrentUserDep) -> dict:
     return {"result": build_frontend_profile(current_user)}
 
 
-@router.post("/", response_model=usersSchema.User)
+@router.post("/", response_model=usersSchema.User, dependencies=[Depends(require_super_admin)])
 def create_user(user: usersSchema.UserBase, db: Session = Depends(get_db)):
     user_db = usersCrud.get_user_by_rd_username(db, rd_username=user.rd_username)
     if user_db is not None:
@@ -71,7 +73,7 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
     return db_user
 
 
-@router.put("/{user_id}", response_model=usersSchema.User)
+@router.put("/{user_id}", response_model=usersSchema.User, dependencies=[Depends(require_super_admin)])
 def update_user(user_id: int, user: usersSchema.UserUpdate, db: Session = Depends(get_db)):
     db_user = usersCrud.get_user_by_id(db, id=user_id)
     if db_user is None:
@@ -79,7 +81,7 @@ def update_user(user_id: int, user: usersSchema.UserUpdate, db: Session = Depend
     return usersCrud.update_user(db, user_id=user_id, user=user)
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_super_admin)])
 def delete_user(user_id: int, db: Session = Depends(get_db)):
     db_user = usersCrud.get_user_by_id(db, user_id)
     if db_user is None:

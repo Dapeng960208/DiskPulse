@@ -19,25 +19,17 @@ class LargeFileAlert:
     """大文件告警服务类，负责处理用户大文件的告警和邮件通知"""
 
     # 部门分类配置
-    DEPARTMENT_CATEGORIES = {
-        'de': ['zhao.yunfeng@engiant.com', 'shaun.mu@grandtrans.com', 'zen.ming@gention.com'],
-        'dv': ['wang.fengC@engiant.com', 'zhang.lirong@grandtrans.com'],
-        'sw': ['sun.xiangdong@engiant.com', 'curtis.yang@grandtrans.com'],
-        'emu': ['dong.xiaojun@gention.com', 'jeff.sun@grandtrans.com'],
-        'cfm': ['qing.yuanyuan@gention.com'],
-        'pd': ['dong.xiaojun@gention.com', 'jeff.sun@grandtrans.com'],
-        'dft': ['dong.xiaojun@gention.com', 'jeff.sun@grandtrans.com']
-    }
+    DEPARTMENT_CATEGORIES: dict[str, list[str]] = {}
 
     def __init__(self, db: Session, logger, model=None):
         self.db = db
         self.logger = logger
         self.storage_config = get_storage_config(db=self.db)
         self.email_service = EmailNotification(db=self.db, type='storage_usage')
-        self.environment = base_config.get('MODEL', 'prod') if model is None else model
+        self.environment = base_config.get('application.mode', 'prod') if model is None else model
 
         # 常量定义
-        self.DEV_EMAIL = ['guo.jianpeng@engiant.com']
+        self.DEV_EMAIL: list[str] = []
         self.MISSING_EMAIL_PLACEHOLDER = 'admin'
         self.ADMIN_EMAILS = self._get_admin_emails()
 
@@ -50,9 +42,8 @@ class LargeFileAlert:
         if hasattr(self.storage_config, 'mail_to') and self.storage_config.mail_to:
             return [email.strip() for email in self.storage_config.mail_to.split() if email.strip()]
 
-        # 如果没有配置，默认使用开发邮箱
-        self.logger.warning("No admin email configured, using dev email as fallback")
-        return self.DEV_EMAIL
+        self.logger.warning("No admin email configured")
+        return []
 
     def _add_email_context(self, data: dict, threshold: int = None) -> dict:
         """为邮件模板添加上下文信息"""
@@ -445,6 +436,9 @@ class LargeFileAlert:
         try:
             user_email, rd_username = user_key
             recipients = self._get_email_recipients(user_email)
+            if not recipients:
+                self.logger.warning("No recipient configured for large file alert")
+                return False
             subject = self._get_email_subject(user_email)
 
             email_data = self._prepare_email_data_for_user(user_files, threshold_gb, user_email)
@@ -551,7 +545,7 @@ class LargeFileState:
         self.db = db
         self.logger = logger
         self.config = get_storage_config(db=self.db)
-        self.environment = base_config.get('MODEL', 'prod') if model is None else model
+        self.environment = base_config.get('application.mode', 'prod') if model is None else model
 
     def _get_all_groups(self) -> List[Group]:
         """Retrieve all groups from database."""

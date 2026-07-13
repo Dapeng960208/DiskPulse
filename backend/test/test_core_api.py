@@ -1,23 +1,11 @@
 # -*- coding: utf-8 -*-
 import io
-import os
-import sys
-import unittest
 from datetime import datetime
-from pathlib import Path
 from unittest.mock import patch
 
-from fastapi import APIRouter, FastAPI, Request
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+import pytest
 
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
-if str(BACKEND_ROOT) not in sys.path:
-    sys.path.insert(0, str(BACKEND_ROOT))
-
-from database import Base
+from appConfig import base_config
 import models
 from routers import (
     aggregate,
@@ -38,50 +26,30 @@ from utils.security import issue_token
 NOW = "2026-06-30T10:00:00"
 
 
-class CoreApiTest(unittest.TestCase):
-    def setUp(self):
-        self.env_patcher = patch.dict(os.environ, {"JWT_SECRET_KEY": "test-secret"}, clear=False)
-        self.env_patcher.start()
-        self.engine = create_engine(
-            "sqlite+pysqlite:///:memory:",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
+class TestCoreApi:
+    @pytest.fixture(autouse=True)
+    def setup(self, api_client_factory, session_factory):
+        base_config.set("jwt.secret_key", "test-secret")
+        base_config.set("super_admin_usernames", ["alice"])
+        self.SessionLocal = session_factory
+        self.client = api_client_factory(
+            [
+                users.router,
+                projects.router,
+                storage_cluster.router,
+                aggregate.router,
+                volumes.router,
+                qtrees.router,
+                group.router,
+                storage_usage.router,
+                storage_alerts.router,
+                storage_back_up_records.router,
+                large_files.router,
+            ],
+            authenticated=True,
+            headers={"Authorization": f"Bearer {issue_token(1)}"},
         )
-        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
-        Base.metadata.create_all(bind=self.engine)
-        app = FastAPI()
-        storage_router = APIRouter(prefix="/storage-pulse/api")
-        for router in (
-            users.router,
-            projects.router,
-            storage_cluster.router,
-            aggregate.router,
-            volumes.router,
-            qtrees.router,
-            group.router,
-            storage_usage.router,
-            storage_alerts.router,
-            storage_back_up_records.router,
-            large_files.router,
-        ):
-            storage_router.include_router(router)
-        app.include_router(storage_router)
-
-        @app.middleware("http")
-        async def db_session_middleware(request: Request, call_next):
-            request.state.db = self.SessionLocal()
-            try:
-                return await call_next(request)
-            finally:
-                request.state.db.close()
-
-        self.client = TestClient(app)
         self.seed_core_data()
-
-    def tearDown(self):
-        Base.metadata.drop_all(bind=self.engine)
-        self.engine.dispose()
-        self.env_patcher.stop()
 
     def seed_core_data(self):
         session = self.SessionLocal()
@@ -265,33 +233,33 @@ class CoreApiTest(unittest.TestCase):
                 "limit": 800,
             },
         )
-        self.assertEqual(create_response.status_code, 200)
+        assert create_response.status_code == 200
         cluster_id = create_response.json()["id"]
 
         list_response = self.client.get(
             "/storage-pulse/api/storage-clusters/",
             params={"nameLike": "cluster", "is_active": "false", "page": 1, "size": 5},
         )
-        self.assertEqual(list_response.status_code, 200)
-        self.assertEqual(list_response.json()["total"], 1)
-        self.assertEqual(list_response.json()["content"][0]["name"], "cluster-b")
+        assert list_response.status_code == 200
+        assert list_response.json()["total"] == 1
+        assert list_response.json()["content"][0]["name"] == "cluster-b"
 
         update_response = self.client.put(
             f"/storage-pulse/api/storage-clusters/{cluster_id}",
             json={"name": "cluster-b-renamed", "is_active": True, "used": 200, "use_ratio": 25},
         )
-        self.assertEqual(update_response.status_code, 200)
-        self.assertEqual(update_response.json()["name"], "cluster-b-renamed")
+        assert update_response.status_code == 200
+        assert update_response.json()["name"] == "cluster-b-renamed"
 
         with patch("routers.storage_cluster.get_storage_cluster_real_time", return_value=[[NOW, 200]]):
             realtime_response = self.client.get(f"/storage-pulse/api/storage-clusters/{cluster_id}/realtime")
-        self.assertEqual(realtime_response.status_code, 200)
-        self.assertEqual(realtime_response.json()["data"], [[NOW, 200]])
+        assert realtime_response.status_code == 200
+        assert realtime_response.json()["data"] == [[NOW, 200]]
 
         delete_response = self.client.delete(f"/storage-pulse/api/storage-clusters/{cluster_id}")
-        self.assertEqual(delete_response.status_code, 200)
+        assert delete_response.status_code == 200
         missing_response = self.client.get(f"/storage-pulse/api/storage-clusters/{cluster_id}")
-        self.assertEqual(missing_response.status_code, 404)
+        assert missing_response.status_code == 404
 
     def test_project_user_and_storage_resource_lists(self):
         users_response = self.client.get(
@@ -299,16 +267,16 @@ class CoreApiTest(unittest.TestCase):
             params={"nameLike": "alice", "load_detail": "false"},
             headers={"Authorization": f"Bearer {issue_token(1)}"},
         )
-        self.assertEqual(users_response.status_code, 200)
-        self.assertEqual(users_response.json()["total"], 1)
-        self.assertEqual(users_response.json()["content"][0]["rd_username"], "alice")
+        assert users_response.status_code == 200
+        assert users_response.json()["total"] == 1
+        assert users_response.json()["content"][0]["rd_username"] == "alice"
 
         project_response = self.client.get("/storage-pulse/api/projects/1")
-        self.assertEqual(project_response.status_code, 200)
-        self.assertEqual(project_response.json()["recipient_ids"], [1, 2])
+        assert project_response.status_code == 200
+        assert project_response.json()["recipient_ids"] == [1, 2]
 
         duplicate_response = self.client.post("/storage-pulse/api/projects/", json={"name": "alpha"})
-        self.assertEqual(duplicate_response.status_code, 400)
+        assert duplicate_response.status_code == 400
 
         for path, expected_name in (
             ("/storage-pulse/api/aggregates/", "aggr-a"),
@@ -317,30 +285,30 @@ class CoreApiTest(unittest.TestCase):
             ("/storage-pulse/api/groups/", "alpha-team"),
         ):
             response = self.client.get(path, params={"nameLike": expected_name, "page": 1, "size": 10})
-            self.assertEqual(response.status_code, 200, path)
-            self.assertEqual(response.json()["total"], 1, path)
-            self.assertEqual(response.json()["content"][0]["name"], expected_name, path)
+            assert response.status_code == 200, path
+            assert response.json()["total"] == 1, path
+            assert response.json()["content"][0]["name"] == expected_name, path
 
         volume_response = self.client.get(
             "/storage-pulse/api/volumes/",
             params={"prop": "soft_limit", "order": "descending", "page": 1, "size": 10},
         )
-        self.assertEqual(volume_response.status_code, 200)
-        self.assertEqual(volume_response.json()["content"][0]["soft_limit"], 320)
+        assert volume_response.status_code == 200
+        assert volume_response.json()["content"][0]["soft_limit"] == 320
 
         qtree_response = self.client.get(
             "/storage-pulse/api/qtrees/",
             params={"prop": "soft_use_ratio", "order": "descending", "page": 1, "size": 10},
         )
-        self.assertEqual(qtree_response.status_code, 200)
-        self.assertEqual(qtree_response.json()["content"][0]["soft_use_ratio"], 31.25)
+        assert qtree_response.status_code == 200
+        assert qtree_response.json()["content"][0]["soft_use_ratio"] == 31.25
 
         group_response = self.client.get(
             "/storage-pulse/api/groups/",
             params={"prop": "soft_limit", "order": "descending", "page": 1, "size": 10},
         )
-        self.assertEqual(group_response.status_code, 200)
-        self.assertEqual(group_response.json()["content"][0]["soft_limit"], 240)
+        assert group_response.status_code == 200
+        assert group_response.json()["content"][0]["soft_limit"] == 240
 
     def test_storage_usage_create_list_update_backup_and_export_contracts(self):
         with patch("routers.storage_usage.create_user_folder_by_storage_usage_id", return_value=None):
@@ -348,15 +316,15 @@ class CoreApiTest(unittest.TestCase):
                 "/storage-pulse/api/storage-usages/",
                 json={"user_id": 1, "group_id": 1},
             )
-        self.assertEqual(create_response.status_code, 200)
-        self.assertEqual(create_response.json()["user_id"], 1)
+        assert create_response.status_code == 200
+        assert create_response.json()["user_id"] == 1
 
         list_response = self.client.get(
             "/storage-pulse/api/storage-usages/",
             params={"nameLike": "alice", "user_id": "", "storage_cluster_id": 1},
         )
-        self.assertEqual(list_response.status_code, 200)
-        self.assertEqual(list_response.json()["total"], 1)
+        assert list_response.status_code == 200
+        assert list_response.json()["total"] == 1
 
         update_response = self.client.put(
             "/storage-pulse/api/storage-usages/1",
@@ -375,38 +343,38 @@ class CoreApiTest(unittest.TestCase):
                 "storage_cluster_id": 1,
             },
         )
-        self.assertEqual(update_response.status_code, 200)
-        self.assertEqual(update_response.json()["limit"], 120)
-        self.assertEqual(update_response.json()["soft_limit"], 90)
+        assert update_response.status_code == 200
+        assert update_response.json()["limit"] == 120
+        assert update_response.json()["soft_limit"] == 90
 
         soft_sort_response = self.client.get(
             "/storage-pulse/api/storage-usages/",
             params={"prop": "soft_use_ratio", "order": "descending", "page": 1, "size": 10},
         )
-        self.assertEqual(soft_sort_response.status_code, 200)
-        self.assertEqual(soft_sort_response.json()["content"][0]["soft_use_ratio"], 33.33)
+        assert soft_sort_response.status_code == 200
+        assert soft_sort_response.json()["content"][0]["soft_use_ratio"] == 33.33
 
         with patch("routers.storage_usage.back_up_user_storage_usage_by_storage_usage_id", return_value=None):
             backup_response = self.client.post(
                 "/storage-pulse/api/storage-usages/1/back-up",
                 json={"closed": True},
             )
-        self.assertEqual(backup_response.status_code, 200)
+        assert backup_response.status_code == 200
 
         with patch("crud.storageUsageCrud.export_storage_usage_to_pdf", return_value=io.BytesIO(b"%PDF")):
             pdf_response = self.client.get("/storage-pulse/api/storage-usages/export/", params={"export_type": "pdf"})
-        self.assertEqual(pdf_response.status_code, 200)
-        self.assertEqual(pdf_response.headers["content-type"], "application/pdf")
+        assert pdf_response.status_code == 200
+        assert pdf_response.headers["content-type"] == "application/pdf"
 
         with patch("crud.storageUsageCrud.export_storage_usage_to_excel", return_value=io.BytesIO(b"xlsx")):
             excel_response = self.client.get(
                 "/storage-pulse/api/storage-usages/export/",
                 params={"export_type": "excel"},
             )
-        self.assertEqual(excel_response.status_code, 200)
-        self.assertEqual(
-            excel_response.headers["content-type"],
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        assert excel_response.status_code == 200
+        assert (
+            excel_response.headers["content-type"]
+            == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     def test_alert_backup_and_large_file_interfaces(self):
@@ -414,38 +382,34 @@ class CoreApiTest(unittest.TestCase):
             "/storage-pulse/api/storage-alerts/",
             params={"alert_type": "usage", "related_type": "group", "related_id": 1},
         )
-        self.assertEqual(alert_response.status_code, 200)
-        self.assertEqual(alert_response.json()["total"], 1)
+        assert alert_response.status_code == 200
+        assert alert_response.json()["total"] == 1
 
         backup_list_response = self.client.get(
             "/storage-pulse/api/storage-back-up-records/",
             params={"user_id": ""},
         )
-        self.assertEqual(backup_list_response.status_code, 200)
-        self.assertEqual(backup_list_response.json()["total"], 2)
+        assert backup_list_response.status_code == 200
+        assert backup_list_response.json()["total"] == 2
 
         blocked_delete_response = self.client.delete("/storage-pulse/api/storage-back-up-records/2")
-        self.assertEqual(blocked_delete_response.status_code, 400)
+        assert blocked_delete_response.status_code == 400
 
         with patch("routers.storage_back_up_records.delete_storage_back_up_record_by_storage_usage_id", return_value=None):
             delete_response = self.client.delete("/storage-pulse/api/storage-back-up-records/1")
-        self.assertEqual(delete_response.status_code, 200)
+        assert delete_response.status_code == 200
 
         large_files_response = self.client.get(
             "/storage-pulse/api/large-files/",
             params={"nameLike": "", "user_id": 1, "group_id": 1},
         )
-        self.assertEqual(large_files_response.status_code, 200)
-        self.assertEqual(large_files_response.json()["total"], 1)
+        assert large_files_response.status_code == 200
+        assert large_files_response.json()["total"] == 1
 
         with patch("crud.largeFilesCrud.export_large_files", return_value=io.BytesIO(b"xlsx")):
             export_response = self.client.get("/storage-pulse/api/large-files/export/")
-        self.assertEqual(export_response.status_code, 200)
-        self.assertEqual(
-            export_response.headers["content-type"],
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        assert export_response.status_code == 200
+        assert (
+            export_response.headers["content-type"]
+            == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
-
-if __name__ == "__main__":
-    unittest.main()
