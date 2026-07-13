@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload
-from models import Group, Project, StorageUsage
+
+from models import Group, ProjectStorageEnvironment, Qtree, StorageUsage, Volume
 from schemas import groupSchema
 from sqlalchemy import or_, desc, asc
 from datetime import datetime, timedelta
@@ -15,7 +17,7 @@ def get_group_by_id(db: Session, group_id: int):
 def get_groups(db: Session, page: int | None = None, size: int | None = None, nameLike: str | None = None,
                prop: str | None = None,
                order: str | None = None, qtree_id: int | None = None, project_id: int | None = None,
-               storage_cluster_id: int | None = None):
+               storage_cluster_id: int | None = None, project_environment_id: int | None = None):
     query = db.query(Group)
     conditions = []
     if nameLike:
@@ -26,6 +28,8 @@ def get_groups(db: Session, page: int | None = None, size: int | None = None, na
         conditions.append(Group.project_id == project_id)
     if storage_cluster_id:
         conditions.append(Group.storage_cluster_id == storage_cluster_id)
+    if project_environment_id is not None:
+        conditions.append(Group.project_environment_id == project_environment_id)
 
     query = query.filter(*conditions)
     total = query.count()
@@ -50,22 +54,111 @@ def get_group_real_time_data_by_id(db: Session, group_id: int, start_time: datet
                                     indicator=indicator, table_prefix='group')
 
 
-def create_group(db: Session, group: groupSchema.GroupCreate):
-    db_group = Group(**group.model_dump(exclude={'in_charge_user'}))
+def create_group(
+    db: Session,
+    group: groupSchema.GroupCreate | groupSchema.GroupBindingCreate,
+):
+    data = group.model_dump(exclude_unset=True)
+    if data.get("project_environment_id") is not None:
+        environment = _validate_binding(db, data)
+        data.update(
+            project_id=environment.project_id,
+            storage_cluster_id=environment.storage_cluster_id,
+        )
+        data.setdefault("volume_id", None)
+        data.setdefault("qtree_id", None)
+    db_group = Group(**data)
     db.add(db_group)
     db.commit()
     db.refresh(db_group)
     return db_group
 
 
-def update_group(db: Session, group_id: int, group: groupSchema.GroupUpdate):
+def update_group(
+    db: Session,
+    group_id: int,
+    group: groupSchema.GroupUpdate | groupSchema.GroupBindingUpdate,
+):
     db_group = db.query(Group).filter(Group.id == group_id).first()
     if db_group:
-        for key, value in group.model_dump(exclude={'in_charge_user'}).items():
+        data = group.model_dump(exclude_unset=True)
+        if data.get("project_environment_id") is not None:
+            environment = _validate_binding(db, data)
+            data.update(
+                project_id=environment.project_id,
+                storage_cluster_id=environment.storage_cluster_id,
+            )
+            data.setdefault("volume_id", None)
+            data.setdefault("qtree_id", None)
+        for key, value in data.items():
             setattr(db_group, key, value)
         db.commit()
         db.refresh(db_group)
     return db_group
+
+
+def _validate_binding(db: Session, data: dict) -> ProjectStorageEnvironment:
+    environment = (
+        db.query(ProjectStorageEnvironment)
+        .filter(ProjectStorageEnvironment.id == data["project_environment_id"])
+        .first()
+    )
+    if environment is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Project storage environment not found",
+        )
+
+    if data.get("volume_id") is not None:
+        target = db.query(Volume).filter(Volume.id == data["volume_id"]).first()
+        target_name = "Volume"
+    else:
+        if (environment.storage_cluster.storage_type or "").lower() == "isilon":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Isilon environments do not support qtree targets",
+            )
+        target = db.query(Qtree).filter(Qtree.id == data.get("qtree_id")).first()
+        target_name = "Qtree"
+
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{target_name} not found",
+        )
+    if target.storage_cluster_id != environment.storage_cluster_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{target_name} does not belong to the environment storage cluster",
+        )
+    return environment
+
+
+def serialize_group(group: Group) -> dict:
+    result = {
+        column.name: getattr(group, column.name)
+        for column in Group.__table__.columns
+    }
+    result["project"] = group.project
+    result["project_environment"] = group.project_environment
+    result["storage_cluster"] = group.storage_cluster
+
+    if group.volume_id is not None:
+        result["storage_target"] = {
+            "type": "volume",
+            "id": group.volume.id,
+            "name": group.volume.name,
+        }
+    elif group.qtree_id is not None:
+        result["qtree"] = group.qtree
+        result["storage_target"] = {
+            "type": "qtree",
+            "id": group.qtree.id,
+            "name": group.qtree.name,
+        }
+    else:
+        result["storage_target"] = None
+    return result
 
 
 def delete_group(db: Session, group_id: int):

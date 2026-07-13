@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-from models import Qtree, Volume
+from sqlalchemy.exc import IntegrityError
+
+from models import Group, Qtree, Volume
 from schemas import qtreeSchema
 from sqlalchemy import or_, desc, asc
 from crud.questDbCrud import get_real_time_data_by_id
@@ -65,6 +68,19 @@ def update_qtree(db: Session, qtree_id: int, qtree: qtreeSchema.QtreeUpdate):
 def delete_qtree(db: Session, qtree_id: int):
     db_qtree = db.query(Qtree).filter(Qtree.id == qtree_id).first()
     if db_qtree:
-        db.delete(db_qtree)
-        db.commit()
+        if db.query(Group.id).filter(Group.qtree_id == qtree_id).first():
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Qtree is referenced by a group",
+            )
+        try:
+            db.delete(db_qtree)
+            db.commit()
+        except IntegrityError as error:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Qtree is referenced",
+            ) from error
     return db_qtree

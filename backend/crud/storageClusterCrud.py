@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc
-from models import StorageCluster
+from sqlalchemy.exc import IntegrityError
+
+from models import Group, ProjectStorageEnvironment, StorageCluster
 from schemas.storageClusterSchema import StorageClusterCreate, StorageClusterUpdate
 from typing import Optional, List
 from utils.query import get_sort_column
@@ -58,7 +61,28 @@ def update_storage_cluster(db: Session, storage_cluster_id: int, storage_cluster
 def delete_storage_cluster(db: Session, storage_cluster_id: int) -> bool:
     db_storage_cluster = get_storage_cluster(db, storage_cluster_id)
     if db_storage_cluster:
-        db.delete(db_storage_cluster)
-        db.commit()
+        referenced = (
+            db.query(ProjectStorageEnvironment.id)
+            .filter(ProjectStorageEnvironment.storage_cluster_id == storage_cluster_id)
+            .first()
+            or db.query(Group.id)
+            .filter(Group.storage_cluster_id == storage_cluster_id)
+            .first()
+        )
+        if referenced:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Storage cluster is referenced by an environment or group",
+            )
+        try:
+            db.delete(db_storage_cluster)
+            db.commit()
+        except IntegrityError as error:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Storage cluster is referenced",
+            ) from error
         return True
     return False

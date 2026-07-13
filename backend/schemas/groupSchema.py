@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel, field_validator
 from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+
 from schemas import projectsSchema, qtreeSchema, usersSchema
-from schemas.storageClusterSchema import StorageCluster
+
 
 class GroupDiskBase(BaseModel):
     id: int
@@ -14,8 +17,100 @@ class GroupDiskBase(BaseModel):
     updated_at: datetime
 
 
-class GroupBase(BaseModel):
+class GroupWriteBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    project_environment_id: int | None = None
+    volume_id: int | None = None
+    qtree_id: int | None = None
+    monitor_host_id: int | None = None
+    linux_path: str | None = None
+    back_path: str | None = None
+    limit: float | None = 0
+    soft_limit: float | None = None
+    used: float | None = 0
+    use_ratio: float | None = 0
+    soft_use_ratio: float | None = None
+    associated_mail_groups: str | list | None = None
+    in_charge_user_id: int | None = None
+    associate_multiple_groups: bool = False
+    enable_monitoring: bool = True
+    completed: bool | None = False
+    back_up_enabled: bool | None = True
+    updated_at: datetime | None = None
+
+    @field_validator("associated_mail_groups", mode="before")
+    @classmethod
+    def normalize_mail_groups(cls, value):
+        if isinstance(value, list):
+            return ",".join(value)
+        return value
+
+
+class GroupBindingCreate(GroupWriteBase):
+    name: str
+    project_environment_id: int
+
+    @model_validator(mode="after")
+    def validate_target(self):
+        if (self.volume_id is None) == (self.qtree_id is None):
+            raise ValueError("Exactly one of volume_id or qtree_id is required")
+        return self
+
+
+class GroupBindingUpdate(GroupWriteBase):
+    @model_validator(mode="after")
+    def validate_binding_update(self):
+        binding_fields = {"project_environment_id", "volume_id", "qtree_id"}
+        if not self.model_fields_set.intersection(binding_fields):
+            return self
+        if self.project_environment_id is None:
+            raise ValueError("project_environment_id is required when changing storage target")
+        if (self.volume_id is None) == (self.qtree_id is None):
+            raise ValueError("Exactly one of volume_id or qtree_id is required")
+        return self
+
+
+class GroupCreate(GroupWriteBase):
+    """Legacy internal write schema; HTTP endpoints use the strict binding schema."""
+
     project_id: int
+    storage_cluster_id: int | None = None
+    name: str
+
+
+class GroupUpdate(GroupCreate):
+    pass
+
+
+class ProjectEnvironmentSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class StorageClusterSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    storage_type: str
+
+
+class StorageTargetSummary(BaseModel):
+    type: Literal["volume", "qtree"]
+    id: int
+    name: str
+
+
+class GroupBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    project_id: int | None = None
+    project_environment_id: int | None = None
+    volume_id: int | None = None
     monitor_host_id: int | None = None
     name: str
     qtree_id: int | None = None
@@ -30,41 +125,20 @@ class GroupBase(BaseModel):
     in_charge_user_id: int | None = None
     associate_multiple_groups: bool = False
     enable_monitoring: bool = True
-    updated_at: datetime = datetime.now()
+    updated_at: datetime | None = None
     in_charge_user: usersSchema.OnlyUser | None = None
     completed: bool | None = False
     back_up_enabled: bool | None = True
     storage_cluster_id: int | None = None
 
-    @field_validator('associated_mail_groups', mode='before')
-    def set_default_jobs(cls, v):
-        if v is None:
-            return None
-        elif isinstance(v, list):
-            return ','.join(v)
-        else:
-            return v.split(',')
-
-    class Config:
-        from_attributes = True
-
-
-class GroupCreate(GroupBase):
-    pass
-
-
-class GroupUpdate(GroupBase):
-    pass
-
 
 class Group(GroupBase):
     id: int
     project: projectsSchema.ProjectBaseInfo
+    project_environment: ProjectEnvironmentSummary | None = None
     qtree: qtreeSchema.QtreeForGroup | None = None
-    storage_cluster: StorageCluster | None = None
-
-    class Config:
-        from_attributes = True
+    storage_cluster: StorageClusterSummary | None = None
+    storage_target: StorageTargetSummary | None = None
 
 
 Group.model_rebuild()

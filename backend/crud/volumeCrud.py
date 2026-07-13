@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-from models import Volume, Qtree
+from sqlalchemy.exc import IntegrityError
+
+from models import Group, Volume, Qtree
 from schemas import volumeSchema
 from sqlalchemy import or_, desc, asc
 from utils.common import convert_GB_to_TB
@@ -56,8 +59,21 @@ def update_volume(db: Session, volume_id: int, volume: volumeSchema.VolumeUpdate
 def delete_volume(db: Session, volume_id: int):
     db_volume = db.query(Volume).filter(Volume.id == volume_id).first()
     if db_volume:
-        db.delete(db_volume)
-        db.commit()
+        if db.query(Group.id).filter(Group.volume_id == volume_id).first():
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Volume is referenced by a group",
+            )
+        try:
+            db.delete(db_volume)
+            db.commit()
+        except IntegrityError as error:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Volume is referenced",
+            ) from error
     return db_volume
 
 
