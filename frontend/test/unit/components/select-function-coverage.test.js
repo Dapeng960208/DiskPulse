@@ -44,10 +44,16 @@ const projectStorageEnvironmentApi = {
   fetchByProject: vi.fn(),
 };
 
+const groupApi = {
+  fetch: vi.fn(() => Promise.resolve({ content: [] })),
+  fetchById: vi.fn((id) => Promise.resolve({ id, name: `Group-${id}` })),
+};
+
 vi.mock('@/api/account-api', () => ({ default: accountApi }));
 vi.mock('@/api/domain-group-api', () => ({ default: domainGroupApi }));
 vi.mock('@/api/project-api', () => ({ default: projectApi }));
 vi.mock('@/api/project-storage-environment-api', () => ({ default: projectStorageEnvironmentApi }));
+vi.mock('@/api/group-api', () => ({ default: groupApi }));
 vi.mock('@/components/data/UserAvatar.vue', () => ({
   default: defineComponent({
     name: 'UserAvatar',
@@ -253,5 +259,30 @@ describe('form select function coverage', () => {
     });
     expect(wrapper.findAllComponents({ name: 'ElOption' })).toHaveLength(0);
     expect(wrapper.findComponent({ name: 'ElSelect' }).props('loading')).toBe(false);
+  });
+
+  it('scopes GroupSelect requests to the environment and clears on scope change', async () => {
+    const { default: GroupSelect } = await import('@/components/form/GroupSelect.vue');
+    const wrapper = shallowMount(GroupSelect, {
+      props: {
+        modelValue: 9,
+        projectId: 31,
+        projectEnvironmentId: 7,
+      },
+      global: { stubs: globalStubs },
+    });
+    await flushPromises();
+
+    expect(groupApi.fetchById).toHaveBeenCalledWith(9);
+    await wrapper.setProps({ projectEnvironmentId: 8 });
+    await flushPromises();
+
+    expect(wrapper.emitted('update:modelValue')).toContainEqual([null]);
+    expect(groupApi.fetch).toHaveBeenLastCalledWith({
+      page: 1,
+      size: 20,
+      project_id: 31,
+      project_environment_id: 8,
+    });
   });
 });

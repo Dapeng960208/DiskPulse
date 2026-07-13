@@ -24,6 +24,10 @@ const props = defineProps({
   projectId:{
     type:Number,
     default:null
+  },
+  projectEnvironmentId: {
+    type: Number,
+    default: null,
   }
 });
 const emit = defineEmits(['update:modelValue']);
@@ -36,6 +40,28 @@ const queryParams = ref({
 const searchingUserGroups = ref(false);
 
 watch(normalizedModelValue, initDefaultOptions, { immediate: true });
+watch(
+  () => [props.projectId, props.projectEnvironmentId],
+  (value, previousValue) => {
+    if (previousValue && value.some((item, index) => item !== previousValue[index])) {
+      emit('update:modelValue', props.multiple ? [] : null);
+      initDefaultOptions(null);
+    }
+  },
+);
+
+function applyScope() {
+  if (props.projectId) {
+    queryParams.value.project_id = props.projectId;
+  } else {
+    delete queryParams.value.project_id;
+  }
+  if (props.projectEnvironmentId) {
+    queryParams.value.project_environment_id = props.projectEnvironmentId;
+  } else {
+    delete queryParams.value.project_environment_id;
+  }
+}
 
 function initDefaultOptions(selectedValue) {
   groupOptions.value = [];
@@ -47,10 +73,7 @@ function initDefaultOptions(selectedValue) {
   });
 
   if (groupOptions.value.length === 0) {
-    if (props.projectId) {
-      queryParams.value.project_id = props.projectId;
-    }
-
+    applyScope();
     groupApi.fetch(queryParams.value).then((result) => {
       groupOptions.value = result.content;
     });
@@ -60,9 +83,7 @@ function initDefaultOptions(selectedValue) {
 function searchUserGroups(queryString) {
   if (queryString) {
     searchingUserGroups.value = true;
-    if (props.projectId) {
-      queryParams.value.project_id = props.projectId;
-    }
+    applyScope();
     queryParams.value.nameLike = queryString;
     groupApi.fetch(queryParams.value).then((result) => {
       groupOptions.value = result.content;

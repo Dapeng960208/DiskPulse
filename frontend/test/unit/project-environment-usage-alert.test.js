@@ -55,6 +55,13 @@ const ElFormStub = defineComponent({
   },
 });
 
+const ElFormItemStub = defineComponent({
+  name: 'ElFormItem',
+  setup(_, { slots }) {
+    return () => h('label', slots.default?.());
+  },
+});
+
 const ElButtonStub = defineComponent({
   name: 'ElButton',
   emits: ['click'],
@@ -98,7 +105,7 @@ const commonStubs = {
   ElDatePicker: true,
   ElDescriptions: true,
   ElDescriptionsItem: true,
-  ElFormItem: true,
+  ElFormItem: ElFormItemStub,
   ElInput: true,
   ElLink: true,
   ElOption: true,
@@ -137,20 +144,20 @@ describe('project environment usage and alert frontend contract', () => {
 
   it('scopes usage filters and export to project, environment, group, cluster, and user', async () => {
     const { storageUsageApi, wrapper } = await mountUsageList();
-    const project = wrapper.findComponent(ProjectSelectStub);
+    const project = wrapper.findComponent({ name: 'ProjectSelect' });
     expect(project.exists()).toBe(true);
     project.vm.$emit('update:modelValue', 42);
     await nextTick();
 
-    const environment = wrapper.findComponent(ProjectStorageEnvironmentSelectStub);
+    const environment = wrapper.findComponent({ name: 'ProjectStorageEnvironmentSelect' });
     expect(environment.props('projectId')).toBe(42);
     environment.vm.$emit('update:modelValue', 7);
-    wrapper.findComponent(GroupSelectStub).vm.$emit('update:modelValue', 31);
-    wrapper.findComponent(StorageClusterSelectStub).vm.$emit('update:modelValue', 9);
-    wrapper.findComponent(RdUserSelectStub).vm.$emit('update:modelValue', 5);
+    wrapper.findComponent({ name: 'GroupSelect' }).vm.$emit('update:modelValue', 31);
+    wrapper.findComponent({ name: 'StorageClusterSelect' }).vm.$emit('update:modelValue', 9);
+    wrapper.findComponent({ name: 'RdUserSelect' }).vm.$emit('update:modelValue', 5);
     await nextTick();
 
-    expect(wrapper.findComponent(GroupSelectStub).props('projectEnvironmentId')).toBe(7);
+    expect(wrapper.findComponent({ name: 'GroupSelect' }).props('projectEnvironmentId')).toBe(7);
     wrapper.findComponent(FilterFormStub).vm.$emit('query');
     await flushPromises();
     expect(storageUsageApi.fetch).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -195,7 +202,7 @@ describe('project environment usage and alert frontend contract', () => {
           ElButton: ElButtonStub,
           ElDialog: ElDialogStub,
           ElForm: ElFormStub,
-          ElFormItem: true,
+          ElFormItem: ElFormItemStub,
           ElInput: true,
           GroupSelect: GroupSelectStub,
           ProjectSelect: ProjectSelectStub,
@@ -209,23 +216,23 @@ describe('project environment usage and alert frontend contract', () => {
     await nextTick();
     const form = wrapper.findComponent(ElFormStub);
 
-    const project = wrapper.findComponent(ProjectSelectStub);
+    const project = wrapper.findComponent({ name: 'ProjectSelect' });
     expect(project.exists()).toBe(true);
     project.vm.$emit('update:modelValue', 42);
     await nextTick();
-    wrapper.findComponent(ProjectStorageEnvironmentSelectStub).vm.$emit('update:modelValue', 7);
+    wrapper.findComponent({ name: 'ProjectStorageEnvironmentSelect' }).vm.$emit('update:modelValue', 7);
     await nextTick();
-    expect(wrapper.findComponent(GroupSelectStub).props('projectEnvironmentId')).toBe(7);
+    expect(wrapper.findComponent({ name: 'GroupSelect' }).props('projectEnvironmentId')).toBe(7);
 
     Object.assign(form.props('model'), {
       group_id: 31,
       user_id: 5,
       storage_cluster_id: 999,
     });
-    wrapper.findComponent(GroupSelectStub).vm.$emit('change', 31);
+    wrapper.findComponent({ name: 'GroupSelect' }).vm.$emit('change', 31);
     await flushPromises();
     expect(wrapper.text()).toContain('netapp-a');
-    expect(wrapper.findComponent(StorageClusterSelectStub).exists()).toBe(false);
+    expect(wrapper.findComponent({ name: 'StorageClusterSelect' }).exists()).toBe(false);
 
     const submit = wrapper.findAll('button').find((button) => button.text() === '提交');
     await submit.trigger('click');
@@ -251,6 +258,8 @@ describe('project environment usage and alert frontend contract', () => {
       expect(source).toContain(`label="${label}"`);
     }
     expect(source).toContain('project_environment?.name');
+    expect(source).toContain('row.project?.name');
+    expect(source).not.toContain('row.group?.project?.name');
     expect(source).toContain('storage_cluster?.storage_type');
     expect(source).toContain('storage_target?.type');
     expect(source).toContain('storage_target?.name');
@@ -279,11 +288,11 @@ describe('project environment usage and alert frontend contract', () => {
     });
     await flushPromises();
 
-    const project = wrapper.findComponent(ProjectSelectStub);
+    const project = wrapper.findComponent({ name: 'ProjectSelect' });
     expect(project.exists()).toBe(true);
     project.vm.$emit('update:modelValue', 42);
     await nextTick();
-    const environment = wrapper.findComponent(ProjectStorageEnvironmentSelectStub);
+    const environment = wrapper.findComponent({ name: 'ProjectStorageEnvironmentSelect' });
     expect(environment.props('projectId')).toBe(42);
     environment.vm.$emit('update:modelValue', 7);
     wrapper.findComponent(FilterFormStub).vm.$emit('query');

@@ -10,7 +10,12 @@ const projectApi = {
 const groupApi = {
   create: vi.fn(() => Promise.resolve({ id: 2 })),
   replace: vi.fn(() => Promise.resolve({ id: 2 })),
-  fetchById: vi.fn((id) => Promise.resolve({ id, linux_path: `/group-${id}` })),
+  fetchById: vi.fn((id) => Promise.resolve({
+    id,
+    linux_path: `/group-${id}`,
+    project_environment: { id: 11, name: 'netapp-environment' },
+    storage_cluster: { id: 3, name: 'netapp-1', storage_type: 'netapp' },
+  })),
 };
 
 const usersApi = {
@@ -44,6 +49,7 @@ const projectStorageEnvironmentApi = {
 };
 
 const messageSuccess = vi.fn();
+const messageError = vi.fn();
 
 vi.mock('echarts', () => ({
   number: Number,
@@ -56,6 +62,7 @@ vi.mock('element-plus', async (importOriginal) => {
     ...actual,
     ElMessage: {
       success: messageSuccess,
+      error: messageError,
     },
   };
 });
@@ -406,15 +413,21 @@ describe('dialog component function coverage', () => {
       global: { stubs: globalStubs },
     });
 
-    getExposed(wrapper).edit({ id: 11, group_id: 2, user_id: 3, linux_path: '/existing/path' });
+    getExposed(wrapper).edit({
+      id: 11,
+      project: { id: 1, name: 'Project-1' },
+      project_environment_id: 11,
+      group_id: 2,
+      user_id: 3,
+      linux_path: '/existing/path',
+    });
     const groupSelect = wrapper.findComponent({ name: 'GroupSelect' });
     const userSelect = wrapper.findComponent({ name: 'RdUserSelect' });
 
     groupSelect.vm.$emit('change', 5);
     userSelect.vm.$emit('change', 7);
     await flushPromises();
-    wrapper.findComponent({ name: 'StorageClusterSelect' }).vm.$emit('update:modelValue', 12);
-    await wrapper.find('input').setValue('/override/path');
+    expect(wrapper.findComponent({ name: 'StorageClusterSelect' }).exists()).toBe(false);
 
     await findSubmitButton(wrapper).trigger('click');
     await wrapper.find('[data-test="dialog-model"]').trigger('click');
@@ -423,7 +436,7 @@ describe('dialog component function coverage', () => {
 
     expect(groupApi.fetchById).toHaveBeenCalled();
     expect(usersApi.fetchById).toHaveBeenCalled();
-    expect(storageUsageApi.replace).toHaveBeenCalled();
+    expect(storageUsageApi.replace).toHaveBeenCalledWith(11, { group_id: 5, user_id: 7 });
     expect(messageSuccess).toHaveBeenCalled();
   }, 15000);
 });

@@ -9,6 +9,9 @@ import { hasRole } from '@/utils/authorization';
 import { useQuery, useQueryParams } from '@/composables/query';
 import Progress from '@/components/form/Progress.vue'
 import GroupSelect from '@/components/form/GroupSelect.vue'
+import ProjectSelect from '@/components/form/ProjectSelect.vue';
+import ProjectStorageEnvironmentSelect from '@/components/form/ProjectStorageEnvironmentSelect.vue';
+import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import UsageFormDialog from './components/UsageFormDialog.vue'
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
 import { useCurrentUser } from '@/stores/current-user';
@@ -22,6 +25,11 @@ const storageUsageFormDialogRef = ref();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
   size: 20,
+  project_id: null,
+  project_environment_id: null,
+  group_id: null,
+  storage_cluster_id: null,
+  user_id: null,
   nameLike:currentUser.extensionAttributes?.rdUsername
 }));
 
@@ -34,6 +42,18 @@ const handleExport = (exportType) => {
   queryParams.value.export_type = exportType;
   exportReport(storageUsageApi.exportStorageUsages(queryParams.value));
 };
+const handleProjectChange = (projectId) => {
+  queryParams.value.project_id = projectId;
+  queryParams.value.project_environment_id = null;
+  queryParams.value.group_id = null;
+  queryParams.value.storage_cluster_id = null;
+};
+const handleEnvironmentChange = (environmentId) => {
+  queryParams.value.project_environment_id = environmentId;
+  queryParams.value.group_id = null;
+  queryParams.value.storage_cluster_id = null;
+};
+const openExport = () => exportRef.value?.open?.();
 function confirmBackUp(row) {
   ElMessageBox.confirm(`确认移动此目录${row.linux_path}至备份目录？此操作不可撤销。`, '提示', {
     type: 'warning',
@@ -67,8 +87,22 @@ query();
         reset();
         query();
       }"
-      @export="exportRef.open()"
+      @export="openExport"
     >
+      <ElFormItem label="项目">
+        <ProjectSelect
+          :model-value="queryParams.project_id"
+          :multiple="false"
+          :clearable="true"
+          @update:model-value="handleProjectChange" />
+      </ElFormItem>
+      <ElFormItem label="项目环境">
+        <ProjectStorageEnvironmentSelect
+          :model-value="queryParams.project_environment_id"
+          :project-id="queryParams.project_id"
+          :clearable="true"
+          @update:model-value="handleEnvironmentChange" />
+      </ElFormItem>
       <ElFormItem label="Linux目录">
         <ElInput
           v-model="queryParams.nameLike"
@@ -77,6 +111,14 @@ query();
       <ElFormItem label="项目组">
         <GroupSelect
           v-model="queryParams.group_id"
+          :project-id="queryParams.project_id"
+          :project-environment-id="queryParams.project_environment_id"
+          :multiple="false"
+          :clearable="true" />
+      </ElFormItem>
+      <ElFormItem label="存储集群">
+        <StorageClusterSelect
+          v-model="queryParams.storage_cluster_id"
           :multiple="false"
           :clearable="true" />
       </ElFormItem>
@@ -180,6 +222,22 @@ query();
       </ElTableColumn>
 
       <ElTableColumn
+        label="项目"
+        align="center"
+        min-width="80">
+        <template #default="{ row }">
+          <span>{{ row.project?.name || '-' }}</span>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="项目环境"
+        align="center"
+        min-width="80">
+        <template #default="{ row }">
+          <span>{{ row.project_environment?.name || '-' }}</span>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
         label="项目组"
         align="center"
         min-width="50"
@@ -200,6 +258,30 @@ query();
       >
         <template #default="{ row }">
           <span>{{ row.storage_cluster?.name || '-' }}</span>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="存储类型"
+        align="center"
+        min-width="70">
+        <template #default="{ row }">
+          <span>{{ row.storage_cluster?.storage_type || '-' }}</span>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="Volume"
+        align="center"
+        min-width="80">
+        <template #default="{ row }">
+          <span>{{ row.storage_target?.type === 'volume' ? row.storage_target?.name : '-' }}</span>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="Qtree"
+        align="center"
+        min-width="80">
+        <template #default="{ row }">
+          <span>{{ row.storage_target?.type === 'qtree' ? row.storage_target?.name : '-' }}</span>
         </template>
       </ElTableColumn>
 

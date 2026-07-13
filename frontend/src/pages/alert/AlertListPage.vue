@@ -5,6 +5,10 @@ import alertApi from '@/api/alert-api.js';
 import FilterForm from '@/components/form/QueryForm.vue';
 import DataTable from '@/components/data/DataTable.vue';
 import { useQuery, useQueryParams } from '@/composables/query';
+import ProjectSelect from '@/components/form/ProjectSelect.vue';
+import ProjectStorageEnvironmentSelect from '@/components/form/ProjectStorageEnvironmentSelect.vue';
+
+const projectId = ref(null);
 
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
@@ -19,9 +23,32 @@ const alertOptions = {
   '用户目录': 'StorageUsage',
   '项目组': 'Group',
   '项目': 'Project',
+  '项目环境': 'ProjectStorageEnvironment',
   '聚合': 'Aggregate',
   'Volume': 'Volume',
   'Qtree': 'Qtree',
+};
+
+const handleProjectChange = (value) => {
+  projectId.value = value;
+  queryParams.value.related_type = null;
+  queryParams.value.related_id = null;
+};
+
+const handleEnvironmentChange = (value) => {
+  queryParams.value.related_type = value ? 'ProjectStorageEnvironment' : null;
+  queryParams.value.related_id = value;
+};
+
+const handleRelatedTypeChange = (value) => {
+  queryParams.value.related_type = value;
+  queryParams.value.related_id = null;
+};
+
+const handleReset = () => {
+  projectId.value = null;
+  reset();
+  query();
 };
 
 const alertTypeOptions = [
@@ -67,11 +94,22 @@ query();
         queryParams.page = 1;
         query();
       }"
-      @reset="{
-        reset();
-        query();
-      }"
+      @reset="handleReset"
     >
+      <ElFormItem label="项目">
+        <ProjectSelect
+          :model-value="projectId"
+          :multiple="false"
+          :clearable="true"
+          @update:model-value="handleProjectChange" />
+      </ElFormItem>
+      <ElFormItem label="项目环境">
+        <ProjectStorageEnvironmentSelect
+          :project-id="projectId"
+          :model-value="queryParams.related_type === 'ProjectStorageEnvironment' ? queryParams.related_id : null"
+          :clearable="true"
+          @update:model-value="handleEnvironmentChange" />
+      </ElFormItem>
       <ElFormItem label="关键词">
         <ElInput
           v-model="queryParams.nameLike"
@@ -92,8 +130,9 @@ query();
       </ElFormItem>
       <ElFormItem label="分类">
         <ElSelect
-          v-model="queryParams.related_type"
+          :model-value="queryParams.related_type"
           placeholder="请选择分类"
+          @update:model-value="handleRelatedTypeChange"
         >
           <ElOption
             v-for="(value, key) in alertOptions"
@@ -134,6 +173,28 @@ query();
           <ElTag :type="alertTypeDisplay(row.alert_type) === '告警' ? 'danger' : alertTypeDisplay(row.alert_type) === '周报' ? 'success' : 'warning'">
             {{ alertTypeDisplay(row.alert_type) }}
           </ElTag>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="项目"
+        align="center"
+        min-width="80">
+        <template #default="{ row }">
+          <span v-if="row.related_type === 'Group'">
+            {{ row.related_info?.project?.name || '-' }}
+          </span>
+          <span v-else>-</span>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="项目环境"
+        align="center"
+        min-width="80">
+        <template #default="{ row }">
+          <span v-if="row.related_type === 'Group'">
+            {{ row.related_info?.project_environment?.name || '-' }}
+          </span>
+          <span v-else>-</span>
         </template>
       </ElTableColumn>
       <ElTableColumn
