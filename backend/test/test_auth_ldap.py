@@ -212,3 +212,17 @@ def test_bind_ldap_user_logs_safe_rejection_reason(caplog):
     assert caplog.records[-1].name == "uvicorn.error"
     assert "CN=Root Admin" not in caplog.text
     assert "secret" not in caplog.text
+
+
+def test_ldap_authenticate_logs_when_directory_user_is_not_found(caplog):
+    from utils import auth_service
+
+    base_config.set("ldap.uri", "ldap://dc.example.com")
+    base_config.set("ldap.user_bases", ["OU=Users,DC=example,DC=com"])
+    caplog.set_level("WARNING", logger="uvicorn.error")
+    with patch.object(auth_service, "_iter_ldap_users", lambda username: iter(())):
+        assert auth_service.ldap_authenticate("missing-user", "secret") is None
+
+    assert "LDAP authentication failed: directory user not found" in caplog.text
+    assert "missing-user" not in caplog.text
+    assert "secret" not in caplog.text
