@@ -9,6 +9,8 @@ import sys
 import types
 from typing import Any, Mapping
 
+import pytest
+
 
 if "redis" not in sys.modules:
     redis_stub = types.ModuleType("redis")
@@ -27,6 +29,7 @@ import models
 
 
 STORAGES_PATH = Path(storages.__file__)
+MONITOR_PATH = STORAGES_PATH.parents[1] / "manager" / "storagePulseMonitor.py"
 
 
 def _require(name: str):
@@ -387,3 +390,111 @@ def test_project_totals_refresh_only_for_complete_successful_projects(db_session
         complete.soft_use_ratio,
         complete.updated_at,
     ) == (60, 50, 30, 50, 60, collected_at)
+
+
+def _outcome_monitor_factory(failing_clusters):
+    class OutcomeMonitor:
+        def __init__(self, _db, _logger, cluster):
+            self.cluster_id = cluster["storage_cluster_id"]
+            self.client = FakeClient()
+
+        def collect_postgres(self):
+            if self.cluster_id in failing_clusters:
+                raise RuntimeError(f"cluster {self.cluster_id} failed")
+            return {"storage_cluster_id": self.cluster_id}
+
+        def close(self):
+            self.client.close()
+
+    return OutcomeMonitor
+
+
+def test_collection_round_raises_when_all_cluster_postgres_collections_fail():
+    run_round = _require("run_collection_round")
+    sessions = []
+
+    def session_factory():
+        session = WriteSession()
+        sessions.append(session)
+        return session
+
+    snapshot = tuple(
+        {
+            "storage_cluster_id": cluster_id,
+            "project_environment_id": cluster_id * 10,
+        }
+        for cluster_id in (1, 2)
+    )
+
+    with pytest.raises(RuntimeError, match="all storage clusters failed"):
+        run_round(
+            snapshot,
+            session_factory=session_factory,
+            monitor_factory=_outcome_monitor_factory({1, 2}),
+            questdb_writer=lambda *_args: None,
+            logger=storages.logger,
+        )
+
+    assert [session.rollbacks for session in sessions] == [1, 1]
+
+
+def test_collection_round_partial_failure_returns_success_failure_summary():
+    run_round = _require("run_collection_round")
+    snapshot = tuple(
+        {
+            "storage_cluster_id": cluster_id,
+            "project_environment_id": cluster_id * 10,
+        }
+        for cluster_id in (1, 2, 3)
+    )
+
+    summary = run_round(
+        snapshot,
+        session_factory=WriteSession,
+        monitor_factory=_outcome_monitor_factory({1}),
+        questdb_writer=lambda *_args: None,
+        logger=storages.logger,
+    )
+
+    assert summary["succeeded_clusters"] == (2, 3)
+    assert summary["failed_clusters"] == (1,)
+    assert summary["environment_results"] == {10: False, 20: True, 30: True}
+
+
+def test_unused_storage_config_is_not_loaded_or_carried_in_collection_snapshot():
+    monitor_module = ast.parse(MONITOR_PATH.read_text(encoding="utf-8"))
+    config_consumers = [
+        node
+        for node in ast.walk(monitor_module)
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "self"
+        and node.attr == "config"
+        and isinstance(node.ctx, ast.Load)
+    ]
+    assert config_consumers == []
+
+    storages_module = ast.parse(STORAGES_PATH.read_text(encoding="utf-8"))
+    task = next(
+        node
+        for node in storages_module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "storages_schedule_fetching_task"
+    )
+    task_calls = {
+        node.func.id
+        for node in ast.walk(task)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "load_storage_config_snapshot" not in task_calls
+
+    run_round = next(
+        node
+        for node in storages_module.body
+        if isinstance(node, ast.FunctionDef) and node.name == "run_collection_round"
+    )
+    parameters = {
+        argument.arg
+        for argument in (*run_round.args.args, *run_round.args.kwonlyargs)
+    }
+    assert "storage_config" not in parameters
