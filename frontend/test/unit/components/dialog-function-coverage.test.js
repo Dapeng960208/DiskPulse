@@ -29,6 +29,20 @@ const storageClusterApi = {
   replace: vi.fn(() => Promise.resolve({ id: 5 })),
 };
 
+const projectStorageEnvironmentApi = {
+  fetchByProject: vi.fn(() => Promise.resolve({
+    content: [{
+      id: 11,
+      name: 'netapp-environment',
+      storage_cluster: {
+        id: 3,
+        name: 'netapp-1',
+        storage_type: 'netapp',
+      },
+    }],
+  })),
+};
+
 const messageSuccess = vi.fn();
 
 vi.mock('echarts', () => ({
@@ -51,8 +65,10 @@ vi.mock('@/api/group-api', () => ({ default: groupApi }));
 vi.mock('@/api/users-api', () => ({ default: usersApi }));
 vi.mock('@/api/storage-usage-api', () => ({ default: storageUsageApi }));
 vi.mock('@/api/storage-cluster-api', () => ({ default: storageClusterApi }));
+vi.mock('@/api/project-storage-environment-api', () => ({ default: projectStorageEnvironmentApi }));
 vi.mock('@/components/form/RdUserSelect.vue', () => ({ default: createSelectComponentStub('RdUserSelect') }));
 vi.mock('@/components/form/ProjectSelect.vue', () => ({ default: createSelectComponentStub('ProjectSelect') }));
+vi.mock('@/components/form/VolumeSelect.vue', () => ({ default: createSelectComponentStub('VolumeSelect') }));
 vi.mock('@/components/form/QtreeSelect.vue', () => ({ default: createSelectComponentStub('QtreeSelect') }));
 vi.mock('@/components/form/StorageClusterSelect.vue', () => ({ default: createSelectComponentStub('StorageClusterSelect') }));
 vi.mock('@/components/form/MailSelect.vue', () => ({ default: createSelectComponentStub('MailSelect') }));
@@ -306,8 +322,24 @@ describe('dialog component function coverage', () => {
     getExposed(wrapper).edit();
     await wrapper.find('input').setValue('group-name');
     wrapper.findComponent({ name: 'ProjectSelect' }).vm.$emit('update:modelValue', 1);
+    await flushPromises();
+
+    expect(projectStorageEnvironmentApi.fetchByProject).toHaveBeenCalledWith(1, {
+      page: 1,
+      size: 100,
+    });
+    wrapper.findComponent('[data-test="project-environment-select"]').vm.$emit('update:modelValue', 11);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('netapp-1');
+    expect(wrapper.findComponent({ name: 'StorageClusterSelect' }).exists()).toBe(false);
+    wrapper.findComponent('[data-test="storage-target-type"]').vm.$emit('update:modelValue', 'volume');
+    await flushPromises();
+    expect(wrapper.findComponent({ name: 'VolumeSelect' }).exists()).toBe(true);
+    wrapper.findComponent('[data-test="storage-target-type"]').vm.$emit('update:modelValue', 'qtree');
+    await flushPromises();
+    expect(wrapper.findComponent({ name: 'QtreeSelect' }).exists()).toBe(true);
     wrapper.findComponent({ name: 'QtreeSelect' }).vm.$emit('update:modelValue', 2);
-    wrapper.findComponent({ name: 'StorageClusterSelect' }).vm.$emit('update:modelValue', 3);
     await wrapper.findAll('input').at(1).setValue('/group/linux-path');
     await wrapper.findAll('input[type="checkbox"]').at(0).setChecked(true);
     wrapper.findComponent({ name: 'RdUserSelect' }).vm.$emit('update:modelValue', 4);

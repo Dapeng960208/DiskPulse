@@ -21,6 +21,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  storageClusterId: {
+    type: Number,
+    default: null,
+  },
 });
 const emit = defineEmits(['update:modelValue']);
 const { model, normalizedModelValue } = useSelectModel(props, emit);
@@ -28,7 +32,20 @@ const { model, normalizedModelValue } = useSelectModel(props, emit);
 const volumeOptions = ref([]);
 const searchingUserGroups = ref(false);
 
-watch(normalizedModelValue, initDefaultOptions, { immediate: true });
+watch(
+  [normalizedModelValue, () => props.storageClusterId],
+  ([selectedValue]) => initDefaultOptions(selectedValue),
+  { immediate: true },
+);
+
+function queryParams(extra = {}) {
+  return {
+    page: 1,
+    size: 20,
+    ...(props.storageClusterId ? { storage_cluster_id: props.storageClusterId } : {}),
+    ...extra,
+  };
+}
 
 function initDefaultOptions(selectedValue) {
   volumeOptions.value = [];
@@ -40,7 +57,7 @@ function initDefaultOptions(selectedValue) {
   });
 
   if (volumeOptions.value.length === 0) {
-    volumeApi.fetch({ page: 1, size: 20 }).then((result) => {
+    volumeApi.fetch(queryParams()).then((result) => {
       volumeOptions.value = result.content;
     });
   }
@@ -49,9 +66,7 @@ function initDefaultOptions(selectedValue) {
 function searchUserGroups(queryString) {
   if (queryString) {
     searchingUserGroups.value = true;
-    volumeApi.fetch({
-      nameLike: queryString,
-    }).then((result) => {
+    volumeApi.fetch(queryParams({ nameLike: queryString })).then((result) => {
       volumeOptions.value = result.content;
     }).finally(() => (searchingUserGroups.value = false));
   }

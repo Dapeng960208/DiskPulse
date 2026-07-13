@@ -24,18 +24,33 @@ const props = defineProps({
   volumeId:{
     type:Number,
     default:null
-  }
+  },
+  storageClusterId: {
+    type: Number,
+    default: null,
+  },
 });
 const emit = defineEmits(['update:modelValue']);
 const { model, normalizedModelValue } = useSelectModel(props, emit);
 
 const qtreeOptions = ref([]);
-const queryParams = ref({
-  page:1,size:20
-});
 const searchingQtree = ref(false);
 
-watch(normalizedModelValue, initDefaultOptions, { immediate: true });
+watch(
+  [normalizedModelValue, () => props.volumeId, () => props.storageClusterId],
+  ([selectedValue]) => initDefaultOptions(selectedValue),
+  { immediate: true },
+);
+
+function queryParams(extra = {}) {
+  return {
+    page: 1,
+    size: 20,
+    ...(props.volumeId ? { volume_id: props.volumeId } : {}),
+    ...(props.storageClusterId ? { storage_cluster_id: props.storageClusterId } : {}),
+    ...extra,
+  };
+}
 
 function initDefaultOptions(selectedValue) {
   qtreeOptions.value = [];
@@ -47,11 +62,7 @@ function initDefaultOptions(selectedValue) {
   });
 
   if (qtreeOptions.value.length === 0) {
-    if (props.volumeId) {
-      queryParams.value.volume_id = props.volumeId;
-    }
-
-    qtreeApi.fetch(queryParams.value).then((result) => {
+    qtreeApi.fetch(queryParams()).then((result) => {
       qtreeOptions.value = result.content;
     });
   }
@@ -60,11 +71,7 @@ function initDefaultOptions(selectedValue) {
 function searchQtree(queryString) {
   if (queryString) {
     searchingQtree.value = true;
-    if (props.volumeId) {
-      queryParams.value.volume_id = props.volumeId;
-    }
-    queryParams.value.nameLike = queryString;
-    qtreeApi.fetch(queryParams.value).then((result) => {
+    qtreeApi.fetch(queryParams({ nameLike: queryString })).then((result) => {
       qtreeOptions.value = result.content;
     }).finally(() => (searchingQtree.value = false));
   }

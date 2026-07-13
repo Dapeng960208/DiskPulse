@@ -1,6 +1,6 @@
 <script setup>
 import { ElButton, ElFormItem, ElInput, ElLink, ElTableColumn, ElTag, ElCard, ElSelect, ElDescriptions, ElDescriptionsItem,ElMessageBox,ElMessage,ElDatePicker, ElSwitch } from 'element-plus';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import groupApi from '@/api/group-api.js';
 import FilterForm from '@/components/form/QueryForm.vue';
@@ -11,6 +11,7 @@ import Progress from '@/components/form/Progress.vue';
 import UserAvatar from '@/components/data/UserAvatar.vue'
 import QtreeSelect from '@/components/form/QtreeSelect.vue';
 import ProjectSelect from '@/components/form/ProjectSelect.vue';
+import ProjectStorageEnvironmentSelect from '@/components/form/ProjectStorageEnvironmentSelect.vue';
 import GroupFormDialog from './components/GroupFormDialog.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 
@@ -26,6 +27,11 @@ const { result, querying, query } = useQuery(() => groupApi.fetch(queryParams.va
   content: [],
   totalElements: 0,
 });
+
+function changeProjectFilter(projectId) {
+  queryParams.value.project_id = projectId;
+  queryParams.value.project_environment_id = null;
+}
 
 query();
 function confirmDelete(row) {
@@ -68,8 +74,17 @@ function confirmDelete(row) {
         label="关联项目"
         class="form-item-center">
         <ProjectSelect
-          v-model="queryParams.project_id"
+          :model-value="queryParams.project_id"
           :multiple="false"
+          :clearable="true"
+          @update:model-value="changeProjectFilter" />
+      </ElFormItem>
+      <ElFormItem
+        label="存储环境"
+        class="form-item-center">
+        <ProjectStorageEnvironmentSelect
+          v-model="queryParams.project_environment_id"
+          :project-id="queryParams.project_id"
           :clearable="true" />
       </ElFormItem>
       <ElFormItem
@@ -115,7 +130,7 @@ function confirmDelete(row) {
             :column="2">
             <ElDescriptionsItem label="挂载">
               <ElTag>
-                {{ props.row.qtree?.volume.name }}/{{ props.row.qtree?.name }}
+                {{ props.row.storage_target?.type }} / {{ props.row.storage_target?.name || '-' }}
               </ElTag>
             </ElDescriptionsItem>
             <ElDescriptionsItem label="Linux路径">
@@ -134,6 +149,17 @@ function confirmDelete(row) {
       >
         <template #default="{ row }">
           <span>{{ row.storage_cluster?.name || '-' }}</span>
+          <ElTag type="info">
+            {{ row.storage_cluster?.storage_type || '-' }}
+          </ElTag>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="存储环境"
+        align="center"
+        min-width="120">
+        <template #default="{ row }">
+          {{ row.project_environment?.name || '-' }}
         </template>
       </ElTableColumn>
       <ElTableColumn
@@ -173,35 +199,6 @@ function confirmDelete(row) {
         </template>
       </ElTableColumn>
 
-      <!-- <ElTableColumn
-      label="头像"
-      align="center"
-      min-width="60"
-    >
-    <template #default="{ row }">
-        <UserAvatar v-if="row.in_charge_user && row.in_charge_user.avatar_url" :src="row.in_charge_user.avatar_url" >  </UserAvatar>
-      </template>
-  </ElTableColumn> -->
-      <!-- <ElTableColumn
-        label="挂载信息"
-        align="center"
-        min-width="100"
-      >
-        <template #default="{ row }">
-          <ElTag>
-            {{ row.qtree?.volume.name }}/{{ row.qtree?.name }}
-          </ElTag>
-
-        </template>
-      </ElTableColumn> -->
-
-
-      <!-- <ElTableColumn
-        label="Linux路径"
-        align="center"
-        prop="linux_path"
-        min-width="120"
-      /> -->
       <ElTableColumn
         label="硬限额"
         sortable="custom"

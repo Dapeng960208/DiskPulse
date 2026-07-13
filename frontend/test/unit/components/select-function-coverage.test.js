@@ -40,9 +40,14 @@ const projectApi = {
   })),
 };
 
+const projectStorageEnvironmentApi = {
+  fetchByProject: vi.fn(),
+};
+
 vi.mock('@/api/account-api', () => ({ default: accountApi }));
 vi.mock('@/api/domain-group-api', () => ({ default: domainGroupApi }));
 vi.mock('@/api/project-api', () => ({ default: projectApi }));
+vi.mock('@/api/project-storage-environment-api', () => ({ default: projectStorageEnvironmentApi }));
 vi.mock('@/components/data/UserAvatar.vue', () => ({
   default: defineComponent({
     name: 'UserAvatar',
@@ -64,6 +69,8 @@ const globalStubs = {
         type: Function,
         default: undefined,
       },
+      loading: Boolean,
+      disabled: Boolean,
     },
     emits: ['update:modelValue'],
     setup(props, { emit, slots }) {
@@ -222,4 +229,29 @@ describe('form select function coverage', () => {
 
     expect(projectApi.fetchById).toHaveBeenCalledWith(99);
   }, 15000);
+
+  it('handles project storage environment loading failures', async () => {
+    projectStorageEnvironmentApi.fetchByProject.mockRejectedValueOnce(new Error('offline'));
+    const { default: ProjectStorageEnvironmentSelect } = await import(
+      '@/components/form/ProjectStorageEnvironmentSelect.vue'
+    );
+    const wrapper = shallowMount(ProjectStorageEnvironmentSelect, {
+      props: {
+        modelValue: null,
+        projectId: 31,
+      },
+      global: {
+        stubs: globalStubs,
+      },
+    });
+
+    await flushPromises();
+
+    expect(projectStorageEnvironmentApi.fetchByProject).toHaveBeenCalledWith(31, {
+      page: 1,
+      size: 100,
+    });
+    expect(wrapper.findAllComponents({ name: 'ElOption' })).toHaveLength(0);
+    expect(wrapper.findComponent({ name: 'ElSelect' }).props('loading')).toBe(false);
+  });
 });
