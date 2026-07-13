@@ -16,7 +16,8 @@ class RequestBuilder {
     // request interceptor
     service.interceptors.request.use(
       (config) => {
-        config.headers.Authorization = getToken();
+        const token = getToken();
+        if (token) config.headers.Authorization = `Bearer ${token}`;
         return config;
       },
       (error) => {
