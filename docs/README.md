@@ -40,6 +40,7 @@ docs/
 | 文档 | 说明 |
 | --- | --- |
 | [standards/documentation-standard.md](./standards/documentation-standard.md) | 文档更新和放置规则。 |
+| [standards/domain-terminology.md](./standards/domain-terminology.md) | DiskPulse 领域术语和权限命名约定。 |
 | [standards/document-naming-convention.md](./standards/document-naming-convention.md) | 文档命名和目录约定。 |
 | [standards/backend-development-standard.md](./standards/backend-development-standard.md) | 后端开发规范。 |
 | [standards/frontend-design-standard.md](./standards/frontend-design-standard.md) | 前端设计规范。 |

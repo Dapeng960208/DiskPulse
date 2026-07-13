@@ -54,23 +54,18 @@ FastAPI: backend/main.py
 
 ## 4. 配置
 
-`backend/appConfig.py` 根据 `MODEL` 选择环境文件：
+`backend/appConfig.py` 使用 PyYAML 加载按子系统分类的 `backend/config.yml`。应用不读取 `.env` 或运行时环境变量；手工 NetApp/Isilon 检查脚本仍单独使用环境变量，避免把设备凭据并入应用配置。
 
-| `MODEL` | 文件 |
+| 分类 | 用途 |
 | --- | --- |
-| `dev` | `backend/development.env` |
-| `test` | `backend/test.env` |
+| `application` | 运行模式、公司名称和 CORS 来源 |
+| `database.postgres` | PostgreSQL 连接和连接池 |
+| `database.questdb` | QuestDB 连接和连接池 |
+| `redis` | Celery broker/backend 地址 |
+| `jwt`、`ldap`、`super_admin_usernames` | 登录、令牌和超级管理员 |
+| `storage` | 存储客户端运行开关 |
 
-生成的关键配置：
-
-| 配置 | 用途 |
-| --- | --- |
-| `SQL_DATABASE_URL` | PostgreSQL SQLAlchemy engine |
-| `QUEST_DATABASE_URL` | QuestDB SQLAlchemy engine |
-| `APP_ROOT_PATH` | 后端根路径 |
-| `APP_LOGO_PATH` | PDF 报告 logo |
-
-环境文件包含部署差异和敏感值，应保持本地化，不提交到仓库。
+真实 `backend/config.yml` 和 LDAP 密码文件不得提交；仓库只保留 `backend/config.example.yml` 与无敏感值的 `backend/config.test.yml`。相对密码文件路径以 YAML 所在目录为基准，PostgreSQL 和 QuestDB URL 由加载器集中生成并转义凭据。
 
 ## 5. 数据层
 

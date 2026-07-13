@@ -1,5 +1,21 @@
 # 错误记录
 
+### 2026-07-13：YAML 配置测试漏建配置实例
+- 触发：执行 `.\.venv\Scripts\python.exe -m pytest backend\test\test_app_config.py -q`。
+- 现象：`test_resolves_secret_file_relative_to_yaml` 报错 `NameError: name 'config' is not defined`。
+- 根因：新增相对路径测试创建了配置文件，但漏写 `Config(config_path)` 实例化步骤。
+- 修复：在断言前显式创建 `Config` 实例。
+- 验证：同一命令重跑通过，7 个测试全部成功。
+- 风险：无生产代码影响；该失败只存在于新增测试装配。
+
+### 2026-06-30：后端安全审查发现敏感信息和命令拼接风险
+- 触发：审查当前后端代码并新增 `backend/test/test_security_regressions.py`。
+- 现象：`/config/storage` 和存储集群响应包含密码字段；通用异常响应回显内部异常文本；JWT 解码不校验 header 算法；NetApp/Isilon 默认关闭 TLS 校验；远程文件管理直接拼接 `sudo mkdir/chmod/chown/mv/rsync/rm -rf` 命令参数。
+- 根因：内部 schema 与 public API schema 混用，异常处理把调试信息返回给客户端，外部客户端和远程任务沿用开发便利默认值，动态参数缺少统一白名单和 shell 参数引用。
+- 修复：新增 public response schema，收敛异常响应，校验 JWT header，开启 TLS 默认校验，远程命令参数使用 `shlex.quote`，动态排序/指标/树图字段使用白名单，后台任务内创建独立 DB session。
+- 验证：`.\.venv\Scripts\python.exe -m unittest backend.test.test_security_regressions`、`.\.venv\Scripts\python.exe -m unittest discover -s backend\test -p "test_*.py"`、`.\.venv\Scripts\python.exe -m compileall -q backend` 均通过。
+- 风险：真实外部设备和 LDAP 环境未端到端验证；自签名证书环境需要配置 CA 或显式受控降级。
+
 ### 2026-06-30：覆盖率门禁缺少本地工具
 - 触发：执行 `.\.venv\Scripts\python.exe -m coverage --version` 和后续覆盖率门禁。
 - 现象：本地虚拟环境提示 `No module named coverage`。
@@ -28,6 +44,6 @@
 - 触发：按 `AGENTS.md` 和项目标准读取必读文档、前端样式入口。
 - 现象：`docs/standards/domain-terminology.md` 不存在；`frontend/src/style.css` 不存在。
 - 根因：规范引用仍指向旧文件，当前仓库实际样式入口为 `frontend/src/styles/style.scss`。
-- 修复：本次认证交付先按现有实际文件执行，并在认证文档与交付记录中避免引用不存在入口。
-- 验证：已确认 `docs/standards/` 下无 `domain-terminology.md`，前端实际入口由 `frontend/src/main.js` 引入 `frontend/src/styles/style.scss`。
-- 风险：后续任务仍可能按旧规范路径寻找文件，需要补齐或修订标准文档。
+- 修复：新增 `docs/standards/domain-terminology.md`，并将前端标准中的全局样式入口改为 `frontend/src/styles/style.scss`。
+- 验证：`docs/standards/domain-terminology.md` 已存在；前端实际入口由 `frontend/src/main.js` 引入 `frontend/src/styles/style.scss`。
+- 风险：历史交付记录中如引用旧路径，需要以后续当前标准为准。

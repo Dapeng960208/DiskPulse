@@ -1,5 +1,105 @@
 # 当前交付记录
 
+## 2026-07-13：后端运行配置迁移为分类 YAML
+
+### 主题
+
+移除后端应用对 `.env`、`python-dotenv` 和运行时环境变量的依赖，将运行配置统一迁移到按子系统分类的 `backend/config.yml`。
+
+### 已完成
+
+- 新增 PyYAML 配置加载器，支持点分路径读取、显式测试配置、URL 凭据转义、相对密码文件和非法配置快速失败。
+- PostgreSQL、QuestDB、Redis、JWT、LDAP、超级管理员、CORS、建表、连接池和 Isilon 缓存均改读 YAML；手工设备检查脚本继续使用环境变量。
+- 本地配置迁入被忽略的 `backend/config.yml`，LDAP 使用 STARTTLS，超级管理员为 `guojianpeng`；旧 `development.env`、`test.env` 已移除。
+- 新增 `backend/config.example.yml`、`backend/config.test.yml` 和配置契约测试，移除 `python-dotenv` 依赖。
+- 同步认证和后端架构文档；登录 API、JWT 响应、前端契约和数据库结构未变。
+
+### 验证状态
+
+- `.\.venv\Scripts\python.exe -m pytest backend\test\test_app_config.py backend\test\test_auth_ldap.py backend\test\test_auth_api.py backend\test\test_security_regressions.py -q`：通过，28 个测试。
+- `.\.venv\Scripts\python.exe -m pytest backend\test -q`：通过，42 个测试。
+- `.\.venv\Scripts\python.exe -m coverage run -m pytest backend\test -q; .\.venv\Scripts\python.exe -m coverage report`：通过，总覆盖率 `83%`，`backend/appConfig.py` 覆盖率 `93%`。
+- `.\.venv\Scripts\python.exe -m compileall -q backend`、`.\.venv\Scripts\python.exe -m pip check`：通过。
+- 静态扫描确认除 `backend/scripts/manual_*_check.py` 外，后端 Python 代码不再读取环境变量；活动代码和功能文档不再引用旧 env 配置键。
+- 本地 `backend/config.yml` 已验证可加载，验证过程未输出密码或密钥。
+
+### 风险与后续
+
+- 未连接真实 LDAP、PostgreSQL、QuestDB、Redis、NetApp 或 Isilon；外部服务连通性与证书链待部署环境验证。
+- `ldap.group_bases` 当前仅保留配置，不参与角色或权限映射。
+
+## 2026-06-30：后端 pytest 迁移与 80% 覆盖率门禁
+
+### 主题
+
+将后端测试入口从 `unittest` 迁移到 `pytest`，补充核心 CRUD 和汇总逻辑测试，并把当前 `.coveragerc` 后端整体覆盖率门禁提升到 `80%`。
+
+### 已完成
+
+- 新增 `pytest.ini`，默认收集 `backend/test` 下的 `test_*.py` 测试。
+- 新增 `backend/test/conftest.py`，统一提供内存 SQLite、数据库会话、FastAPI `TestClient`、认证头和 JWT 撤销状态隔离 fixture。
+- 将 `backend/test` 下既有测试改为 pytest 函数/测试类，移除 `unittest.TestCase`、`setUp/tearDown` 和 `self.assert*` 断言风格。
+- 新增 `backend/test/test_crud_pytest.py`，覆盖项目、用户、aggregate、volume、qtree、group 的 CRUD、过滤排序、树形汇总、实时数据代理和非法字段拒绝。
+- 在 `backend/requirements.txt` 中新增 `pytest==9.1.1`，并将 `.coveragerc` 的 `fail_under` 提升到 `80`。
+
+### 验证状态
+
+- `.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt`：通过。
+- `.\.venv\Scripts\python.exe -m pytest backend\test`：通过，33 个测试。
+- `.\.venv\Scripts\python.exe -m coverage run -m pytest; .\.venv\Scripts\python.exe -m coverage report`：通过，总覆盖率 `82%`。
+- `.\.venv\Scripts\python.exe -m compileall -q backend`：通过。
+
+### 风险与后续
+
+- 当前 80% 覆盖率口径沿用 `.coveragerc`，仍排除外部设备客户端、QuestDB、Celery、迁移和手工脚本。
+- 测试运行仍会输出 SQLAlchemy/Pydantic 迁移类弃用告警，本轮未处理这些生产代码告警。
+- 本轮未连接真实 NetApp/Isilon/LDAP/QuestDB 环境，仅验证自动化测试和内存 SQLite 覆盖路径。
+
+## 2026-06-30：后端安全审查问题修复
+
+### 主题
+
+修复后端安全审查中确认的敏感信息泄露、远程命令拼接、动态查询字段、TLS 默认值、异常响应、认证授权、运行时默认值和测试装配问题。
+
+### 已完成
+
+- 新增 `backend/test/test_security_regressions.py`，覆盖配置响应去密、存储集群响应去密、异常响应不泄露内部文本、JWT header 校验、NetApp TLS 默认开启和远程 shell 参数引用。
+- `/config/storage` 响应改用 public schema，保留内部 full schema 给服务和更新入参使用。
+- `StorageCluster` public 响应不再包含 `storage_password`，创建/更新入参仍允许提交密码。
+- 通用异常处理不再把内部异常字符串或 Pydantic `errors` 返回给客户端。
+- JWT 解码新增 header `alg=HS256`、`typ=JWT` 校验。
+- NetApp/Isilon 客户端默认开启 TLS 证书校验，不再全局屏蔽 `InsecureRequestWarning`。
+- 远程文件管理和 NetApp quota 扩容命令对路径、用户名、卷名、Qtree 名和目标名做 shell 参数引用，权限值限制为数字模式。
+- QuestDB 动态表前缀、指标列和树图 `value_type` 改为白名单；时间和 id 使用绑定参数。
+- 列表排序字段统一走 `utils.query.get_sort_column`，非法字段返回 `400`。
+- 后台文件任务不再复用请求 Session，改为任务内创建独立数据库会话。
+- CORS 默认收紧为本地开发源，部署可通过 `DISKPULSE_CORS_ORIGINS` 配置。
+- 启动日志中的 Postgres/QuestDB URL 改为脱敏摘要；`alembic.ini` 移除硬编码内网账号密码，迁移运行时从 `appConfig` 注入 URL。
+- 扩容接口改为 Pydantic schema 入参校验，失败返回 `400`，不再记录原始请求体。
+- 核心 API 测试装配补齐主路由认证依赖，并使用默认测试 token。
+- `Authorization` 请求头收紧为 `Bearer <token>`；裸 token 不再兼容。
+- `/users/logout` 要求有效 Bearer token，并撤销当前 JWT 的 `jti`，登出后复用原 token 会返回 `401`。
+- 配置接口以及用户、存储资源、项目、扩容、备份删除/回滚等高风险写操作新增超级管理员依赖，超级管理员来源为 `SUPER_ADMIN_USERNAMES`。
+- 邮件模板和任务默认值移除历史产品名、内部域名和个人邮箱；默认站点链接使用本地入口，扩容流程链接未配置时为空。
+- NetApp/Isilon 手工集成检查脚本移动到 `backend/scripts/manual_*_check.py`，避免被单元测试收集。
+- 主库和 QuestDB 连接池默认值改为保守配置，并支持 `DISKPULSE_DB_*`、`DISKPULSE_QUESTDB_*` 环境变量覆盖。
+- Isilon 会话 cookie/CSRF 缓存默认关闭，仅 `DISKPULSE_ISILON_SESSION_CACHE=true` 时启用。
+- 请求级数据库会话在异常路径执行 rollback 后再关闭。
+- 新增 `docs/standards/domain-terminology.md`，并修正前端标准中的真实样式入口路径。
+
+### 验证状态
+
+- `.\.venv\Scripts\python.exe -m unittest backend.test.test_security_regressions backend.test.test_auth_api`：通过，15 个测试。
+- `.\.venv\Scripts\python.exe -m unittest discover -s backend\test -p "test_*.py"`：通过，28 个测试。
+- `.\.venv\Scripts\python.exe -m compileall -q backend`：通过。
+- 静态扫描确认旧内部域名、个人邮箱、硬编码高连接池、`verify=False` 和 `disable_warnings` 不再存在于后端生产代码；`.dict()` 残留仅为测试中的 `unittest.mock.patch.dict`。
+
+### 风险与后续
+
+- 真实 NetApp/Isilon/LDAP/QuestDB 环境未做端到端连通性验证；TLS 默认开启后，自签名环境需要配置可信 CA 或显式受控降级。
+- JWT 撤销列表当前为进程内内存状态；多实例部署需要迁移到 Redis 或数据库等共享存储。
+- 未配置 `mail_to` 时，历史默认个人收件人已移除，相关告警邮件会缺少默认收件人并需要部署侧显式配置。
+
 ## 2026-06-30：NetApp/Isilon 软限额持久化与展示
 
 ### 主题
@@ -26,7 +126,7 @@
 
 - 未连接真实 NetApp/Isilon 设备做端到端采集验证，本次通过 mock quota payload 覆盖字段解析。
 - 当前工作区已有 `.gitignore` 修改和多份 `backend/migrate/versions/*` 删除，本次未回退也未纳入修复；新增 migration 的 `down_revision` 接到 Git 中既有链路末端 `a1d670c60836`。
-- `docs/standards/domain-terminology.md` 仍缺失，属于既有规范引用缺口。
+- `docs/standards/domain-terminology.md` 已在后续安全修复中补齐。
 
 ## 2026-06-30：后端核心接口测试与覆盖率门禁
 
@@ -56,7 +156,7 @@
 
 - 覆盖率口径为初版核心后端 `70%+`，未把外部设备客户端、QuestDB、Celery worker、迁移脚本和手动探测脚本纳入门禁。
 - 部分 CRUD 和 router 仍输出 Pydantic v2 `dict()` 弃用告警，当前不影响测试通过，后续可单独改为 `model_dump()`。
-- `docs/standards/domain-terminology.md` 仍缺失，属于既有规范引用缺口。
+- `docs/standards/domain-terminology.md` 已在后续安全修复中补齐。
 - 当前工作区仍存在与本任务无关的未跟踪前端测试文件，本次未纳入也未回退。
 
 ## 2026-06-30：前端清理、结构整理与测试补齐
@@ -103,9 +203,9 @@
 ## 已完成
 
 - 新增 LDAP directory 查询、LDAP filter 转义、多 user base 搜索和 STARTTLS-before-bind 行为。
-- 新增 HMAC-SHA256 JWT 签发与校验，兼容 `Authorization: <token>` 和 `Authorization: Bearer <token>`。
+- 新增 HMAC-SHA256 JWT 签发与校验；当前安全契约要求 `Authorization: Bearer <token>`。
 - 新增 `/storage-pulse/api/users/login`、`/users/logout`、`/users/current/profile`，保持前端 `{ result: ... }` 契约。
-- `/storage-pulse/api/**` 除登录、登出和 `OPTIONS` 外默认要求有效 JWT。
+- `/storage-pulse/api/**` 除登录和 `OPTIONS` 外默认要求有效 JWT；登出接口同样要求有效 Bearer token。
 - 移除前端登录页本地 `superadmin` 绕过，所有账号统一走后端登录接口。
 - 新增后端认证测试和前端登录流程测试。
 - 同步认证文档、配置示例和依赖声明。

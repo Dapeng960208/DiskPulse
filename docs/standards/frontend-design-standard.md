@@ -4,14 +4,14 @@
 
 ## 1. 开工前
 
-- 涉及前端代码、样式、测试、构建、页面交互或前端文档时，先读本文、`docs/standards/documentation-standard.md`、`docs/standards/domain-terminology.md` 和 `frontend/src/style.css`。
+- 涉及前端代码、样式、测试、构建、页面交互或前端文档时，先读本文、`docs/standards/documentation-standard.md`、`docs/standards/domain-terminology.md` 和 `frontend/src/styles/style.scss`。
 - 前端任务默认只改 `frontend/` 和相关 `docs/`；除非需求明确联动后端，不改 `backend/`。
 - 功能、接口、配置、权限、测试入口或用户可见行为变化，必须同步 `docs/` 和 `docs/tracking/current-release.md`。
 
 ## 2. 技术与目录
 
 - 技术栈：Vue 3、Vite、Vue Router、Pinia、Tailwind CSS v4、shadcn-vue、lucide。
-- 全局样式入口：`frontend/src/style.css`；设计 token：`frontend/src/tokens.css`。
+- 全局样式入口：`frontend/src/styles/style.scss`；共享变量：`frontend/src/styles/variables.scss`。
 - 通用组件放 `frontend/src/components/common/`；表格组件放 `frontend/src/components/tables/`；shadcn 源码组件保留在 `frontend/src/components/ui/`。
 - Admin API 按资源域放 `frontend/src/api/admin/`，不得恢复 `frontend/src/api/admin.js` 聚合大文件。
 - 路由定义放 `frontend/src/router/routes.js`；守卫放 `frontend/src/router/guards/`；页面组件继续懒加载。
