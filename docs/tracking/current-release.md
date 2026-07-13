@@ -1,5 +1,41 @@
 # 当前交付记录
 
+## 2026-07-13：项目存储环境分层、绑定与采集隔离
+
+### 主题
+
+在 `Project` 与存储资源之间引入 `ProjectStorageEnvironment`，统一项目、存储集群、项目组和 Volume/Qtree 的绑定关系，并按项目存储环境提供管理、工作台、汇总和实时趋势能力。
+
+原始设计文档已按原文纳入 `docs/features/project-storage-environment/design.md`；当前分支的实际实施与验收状态以本节、代码和自动化测试为准。
+
+### 已完成
+
+- 新增 `ProjectStorageEnvironment` 关系模型；Alembic revision `e6a1b2c3d4f5` 接续 `f4b2c8d9e701`，创建 `project_storage_environments`，并为 `groups` 增加 `project_environment_id`、`volume_id` 及对应外键。项目内环境名称、项目与集群组合均保持唯一。
+- 新增项目存储环境列表、创建、详情、摘要、实时趋势、更新和删除 API；读操作按超级管理员、项目负责人或 PT 负责人校验项目访问权，写操作要求超级管理员。已绑定项目组的环境拒绝删除。
+- 项目组 API 支持按 `project_environment_id` 过滤，并要求写入时选择一个环境以及且仅一个 Volume/Qtree 目标；目标必须属于环境绑定的存储集群，Isilon 环境只允许 Volume。
+- 前端完成项目存储环境 CRUD、项目组级联绑定和项目详情工作台。项目列表展示环境数量、集群类型和状态统计；工作台按启用环境切换，展示环境摘要、实时趋势和关联项目组，并通过 `environment_id` 保持可分享的当前环境状态。
+- Celery 存储采集每轮先加载新的、与 ORM session 解耦的标量快照；快照读取使用短会话，后续按存储集群创建独立 session 和事务。单集群 PostgreSQL 更新提交后再写 QuestDB，QuestDB 写入失败不会回滚已提交的 PostgreSQL 数据。
+- 采集轮次允许部分集群失败并保留成功集群结果；只有全部集群失败时轮次失败。项目级汇总只在该项目全部启用环境于本轮完整成功时更新，避免部分成功覆盖完整项目统计。
+- Isilon 项目组直接绑定 Volume，不再创建或依赖 `name='null'` 的 Qtree；环境汇总按真实 Volume/Qtree/多用户项目组目标去重，多个项目组指向同一目标时只计一次。
+- 新增审计与回填脚本 `backend/scripts/backfill_project_storage_environments.py`。默认只输出审计和计划，`--apply` 在阻塞项清零后按项目与集群创建环境、回填项目组，并把历史 Isilon `null` Qtree 绑定转换为 Volume 直连。
+
+### 验证状态
+
+- `& 'D:\dev\DiskPulse\.venv\Scripts\python.exe' -m pytest backend\test -q`：通过，`106` 个测试。
+- `& 'D:\dev\DiskPulse\.venv\Scripts\python.exe' -m coverage run -m pytest backend\test -q; & 'D:\dev\DiskPulse\.venv\Scripts\python.exe' -m coverage report`：通过，总覆盖率 `85%`。
+- `cd frontend; .\node_modules\.bin\vitest.cmd run --testTimeout=15000`：通过，`138` 个测试。
+- `cd frontend; .\node_modules\.bin\vitest.cmd run --coverage --testTimeout=15000`：通过；`statements 92.68%`、`branches 84.12%`、`lines 92.68%`、`functions 71.04%`。
+- `cd frontend; npm run lint`：通过。
+- `cd frontend; npm run build:prod`：通过。
+
+### 风险与后续
+
+- 未在生产数据库执行 Alembic upgrade，也未对生产历史数据运行审计或 `--apply` 回填；上线前必须先备份、审计阻塞项并演练迁移与回滚。
+- 未连接真实 PostgreSQL、QuestDB、NetApp 或 Isilon 做端到端验证；外部连接、实际设备返回、QuestDB 表结构和跨库最终一致性仍需在集成环境验收。
+- 前端覆盖率中 `statements`、`branches` 和 `lines` 均超过 `80%`，但 `functions 71.04%` 尚未达到 `80%`；后续需继续补充函数级测试。
+- `npm run build:prod` 虽成功，但仍有既有的 `%VITE_APP_TITLE%` 未定义和 chunk 大于 `500 kB` 警告，本次未处理。
+- 本次自动化测试覆盖模型、迁移契约、API、前端交互、采集事务和聚合边界，不等同于生产容量数据验收。
+
 ## 2026-07-13：登录后 profile 请求补齐 Bearer scheme
 
 - 修复前端请求拦截器发送裸 JWT，导致登录成功后 `/users/current/profile` 返回 `401` 的问题。
