@@ -1,5 +1,36 @@
 # 当前交付记录
 
+## 2026-07-14：用户信息管理与 LDAP 一键同步
+
+### 主题
+
+复用 `/admin/users` 建设超级管理员用户维护页面，并通过完整 LDAP 快照同步系统用户资料和离职/在职生命周期。
+
+### 已完成
+
+- 明确用户类型为 `0=离职`、`1=公共用户`、`2=在职`，保持现有模型默认值和数据库结构，不新增 migration。
+- 新增超级管理员接口 `POST /storage-pulse/api/users/sync-ldap`，返回 `ldap_total`、`created`、`updated`、`reactivated`、`marked_inactive`。
+- LDAP 新用户创建为在职；重新出现的离职用户恢复在职；快照缺失的在职用户转为离职；同步不删除用户。
+- 公共用户类型不由 LDAP 修改，缺失时不受影响；LDAP 中存在时可更新非空姓名、邮箱和部门。
+- 空快照、不完整搜索范围和忽略大小写的用户名冲突会拒绝同步并回滚。
+- 用户页面补齐查询、新增、编辑、删除和同步操作；登录用户名创建后不可修改，姓名、邮箱、部门、用户类型和告警状态可人工维护。
+- 新增 `ldap.user_department_attribute`，默认 `department`；真实 `backend/config.yml` 继续保持本地，目录字段不同时由部署侧调整。
+- 同步用户管理专题、LDAP 认证配置、文档索引和最新功能说明。
+
+### 验证状态
+
+- 后端用户管理与 LDAP 分支测试通过，`35 passed`；`usersService` 分支覆盖率 `96%`，`ldap_directory` 分支覆盖率 `95%`。
+- 既有 CRUD 与认证 API 回归通过，`10 passed`；后端 `pip check` 和 `compileall` 通过。
+- 前端功能与相关回归测试通过，`18 passed`；`lint` 和 `build:prod` 通过。
+- 前端全量 `npm test` 完成 `147/150`，其余 `3` 项为既有 `5s` timeout；三个超时文件单独执行 `11/11` 通过。`test:coverage` 同因超时未生成总覆盖率报告。
+- 延长超时后执行 `npx vitest run --coverage --testTimeout=15000`，完整测试 `150/150` 通过；总 `lines/statements` 为 `91.88%`、`branches` 为 `82.1%`，用户页为 `91.24%`、表单为 `96.57%`，`users-api` 和 `routes` 为 `100%`。
+- `git diff --check` 通过，仅有 LF→CRLF 提示。
+
+### 风险与后续
+
+- 尚未连接真实 LDAP 验证多搜索范围、部门属性权限和大目录请求耗时；部署前需确认 `ldap.user_department_attribute` 与目录实际字段一致。
+- 本轮不包含定时同步、后台任务、同步历史表、预演接口或 LDAP 同步删除；只有出现同步超时或审计需求时再评估扩展。
+
 ## 2026-07-14：存储一览按集群查看
 
 ### 主题

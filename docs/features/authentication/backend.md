@@ -31,8 +31,11 @@ DiskPulse 后端通过 LDAP 校验人工用户身份，登录成功后签发 JWT
 - `ldap.group_bases`：保留组搜索范围配置，本版本不据此映射角色或权限。
 - `ldap.lookup_user_dn: true`、`ldap.lookup_as_user: false`：固定为服务账号查询用户 DN、用户账号执行 bind；其他组合启动时拒绝。
 - `ldap.user_class`、`ldap.user_name_attribute`、`ldap.user_fullname_attribute`：用户对象和字段映射。
+- `ldap.user_department_attribute`：用户部门属性，默认 `department`；目录字段不同时必须在本地真实 `backend/config.yml` 中调整。
 - `ldap.user_extra_filters`：额外 LDAP filter 列表，默认排除 computer 和 group。
 - `super_admin_usernames`：超级管理员 `rd_username` 的 YAML 列表。
+
+超级管理员还可通过“用户信息管理”页面把完整 LDAP 用户快照同步到系统用户表。同步生命周期、公共用户保护和失败回滚规则见[用户信息管理](../user-management/overview.md)。
 
 ## 安全边界
 
