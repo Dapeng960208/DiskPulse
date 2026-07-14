@@ -23,6 +23,9 @@ class _Rows:
     def all(self):
         return list(self._rows)
 
+    def scalars(self):
+        return (row[0] if isinstance(row, tuple) else row for row in self._rows)
+
 
 class _Connection:
     def __init__(self, engine):
@@ -32,7 +35,11 @@ class _Connection:
         sql = " ".join(str(statement).split())
         self.engine.statements.append(sql)
         if sql.startswith("SELECT version, checksum"):
-            return _Rows(self.engine.applied.items())
+            return _Rows(self.engine.applied_rows or self.engine.applied.items())
+        if sql.startswith("SELECT table_name FROM tables()"):
+            return _Rows((table_name,) for table_name in self.engine.tables)
+        if sql.startswith("CREATE TABLE IF NOT EXISTS diskpulse_schema_migrations"):
+            self.engine.tables.add("diskpulse_schema_migrations")
         if sql.startswith("INSERT INTO diskpulse_schema_migrations"):
             self.engine.applied[parameters["version"]] = parameters["checksum"]
         return _Rows()
@@ -48,8 +55,10 @@ class _Connection:
 
 
 class _Engine:
-    def __init__(self, applied=None):
+    def __init__(self, applied=None, applied_rows=None, tables=None):
         self.applied = dict(applied or {})
+        self.applied_rows = applied_rows
+        self.tables = set(tables or ())
         self.statements = []
         self.commits = 0
 
@@ -75,7 +84,6 @@ def test_questdb_initial_revision_matches_current_models():
     runner = _load_runner()
     migrations = runner.load_migrations(MIGRATION_ROOT)
 
-    assert len(migrations) == 1
     assert migrations[0].version == "000000000001"
     expected = {
         _normalize(
@@ -104,6 +112,68 @@ def test_questdb_upgrade_rejects_changed_applied_revision():
 
     with pytest.raises(RuntimeError, match="checksum"):
         runner.upgrade(engine)
+
+
+def test_questdb_upgrade_rejects_unknown_or_conflicting_revisions():
+    runner = _load_runner()
+
+    with pytest.raises(RuntimeError, match="Unknown applied"):
+        runner.upgrade(_Engine({"999999999999": "unknown"}))
+    with pytest.raises(RuntimeError, match="conflicting checksums"):
+        runner.upgrade(
+            _Engine(
+                applied_rows=[
+                    ("000000000001", "first"),
+                    ("000000000001", "second"),
+                ]
+            )
+        )
+
+
+def test_questdb_migration_filenames_are_valid_and_unique(tmp_path):
+    runner = _load_runner()
+    (tmp_path / "invalid-name.sql").write_text("SELECT 1;", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="Invalid QuestDB migration filename"):
+        runner.load_migrations(tmp_path)
+
+    (tmp_path / "invalid-name.sql").unlink()
+    (tmp_path / "000000000001_one.sql").write_text("SELECT 1;", encoding="utf-8")
+    (tmp_path / "000000000001_two.sql").write_text("SELECT 2;", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="Duplicate QuestDB migration version"):
+        runner.load_migrations(tmp_path)
+
+
+def test_questdb_current_reports_base_and_applied_revisions():
+    runner = _load_runner()
+
+    assert runner.current(_Engine()) == ()
+    assert runner.current(
+        _Engine(
+            {"000000000001": "checksum"},
+            tables={"diskpulse_schema_migrations"},
+        )
+    ) == ("000000000001",)
+
+
+@pytest.mark.parametrize(
+    ("command", "current_versions", "upgraded_versions", "expected"),
+    [
+        ("history", (), (), "000000000001 initial_schema"),
+        ("current", ("000000000001",), (), "000000000001"),
+        ("current", (), (), "base"),
+        ("upgrade", (), ("000000000001",), "upgraded: 000000000001"),
+        ("upgrade", (), (), "up to date"),
+    ],
+)
+def test_questdb_migration_cli(
+    monkeypatch, capsys, command, current_versions, upgraded_versions, expected
+):
+    runner = _load_runner()
+    monkeypatch.setattr(runner, "current", lambda: current_versions)
+    monkeypatch.setattr(runner, "upgrade", lambda: upgraded_versions)
+
+    assert runner.main([command]) == 0
+    assert capsys.readouterr().out.strip() == expected
 
 
 def test_startup_uses_versioned_questdb_migrations():

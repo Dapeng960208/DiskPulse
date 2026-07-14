@@ -91,7 +91,7 @@ FastAPI: backend/main.py
 
 ### QuestDB
 
-`backend/questdb/models.py` 保存趋势数据模型。实时图表查询通过 `backend/crud/questDbCrud.py` 完成。
+`backend/questdb/models.py` 保存趋势数据模型。`backend/questdb/migrations/` 保存前向 revision，`backend/questdb/migrate.py` 负责升级并把版本及 checksum 写入 `diskpulse_schema_migrations`。实时图表查询通过 `backend/crud/questDbCrud.py` 完成。
 
 | 表 | 维度 |
 | --- | --- |

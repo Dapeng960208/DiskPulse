@@ -1,5 +1,32 @@
 # 当前交付记录
 
+## 2026-07-14：QuestDB 版本管控与启动初始化
+
+### 主题
+
+将当前 `7` 张 QuestDB 趋势表纳入独立前向 revision 管控，并替换启动时无版本记录的 `QuestDBBase.metadata.create_all()`。
+
+### 已完成
+
+- 新增 `backend/questdb/migrations/000000000001_initial_schema.sql`，结构与当前 `QuestDBBase.metadata` 一致。
+- 新增 `backend/questdb/migrate.py`，提供 `history/current/upgrade`，通过 `diskpulse_schema_migrations` 记录版本、SHA-256 checksum 和应用时间。
+- `database.create_tables=true` 时启动自动执行 QuestDB upgrade；重复执行跳过已应用 revision，checksum 漂移和本地未知 revision 会失败。
+- QuestDB 采用前向、幂等 migration，不模拟其不支持的 PostgreSQL 主键、事务回滚或 PGWire `DELETE`。
+
+### 验证状态
+
+- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend\test\test_questdb_migrations.py -q`：通过，`12 passed`；任务专用 coverage 配置下 `backend/questdb/migrate.py` statements/branches 综合覆盖率 `98%`。
+- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend\test -q`：通过，`158 passed`、`41` 个既有弃用 warning；`compileall -q backend` 通过。
+- PostgreSQL Alembic `heads/history`：通过，唯一 root/head 为 `000000000001`。
+- 使用当前配置导入 `main`：启动迁移成功；QuestDB 的 `7` 张业务表逐列与 `QuestDBBase.metadata` 一致，版本账本存在。
+- 当前配置 QuestDB：`history/current/upgrade/current` 通过，revision 为 `000000000001`；共 `8` 张表，包括 `7` 张趋势表和 `diskpulse_schema_migrations`；重复升级返回 `up to date`。
+
+### 风险与后续
+
+- 尚未在独立空白 QuestDB 实例执行从 `base` 到 head 的录像式验收；当前实例的首次创建可能由运行中的自动重载服务触发。
+- QuestDB migration 不提供自动 downgrade；破坏性回退必须先备份，再使用独立修复 revision 或重建实例。
+- 多副本生产部署应由单一迁移节点先执行 `python -m questdb.migrate upgrade`，再启动 API/worker，避免并发执行未来可能不具备天然幂等性的 DDL。
+
 ## 2026-07-13：项目存储环境分层、绑定与采集隔离
 
 ### 主题

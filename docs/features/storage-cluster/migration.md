@@ -1,8 +1,8 @@
-# StorageCluster 数据库初始化
+# StorageCluster 数据库版本管控与初始化
 
 ## 适用范围
 
-项目处于初始开发阶段，不保留历史数据、增量 revision 或向前兼容迁移。PostgreSQL 与 QuestDB 使用独立初始化流程。
+PostgreSQL 与 QuestDB 使用独立 revision 链。PostgreSQL 由 Alembic 管理；QuestDB 使用项目内前向迁移执行器，避免 Alembic 默认版本表与 QuestDB 类型、约束和 `DELETE` 能力不兼容。
 
 ## PostgreSQL / Alembic
 
@@ -26,13 +26,31 @@
 
 ## QuestDB
 
-QuestDB 不属于 Alembic 管理范围。存储集群和项目环境趋势表由 `backend/questdb/models.py` 及 QuestDB 初始化流程维护；PostgreSQL 的 `upgrade/downgrade` 不创建、修改或删除 QuestDB 表。
+`backend/questdb/migrations/` 当前保留：
 
-本阶段不迁移或回填历史 QuestDB 数据。真实 QuestDB 的表结构、连接和读写需要在集成环境单独验收。
+```text
+000000000001_initial_schema.sql
+```
+
+该 revision 从空 QuestDB 创建当前 `7` 张趋势表。迁移执行器会先创建 `diskpulse_schema_migrations`，记录 revision、SHA-256 checksum 和应用时间；重复执行会跳过已应用 revision，已应用文件被修改或数据库存在本地未知 revision 时会拒绝继续。
+
+```powershell
+Push-Location backend
+..\.venv\Scripts\python.exe -m questdb.migrate history
+..\.venv\Scripts\python.exe -m questdb.migrate current
+..\.venv\Scripts\python.exe -m questdb.migrate upgrade
+Pop-Location
+```
+
+`database.create_tables=true` 时，API 启动会在 PostgreSQL `create_all()` 后执行 QuestDB `upgrade`。生产部署仍应先通过单一迁移节点执行命令，再启动 API/worker。
+
+QuestDB migration 为前向、幂等 DDL：每个新 revision 必须使用 `IF NOT EXISTS` 等可重试语句，并在所有语句成功后才写版本账本。QuestDB 不支持 PostgreSQL 式事务回滚和 PGWire `DELETE`，因此不提供自动 downgrade；破坏性回退必须先备份，再使用独立修复 revision 或重建实例。
 
 ## 已验证与待验证
 
 - versions 恰好 `1` 个，`000000000001` 为 root/head。
 - SQLite upgrade 后与 `Base.metadata` 对比无差异，downgrade 后为 `0` 张表。
 - PostgreSQL offline upgrade/downgrade DDL 编译和逆序 drop 审计通过。
-- 尚未在真实 PostgreSQL 或 QuestDB 环境执行端到端初始化。
+- QuestDB migration 契约测试验证初始 revision 与当前 `QuestDBBase.metadata` 的 `7` 张表一致、重复升级安全、checksum 漂移会失败。
+- 当前配置指向的 QuestDB 已验证 `current=000000000001`，包含 `7` 张趋势表和 `diskpulse_schema_migrations`；重复 `upgrade` 返回 `up to date`。
+- 尚未在空白 QuestDB 实例执行从 `base` 到 head 的独立录像式验收；当前实例的首次创建可能由运行中的自动重载服务触发。

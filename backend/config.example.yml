@@ -6,6 +6,7 @@ application:
     - http://127.0.0.1:5173
 
 database:
+  # true 时启动会初始化 PostgreSQL 表并升级 QuestDB revision。
   create_tables: false
   postgres:
     host: localhost

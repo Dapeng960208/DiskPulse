@@ -7,7 +7,7 @@ import models
 from appConfig import base_config
 from database import Base, SessionLocal, engine
 from dependencies import require_authenticated_request
-from questdb.database import QuestDBBase, questdb_engine
+from questdb.migrate import upgrade as upgrade_questdb
 from routers import (
     aggregate,
     config,
@@ -26,7 +26,7 @@ from routers import (
 
 if base_config.get("database.create_tables", False):
     Base.metadata.create_all(bind=engine)
-    QuestDBBase.metadata.create_all(bind=questdb_engine)
+    upgrade_questdb()
 
 app = FastAPI(
     title="DiskPulse API",

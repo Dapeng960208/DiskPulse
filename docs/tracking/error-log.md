@@ -1,5 +1,21 @@
 # 错误记录
 
+### 2026-07-14：QuestDB migration 聚焦覆盖率被全局排除规则过滤
+- 触发：使用仓库默认 `.coveragerc` 对 `backend/questdb/migrate.py` 运行聚焦覆盖率。
+- 现象：测试通过，但 coverage 输出 `No data to report`，并提示命令行 `--include` 因配置中的 `source` 被忽略。
+- 根因：核心后端覆盖率门禁历史上整体排除了 `backend/questdb/*`，聚焦命令仍继承该配置，无法单独计量新迁移执行器。
+- 修复：使用 `.tmp` 下任务专用 coverage 配置运行聚焦计量，验证后删除临时文件；不改变既有核心后端门禁范围。
+- 验证：QuestDB migration 测试 `12 passed`，`backend/questdb/migrate.py` statements/branches 综合覆盖率 `98%`。
+- 风险：全局核心后端覆盖率报告仍不包含 QuestDB；后续若将整个 QuestDB 目录纳入全局门禁，应单独评估既有数据库连接与设备集成代码的测试范围。
+
+### 2026-07-14：Alembic 默认版本表无法用于 QuestDB
+- 触发：使用 `questdb-connect` 1.1.0 方言离线编译 Alembic 默认 `alembic_version` 表。
+- 现象：`VARCHAR(32) PRIMARY KEY` 版本列触发 `sqlalchemy.exc.ArgumentError: Column type is not a valid QuestDB type`。
+- 根因：QuestDB 方言只接受自身类型；QuestDB 也不支持 PostgreSQL 式 `PRIMARY KEY/NOT NULL` 约束，PGWire 不支持 Alembic 降级到 base 所需的 `DELETE`。
+- 修复：复用现有 SQLAlchemy 连接，新增前向 QuestDB migration 执行器、静态 SQL revision 和 `diskpulse_schema_migrations` 账本；启动时不再调用无版本记录的 `QuestDBBase.metadata.create_all()`。
+- 验证：QuestDB migration 聚焦测试 `12 passed`、迁移执行器覆盖率 `98%`；当前配置指向的 QuestDB 为 revision `000000000001`，包含 `7` 张趋势表和版本账本，重复升级返回 `up to date`。
+- 风险：QuestDB DDL 不具备 PostgreSQL 式事务回滚；revision 必须保持前向、幂等和不可修改，破坏性回退需备份后使用修复 revision 或重建实例。
+
 ### 2026-07-14：MySQL 全 metadata 编译因无长度 String/VARCHAR 失败
 - 触发：迁移独立审计对 `Base.metadata` 的全部 `14` 张表执行 MySQL `CreateTable` 编译。
 - 现象：`14` 张表中 `13` 张触发 SQLAlchemy `CompileError`，错误均指向 MySQL `VARCHAR` 必须声明长度；只有不包含相关无长度字符串列的表可编译。

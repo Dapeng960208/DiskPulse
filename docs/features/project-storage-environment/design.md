@@ -713,16 +713,16 @@ frontend/test/unit/project-environment-usage-alert.test.js
 - baseline 只适用于空数据库，不包含 DML、历史数据转换、默认环境生成、假 Qtree 转换或兼容字段。
 - 已使用删除前 revision 的开发数据库不支持原地升级；确认数据可丢弃后删除并重建空库，再执行 `upgrade head`。
 
-### 11.2 QuestDB 边界
+### 11.2 QuestDB revision
 
-QuestDB 不属于 Alembic 管理范围。环境趋势表由 `backend/questdb/models.py` 和 QuestDB 初始化流程维护，不写入 `000000000001`，也不在本功能中迁移或回填历史 QuestDB 数据。
+QuestDB 使用独立前向 revision `backend/questdb/migrations/000000000001_initial_schema.sql` 创建当前 `7` 张趋势表，并由 `diskpulse_schema_migrations` 记录版本和 checksum。启动开关 `database.create_tables=true` 时自动升级，也可通过 `python -m questdb.migrate upgrade` 独立执行。本阶段不回填历史 QuestDB 数据。
 
 ## 12. 回滚方案
 
 1. 停止 API、Celery beat 和 worker，避免重建期间继续写入。
 2. 初始开发数据库按与目标代码匹配的 baseline 重建；不恢复或伪造已经删除的 revision 链。
 3. `downgrade base` 仅用于空库 migration 往返验证，不作为保留开发数据的回滚工具。
-4. QuestDB schema 和数据独立管理，Alembic downgrade 不处理 QuestDB。
+4. QuestDB 不支持自动 downgrade；破坏性回退先备份，再通过独立修复 revision 或重建实例处理，PostgreSQL Alembic downgrade 不处理 QuestDB。
 5. 真实备份目录和外部设备数据不随本地数据库重建删除。
 
 ## 13. TDD 实施顺序与任务 DAG
@@ -1051,9 +1051,9 @@ docs/tracking/current-release.md
 ### 19.2 待验证
 
 - 尚未在真实 PostgreSQL 空库执行 baseline upgrade/downgrade；自动化已覆盖 SQLite 往返和 PostgreSQL offline DDL 编译。
-- QuestDB 不属于 Alembic baseline，真实 QuestDB 环境趋势表初始化和读写仍待单独验收。
+- QuestDB 独立 revision `000000000001` 已在当前配置实例验证初始化和重复升级；真实趋势写入、查询和历史数据仍待单独验收。
 - 尚未执行外部浏览器烟测。
-- 尚未连接真实 PostgreSQL、QuestDB、NetApp 或 Isilon 做端到端验收；外部连接、设备资源标识、目录映射、QuestDB 表结构和跨库最终一致性均待验证。
+- 尚未连接真实 PostgreSQL、NetApp 或 Isilon 做端到端验收；QuestDB 只完成 migration 初始化验证，设备资源标识、目录映射、趋势业务读写和跨库最终一致性仍待验证。
 - `StoragePulseMonitor` 当前结果正确性已有测试覆盖，但真实性能仍需结合生产规模压测后确认。
 - 当前 beat schedule 只启用 60 秒一次的 `storages_schedule_fetching_task`；告警、周报和定时备份条目仍为注释状态，尚未通过真实 Celery beat/worker 调度验收。
 - MySQL 全 metadata 编译未通过；若后续扩大到 MySQL 部署，必须先补齐无长度 `String/VARCHAR` 并重新执行三方言编译门禁。
