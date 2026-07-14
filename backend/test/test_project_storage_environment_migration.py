@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 
 import models
+from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import (
@@ -326,6 +327,12 @@ def test_initial_migration_upgrades_empty_database_and_downgrades(tmp_path):
                 assert {column["name"] for column in database.get_columns(table_name)} == {
                     column.name for column in table.c
                 }
+            assert (
+                compare_metadata(
+                    MigrationContext.configure(connection), models.Base.metadata
+                )
+                == []
+            )
 
             migration.downgrade()
             assert inspect(connection).get_table_names() == []
