@@ -40,6 +40,7 @@ DiskPulse 后端通过 LDAP 校验人工用户身份，登录成功后签发 JWT
 ## 安全边界
 
 - LDAP filter 中的用户名会转义 `\`、`*`、`(`、`)` 和 NUL。
+- 登录按用户名逐个搜索 `ldap.user_bases`，某个范围无匹配时继续搜索其他范围；只有完整用户同步才要求所有搜索范围成功返回。
 - 启用 `ldap.starttls: true` 时，用户 bind 必须发生在 STARTTLS 成功之后。
 - JWT 签名使用 HMAC-SHA256，并使用常量时间比较校验签名。
 - JWT header 必须为 `alg=HS256`、`typ=JWT`；裸 token 请求头会返回 `401`。

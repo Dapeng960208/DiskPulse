@@ -224,3 +224,12 @@
 - 修复：在 `frontend/vitest.config.js` 统一将 `testTimeout` 调整为 `15000ms`，覆盖普通测试和 coverage，不再依赖额外命令参数。
 - 验证：默认 `npm test` 和 `npm run test:coverage` 均为 `150/150` 通过；Statements/Lines `91.88%`、Branches `82.10%`、Functions `69.75%`。
 - 风险：慢用例当前最长约 `13.8s`；若继续增长接近 `15s`，应优化模块加载和挂载开销，而不是继续放宽超时。
+
+### 2026-07-14：多 LDAP 搜索范围导致登录误报快照不完整
+
+- 触发：用户登录时按用户名依次查询多个 `ldap.user_bases`，首个范围没有该用户。
+- 现象：登录接口返回 `500`，服务端抛出 `RuntimeError: incomplete LDAP directory snapshot`。
+- 根因：完整 LDAP 同步新增的范围完整性检查被复用于单用户登录查询，把“该范围无匹配”错误视为同步快照不完整。
+- 修复：单用户查询遇到无匹配范围时继续搜索；无用户名的完整快照查询仍在任一范围失败时中止。
+- 验证：`backend/test/test_auth_ldap.py` 新增多范围登录回归；认证、用户管理与同步聚焦测试 `41 passed`，`compileall` 通过。
+- 风险：未连接真实 LDAP 复验；需重启后端进程加载修复。

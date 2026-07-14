@@ -183,7 +183,9 @@ def list_ldap_directory_users(
                 attributes=attributes,
             )
             if not found:
-                raise RuntimeError("incomplete LDAP directory snapshot")
+                if username is None:
+                    raise RuntimeError("incomplete LDAP directory snapshot")
+                continue
             for entry in connection.entries:
                 username_attr = getattr(entry, ldap_user_name_attribute(), None)
                 entry_username = str(getattr(username_attr, "value", "") or normalized_username).strip()

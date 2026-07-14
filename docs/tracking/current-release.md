@@ -13,6 +13,7 @@
 - LDAP 新用户创建为在职；重新出现的离职用户恢复在职；快照缺失的在职用户转为离职；同步不删除用户。
 - 公共用户类型不由 LDAP 修改，缺失时不受影响；LDAP 中存在时可更新非空姓名、邮箱和部门。
 - 空快照、不完整搜索范围和忽略大小写的用户名冲突会拒绝同步并回滚。
+- 修复多 LDAP 搜索范围登录：单用户查询会跳过无匹配范围并继续查找，完整同步的快照保护保持不变。
 - 用户页面补齐查询、新增、编辑、删除和同步操作；登录用户名创建后不可修改，姓名、邮箱、部门、用户类型和告警状态可人工维护。
 - 新增 `ldap.user_department_attribute`，默认 `department`；真实 `backend/config.yml` 继续保持本地，目录字段不同时由部署侧调整。
 - 同步用户管理专题、LDAP 认证配置、文档索引和最新功能说明。
@@ -20,7 +21,7 @@
 ### 验证状态
 
 - 后端用户管理与 LDAP 分支测试通过，`35 passed`；`usersService` 分支覆盖率 `96%`，`ldap_directory` 分支覆盖率 `95%`。
-- 既有 CRUD 与认证 API 回归通过，`10 passed`；后端 `pip check` 和 `compileall` 通过。
+- 认证、用户管理与 LDAP 同步聚焦回归通过，`41 passed`；后端 `pip check` 和 `compileall` 通过。
 - 前端功能与相关回归测试通过，`18 passed`；`lint` 和 `build:prod` 通过。
 - Vitest 全局测试超时统一为 `15s`；默认 `npm test` 和 `npm run test:coverage` 均为 `150/150` 通过。
 - 前端总 `lines/statements` 为 `91.88%`、`branches` 为 `82.1%`，用户页为 `91.24%`、表单为 `96.57%`，`users-api` 和 `routes` 为 `100%`。
