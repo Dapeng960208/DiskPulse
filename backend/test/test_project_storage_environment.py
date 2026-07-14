@@ -70,11 +70,15 @@ def environment_api(api_client_factory, session_factory):
                     )
                     for environment_id in (3, 1, 2)
                 ],
+                models.Volume(
+                    id=1,
+                    storage_cluster_id=1,
+                    name="volume-1",
+                ),
                 models.Group(
                     id=1,
-                    project_id=1,
                     project_environment_id=1,
-                    storage_cluster_id=1,
+                    volume_id=1,
                     name="linked-group",
                 ),
             ]

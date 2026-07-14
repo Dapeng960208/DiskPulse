@@ -87,6 +87,14 @@ class TestCoreApi:
                 used=250,
                 use_ratio=25,
             )
+            environment = models.ProjectStorageEnvironment(
+                id=1,
+                project_id=1,
+                storage_cluster_id=1,
+                name="cluster-a",
+                created_at=datetime.fromisoformat(NOW),
+                updated_at=datetime.fromisoformat(NOW),
+            )
             aggregate_db = models.Aggregate(
                 id=1,
                 storage_cluster_id=1,
@@ -129,8 +137,7 @@ class TestCoreApi:
             )
             group_db = models.Group(
                 id=1,
-                project_id=1,
-                storage_cluster_id=1,
+                project_environment_id=1,
                 qtree_id=1,
                 in_charge_user_id=1,
                 name="alpha-team",
@@ -206,6 +213,7 @@ class TestCoreApi:
                     user,
                     project,
                     cluster,
+                    environment,
                     aggregate_db,
                     volume,
                     qtree,
@@ -309,6 +317,19 @@ class TestCoreApi:
         )
         assert group_response.status_code == 200
         assert group_response.json()["content"][0]["soft_limit"] == 240
+
+    def test_legacy_group_payload_is_rejected(self):
+        response = self.client.post(
+            "/storage-pulse/api/groups/",
+            json={
+                "name": "legacy-group",
+                "project_id": 1,
+                "storage_cluster_id": 1,
+                "qtree_id": 1,
+            },
+        )
+
+        assert response.status_code == 422
 
     def test_storage_usage_create_list_update_backup_and_export_contracts(self):
         with patch("routers.storage_usage.create_user_folder_by_storage_usage_id", return_value=None):

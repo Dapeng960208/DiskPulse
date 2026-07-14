@@ -83,6 +83,14 @@ def seed_quota_data(db_session, storage_type):
         is_active=True,
     )
     project = models.Project(id=1, name="alpha", limit=100, used=20, use_ratio=20)
+    environment = models.ProjectStorageEnvironment(
+        id=1,
+        project_id=1,
+        storage_cluster_id=1,
+        name="cluster-a",
+        created_at=NOW,
+        updated_at=NOW,
+    )
     user = models.User(id=1, rd_username="alice", uid=1001, updated_at=NOW)
     volume = models.Volume(
         id=1,
@@ -116,8 +124,7 @@ def seed_quota_data(db_session, storage_type):
     )
     group = models.Group(
         id=1,
-        project_id=1,
-        storage_cluster_id=1,
+        project_environment_id=1,
         qtree_id=1,
         name="alpha-team",
         linux_path="/data/alpha",
@@ -128,7 +135,7 @@ def seed_quota_data(db_session, storage_type):
         soft_use_ratio=25,
         updated_at=NOW,
     )
-    db_session.add_all([cluster, project, user, volume, qtree, group])
+    db_session.add_all([cluster, project, environment, user, volume, qtree, group])
     db_session.commit()
 
 

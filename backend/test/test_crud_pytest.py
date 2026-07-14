@@ -60,6 +60,14 @@ def seed_storage_tree(db_session):
         used=2048,
         use_ratio=50,
     )
+    environment = models.ProjectStorageEnvironment(
+        id=1,
+        project_id=1,
+        storage_cluster_id=1,
+        name="cluster-a",
+        created_at=NOW,
+        updated_at=NOW,
+    )
     aggregate = models.Aggregate(
         id=1,
         storage_cluster_id=1,
@@ -102,8 +110,7 @@ def seed_storage_tree(db_session):
     )
     group = models.Group(
         id=1,
-        project_id=1,
-        storage_cluster_id=1,
+        project_environment_id=1,
         qtree_id=1,
         name="alpha-team",
         linux_path="/data/alpha",
@@ -137,6 +144,7 @@ def seed_storage_tree(db_session):
             project,
             common_project,
             cluster,
+            environment,
             aggregate,
             volume,
             qtree,
@@ -444,9 +452,8 @@ def test_group_crud_filters_realtime_and_cascades_storage_usages(db_session):
 
     created = groupCrud.create_group(
         db_session,
-        groupSchema.GroupCreate(
-            project_id=1,
-            storage_cluster_id=1,
+        groupSchema.GroupBindingCreate(
+            project_environment_id=1,
             qtree_id=1,
             name="beta-team",
             linux_path="/data/beta",
@@ -461,9 +468,8 @@ def test_group_crud_filters_realtime_and_cascades_storage_usages(db_session):
     updated = groupCrud.update_group(
         db_session,
         created.id,
-        groupSchema.GroupUpdate(
-            project_id=1,
-            storage_cluster_id=1,
+        groupSchema.GroupBindingUpdate(
+            project_environment_id=1,
             qtree_id=1,
             name="beta-renamed",
             linux_path="/data/beta",
