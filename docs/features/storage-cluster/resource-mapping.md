@@ -214,7 +214,7 @@ PostgreSQL 提交成功后写入 QuestDB
 .\.venv\Scripts\python.exe backend\scripts\manual_isilon_check.py "<存储集群名称>"
 ```
 
-脚本按名称读取 `storage_clusters` 中的 Isilon 连接配置，只调用 Quota 查询并输出总数和类型统计；不会更新 PostgreSQL 或 QuestDB，也不会输出密码。
+脚本按名称读取 `storage_clusters` 中的 Isilon 主机、端口、账号、访问协议和 TLS 校验配置，只调用 Quota 查询并输出总数和类型统计；不会更新 PostgreSQL 或 QuestDB，也不会输出密码。HTTP 下 TLS 校验不适用，设备凭据会以明文传输。
 
 ## 10. 风险与待验证项
 

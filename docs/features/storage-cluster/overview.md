@@ -33,12 +33,16 @@ curl -X POST "http://localhost:8000/storage-pulse/api/storage-clusters" \
     "storage_type": "netapp",
     "storage_host": "192.168.1.100",
     "storage_port": 443,
+    "protocol": "https",
+    "tls_verify": true,
     "storage_user": "monitor",
     "storage_password": "******",
     "limit": 100000,
     "is_active": true
   }'
 ```
+
+示例中的 `http://localhost:8000` 是 DiskPulse API 地址，不代表存储设备协议；设备协议由请求体中的 `protocol` 决定。HTTP 下 TLS 校验不适用，设备凭据会以明文传输。
 
 ## 文档索引
 
@@ -53,4 +57,5 @@ curl -X POST "http://localhost:8000/storage-pulse/api/storage-clusters" \
 
 - 当前后端实际字段以 `backend/schemas/storageClusterSchema.py` 和 `backend/models.py` 为准。
 - 新增或删除集群字段时，需要同步 `StoragePulseMonitor`、相关 CRUD、前端表单和本文档。
-- PostgreSQL 从空库执行单一 baseline `000000000001`；不支持从已删除 revision 原地升级。QuestDB 使用独立前向 revision 和 checksum 账本，当前 head 为 `000000000002`。
+- `protocol` 只允许 `http` 或 `https`；`tls_verify` 仅对 HTTPS 生效。新建集群默认 `https/true`，已有集群由迁移回填为 `https/false`。
+- PostgreSQL 从空库依次执行 root baseline `000000000001` 和当前 head `000000000002`；使用已删除旧 revision 链的数据库不支持伪造版本接续。QuestDB 使用独立前向 revision 和 checksum 账本，当前 head 为 `000000000002`。

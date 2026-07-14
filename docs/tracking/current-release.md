@@ -1,5 +1,33 @@
 # 当前交付记录
 
+## 2026-07-14：存储集群协议与 TLS 校验改为逐集群配置
+
+### 主题
+
+移除全局 YAML `storage.tls_verify`，让每个 NetApp/Isilon 集群独立配置设备访问协议和 TLS 证书校验。
+
+### 已完成
+
+- `storage_clusters` 新增非空字段 `protocol`、`tls_verify`；协议只允许 `http/https`，HTTP 下 TLS 校验不适用。
+- Alembic 新增 `000000000002_storage_cluster_transport.py`：已有行迁移为 `https/false`，新建集群默认 `https/true`，当前唯一 head 为 `000000000002`。
+- 全局 YAML `storage.tls_verify` 已删除；NetApp/Isilon 采集客户端和 Isilon Quota 手工检查均读取数据库中的逐集群配置。
+- 存储集群新增、编辑、列表和详情页面展示并提交访问协议和 TLS 校验；选择 HTTP 时自动关闭 TLS 校验。
+- API 示例中的 `http://localhost:8000` 仅代表 DiskPulse API 地址，不代表设备协议。
+
+### 验证状态
+
+- 后端全量测试通过：`152 passed`，coverage `86%`；`compileall`、`pip check` 通过。
+- 前端全量测试通过：`153 passed`，coverage statements/lines `91.93%`、branches `82.83%`；lint 和 `build:prod` 通过。
+- 本地未登录浏览器冒烟确认存储集群列表出现“协议”“TLS 校验”列；新增表单默认 HTTPS 且开启 TLS 校验，切换到 HTTP 后 TLS 开关自动关闭并禁用。
+- Alembic `heads` 通过，当前唯一 head 为 `000000000002`。
+- SQLite online migration 的 upgrade、已有行 `https/false` 回填、新行 `https/true` 默认值和 downgrade 通过；SQLite、PostgreSQL、MySQL offline SQL 编译通过，并确认 `DEFAULT true` 与旧行 `UPDATE false`。
+- 尚未在真实 PostgreSQL/MySQL 执行迁移，未验证真实 NetApp/Isilon 的 HTTP/HTTPS 组合；浏览器因当前无登录会话未取得数据，真实数据列表、编辑和详情仍待登录环境验证。
+
+### 风险与后续
+
+- 已有集群继续使用 `https/false`；应在设备证书受运行环境信任后逐集群开启 TLS 校验。
+- HTTP 不提供传输加密，设备凭据会以明文传输，只应在可信隔离网络中使用。
+
 ## 2026-07-14：用户信息管理与 LDAP 一键同步
 
 ### 主题
@@ -119,7 +147,7 @@
 - 真机 Storage Pool 条目未返回 SDK 中定义为可选的 `usage` 对象，当前实现缺少容量池总容量和已用容量来源；确认官方字段来源和权限影响前，整集群采集仍保持回滚保护。
 - 尚未在持有历史 `isilon_cluster`/`null` Qtree 数据的集成 PostgreSQL 和 QuestDB 环境观察完整采集事务；QuestDB 历史占位指标按设计保留。
 - Directory Quota 与 Storage Pool 不保证一对一；无法确认唯一归属时 `Volume.aggregate` 保持为空。
-- 当前配置关闭 TLS 证书校验，真机请求会产生 `InsecureRequestWarning`；生产环境应配置可信 CA 并启用校验。
+- 当前真机集群关闭 TLS 证书校验时会产生 `InsecureRequestWarning`；生产环境应配置可信 CA 并逐集群启用校验。
 
 ## 2026-07-14：存储资源按集群筛选
 
@@ -157,7 +185,7 @@
 - 存储集群新增/编辑表单新增“是否启用”开关，新建默认启用并提交 `is_active` 布尔值。
 - API 调度使用 Uvicorn logger 记录投递开始、成功和失败；Celery worker 记录任务开始，日志不包含设备凭据。
 - Celery 实例及任务装饰器统一使用 `diskpulse_app`，Windows 和 Linux 启动入口显式指定 `celery_worker:diskpulse_app`。
-- 新增全局 `storage.tls_verify` 布尔配置并默认设为 `false`，NetApp/Isilon 客户端统一读取；关闭时记录 warning。
+- 当时新增全局 `storage.tls_verify` 布尔配置并默认设为 `false`；该配置现已被逐 `StorageCluster` 的 `protocol`、`tls_verify` 字段取代并从 YAML 删除。
 - 存储 API 连接或 HTTP 失败改为向上抛出，由现有集群事务回滚，避免空结果删除已有 Volume/Qtree。
 
 ### 验证状态
@@ -177,7 +205,7 @@
 
 - 未连接真实 NetApp、Isilon、Redis 或 Celery worker；真实设备卷数据和任务消费链路待部署环境验证。
 - 任务投递失败不会回滚已保存配置，错误写入服务端日志，后续周期采集继续兜底。
-- 默认关闭 TLS 证书校验会降低中间人攻击防护；设备证书受信任后应将 `storage.tls_verify` 改为 `true`。
+- 当时默认关闭 TLS 证书校验会降低中间人攻击防护；当前应在设备证书受信任后逐集群将 `tls_verify` 改为 `true`。
 
 ## 2026-07-14：项目组标签与直接资源绑定
 
@@ -585,5 +613,5 @@ npm test -- --coverage.enabled=false
 
 ### 风险
 
-- `storage.tls_verify=false` 时仍会输出 `InsecureRequestWarning`，这是关闭证书校验的预期安全提示；受信任证书环境应改为 `true`。
+- 该历史记录中的全局 `storage.tls_verify` 已被逐集群字段取代；`tls_verify=false` 的 HTTPS 集群仍会输出预期的 `InsecureRequestWarning`。
 - Celery worker 需重启后才能加载本次客户端修改。

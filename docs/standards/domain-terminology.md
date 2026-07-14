@@ -15,6 +15,8 @@
 | 术语 | 说明 | 代码/表 |
 | --- | --- | --- |
 | 存储集群 | NetApp 或 Isilon 等后端存储系统实例。 | `StorageCluster` |
+| 存储访问协议 | 每个存储集群访问设备 API 使用的 `http` 或 `https`；不由 YAML 全局控制。 | `StorageCluster.protocol` |
+| TLS 证书校验 | HTTPS 集群是否校验证书；HTTP 下不适用，新建集群默认开启。 | `StorageCluster.tls_verify` |
 | 容量池 | 厂商提供的物理容量池；NetApp 对应 Aggregate / Local Tier，Isilon 对应 Storage Pool / Node Pool。 | `Aggregate` |
 | 存储空间 | 可分配给项目组的逻辑存储目标；NetApp 对应 Volume，Isilon 对应 Directory Quota。 | `Volume` |
 | Qtree（NetApp） | NetApp 存储空间下级的目录和配额目标；Isilon 不适用。 | `Qtree` |

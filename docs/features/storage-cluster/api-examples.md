@@ -12,6 +12,8 @@ curl -X POST "http://localhost:8000/storage-pulse/api/storage-clusters" \
     "name": "NetApp-Cluster-01",
     "storage_host": "192.168.1.100",
     "storage_type": "netapp",
+    "protocol": "https",
+    "tls_verify": true,
     "description": "生产环境 NetApp 存储",
     "limit": 100000,
     "is_active": true
@@ -24,11 +26,15 @@ curl -X POST "http://localhost:8000/storage-pulse/api/storage-clusters" \
     "name": "Isilon-Cluster-01",
     "storage_host": "192.168.1.200",
     "storage_type": "isilon",
+    "protocol": "https",
+    "tls_verify": true,
     "description": "备份环境 Isilon 存储",
     "limit": 200000,
     "is_active": true
   }'
 ```
+
+上述 `http://localhost:8000` 是 DiskPulse API 地址，不代表存储设备协议；设备协议由请求体中的 `protocol` 决定。`tls_verify` 仅对 HTTPS 生效，HTTP 下设备凭据会以明文传输。
 
 ### 2. 获取所有集群
 
@@ -135,6 +141,8 @@ def create_cluster():
         "name": "NetApp-Cluster-01",
         "storage_host": "192.168.1.100",
         "storage_type": "netapp",
+        "protocol": "https",
+        "tls_verify": True,
         "limit": 100000
     })
     return response.json()

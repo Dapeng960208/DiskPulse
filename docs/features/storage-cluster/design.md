@@ -1,6 +1,6 @@
 # StorageCluster 多存储支持设计文档
 
-> 本文保留早期多集群设计背景，不作为当前实现说明。当前接口和行为以 [专题概览](./overview.md) 与 [NetApp/Isilon 资源映射](./resource-mapping.md) 为准。
+> 本文保留早期多集群设计背景，不作为当前实现说明。当前接口和行为以 [专题概览](./overview.md) 与 [NetApp/Isilon 资源映射](./resource-mapping.md) 为准；当前连接字段以专题概览、API schema 和 ORM 为准，访问协议和 TLS 校验分别由每个集群的 `protocol`、`tls_verify` 字段控制。
 
 ## 1. 需求背景
 
@@ -422,7 +422,7 @@ aggregates = requests.get(
 ## 9. 注意事项
 
 ### 9.1 数据迁移
-- PostgreSQL 从空库执行单一 Alembic initial baseline，不生成默认集群或回填现有数据。
+- PostgreSQL 从空库先执行 Alembic root baseline，再通过前向 revision 增加逐集群协议和 TLS 校验字段；不生成默认集群。
 - QuestDB 由独立初始化流程管理，不属于 Alembic baseline。
 
 ### 9.2 性能考虑

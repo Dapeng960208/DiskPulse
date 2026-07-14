@@ -55,4 +55,4 @@ Project 1 ── * Group * ── 1 StorageCluster
 
 ## 5. 迁移边界
 
-项目当前采用绿地单 baseline。`000000000001_initial_schema.py` 直接创建 `group_tags` 和新的 `groups` 外键，不提供旧 `project_storage_environments` 数据回填或兼容窗口。使用旧 baseline 的开发数据库需确认数据可丢弃后重建空库。
+`000000000001_initial_schema.py` 直接创建 `group_tags` 和新的 `groups` 外键；后续存储集群协议/TLS revision 不改变 GroupTag 数据结构。项目不提供旧 `project_storage_environments` 数据回填或兼容窗口；使用已删除旧 revision 链的开发数据库需确认数据可丢弃后重建空库。

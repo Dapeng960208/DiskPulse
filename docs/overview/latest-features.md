@@ -14,6 +14,12 @@
 - 项目组支持按存储空间或 Qtree（NetApp）绑定和筛选，`volume_id` 与 `qtree_id` 不能同时过滤。
 - 采集链路不再生成 `isilon_cluster` Aggregate 或 `null` Qtree，新采集按真实资源汇总项目组和趋势数据。
 
+## 2026-07-14：存储协议与 TLS 校验按集群配置
+
+- 每个 NetApp/Isilon 集群独立保存访问协议和 TLS 证书校验；新建默认 `https/true`，已有集群迁移为 `https/false` 以保持原连接行为。
+- 全局 YAML `storage.tls_verify` 已删除；采集客户端和 Isilon Quota 手工检查均读取数据库中的集群配置。
+- HTTP 下 TLS 校验不适用，设备凭据会以明文传输，只应在可信隔离网络中使用。
+
 ## 2026-07-14：存储一览按集群查看
 
 - “存储一览”新增可清空的存储集群下拉框，选择后自动刷新该集群的存储空间/Qtree（NetApp）容量树。
@@ -36,7 +42,7 @@
 - NetApp 与 Isilon 共用现有 `StoragePulseMonitor` 链路，只采集本次配置对应的集群。
 - 存储集群新增/编辑表单新增“是否启用”开关，新建默认启用，停用集群不触发采集。
 - 开发环境补充 Uvicorn 可见的任务投递日志，Celery worker 补充任务开始日志。
-- NetApp/Isilon 共用 `storage.tls_verify`，默认关闭证书校验以支持内部自签名设备；连接失败不再同步空数据。
+- NetApp/Isilon 使用各自集群的 `protocol` 和 `tls_verify`；连接失败不再同步空数据。
 - 未启用集群不触发；异步任务失败不回滚已保存配置，并由服务端日志和后续周期任务继续兜底。
 
 ## 2026-07-14：项目组标签替代项目存储环境
@@ -45,19 +51,19 @@
 - `Group` 直接关联 `Project`、`StorageCluster` 和 `GroupTag`，标签只用于分类，不承载容量、采集状态或实时趋势。
 - 新增 `/group-tags` 全局 CRUD 和“项目组标签”管理页；项目组表单直接选择项目、集群和标签。
 - 采集、告警、用户目录、备份和周报改为从 `Group` 的直接关系解析项目、集群和标签。
-- 单一 Alembic initial baseline 已改写为新模型；旧开发数据库不提供原地兼容迁移。
+- GroupTag 结构由 Alembic root baseline 创建；旧删除链数据库不提供原地兼容迁移。
 
 ## 2026-07-13：清理未使用字段和无效 QuestDB 配置
 
 - 删除 `Project`、`User`、`Host` 和 `StorageBackUpRecord` 中确认没有业务读写的 `20` 个字段，并同步收紧 API schema。
 - 管理设置页和 `/config/storage` 不再暴露 `questdb_host`、`questdb_port`、`questdb_user`、`questdb_password`；QuestDB 连接统一由 `backend/config.yml` 的 `database.questdb` 配置。
-- 这 `24` 个字段不进入当前单一 Alembic initial baseline；项目处于初始开发阶段，不提供旧字段回填或兼容迁移。
+- 这 `24` 个字段不进入 Alembic initial baseline；项目处于初始开发阶段，不提供旧字段回填或兼容迁移。
 
 ## 2026-06-30：后端安全默认值与敏感信息保护
 
 - 配置和存储集群接口响应不再返回密码字段，降低前端和日志链路泄露风险。
 - 后端异常响应不再回显内部异常文本，仍在服务端日志保留排障上下文。
-- NetApp/Isilon 客户端默认开启 TLS 证书校验，迁移连接串和启动日志不再暴露账号密码。
+- NetApp/Isilon 客户端默认开启 TLS 证书校验，实际集群设置由数据库字段控制；迁移连接串和启动日志不再暴露账号密码。
 - 扩容和远程文件操作加强参数校验与 shell 参数引用，降低命令注入风险。
 - 列表排序、QuestDB 指标和树图字段改为白名单校验，非法字段返回稳定错误。
 - 后台文件任务使用独立数据库会话，避免请求结束后继续使用已关闭 Session。

@@ -193,9 +193,9 @@
 - 触发：Celery worker 通过 HTTPS 连接使用自签名证书的 NetApp。
 - 现象：请求报 `CERTIFICATE_VERIFY_FAILED`，随后采集日志显示 `Fetched 0 volumes` 和 `Fetched 0 user quotas`。
 - 根因：NetApp/Isilon 客户端支持 `tls_verify`，但采集入口未从存储配置传入；客户端又将连接异常吞成空结果。
-- 修复：新增全局 `storage.tls_verify` 布尔配置并默认关闭，统一传入 NetApp/Isilon；API 连接和 HTTP 失败改为向上抛出，由集群事务回滚。
+- 修复（当时）：新增全局 `storage.tls_verify` 布尔配置并默认关闭，统一传入 NetApp/Isilon；API 连接和 HTTP 失败改为向上抛出，由集群事务回滚。该全局配置现已由逐 `StorageCluster` 的 `protocol`、`tls_verify` 字段取代并从 YAML 删除。
 - 验证：配置默认值、类型校验、两个客户端参数贯通和连接失败传播共 `7 passed`。
-- 风险：尚未连接真实 NetApp/Isilon 验证；默认关闭证书校验会降低中间人攻击防护，受信任证书环境应设为 `true`。
+- 风险：已有集群迁移为 `https/false` 以保持连接行为；关闭证书校验会降低中间人攻击防护，受信任证书环境应逐集群设为 `true`。HTTP 下设备凭据会以明文传输。
 
 ### 2026-07-14：QuestDB 缺少软限额列且 Aggregate 误写软限额字段
 
@@ -222,7 +222,7 @@
 - 根因：客户端固定请求 `oplocks`，但当前 ONTAP 的 Qtree REST 资源不支持该字段。
 - 修复：从 Qtree 请求字段中移除 `oplocks`；下游继续使用既有缺省值 `False`。
 - 验证：逐字段只读探测确认只有 `oplocks` 返回 400；聚焦测试 `13 passed`；修改后的客户端从真实设备成功返回 `82` 条 Qtree。
-- 风险：Celery worker 需要重启后才会加载新代码；关闭 TLS 校验时的 `InsecureRequestWarning` 仍会保留。
+- 风险：Celery worker 需要重启后才会加载新代码；`tls_verify=false` 的 HTTPS 集群仍会保留 `InsecureRequestWarning`。
 
 ### 2026-07-14：前端覆盖率全量测试超过默认 5 秒超时
 

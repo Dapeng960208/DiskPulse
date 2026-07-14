@@ -55,7 +55,7 @@ FastAPI: backend/main.py
 
 ## 4. 配置
 
-`backend/appConfig.py` 使用 PyYAML 加载按子系统分类的 `backend/config.yml`。应用不读取 `.env` 或运行时环境变量；手工 NetApp/Isilon 检查脚本仍单独使用环境变量，避免把设备凭据并入应用配置。
+`backend/appConfig.py` 使用 PyYAML 加载按子系统分类的 `backend/config.yml`。应用不读取 `.env` 或运行时环境变量；手工 NetApp 检查脚本单独使用环境变量，Isilon Quota 检查脚本按名称读取 `storage_clusters` 中的连接配置。
 
 | 分类 | 用途 |
 | --- | --- |
@@ -64,11 +64,11 @@ FastAPI: backend/main.py
 | `database.questdb` | QuestDB 连接和连接池 |
 | `redis` | Celery broker/backend 地址 |
 | `jwt`、`ldap`、`super_admin_usernames` | 登录、令牌和超级管理员 |
-| `storage` | 存储客户端运行开关；`tls_verify` 控制 NetApp/Isilon HTTPS 证书校验，默认 `false` |
+| `storage` | Isilon 会话缓存等存储客户端运行开关；不保存设备协议或 TLS 校验配置 |
 
 真实 `backend/config.yml` 和 LDAP 密码文件不得提交；仓库只保留 `backend/config.example.yml` 与无敏感值的 `backend/config.test.yml`。相对密码文件路径以 YAML 所在目录为基准，PostgreSQL 和 QuestDB URL 由加载器集中生成并转义凭据。
 
-`storage.tls_verify=false` 用于连接内部自签名存储设备，Worker 会记录证书校验已关闭的 warning。具备受信任证书的环境应改为 `true`；配置只接受 YAML 布尔值。存储 API 连接或 HTTP 请求失败会中止并回滚当前集群采集，避免将失败误判为空数据。
+设备访问协议和 TLS 证书校验分别保存在 `storage_clusters.protocol`、`storage_clusters.tls_verify`，由每个集群独立配置。新建集群默认 `https/true`；迁移前已有集群回填为 `https/false`，保持原连接行为。HTTP 下 TLS 校验不适用，设备凭据会以明文传输，只应在可信隔离网络中使用。存储 API 连接或请求失败会中止并回滚当前集群采集，避免将失败误判为空数据。
 
 ## 5. 数据层
 
@@ -82,7 +82,7 @@ FastAPI: backend/main.py
 | `User` | `users` | 用户和 IAM 同步信息 |
 | `Host` | `hosts` | SSH 主机信息，路径状态和大文件检查仍在使用 |
 | `Project` | `projects` | 项目和项目级资源统计 |
-| `StorageCluster` | `storage_clusters` | 存储集群配置 |
+| `StorageCluster` | `storage_clusters` | 存储集群连接、协议和 TLS 校验配置 |
 | `GroupTag` | `group_tags` | 只包含名称的项目组全局标签 |
 | `Aggregate` | `aggregates` | Aggregate 容量 |
 | `Volume` | `volumes` | Volume 容量和分配量 |
@@ -153,4 +153,4 @@ celery -A celery_worker:diskpulse_app beat --loglevel=INFO
 - 不要删除 `Host` 或 `Group.monitor_host_id`，除非同步替换路径状态和大文件检查链路。
 - 不要删除 `StorageUsage` 文件元数据字段，除非同步修改详情页、导出和告警模板。
 - CRUD 中的动态排序参数应逐步改为白名单，避免调用方传入任意 ORM 属性。
-- PostgreSQL 使用单一 Alembic initial baseline `000000000001` 从空库创建当前 `14` 张表；`Group` 直接保存项目、存储集群和项目组标签外键，旧 revision 数据库不支持原地升级。QuestDB 由独立模型和初始化流程维护，不属于 Alembic。
+- PostgreSQL 使用 Alembic root baseline `000000000001` 从空库创建当前业务表，`000000000002` 为 `storage_clusters` 增加逐集群协议和 TLS 校验字段；使用已删除旧 revision 链的数据库仍不支持伪造版本接续。QuestDB 由独立模型和初始化流程维护，不属于 Alembic。
