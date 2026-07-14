@@ -560,9 +560,7 @@ def test_environment_aggregation_counts_shared_volume_once(db_session):
     groups = [
         models.Group(
             id=group_id,
-            project_id=1,
             project_environment_id=1,
-            storage_cluster_id=1,
             volume_id=1,
             name=f"group-{group_id}",
             enable_monitoring=True,
@@ -605,9 +603,11 @@ def test_isilon_multi_group_without_usage_resets_stale_totals(db_session):
         name="isilon-a",
         is_active=True,
     )
+    volume = models.Volume(id=1, storage_cluster_id=1, name="/ifs/project")
     group = models.Group(
         id=1,
         project_environment_id=1,
+        volume_id=1,
         name="group-empty-usage",
         enable_monitoring=True,
         associate_multiple_groups=True,
@@ -617,7 +617,7 @@ def test_isilon_multi_group_without_usage_resets_stale_totals(db_session):
         use_ratio=50,
         soft_use_ratio=62.5,
     )
-    db_session.add_all([cluster, project, environment, group])
+    db_session.add_all([cluster, project, environment, volume, group])
     db_session.commit()
     monitor = storages.StoragePulseMonitor(
         db_session,
@@ -668,9 +668,7 @@ def test_netapp_regular_qtree_remains_the_group_storage_target(db_session):
     )
     group = models.Group(
         id=1,
-        project_id=1,
         project_environment_id=1,
-        storage_cluster_id=1,
         qtree_id=1,
         name="group-qtree",
         enable_monitoring=True,

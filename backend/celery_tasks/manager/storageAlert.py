@@ -8,12 +8,24 @@ from sqlalchemy import func, inspect as sa_inspect
 from sqlalchemy.orm import joinedload
 from crud.questDbCrud import get_high_avg_usage
 from crud.configCrud import get_storage_config
+from crud.groupCrud import serialize_group
+from crud.storageUsageCrud import serialize_storage_usage
 from utils.mailTools.emailNotification import EmailNotification
 from schemas import storageUsageSchema, groupSchema, projectsSchema, aggregateSchema, volumeSchema, \
     qtreeSchema
 from datetime import datetime, timedelta
 from appConfig import base_config
 from utils.storageTarget import resolve_group_storage_target
+
+
+def _group_payload(group):
+    return groupSchema.Group.model_validate(serialize_group(group)).model_dump()
+
+
+def _storage_usage_payload(storage_usage):
+    data = serialize_storage_usage(storage_usage)
+    data["group"] = _group_payload(storage_usage.group)
+    return storageUsageSchema.StorageUsage.model_validate(data).model_dump()
 
 
 class StorageAlert:
@@ -47,11 +59,12 @@ class StorageAlert:
         storage_usage_dbs = self.db.query(StorageUsage).options(
             joinedload(StorageUsage.user),
             joinedload(StorageUsage.storage_cluster),
-            joinedload(StorageUsage.group).joinedload(Group.project),
+            joinedload(StorageUsage.group).joinedload(Group.project_environment).joinedload(
+                ProjectStorageEnvironment.project
+            ),
             joinedload(StorageUsage.group).joinedload(Group.project_environment).joinedload(
                 ProjectStorageEnvironment.storage_cluster
             ),
-            joinedload(StorageUsage.group).joinedload(Group.storage_cluster),
             joinedload(StorageUsage.group).joinedload(Group.volume),
             joinedload(StorageUsage.group).joinedload(Group.qtree).joinedload(Qtree.volume),
         ).join(
@@ -134,7 +147,7 @@ class StorageAlert:
                 # 构建存储使用数据
                 storage_usages = []
                 for storage_db, avg_use_ratio in storage_dbs:
-                    storage_dict = storageUsageSchema.StorageUsage.model_validate(storage_db).model_dump()
+                    storage_dict = _storage_usage_payload(storage_db)
                     storage_dict['avg_use_ratio'] = round(avg_use_ratio, 2)
 
                     # 设置告警级别
@@ -187,11 +200,12 @@ class StorageAlert:
         )
         group_ids = {group_id for group_id, _avg_use_ratio in storage_usage_quest_dbs}
         group_dbs = self.db.query(Group).options(
-            joinedload(Group.project),
+            joinedload(Group.project_environment).joinedload(
+                ProjectStorageEnvironment.project
+            ),
             joinedload(Group.project_environment).joinedload(
                 ProjectStorageEnvironment.storage_cluster
             ),
-            joinedload(Group.storage_cluster),
             joinedload(Group.volume),
             joinedload(Group.qtree).joinedload(Qtree.volume),
             joinedload(Group.in_charge_user),
@@ -242,9 +256,12 @@ class StorageAlert:
             ).subquery()
             top_storage_usages = self.db.query(StorageUsage).options(
                 joinedload(StorageUsage.user),
-                joinedload(StorageUsage.group).joinedload(Group.project),
-                joinedload(StorageUsage.group).joinedload(Group.project_environment),
-                joinedload(StorageUsage.group).joinedload(Group.storage_cluster),
+                joinedload(StorageUsage.group).joinedload(Group.project_environment).joinedload(
+                    ProjectStorageEnvironment.project
+                ),
+                joinedload(StorageUsage.group).joinedload(Group.project_environment).joinedload(
+                    ProjectStorageEnvironment.storage_cluster
+                ),
                 joinedload(StorageUsage.group).joinedload(Group.volume),
                 joinedload(StorageUsage.group).joinedload(Group.qtree).joinedload(Qtree.volume),
                 joinedload(StorageUsage.group).joinedload(Group.in_charge_user),
@@ -307,7 +324,7 @@ class StorageAlert:
                         if self.model != 'dev' and group_db.associated_mail_groups:
                             recipient += group_db.associated_mail_groups.split(',')
 
-                        group_dict = groupSchema.Group.model_validate(group_db).model_dump()
+                        group_dict = _group_payload(group_db)
                         group_dict['avg_use_ratio'] = round(avg_use_ratio, 2)
 
                         # 设置告警级别
@@ -329,7 +346,7 @@ class StorageAlert:
                         storage_usage_dbs = top_usages_by_group.get(group_id, [])
 
                         group_dict['storage_usages'] = [
-                            storageUsageSchema.StorageUsage.model_validate(storage_usage_db).model_dump()
+                            _storage_usage_payload(storage_usage_db)
                             for storage_usage_db in storage_usage_dbs
                         ]
 
@@ -366,29 +383,6 @@ class StorageAlert:
         except Exception as e:
             self.logger.error(f"Error in Group Alarm Daily : {e}")
 
-    # def group_quit_user_alarm_weekly(self):
-    #     alarm_data = self.get_project_group_quit_user_storage_usages()
-    #     if len(alarm_data) == 0:
-    #         self.logger.warning("[Alert] No group quit user to alert")
-    #         return
-    #     quit_days = self.config.back_up_quit_days if self.config.back_up_quit_days else 30
-    #     for group_db, storage_usages_dbs in alarm_data.items():
-    #         data = {'group_usage': groupSchema.Group.model_validate(group_db).model_dump()}
-    #         email = group_db.in_charge_user.email
-    #         subject = f"[{group_db.project.name}]-[{group_db.name}] 离职用户存储数据清理 "
-    #         # if self.model != 'dev':
-    #         #     recipient.append(email)
-    #         data['storage_usages'] = [
-    #             storageUsageSchema.StorageUsage.model_validate(storage_usage_db).default_dict()
-    #             for storage_usage_db in storage_usages_dbs
-    #         ]
-    #         data['quit_days'] = quit_days
-    #         self.email.send_email_via_template(
-    #             recipient=recipient, subject=subject,
-    #             data=self.add_email_company_info(data=data),
-    #             template_name='groupQuitUserAlarmWeekly'
-    #         )
-
     def get_project_group_quit_user_storage_usages(self):
         """
         每周一提醒quit_days内离职用户数据清理
@@ -424,16 +418,12 @@ class StorageAlert:
                 avg_use_ratio=avg_use_ratio)
             related_info = None
             if model.__name__ == Group.__name__:
-                description = f"{related_db.project.name}" + description
                 environment = related_db.project_environment
-                project = environment.project if environment is not None else related_db.project
+                project = environment.project
+                description = f"{project.name}" + description
                 related_info = {
                     "project": {"id": project.id, "name": project.name},
-                    "project_environment": (
-                        {"id": environment.id, "name": environment.name}
-                        if environment is not None
-                        else None
-                    ),
+                    "project_environment": {"id": environment.id, "name": environment.name},
                     "group": {"id": related_db.id, "name": related_db.name},
                 }
             related_id = related_db.id
@@ -460,18 +450,26 @@ class StorageAlert:
             for project_dbs in alarm_data.values()
             for project_db, _avg_use_ratio in project_dbs
         }
-        all_group_dbs = self.db.query(Group).options(
-            joinedload(Group.project),
-            joinedload(Group.project_environment),
-            joinedload(Group.storage_cluster),
+        all_group_dbs = self.db.query(Group).join(
+            ProjectStorageEnvironment,
+            Group.project_environment_id == ProjectStorageEnvironment.id,
+        ).options(
+            joinedload(Group.project_environment).joinedload(
+                ProjectStorageEnvironment.project
+            ),
+            joinedload(Group.project_environment).joinedload(
+                ProjectStorageEnvironment.storage_cluster
+            ),
             joinedload(Group.qtree).joinedload(Qtree.volume),
             joinedload(Group.in_charge_user),
-        ).filter(Group.project_id.in_(project_ids)).order_by(
-            Group.project_id, Group.used.desc()
+        ).filter(ProjectStorageEnvironment.project_id.in_(project_ids)).order_by(
+            ProjectStorageEnvironment.project_id, Group.used.desc()
         ).all() if project_ids else []
         groups_by_project = {}
         for group_db in all_group_dbs:
-            groups_by_project.setdefault(group_db.project_id, []).append(group_db)
+            groups_by_project.setdefault(
+                group_db.project_environment.project_id, []
+            ).append(group_db)
         result = []
         for email, project_dbs in alarm_data.items():
             try:
@@ -486,17 +484,16 @@ class StorageAlert:
                     project_dict = projectsSchema.Project.model_validate(project_db).model_dump()
                     project_dict['avg_use_ratio'] = round(avg_use_ratio, 2)
                     group_dbs = groups_by_project.get(project_db.id, [])
-                    group_usages = [groupSchema.Group.model_validate(group_db).model_dump() for group_db in group_dbs]
+                    group_usages = [_group_payload(group_db) for group_db in group_dbs]
                     environment_usages = {}
                     for group_db, group_usage in zip(group_dbs, group_usages):
                         environment = group_db.project_environment
-                        environment_key = environment.id if environment is not None else 0
                         section = environment_usages.setdefault(
-                            environment_key,
+                            environment.id,
                             {
                                 'project_environment': {
-                                    'id': environment.id if environment is not None else None,
-                                    'name': environment.name if environment is not None else '未绑定环境',
+                                    'id': environment.id,
+                                    'name': environment.name,
                                 },
                                 'group_usages': [],
                             },

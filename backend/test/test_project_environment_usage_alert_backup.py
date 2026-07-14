@@ -111,9 +111,7 @@ def usage_scope(db_session):
         [
             models.Group(
                 id=1,
-                project_id=1,
                 project_environment_id=1,
-                storage_cluster_id=1,
                 volume_id=1,
                 name="volume-group",
                 linux_path="/data/volume-group",
@@ -121,9 +119,7 @@ def usage_scope(db_session):
             ),
             models.Group(
                 id=2,
-                project_id=1,
                 project_environment_id=1,
-                storage_cluster_id=1,
                 qtree_id=1,
                 in_charge_user_id=2,
                 name="qtree-group",
@@ -132,9 +128,7 @@ def usage_scope(db_session):
             ),
             models.Group(
                 id=3,
-                project_id=2,
                 project_environment_id=2,
-                storage_cluster_id=2,
                 volume_id=2,
                 name="other-group",
                 linux_path="/data/other-group",
@@ -283,29 +277,6 @@ def test_storage_usage_export_starts_with_traceable_environment_columns(usage_sc
         "路径",
     ]
     assert set(exported["项目环境"]) == {"environment-a"}
-
-
-def test_storage_usage_export_preserves_legacy_rows_without_group(usage_scope):
-    usage_scope.add(
-        models.StorageUsage(
-            id=4,
-            storage_cluster_id=1,
-            user_id=1,
-            group_id=None,
-            linux_path="/legacy/orphan/admin",
-            used=5,
-            use_ratio=5,
-            updated_at=NOW,
-        )
-    )
-    usage_scope.commit()
-
-    exported = storageUsageCrud.get_export_data(usage_scope)
-
-    legacy = exported.loc[exported["路径"] == "/legacy/orphan/admin"].iloc[0]
-    assert legacy["项目环境"] == ""
-    assert legacy["Volume"] == ""
-    assert legacy["Qtree"] == ""
 
 
 @pytest.mark.parametrize(
@@ -467,15 +438,15 @@ def test_group_alarm_batches_independent_top20_storage_usage_queries(
     serialized_usages = []
 
     class SerializedUsage:
-        def __init__(self, storage_usage):
-            self.storage_usage = storage_usage
+        def __init__(self, data):
+            self.data = data
 
         def model_dump(self):
             payload = {
-                "id": self.storage_usage.id,
-                "used": self.storage_usage.used,
-                "user": self.storage_usage.user.rd_username,
-                "group_id": self.storage_usage.group.id,
+                "id": self.data["id"],
+                "used": self.data["used"],
+                "user": self.data["user"].rd_username,
+                "group_id": self.data["group"]["id"],
             }
             serialized_usages.append(payload)
             return payload
@@ -542,7 +513,6 @@ def test_group_alert_reads_current_environment_and_target_by_stable_id(
         )
         group = writer.get(models.Group, 1)
         group.project_environment_id = 3
-        group.storage_cluster_id = 2
         group.volume_id = 2
         group.qtree_id = None
         writer.commit()
@@ -720,9 +690,7 @@ def test_project_weekly_report_keeps_flat_groups_and_sections_by_environment(usa
     usage_scope.add(
         models.Group(
             id=4,
-            project_id=1,
             project_environment_id=3,
-            storage_cluster_id=2,
             volume_id=2,
             name="volume-group",
             linux_path="/data/environment-c/volume-group",
@@ -764,44 +732,6 @@ def test_project_weekly_report_keeps_flat_groups_and_sections_by_environment(usa
     assert {group["name"] for group in sections[3]["group_usages"]} == {"volume-group"}
 
 
-def test_project_weekly_report_keeps_legacy_groups_in_unbound_environment_section(usage_scope):
-    usage_scope.add(
-        models.Group(
-            id=5,
-            project_id=1,
-            project_environment_id=None,
-            storage_cluster_id=1,
-            qtree_id=1,
-            name="legacy-group",
-            linux_path="/legacy/group",
-            limit=1024,
-        )
-    )
-    usage_scope.commit()
-
-    alert = object.__new__(StorageAlert)
-    alert.db = usage_scope
-    alert.logger = Mock()
-    alert.config = SimpleNamespace(mail_to="ops@example.com")
-    alert.model = "dev"
-    alert.email = Mock()
-    project = usage_scope.get(models.Project, 1)
-    alert.get_project_alarm_data = Mock(return_value={"admin": [(project, 55.0)]})
-    alert.add_email_company_info = lambda data: data
-    alert.write_alerts_to_mysql = Mock()
-
-    alert.project_alarm_weekly()
-
-    project_data = alert.email.send_email_via_template.call_args.kwargs["data"]["project_usages"][0]
-    section = next(
-        item
-        for item in project_data["environment_usages"]
-        if item["project_environment"]["id"] is None
-    )
-    assert section["project_environment"] == {"id": None, "name": "未绑定环境"}
-    assert {group["id"] for group in section["group_usages"]} == {5}
-
-
 def test_project_weekly_report_batches_groups_and_preloads_environment_and_owner(usage_scope):
     alert = object.__new__(StorageAlert)
     alert.db = usage_scope
@@ -839,7 +769,7 @@ def test_project_weekly_template_renders_environment_sections():
     assert "environment.group_usages" in template
 
 
-def test_new_backup_path_includes_environment_without_moving_legacy_record(usage_scope):
+def test_backup_path_includes_project_environment(usage_scope):
     manager = object.__new__(RemoteFileManager)
     manager.db = usage_scope
     manager.storage_config = SimpleNamespace(back_up_dir="/backup")
@@ -849,9 +779,6 @@ def test_new_backup_path_includes_environment_without_moving_legacy_record(usage
 
     assert destination == os.path.join(
         "/backup", "project-a", "environment-a", "volume-group", "admin"
-    )
-    assert usage_scope.get(models.StorageBackUpRecord, 1).destination_path == (
-        "/legacy/project-a/volume-group/admin"
     )
 
 
