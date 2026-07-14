@@ -98,6 +98,12 @@ curl "http://localhost:8000/storage-pulse/api/volumes?storage_cluster_id=1"
 curl "http://localhost:8000/storage-pulse/api/qtrees?storage_cluster_id=1"
 ```
 
+### 获取指定集群的存储一览容量树
+
+```bash
+curl "http://localhost:8000/storage-pulse/api/aggregates/storage-trees/?storage_cluster_id=1"
+```
+
 ### 获取指定集群的 StorageUsage
 
 ```bash

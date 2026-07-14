@@ -1,5 +1,13 @@
 # 错误记录
 
+### 2026-07-14：存储一览加载态引用了不存在的变量
+- 触发：为“存储一览”新增集群切换页面测试并挂载 `DashboardPage.vue`。
+- 现象：Vue 提示 `Property "querying" was accessed during render but is not defined on instance`，页面请求期间不会进入加载态。
+- 根因：`useQuery` 将状态解构为 `storageSummaryQuerying`，模板仍引用旧变量名 `querying`。
+- 修复：模板统一改用 `storageSummaryQuerying`。
+- 验证：页面聚焦 Vitest 通过，`1 passed`；`npm run build:prod` 通过。
+- 风险：仅修正存储一览加载态变量引用，未修改其他图表行为。
+
 ### 2026-07-14：设置页旧测试仍操作已隐藏的备份控件
 - 触发：执行离职备份前端隐藏的五文件聚焦回归测试。
 - 现象：`settings-config.test.js` 仍读取两个 `ElInputNumber` 和一个 `ElSwitch`，隐藏备份页签后数组为空并触发 `Cannot read properties of undefined (reading 'vm')`。

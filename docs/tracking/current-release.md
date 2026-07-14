@@ -1,5 +1,29 @@
 # 当前交付记录
 
+## 2026-07-14：存储一览按集群查看
+
+### 主题
+
+为“存储一览”增加存储集群选择，按目标集群加载 Volume/Qtree 容量树。
+
+### 已完成
+
+- 页面复用 `StorageClusterSelect`，选择或清空集群时自动刷新 treemap。
+- `/aggregates/storage-trees/` 新增可选 `storage_cluster_id`，并在数据库查询阶段过滤 Volume。
+- `storage_cluster_id` 使用 `Query(ge=1)` 校验，非法非正整数返回 `422`。
+- 修正页面加载态变量名，使切换集群期间正确显示加载状态。
+
+### 验证状态
+
+- RED：前端首次请求仍为 `{}`；后端传 `storage_cluster_id=2` 仍返回两个集群的 Volume。
+- GREEN：页面聚焦 Vitest 通过，`1 passed`；`backend/test/test_core_api.py` 通过，`8 passed`。
+- `.\.venv\Scripts\python.exe -m compileall -q backend` 与 `npm run build:prod`：通过。
+
+### 风险与后续
+
+- 未连接真实 NetApp/Isilon 数据或执行浏览器端到端测试；实际大数据量 treemap 切换待集成环境确认。
+- 构建仍有既有 Sass legacy API deprecation 和大于 `500 kB` chunk warning，本次未处理。
+
 ## 2026-07-14：隐藏离职备份前端入口
 
 ### 主题
