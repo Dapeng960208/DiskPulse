@@ -226,6 +226,7 @@ export default [
         component: () => import('@/pages/admin/backup/BackUpListPage.vue'),
         meta: {
           title: '离职备份',
+          isHidden: true,
         },
       },
       {

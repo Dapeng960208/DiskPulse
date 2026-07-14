@@ -120,7 +120,9 @@ fetchConfig();
         </ElCol>
       </ElRow>
     </ElTabPane>
-    <ElTabPane label="目录操作和备份配置">
+    <ElTabPane
+      v-if="false"
+      label="目录操作和备份配置">
       <ElRow class="mt-5">
         <ElCol>
           <ElForm

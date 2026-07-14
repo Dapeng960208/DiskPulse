@@ -175,7 +175,9 @@ defineExpose({
         multiple /></ElFormItem>
       <ElFormItem label="是否监控"><ElSwitch v-model="model.enable_monitoring" /></ElFormItem>
       <ElFormItem label="是否已结项"><ElSwitch v-model="model.completed" /></ElFormItem>
-      <ElFormItem label="是否开启离职数据备份"><ElSwitch v-model="model.back_up_enabled" /></ElFormItem>
+      <ElFormItem
+        v-if="false"
+        label="是否开启离职数据备份"><ElSwitch v-model="model.back_up_enabled" /></ElFormItem>
     </ElForm>
     <template #footer>
       <ElButton @click="close">取消</ElButton><ElButton

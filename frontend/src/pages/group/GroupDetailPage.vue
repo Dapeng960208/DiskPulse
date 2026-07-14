@@ -20,7 +20,9 @@ onBeforeMount(() => {
       <ElDescriptionsItem label="项目路径">{{ info?.linux_path }}</ElDescriptionsItem>
       <ElDescriptionsItem label="归属项目">{{ info?.project?.name }}</ElDescriptionsItem>
       <ElDescriptionsItem label="关联Qtree">{{ info?.qtree?.name }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="备份路径">{{ info?.back_path }}</ElDescriptionsItem>
+      <ElDescriptionsItem
+        v-if="false"
+        label="备份路径">{{ info?.back_path }}</ElDescriptionsItem>
     </template>
   </RealTimePage>
 

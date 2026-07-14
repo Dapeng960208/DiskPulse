@@ -408,9 +408,9 @@ query();
           </ElButton>
           <!-- <ElButton size="small" plain @click="storageUsageFormDialogRef.edit(row)" v-if="hasRole('disk-monitor:admin')">
           编辑
-        </ElButton> -->
+          </ElButton> -->
           <ElButton
-            v-if="hasRole('disk-monitor:admin')"
+            v-if="hasRole('disk-monitor:admin') && false"
             size="small"
             type="danger"
             plain

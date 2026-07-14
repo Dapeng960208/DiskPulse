@@ -278,6 +278,7 @@ function confirmDelete(row) {
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="false"
         label="开启离职备份"
         align="center"
         prop="back_up_enabled"

@@ -56,6 +56,13 @@ const mountOptions = {
     },
   },
 };
+const DescriptionsItemStub = defineComponent({
+  name: 'ElDescriptionsItem',
+  props: ['label'],
+  setup(_, { slots }) {
+    return () => h('div', slots.default?.());
+  },
+});
 
 describe('offboarding backup visibility', () => {
   it('keeps the backup route registered but hides it from navigation', async () => {
@@ -93,7 +100,9 @@ describe('offboarding backup visibility', () => {
 
   it('does not render the backup path on the group detail', async () => {
     const { default: GroupDetailPage } = await import('@/pages/group/GroupDetailPage.vue');
-    const groupDetail = mount(GroupDetailPage);
+    const groupDetail = mount(GroupDetailPage, {
+      global: { stubs: { ElDescriptionsItem: DescriptionsItemStub } },
+    });
 
     expect(groupDetail.findAllComponents({ name: 'ElDescriptionsItem' }).map((item) => item.props('label')))
       .not.toContain('备份路径');
