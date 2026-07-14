@@ -182,3 +182,12 @@
 - 修复：验证命令改为通过显式 Connection 执行 `SELECT "column" FROM table_columns(:tn)`。
 - 验证：五张配额历史表均返回 `soft_limit`、`soft_use_ratio`，`aggregate_storage_usages` 返回空列表。
 - 风险：仅影响诊断命令，不影响业务写入；本轮不升级依赖，后续使用 Inspector 仍会复现。
+
+### 2026-07-14：NetApp Qtree 请求包含不支持的 oplocks 字段
+
+- 触发：Celery worker 调用 `GET /api/storage/qtrees` 同步 Qtree。
+- 现象：ONTAP 返回 `400 Bad Request`，错误码 `262197`，提示 `oplocks` 对 `fields` 无效。
+- 根因：客户端固定请求 `oplocks`，但当前 ONTAP 的 Qtree REST 资源不支持该字段。
+- 修复：从 Qtree 请求字段中移除 `oplocks`；下游继续使用既有缺省值 `False`。
+- 验证：逐字段只读探测确认只有 `oplocks` 返回 400；聚焦测试 `13 passed`；修改后的客户端从真实设备成功返回 `82` 条 Qtree。
+- 风险：Celery worker 需要重启后才会加载新代码；关闭 TLS 校验时的 `InsecureRequestWarning` 仍会保留。

@@ -426,3 +426,21 @@ npm test -- --coverage.enabled=false
 - 当前开发实例已显示 revision `000000000002`，幂等 upgrade 返回 `up to date`；实际列检查确认五张配额历史表包含两个软限额列，Aggregate 不包含。
 - 其他环境更新代码后需在 `backend` 目录执行 `..\.venv\Scripts\python.exe -m questdb.migrate upgrade`，再重启 Celery worker。
 - 尚未重新触发真实 NetApp 采集；需要在 worker 加载新代码后观察一次 Volume、Aggregate 和 Cluster 三类写入日志。
+
+## 2026-07-14：修复 NetApp Qtree API 400
+
+### 已完成
+
+- 从 `storage/qtrees` 的 `fields` 参数中移除当前 ONTAP 不支持的 `oplocks`。
+- 保留现有缺省行为：响应不含 `oplocks` 时，Qtree 的该展示字段按 `False` 处理。
+- 增加请求字段回归测试。
+
+### 验证状态
+
+- `cd backend && ..\.venv\Scripts\python.exe -m pytest test\test_security_regressions.py -q`：通过，`13 passed`。
+- 使用修改后的客户端只读访问北京 NetApp：成功返回 `82` 条 Qtree。
+
+### 风险
+
+- `storage.tls_verify=false` 时仍会输出 `InsecureRequestWarning`，这是关闭证书校验的预期安全提示；受信任证书环境应改为 `true`。
+- Celery worker 需重启后才能加载本次客户端修改。
