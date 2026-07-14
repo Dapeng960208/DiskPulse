@@ -27,6 +27,16 @@ describe('group tags', () => {
     expect(source).not.toMatch(/project_id|storage_cluster_id|description|is_active|StorageClusterSelect/);
   });
 
+  it('places the create action in the table header', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/pages/group-tag/GroupTagListPage.vue'),
+      'utf8',
+    );
+
+    expect(source).toMatch(/<template #header>[\s\S]*?新增标签[\s\S]*?<\/template>/);
+    expect(source).not.toMatch(/<\/QueryForm>\s*<div[^>]*flex justify-end/);
+  });
+
   it('submits project, cluster, and environment tag ids from the group form', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/pages/group/components/GroupFormDialog.vue'),
