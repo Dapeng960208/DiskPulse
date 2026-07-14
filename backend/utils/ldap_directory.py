@@ -102,10 +102,10 @@ def _ldap_runtime_primitives() -> tuple[Any, Any, Any, dict[str, Any]]:
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"ldap3(\..*)?$")
-            from ldap3 import ALL, AUTO_BIND_NO_TLS, Connection, Server, Tls
+            from ldap3 import AUTO_BIND_NO_TLS, NONE, Connection, Server, Tls
     except ImportError as error:  # pragma: no cover - runtime dependency
         raise RuntimeError("ldap3 is not installed") from error
-    return Server, Connection, Tls, {"ssl": ssl, "all": ALL, "auto_bind_no_tls": AUTO_BIND_NO_TLS}
+    return Server, Connection, Tls, {"ssl": ssl, "none": NONE, "auto_bind_no_tls": AUTO_BIND_NO_TLS}
 
 
 def _ldap_server() -> Any:
@@ -122,7 +122,7 @@ def _ldap_server() -> Any:
     return Server(
         server_url,
         connect_timeout=ldap_timeout_seconds(),
-        get_info=constants["all"],
+        get_info=constants["none"],
         tls=tls,
     )
 

@@ -514,7 +514,7 @@ def test_ldap_server_builds_optional_tls(monkeypatch, tmp_path, with_ca):
             FakeServer,
             object,
             FakeTls,
-            {"ssl": ssl, "all": "ALL", "auto_bind_no_tls": "AUTO"},
+            {"ssl": ssl, "none": "NONE", "auto_bind_no_tls": "AUTO"},
         ),
     )
 

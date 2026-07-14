@@ -32,16 +32,25 @@ def _is_public_auth_request(request: Request) -> bool:
     return request.method.upper() == "OPTIONS" or request.url.path in PUBLIC_AUTH_PATHS
 
 
+def _resolve_current_user(request: Request, authorization: str | None) -> User:
+    current_user = getattr(request.state, "current_user", None)
+    if current_user is not None:
+        return current_user
+
+    token = parse_authorization_token(authorization)
+    payload = decode_token(token, "access")
+    current_user = usersCrud.get_user_by_id(request.state.db, int(payload["sub"]))
+    if current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user is unavailable")
+    request.state.current_user = current_user
+    return current_user
+
+
 def get_current_user(
     request: Request,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ) -> User:
-    token = parse_authorization_token(authorization)
-    payload = decode_token(token, "access")
-    user = usersCrud.get_user_by_id(request.state.db, int(payload["sub"]))
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user is unavailable")
-    return user
+    return _resolve_current_user(request, authorization)
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
@@ -67,11 +76,7 @@ def require_authenticated_request(
 ) -> None:
     if _is_public_auth_request(request):
         return
-    token = parse_authorization_token(authorization)
-    payload = decode_token(token, "access")
-    user = usersCrud.get_user_by_id(request.state.db, int(payload["sub"]))
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user is unavailable")
+    _resolve_current_user(request, authorization)
 
 
 class QuestDBSession:
