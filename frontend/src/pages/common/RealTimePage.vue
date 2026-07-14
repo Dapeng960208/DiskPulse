@@ -32,6 +32,7 @@ const props = defineProps({
       'qtree',
       'aggregate',
       'project',
+      'group',
       'storage-usage',
     ].includes(value),
   },
@@ -240,7 +241,7 @@ const yAxisUnit = computed(() => {
             v-else-if="!result.data || Object.keys(result.data).length === 0"
             class="h-full">
             <AnimatedTextChart
-              :text="'NO DATA'"
+              :text="'暂无趋势数据'"
               :width="'100%'"
               :height="'100%'" />
           </div>

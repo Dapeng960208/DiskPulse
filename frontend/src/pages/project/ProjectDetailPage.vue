@@ -3,6 +3,7 @@ import { ElEmpty, ElMessage, ElTable, ElTableColumn, ElTag } from 'element-plus'
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import groupApi from '@/api/group-api.js';
+import { formatStorageTargetType } from '@/utils/storage-resource';
 
 const route = useRoute();
 const projectId = computed(() => Number(route.params.id));
@@ -39,7 +40,7 @@ onMounted(loadGroups);
         prop="name" />
       <ElTableColumn label="项目组标签"><template #default="scope">{{ scope?.row?.group_tag?.name || '-' }}</template></ElTableColumn>
       <ElTableColumn label="存储集群"><template #default="scope">{{ scope?.row?.storage_cluster?.name || '-' }} <ElTag type="info">{{ scope?.row?.storage_cluster?.storage_type || '-' }}</ElTag></template></ElTableColumn>
-      <ElTableColumn label="存储目标"><template #default="scope">{{ scope?.row?.storage_target?.type || '-' }} / {{ scope?.row?.storage_target?.name || '-' }}</template></ElTableColumn>
+      <ElTableColumn label="存储目标"><template #default="scope">{{ formatStorageTargetType(scope?.row?.storage_target?.type) }} / {{ scope?.row?.storage_target?.name || '-' }}</template></ElTableColumn>
       <ElTableColumn
         label="Linux路径"
         prop="linux_path" />

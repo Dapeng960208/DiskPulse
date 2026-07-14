@@ -15,5 +15,5 @@ onBeforeMount(() => {
   <RealTimePage
     :attribute-id="attributeId"
     :api-type="'volume'"
-    :label="'Volume名'"></RealTimePage>
+    :label="'存储空间名'"></RealTimePage>
 </template>

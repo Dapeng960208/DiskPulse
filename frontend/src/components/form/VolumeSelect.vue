@@ -79,7 +79,7 @@ function searchUserGroups(queryString) {
     class="w-full"
     :loading="searchingUserGroups"
     :remote-method="searchUserGroups"
-    placeholder="根据Volume模糊搜索"
+    placeholder="根据存储空间模糊搜索"
     :multiple="multiple"
     :multiple-limit="multipleLimit"
     :reserve-keyword="false"

@@ -84,7 +84,7 @@ function searchQtree(queryString) {
     class="w-full"
     :loading="searchingQtree"
     :remote-method="searchQtree"
-    placeholder="根据Qtree模糊搜索"
+    placeholder="根据 Qtree（NetApp）模糊搜索"
     :multiple="multiple"
     :multiple-limit="multipleLimit"
     :reserve-keyword="false"

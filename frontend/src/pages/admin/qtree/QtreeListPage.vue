@@ -1,5 +1,6 @@
 <script setup>
-import { ElButton, ElFormItem, ElInput,ElTableColumn, ElTag } from 'element-plus';
+import { ElButton, ElFormItem, ElInput, ElMessage, ElTableColumn, ElTag } from 'element-plus';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import qtreeApi from '@/api/qtree-api.js';
 import FilterForm from '@/components/form/QueryForm.vue';
@@ -9,8 +10,10 @@ import { useQuery, useQueryParams } from '@/composables/query';
 import Progress from '@/components/form/Progress.vue'
 import VolumeSelect from '@/components/form/VolumeSelect.vue'
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
+import storageClusterApi from '@/api/storage-cluster-api';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 const router = useRouter();
+const selectedCluster = ref(null);
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
   size: 20,
@@ -22,36 +25,56 @@ const { result, querying, query } = useQuery(() => qtreeApi.fetch(queryParams.va
   totalElements: 0,
 });
 
+async function changeCluster(clusterId) {
+  queryParams.value.storage_cluster_id = clusterId;
+  delete queryParams.value.volume_id;
+  selectedCluster.value = clusterId ? await storageClusterApi.fetchById(clusterId) : null;
+  if (selectedCluster.value?.storage_type === 'isilon') {
+    ElMessage.warning('Isilon 不支持 Qtree');
+  }
+}
+
+function runQuery() {
+  if (selectedCluster.value?.storage_type === 'isilon') {
+    ElMessage.warning('Isilon 不支持 Qtree');
+    return;
+  }
+  queryParams.value.page = 1;
+  query();
+}
+
+function resetQuery() {
+  selectedCluster.value = null;
+  reset();
+  query();
+}
+
 query();
 </script>
 
 <template>
   <div class="qtree-list-page">
     <FilterForm
-      @query="{
-        queryParams.page = 1;
-        query();
-      }"
-      @reset="{
-        reset();
-        query();
-      }"
+      @query="runQuery"
+      @reset="resetQuery"
     >
       <ElFormItem
         label="存储集群"
         class="form-item-center">
         <StorageClusterSelect
-          v-model="queryParams.storage_cluster_id"
-          :clearable="true" />
+          :model-value="queryParams.storage_cluster_id"
+          :clearable="true"
+          @update:model-value="changeCluster" />
       </ElFormItem>
-      <ElFormItem label="Qtree">
+      <ElFormItem label="Qtree（NetApp）">
         <ElInput
           v-model="queryParams.nameLike"
-          placeholder="根据Qtree搜索" />
+          placeholder="根据 Qtree（NetApp）搜索" />
       </ElFormItem>
-      <ElFormItem label="Volume">
+      <ElFormItem label="所属存储空间">
         <VolumeSelect
           v-model="queryParams.volume_id"
+          :storage-cluster-id="queryParams.storage_cluster_id"
           :multiple="false"
           :clearable="true" />
       </ElFormItem>
@@ -86,13 +109,13 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="Qtree名"
+        label="Qtree（NetApp）名"
         align="center"
         prop="name"
         min-width="120"
       />
       <ElTableColumn
-        label="Volume"
+        label="所属存储空间"
         align="center"
         min-width="80"
       >
@@ -200,7 +223,7 @@ query();
             v-if="hasRole('disk-monitor:admin')"
             size="small"
             plain
-            @click="router.push({path: `/storage/qtree/${row.id}`})">
+            @click="router.push({path: `/admin/qtree/${row.id}`})">
             详情
           </ElButton>
         </template>

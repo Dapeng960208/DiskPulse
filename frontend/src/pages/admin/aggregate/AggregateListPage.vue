@@ -8,6 +8,7 @@ import { useQuery, useQueryParams } from '@/composables/query';
 import Progress from '@/components/form/Progress.vue';
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import { hasRole } from '@/utils/authorization';
+import { getStorageResourceNativeType } from '@/utils/storage-resource';
 const router = useRouter();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
@@ -42,7 +43,7 @@ query();
           v-model="queryParams.storage_cluster_id"
           :clearable="true" />
       </ElFormItem>
-      <ElFormItem label="聚合名">
+      <ElFormItem label="容量池名">
         <ElInput
           v-model="queryParams.nameLike"
           placeholder="根据关键字模糊搜素" />
@@ -78,11 +79,19 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="聚合"
+        label="容量池名"
         align="center"
         prop="name"
         min-width="120"
       />
+      <ElTableColumn
+        label="原生类型"
+        align="center"
+        min-width="140">
+        <template #default="{ row }">
+          {{ getStorageResourceNativeType('aggregate', row) }}
+        </template>
+      </ElTableColumn>
       <ElTableColumn
         label="限额"
         sortable="custom"
@@ -133,7 +142,7 @@ query();
             v-if="hasRole('disk-monitor:admin')"
             size="small"
             plain
-            @click="router.push({path: `/storage/aggregate/${row.id}`})">
+            @click="router.push({path: `/admin/aggregate/${row.id}`})">
             详情
           </ElButton>
         </template>

@@ -166,7 +166,7 @@ export default [
         name: 'Aggregates',
         component: () => import('@/pages/admin/aggregate/AggregateListPage.vue'),
         meta: {
-          title: '聚合',
+          title: '容量池',
         },
       },
       {
@@ -174,7 +174,7 @@ export default [
         name: 'AggregateDetail',
         component: () => import('@/pages/admin/aggregate/AggregateDetailPage.vue'),
         meta: {
-          title: '聚合详情',
+          title: '容量池详情',
           isHidden: true,
         },
       },
@@ -183,7 +183,7 @@ export default [
         name: 'Volumes',
         component: () => import('@/pages/admin/volume/VolumeListPage.vue'),
         meta: {
-          title: 'Volume',
+          title: '存储空间',
         },
       },
       {
@@ -191,7 +191,7 @@ export default [
         name: 'VolumeDetail',
         component: () => import('@/pages/admin/volume/VolumeDetailPage.vue'),
         meta: {
-          title: '卷详情',
+          title: '存储空间详情',
           isHidden: true,
         },
       },
@@ -200,7 +200,7 @@ export default [
         name: 'Qtrees',
         component: () => import('@/pages/admin/qtree/QtreeListPage.vue'),
         meta: {
-          title: 'Qtree',
+          title: 'Qtree（NetApp）',
         },
       },
       {
@@ -208,7 +208,7 @@ export default [
         name: 'QtreeDetail',
         component: () => import('@/pages/admin/qtree/QtreeDetailPage.vue'),
         meta: {
-          title: 'Qtree详情',
+          title: 'Qtree（NetApp）详情',
           isHidden: true,
         },
       },

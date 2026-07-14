@@ -9,6 +9,7 @@ import { useQuery, useQueryParams } from '@/composables/query';
 import Progress from '@/components/form/Progress.vue'
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
+import { getStorageResourceNativeType } from '@/utils/storage-resource';
 const router = useRouter();
 
 const { queryParams, reset } = useQueryParams(() => ({
@@ -44,10 +45,10 @@ query();
           v-model="queryParams.storage_cluster_id"
           :clearable="true" />
       </ElFormItem>
-      <ElFormItem label="Volume名">
+      <ElFormItem label="存储空间名">
         <ElInput
           v-model="queryParams.nameLike"
-          placeholder="根据关键字模糊搜素" />
+          placeholder="根据名称或路径模糊搜索" />
       </ElFormItem>
     </FilterForm>
     <DataTable
@@ -80,13 +81,14 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="Volume名"
+        label="存储空间名"
         align="center"
         prop="name"
-        min-width="120"
+        min-width="180"
+        show-overflow-tooltip
       />
       <ElTableColumn
-        label="vserver"
+        label="服务域（SVM / Access Zone）"
         align="center"
         sortable
         prop="vserver"
@@ -95,23 +97,19 @@ query();
       </ElTableColumn>
 
       <ElTableColumn
-        label="聚合"
+        label="所属容量池"
         align="center"
         prop="aggregate"
         min-width="120"
       />
       <ElTableColumn
-        label="类型"
+        label="原生类型"
         align="center"
-        prop="type"
-        min-width="50"
-      />
-      <ElTableColumn
-        label="状态"
-        align="center"
-        prop="state"
-        min-width="50"
-      />
+        min-width="150">
+        <template #default="{ row }">
+          {{ getStorageResourceNativeType('volume', row) }}
+        </template>
+      </ElTableColumn>
       <ElTableColumn
         label="状态"
         align="center"
@@ -221,7 +219,7 @@ query();
             v-if="hasRole('disk-monitor:admin')"
             size="small"
             plain
-            @click="router.push({path: `/storage/volume/${row.id}`})">
+            @click="router.push({path: `/admin/volume/${row.id}`})">
             详情
           </ElButton>
         </template>

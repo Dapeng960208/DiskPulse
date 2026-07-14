@@ -15,5 +15,5 @@ onBeforeMount(() => {
   <RealTimePage
     :attribute-id="attributeId"
     :api-type="'qtree'"
-    :label="'Qtree名'"></RealTimePage>
+    :label="'Qtree（NetApp）名'"></RealTimePage>
 </template>

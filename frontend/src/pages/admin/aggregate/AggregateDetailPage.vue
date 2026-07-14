@@ -15,5 +15,5 @@ onBeforeMount(() => {
   <RealTimePage
     :attribute-id="attributeId"
     :api-type="'aggregate'"
-    :label="'聚合名'"></RealTimePage>
+    :label="'容量池名'"></RealTimePage>
 </template>

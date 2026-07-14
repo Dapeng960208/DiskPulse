@@ -10,11 +10,13 @@ import { useQuery, useQueryParams } from '@/composables/query';
 import Progress from '@/components/form/Progress.vue';
 import UserAvatar from '@/components/data/UserAvatar.vue'
 import QtreeSelect from '@/components/form/QtreeSelect.vue';
+import VolumeSelect from '@/components/form/VolumeSelect.vue';
 import ProjectSelect from '@/components/form/ProjectSelect.vue';
 import GroupTagSelect from '@/components/form/GroupTagSelect.vue';
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import GroupFormDialog from './components/GroupFormDialog.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
+import { formatStorageTargetType } from '@/utils/storage-resource';
 
 const groupFormDialogRef = ref();
 const { queryParams, reset } = useQueryParams(() => ({
@@ -31,6 +33,22 @@ const { result, querying, query } = useQuery(() => groupApi.fetch(queryParams.va
 
 function changeProjectFilter(projectId) {
   queryParams.value.project_id = projectId;
+}
+
+function changeClusterFilter(clusterId) {
+  queryParams.value.storage_cluster_id = clusterId;
+  queryParams.value.volume_id = null;
+  queryParams.value.qtree_id = null;
+}
+
+function changeVolumeFilter(volumeId) {
+  queryParams.value.volume_id = volumeId;
+  queryParams.value.qtree_id = null;
+}
+
+function changeQtreeFilter(qtreeId) {
+  queryParams.value.qtree_id = qtreeId;
+  queryParams.value.volume_id = null;
 }
 
 query();
@@ -90,16 +108,29 @@ function confirmDelete(row) {
         label="存储集群"
         class="form-item-center">
         <StorageClusterSelect
-          v-model="queryParams.storage_cluster_id"
-          :clearable="true" />
+          :model-value="queryParams.storage_cluster_id"
+          :clearable="true"
+          @update:model-value="changeClusterFilter" />
       </ElFormItem>
       <ElFormItem
-        label="关联Qtree"
+        label="关联存储空间"
+        class="form-item-center">
+        <VolumeSelect
+          :model-value="queryParams.volume_id"
+          :storage-cluster-id="queryParams.storage_cluster_id"
+          :multiple="false"
+          :clearable="true"
+          @update:model-value="changeVolumeFilter" />
+      </ElFormItem>
+      <ElFormItem
+        label="关联Qtree（NetApp）"
         class="form-item-center">
         <QtreeSelect
-          v-model="queryParams.qtree_id"
+          :model-value="queryParams.qtree_id"
+          :storage-cluster-id="queryParams.storage_cluster_id"
           :multiple="false"
-          :clearable="true" />
+          :clearable="true"
+          @update:model-value="changeQtreeFilter" />
       </ElFormItem>
       <ElFormItem
         label="项目组名"
@@ -134,9 +165,9 @@ function confirmDelete(row) {
           <ElDescriptions
             border
             :column="2">
-            <ElDescriptionsItem label="挂载">
+            <ElDescriptionsItem label="存储目标">
               <ElTag>
-                {{ props.row.storage_target?.type }} / {{ props.row.storage_target?.name || '-' }}
+                {{ formatStorageTargetType(props.row.storage_target?.type) }} / {{ props.row.storage_target?.name || '-' }}
               </ElTag>
             </ElDescriptionsItem>
             <ElDescriptionsItem label="Linux路径">

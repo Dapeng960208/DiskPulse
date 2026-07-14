@@ -37,8 +37,8 @@ const { formRef, mode, model, modelRules, submitting, edit: editForm, submit } =
     group_tag_id: [{ type: 'number', required: true, message: '项目组标签不能为空', trigger: 'change' }],
     target_type: [{ required: true, message: '目标类型不能为空', trigger: 'change' }],
     ...(currentModel.value.target_type === 'volume'
-      ? { volume_id: [{ type: 'number', required: true, message: 'Volume不能为空', trigger: 'change' }] }
-      : { qtree_id: [{ type: 'number', required: true, message: 'Qtree不能为空', trigger: 'change' }] }),
+      ? { volume_id: [{ type: 'number', required: true, message: '存储空间不能为空', trigger: 'change' }] }
+      : { qtree_id: [{ type: 'number', required: true, message: 'Qtree（NetApp）不能为空', trigger: 'change' }] }),
     linux_path: [{ required: true, message: '关联Linux路径不能为空', trigger: 'blur' }],
   }),
   doSubmit(currentMode) {
@@ -137,18 +137,18 @@ defineExpose({
           :model-value="model.target_type"
           @update:model-value="changeTargetType">
           <ElOption
-            label="Volume"
+            label="存储空间"
             value="volume" /><ElOption
-              label="Qtree"
+              label="Qtree（NetApp）"
               value="qtree" />
         </ElSelect>
       </ElFormItem>
       <ElFormItem
         v-else-if="selectedCluster"
-        label="目标类型">Volume</ElFormItem>
+        label="目标类型">存储空间（Directory Quota）</ElFormItem>
       <ElFormItem
         v-if="selectedCluster && model.target_type === 'volume'"
-        label="Volume"
+        :label="isNetApp ? '存储空间' : '存储空间（Directory Quota）'"
         prop="volume_id">
         <VolumeSelect
           v-model="model.volume_id"
@@ -156,7 +156,7 @@ defineExpose({
       </ElFormItem>
       <ElFormItem
         v-if="selectedCluster && model.target_type === 'qtree'"
-        label="Qtree"
+        label="Qtree（NetApp）"
         prop="qtree_id">
         <QtreeSelect
           v-model="model.qtree_id"
@@ -165,7 +165,7 @@ defineExpose({
       <ElFormItem
         label="关联Linux路径"
         prop="linux_path"><ElInput v-model="model.linux_path" /></ElFormItem>
-      <ElFormItem label="单个Volume关联多个项目组"><ElSwitch v-model="model.associate_multiple_groups" /></ElFormItem>
+      <ElFormItem label="单个存储目标关联多个项目组"><ElSwitch v-model="model.associate_multiple_groups" /></ElFormItem>
       <ElFormItem label="项目组开发代表"><RdUserSelect
         v-model="model.in_charge_user_id"
         clearable /></ElFormItem>

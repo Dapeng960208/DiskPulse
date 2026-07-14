@@ -18,6 +18,7 @@ import { useCurrentUser } from '@/stores/current-user';
 import { exportReport } from '@/utils/common.js';
 import ExportDialog from '@/components/form/ExportDialog.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
+import { formatStorageTargetType } from '@/utils/storage-resource';
 const exportRef =ref(null);
 const currentUser = useCurrentUser();
 const router = useRouter();
@@ -268,19 +269,11 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="Volume"
+        label="存储目标"
         align="center"
-        min-width="80">
+        min-width="160">
         <template #default="{ row }">
-          <span>{{ row.storage_target?.type === 'volume' ? row.storage_target?.name : '-' }}</span>
-        </template>
-      </ElTableColumn>
-      <ElTableColumn
-        label="Qtree"
-        align="center"
-        min-width="80">
-        <template #default="{ row }">
-          <span>{{ row.storage_target?.type === 'qtree' ? row.storage_target?.name : '-' }}</span>
+          <span>{{ formatStorageTargetType(row.storage_target?.type) }} / {{ row.storage_target?.name || '-' }}</span>
         </template>
       </ElTableColumn>
 

@@ -64,7 +64,7 @@ function searchAggregates(queryString) {
     class="w-full"
     :loading="searchingAggregates"
     :remote-method="searchAggregates"
-    placeholder="根据Aggregate模糊搜索"
+    placeholder="根据容量池模糊搜索"
     :multiple="multiple"
     :multiple-limit="multipleLimit"
     :reserve-keyword="false"

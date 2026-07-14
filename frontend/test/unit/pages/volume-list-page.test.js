@@ -7,10 +7,14 @@ const resourceApis = vi.hoisted(() => Object.fromEntries(
     fetch: vi.fn(() => Promise.resolve({ content: [], total: 0 })),
   }]),
 ));
+const storageClusterApi = vi.hoisted(() => ({
+  fetchById: vi.fn((id) => Promise.resolve({ id, storage_type: 'netapp' })),
+}));
 
 vi.mock('@/api/volume-api.js', () => ({ default: resourceApis.volume }));
 vi.mock('@/api/aggregate-api.js', () => ({ default: resourceApis.aggregate }));
 vi.mock('@/api/qtree-api.js', () => ({ default: resourceApis.qtree }));
+vi.mock('@/api/storage-cluster-api', () => ({ default: storageClusterApi }));
 vi.mock('@/components/form/StorageClusterSelect.vue', () => ({
   default: {
     name: 'StorageClusterSelect',

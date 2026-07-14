@@ -19,9 +19,9 @@ const alertOptions = {
   '用户目录': 'StorageUsage',
   '项目组': 'Group',
   '项目': 'Project',
-  '聚合': 'Aggregate',
-  'Volume': 'Volume',
-  'Qtree': 'Qtree',
+  '容量池': 'Aggregate',
+  '存储空间': 'Volume',
+  'Qtree（NetApp）': 'Qtree',
 };
 
 const handleRelatedTypeChange = (value) => {
