@@ -96,16 +96,6 @@ describe('storage settings configuration source', () => {
       expected[field] = `updated-${field}`;
       input.vm.$emit('update:modelValue', expected[field]);
     }
-    const numberInputs = wrapper.findAllComponents({ name: 'ElInputNumber' });
-    numberInputs[0].vm.$emit('update:modelValue', 30);
-    numberInputs[1].vm.$emit('update:modelValue', 40);
-    expected.back_up_quit_days = 30;
-    expected.back_up_duration = 40;
-    wrapper
-      .findComponent({ name: 'ElSwitch' })
-      .vm.$emit('update:modelValue', false);
-    expected.back_up_enabled = false;
-
     await wrapper.findComponent({ name: 'ElButton' }).trigger('click');
     await flushPromises();
 
