@@ -30,28 +30,14 @@ def upgrade() -> None:
             "tls_verify",
             sa.Boolean(),
             nullable=False,
-            server_default=sa.false(),
+            server_default=sa.true(),
         ),
     )
-
-    context = op.get_context()
-    if context.dialect.name == "sqlite":
-        if not context.as_sql:
-            with op.batch_alter_table("storage_clusters") as batch_op:
-                batch_op.alter_column(
-                    "tls_verify",
-                    existing_type=sa.Boolean(),
-                    nullable=False,
-                    server_default=sa.true(),
-                )
-    else:
-        op.alter_column(
-            "storage_clusters",
-            "tls_verify",
-            existing_type=sa.Boolean(),
-            nullable=False,
-            server_default=sa.true(),
-        )
+    storage_clusters = sa.table(
+        "storage_clusters",
+        sa.column("tls_verify", sa.Boolean()),
+    )
+    op.execute(storage_clusters.update().values(tls_verify=sa.false()))
 
 
 def downgrade() -> None:

@@ -51,6 +51,8 @@ def update_storage_cluster(db: Session, storage_cluster_id: int, storage_cluster
     db_storage_cluster = get_storage_cluster(db, storage_cluster_id)
     if db_storage_cluster:
         update_data = storage_cluster.model_dump(exclude_unset=True)
+        if update_data.get("protocol", db_storage_cluster.protocol) == "http":
+            update_data["tls_verify"] = False
         for key, value in update_data.items():
             setattr(db_storage_cluster, key, value)
         db.commit()

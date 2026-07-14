@@ -44,6 +44,9 @@ class StorageClusterUpdate(BaseModel):
 
     @model_validator(mode="after")
     def disable_tls_verification_for_http(self):
+        for field in ("protocol", "tls_verify"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
         if self.protocol == "http":
             self.tls_verify = False
         return self
