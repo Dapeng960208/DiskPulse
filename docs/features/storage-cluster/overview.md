@@ -45,11 +45,11 @@ curl -X POST "http://localhost:8000/storage-pulse/api/storage-clusters" \
 | 文档 | 说明 |
 | --- | --- |
 | [design.md](./design.md) | 多集群设计背景、数据关系、监控任务设计。 |
-| [migration.md](./migration.md) | 历史迁移方案和数据库变更说明。部分内容是迁移设计，执行前需要按当前环境复核。 |
+| [migration.md](./migration.md) | 当前空库 baseline 和 QuestDB 独立初始化边界。 |
 | [api-examples.md](./api-examples.md) | 集群 CRUD、实时查询和按集群过滤的 API 示例。 |
 
 ## 维护边界
 
 - 当前后端实际字段以 `backend/schemas/storageClusterSchema.py` 和 `backend/models.py` 为准。
 - 新增或删除集群字段时，需要同步 `StoragePulseMonitor`、相关 CRUD、前端表单和本文档。
-- 当前轮次没有新增 Alembic 迁移脚本；如需清理线上历史表，需要单独制定数据库变更方案。
+- PostgreSQL 从空库执行单一 baseline `000000000001`；不支持从已删除 revision 原地升级。QuestDB 不属于 Alembic。

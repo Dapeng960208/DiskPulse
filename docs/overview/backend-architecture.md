@@ -139,4 +139,4 @@ User
 - 不要删除 `Host` 或 `Group.monitor_host_id`，除非同步替换路径状态和大文件检查链路。
 - 不要删除 `StorageUsage` 文件元数据字段，除非同步修改详情页、导出和告警模板。
 - CRUD 中的动态排序参数应逐步改为白名单，避免调用方传入任意 ORM 属性。
-- 当前轮次没有新增 Alembic 迁移脚本；数据库历史表清理由单独变更处理。
+- PostgreSQL 使用单一 Alembic initial baseline `000000000001` 从空库创建当前 `14` 张表；旧 revision 数据库不支持原地升级。QuestDB 由独立模型和初始化流程维护，不属于 Alembic。

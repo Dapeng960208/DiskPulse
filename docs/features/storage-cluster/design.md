@@ -420,9 +420,8 @@ aggregates = requests.get(
 ## 9. 注意事项
 
 ### 9.1 数据迁移
-- 现有数据需要关联到默认集群（id=1）
-- PostgreSQL 和 QuestDB 都需要迁移
-- 建议在低峰期执行迁移
+- PostgreSQL 从空库执行单一 Alembic initial baseline，不生成默认集群或回填现有数据。
+- QuestDB 由独立初始化流程管理，不属于 Alembic baseline。
 
 ### 9.2 性能考虑
 - 为 storage_cluster_id 字段添加索引
@@ -430,7 +429,6 @@ aggregates = requests.get(
 - 监控任务并行执行，避免阻塞
 
 ### 9.3 兼容性
-- 保持现有 API 向后兼容
 - storage_cluster_id 参数为可选
 - 不传参数时返回所有集群的数据
 

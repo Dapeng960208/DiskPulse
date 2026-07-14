@@ -1,5 +1,21 @@
 # 错误记录
 
+### 2026-07-14：MySQL 全 metadata 编译因无长度 String/VARCHAR 失败
+- 触发：迁移独立审计对 `Base.metadata` 的全部 `14` 张表执行 MySQL `CreateTable` 编译。
+- 现象：`14` 张表中 `13` 张触发 SQLAlchemy `CompileError`，错误均指向 MySQL `VARCHAR` 必须声明长度；只有不包含相关无长度字符串列的表可编译。
+- 根因：现有 ORM 广泛使用未指定长度的 `String`，SQLite 和 PostgreSQL 接受该定义，MySQL 方言不接受无长度 `VARCHAR`。
+- 处理：本次项目存储环境 baseline 明确只支持 SQLite/PostgreSQL；MySQL 明确不支持并列为待专项整改，不为未纳入部署范围的 MySQL 批量修改既有 ORM。文档不得把三方言编译门禁描述为通过。
+- 验证：SQLite 空库 upgrade/downgrade 与 metadata 对比通过，PostgreSQL offline upgrade/downgrade DDL 通过；MySQL 全 metadata 编译可稳定复现上述 `13/14` 失败。
+- 风险：当前实现未满足 `backend-development-standard.md` 的默认 SQLite/PostgreSQL/MySQL 三方言编译门禁；若将 MySQL 纳入部署范围，必须先为相关 `String/VARCHAR` 补齐长度并重新验证完整 baseline。
+
+### 2026-07-14：项目存储环境文档仍描述已删除的兼容迁移
+- 触发：完成严格 Group 模型和单一 Alembic baseline 后，审查 `docs/features/project-storage-environment/design.md` 与交付记录。
+- 现象：文档仍把回填脚本、兼容双写、M3 收紧和旧 revision 链描述为当前方案，与初始开发阶段的实际代码不一致。
+- 根因：需求从增量迁移调整为绿地空库 baseline 后，先前设计和历史交付陈述未同步收敛。
+- 修复：统一改为 root/head `000000000001`、空库重建、无回填和无兼容窗口；明确 QuestDB 不属于 Alembic。
+- 验证：全 `docs/` 搜索旧 revision、回填脚本和 M3 当前态陈述，并执行 `git diff --check`。
+- 风险：已使用删除前 revision 的开发数据库不能原地升级，必须确认数据可丢弃后重建空库。
+
 ### 2026-07-13：跨方言删除列测试导入错误
 - 触发：执行 `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test/test_backend_schema_contract.py -q`。
 - 现象：测试收集时报错 `ImportError: cannot import name 'DropColumn' from 'sqlalchemy.schema'`。

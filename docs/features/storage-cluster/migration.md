@@ -1,158 +1,38 @@
-# StorageCluster 数据库迁移文档
+# StorageCluster 数据库初始化
 
-## 概述
+## 适用范围
 
-本文档描述了为支持多存储集群功能所需的数据库迁移步骤。
+项目处于初始开发阶段，不保留历史数据、增量 revision 或向前兼容迁移。PostgreSQL 与 QuestDB 使用独立初始化流程。
 
-## 迁移内容
+## PostgreSQL / Alembic
 
-### PostgreSQL 迁移
+`backend/migrate/versions/` 只保留：
 
-#### 1. 新增 storage_clusters 表
-
-```sql
-CREATE TABLE storage_clusters (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL UNIQUE,
-    storage_host VARCHAR(255) NOT NULL,
-    storage_type VARCHAR(50) NOT NULL,
-    description TEXT,
-    is_active BOOLEAN DEFAULT TRUE,
-    "limit" FLOAT,
-    used FLOAT,
-    use_ratio FLOAT DEFAULT 0,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_storage_clusters_updated_at ON storage_clusters(updated_at);
+```text
+000000000001_initial_schema.py
 ```
 
-#### 2. 修改 aggregates 表
+该 root/head baseline 从空库创建当前 `14` 张业务表和 `31` 个索引，其中包含 `storage_clusters` 及 `aggregates`、`volumes`、`qtrees`、`project_storage_environments`、`storage_usages` 的集群关系。
 
-```sql
-ALTER TABLE aggregates ADD COLUMN storage_cluster_id INTEGER REFERENCES storage_clusters(id);
-CREATE INDEX idx_aggregates_storage_cluster_id ON aggregates(storage_cluster_id);
+```powershell
+.\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini heads
+.\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini history
+.\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini upgrade head
 ```
 
-#### 3. 修改 volumes 表
+已使用删除前 revision 的开发数据库不支持原地升级。确认数据可丢弃后重建空数据库，再执行 `upgrade head`；不得通过手工修改 `alembic_version` 伪造升级路径。
 
-```sql
-ALTER TABLE volumes ADD COLUMN storage_cluster_id INTEGER REFERENCES storage_clusters(id);
-CREATE INDEX idx_volumes_storage_cluster_id ON volumes(storage_cluster_id);
-```
+`downgrade base` 仅用于空库往返验证，不作为保留开发数据的回滚方案。
 
-#### 4. 修改 qtrees 表
+## QuestDB
 
-```sql
-ALTER TABLE qtrees ADD COLUMN storage_cluster_id INTEGER REFERENCES storage_clusters(id);
-CREATE INDEX idx_qtrees_storage_cluster_id ON qtrees(storage_cluster_id);
-```
+QuestDB 不属于 Alembic 管理范围。存储集群和项目环境趋势表由 `backend/questdb/models.py` 及 QuestDB 初始化流程维护；PostgreSQL 的 `upgrade/downgrade` 不创建、修改或删除 QuestDB 表。
 
-#### 5. 修改 storage_usages 表
+本阶段不迁移或回填历史 QuestDB 数据。真实 QuestDB 的表结构、连接和读写需要在集成环境单独验收。
 
-```sql
-ALTER TABLE storage_usages ADD COLUMN storage_cluster_id INTEGER REFERENCES storage_clusters(id);
-CREATE INDEX idx_storage_usages_storage_cluster_id ON storage_usages(storage_cluster_id);
-```
+## 已验证与待验证
 
-### QuestDB 迁移
-
-#### 1. 新增 storage_cluster_storage_usages 表
-
-```sql
-CREATE TABLE storage_cluster_storage_usages (
-    storage_cluster_id SYMBOL,
-    used DOUBLE,
-    use_ratio DOUBLE,
-    updated_at TIMESTAMP
-) TIMESTAMP(updated_at) PARTITION BY DAY WAL;
-```
-
-#### 2. 修改 aggregate_storage_usages 表（添加 storage_cluster_id 字段）
-
-QuestDB 不支持直接 ALTER TABLE 添加列，需要重建表：
-
-```sql
--- 备份旧数据
-CREATE TABLE aggregate_storage_usages_backup AS (
-    SELECT * FROM aggregate_storage_usages
-) TIMESTAMP(updated_at) PARTITION BY DAY WAL;
-
--- 删除旧表
-DROP TABLE aggregate_storage_usages;
-
--- 创建新表（含 storage_cluster_id）
-CREATE TABLE aggregate_storage_usages (
-    storage_cluster_id SYMBOL,
-    aggregate_id SYMBOL,
-    used DOUBLE,
-    used_ratio DOUBLE,
-    updated_at TIMESTAMP
-) TIMESTAMP(updated_at) PARTITION BY DAY WAL;
-
--- 恢复旧数据（storage_cluster_id 为 NULL）
-INSERT INTO aggregate_storage_usages (aggregate_id, used, used_ratio, updated_at)
-SELECT aggregate_id, used, used_ratio, updated_at FROM aggregate_storage_usages_backup;
-```
-
-## 数据迁移（现有数据关联默认集群）
-
-如果系统中已有数据，需要先创建一个默认集群，然后将现有数据关联到该集群：
-
-```sql
--- 1. 插入默认集群（根据实际情况修改 storage_host 和 storage_type）
-INSERT INTO storage_clusters (name, storage_host, storage_type, description, is_active)
-VALUES ('Default-Cluster', '192.168.1.100', 'netapp', '默认存储集群（迁移用）', TRUE);
-
--- 获取默认集群 ID（通常为 1）
--- 假设 id = 1
-
--- 2. 更新 aggregates 表
-UPDATE aggregates SET storage_cluster_id = 1 WHERE storage_cluster_id IS NULL;
-
--- 3. 更新 volumes 表
-UPDATE volumes SET storage_cluster_id = 1 WHERE storage_cluster_id IS NULL;
-
--- 4. 更新 qtrees 表
-UPDATE qtrees SET storage_cluster_id = 1 WHERE storage_cluster_id IS NULL;
-
--- 5. 更新 storage_usages 表
-UPDATE storage_usages SET storage_cluster_id = 1 WHERE storage_cluster_id IS NULL;
-```
-
-## 回滚方案
-
-如果迁移失败，可以执行以下回滚操作：
-
-```sql
--- 删除新增列
-ALTER TABLE aggregates DROP COLUMN storage_cluster_id;
-ALTER TABLE volumes DROP COLUMN storage_cluster_id;
-ALTER TABLE qtrees DROP COLUMN storage_cluster_id;
-ALTER TABLE storage_usages DROP COLUMN storage_cluster_id;
-
--- 删除新表
-DROP TABLE IF EXISTS storage_clusters;
-```
-
-## 注意事项
-
-1. **执行顺序**：必须先创建 `storage_clusters` 表，再修改其他表添加外键
-2. **低峰期执行**：建议在业务低峰期执行迁移，避免影响正常使用
-3. **备份数据**：迁移前务必备份数据库
-4. **QuestDB 限制**：QuestDB 不支持 ALTER TABLE 添加列，需要重建表
-5. **应用重启**：迁移完成后需要重启应用服务
-
-## 验证迁移
-
-```sql
--- 验证 storage_clusters 表
-SELECT COUNT(*) FROM storage_clusters;
-
--- 验证关联字段
-SELECT COUNT(*) FROM aggregates WHERE storage_cluster_id IS NOT NULL;
-SELECT COUNT(*) FROM volumes WHERE storage_cluster_id IS NOT NULL;
-SELECT COUNT(*) FROM qtrees WHERE storage_cluster_id IS NOT NULL;
-SELECT COUNT(*) FROM storage_usages WHERE storage_cluster_id IS NOT NULL;
-```
+- versions 恰好 `1` 个，`000000000001` 为 root/head。
+- SQLite upgrade 后与 `Base.metadata` 对比无差异，downgrade 后为 `0` 张表。
+- PostgreSQL offline upgrade/downgrade DDL 编译和逆序 drop 审计通过。
+- 尚未在真实 PostgreSQL 或 QuestDB 环境执行端到端初始化。

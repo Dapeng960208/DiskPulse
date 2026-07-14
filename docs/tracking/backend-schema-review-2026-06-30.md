@@ -9,7 +9,7 @@
 - 从 `backend/models.py` 删除未使用的 `StorageRecords` ORM 映射。
 - 从 `ProjectBase` 删除不属于 `projects` 表、也没有当前后端计算来源的历史资源字段。
 - 新增 `backend/test/test_backend_schema_contract.py`，防止无用模型和历史字段回归。
-- 没有新增 Alembic 迁移脚本；数据库侧清理由单独变更处理。
+- `storage_records` 不进入当前单一 Alembic initial baseline，不保留独立清理 revision。
 
 ## 删除的数据库结构
 
@@ -35,7 +35,7 @@
 处理方式：
 
 - 删除 ORM 映射。
-- 不在本轮新增迁移脚本。若部署数据库仍存在该表，需在对应环境单独确认后删除。
+- 当前项目按空库 baseline 初始化，不支持从包含该旧表的已删除 revision 数据库原地升级。
 
 ## Project Schema 清理
 
@@ -53,7 +53,7 @@ master, max_swp, resources, rsv, r15s, r1m, r15m, ut, pg, ls, it, tmp, swp, sut,
 mem, mem_reserved, slot, slot_reserved, run_jobs, ssusp_jobs, ususp_jobs, pend_jobs
 ```
 
-这些字段在 2026-06-30 审查时仍存在于 `projects` 表；后续审计确认没有业务读写，现已从 ORM、API schema 和清理迁移中删除，详见 `unused-field-audit-2026-07-13.md`。
+这些字段在 2026-06-30 审查时仍存在于 `projects` 表；后续审计确认没有业务读写，现已从 ORM、API schema 和 initial baseline 中删除，详见 `unused-field-audit-2026-07-13.md`。
 
 ## 已审查但保留
 
@@ -90,8 +90,7 @@ access_time, modify_time, change_time, birth_time
 
 - 为 `/hosts` 补齐后端 CRUD，或移除前端 Host 选择并改用集群级 SSH 配置。
 - 对 CRUD 动态排序字段加白名单。
-- 明确 `storageMonitor.py`、`netAppMonitor.py`、`isilonMonitor.py` 是否仍是生产路径。
-- 如果线上存在 `storage_records`，单独制定数据库清理方案。
+- 只维护当前生产入口 `StoragePulseMonitor`；无入口的旧 monitor 已删除。
 
 ## 验证
 

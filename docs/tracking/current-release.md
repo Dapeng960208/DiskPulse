@@ -6,11 +6,11 @@
 
 在 `Project` 与存储资源之间引入 `ProjectStorageEnvironment`，统一项目、存储集群、项目组和 Volume/Qtree 的绑定关系，并按项目存储环境提供管理、工作台、汇总和实时趋势能力。
 
-原始设计文档已按原文纳入 `docs/features/project-storage-environment/design.md`；当前分支的实际实施与验收状态以本节、代码和自动化测试为准。
+`docs/features/project-storage-environment/design.md` 已按当前绿地实施方案收敛重写；当前分支的实际实施与验收状态以该设计、代码和自动化测试为准。
 
 ### 已完成
 
-- 新增 `ProjectStorageEnvironment` 关系模型；Alembic revision `e6a1b2c3d4f5` 接续 `f4b2c8d9e701`，创建 `project_storage_environments`，并为 `groups` 增加 `project_environment_id`、`volume_id` 及对应外键。项目内环境名称、项目与集群组合均保持唯一。
+- 新增 `ProjectStorageEnvironment` 关系模型；Alembic 只保留 root/head `000000000001`，从空库一次创建当前 `14` 张表和 `31` 个索引。`groups.project_environment_id` 从建表起为 `NOT NULL`，不存在重复的 `project_id/storage_cluster_id` 物理列；项目内环境名称、项目与集群组合均保持唯一。
 - 新增项目存储环境列表、创建、详情、摘要、实时趋势、更新和删除 API；读操作按超级管理员、项目负责人或 PT 负责人校验项目访问权，写操作要求超级管理员。已绑定项目组的环境拒绝删除。
 - 项目组 API 支持按 `project_environment_id` 过滤，并要求写入时选择一个环境以及且仅一个 Volume/Qtree 目标；目标必须属于环境绑定的存储集群，Isilon 环境只允许 Volume。
 - 前端完成项目存储环境 CRUD、项目组级联绑定、项目详情工作台和 Dashboard 环境维度接入。项目列表展示环境数量、集群类型和状态统计；工作台按启用环境切换，展示环境摘要、实时趋势和关联项目组，并通过 `environment_id` 保持可分享的当前环境状态；Dashboard 支持项目/环境筛选、环境独立容量展示，并使用 `project_environment_id:group_id` 稳定 key 隔离跨环境同名 Group。
@@ -19,26 +19,29 @@
 - Group/User/Project/System 告警、项目周报、单次与批量备份、BPM 和删除流程批量预加载关联并复用当前 ORM 快照；Group TOP20 使用一次窗口查询，`enable_monitoring=false` 的 Group 不进入 Group/User 告警。该口径仅覆盖本次主链路，不代表整个 `celery_tasks` 目录已消除 N+1。
 - 采集轮次允许部分集群失败并保留成功集群结果；只有全部集群失败时轮次失败。项目级汇总只在该项目全部启用环境于本轮完整成功时更新，避免部分成功覆盖完整项目统计。
 - Isilon 项目组直接绑定 Volume，不再创建或依赖 `name='null'` 的 Qtree；环境汇总按真实 Volume/Qtree/多用户项目组目标去重，多个项目组指向同一目标时只计一次。
-- 新增审计与回填脚本 `backend/scripts/backfill_project_storage_environments.py`。默认只输出审计和计划，`--apply` 在阻塞项清零后按项目与集群创建环境、回填项目组，并把历史 Isilon `null` Qtree 绑定转换为 Volume 直连。
+- 项目组创建、更新和响应不接受或返回旧 `project_id/storage_cluster_id` 数字字段；保留的项目/集群列表筛选参数通过 `ProjectStorageEnvironment` 关系查询，不做兼容双写。
 
 ### 验证状态
 
-- `& 'D:\dev\DiskPulse\.venv\Scripts\python.exe' -m pytest backend\test -q`：通过，`138` 个测试。
-- `& 'D:\dev\DiskPulse\.venv\Scripts\python.exe' -m coverage run -m pytest backend\test -q; & 'D:\dev\DiskPulse\.venv\Scripts\python.exe' -m coverage report`：通过，总覆盖率 `85%`。
-- `cd frontend; .\node_modules\.bin\vitest.cmd run --testTimeout=15000`：通过，`29` 个测试文件、`150` 个测试。
-- `cd frontend; .\node_modules\.bin\vitest.cmd run --coverage --testTimeout=15000`：通过；`statements 93.43%`、`branches 82.41%`、`functions 80.82%`、`lines 93.43%`。
+- `& 'D:\dev\DiskPulse\.venv\Scripts\python.exe' -m pytest backend\test -q`：通过，`146` 个测试，`41` 个既有弃用 warning。
+- `& 'D:\dev\DiskPulse\.venv\Scripts\python.exe' -m coverage run -m pytest backend\test -q; & 'D:\dev\DiskPulse\.venv\Scripts\python.exe' -m coverage report`：通过，`2892` statements、`444` miss，总覆盖率 `85%`。
+- migration 独立审计：versions 恰好 `1` 个，`000000000001` 为 root/head；SQLite upgrade 后与 `Base.metadata` 对比无差异，downgrade 后 `0` 张表；PostgreSQL offline upgrade/downgrade DDL、逆序 drop、`heads/history`、`compileall` 和 diff check 通过，核心迁移测试 `13 passed`。
+- MySQL 全 `Base.metadata` 编译审计未通过：当前 `14` 张表中 `13` 张因无长度 `String/VARCHAR` 触发 `CompileError`。本次 baseline 仅声明支持 SQLite/PostgreSQL，未满足后端开发标准的默认三方言编译门禁。
+- `cd frontend; .\node_modules\.bin\vitest.cmd run --testTimeout=15000`：通过，`30` 个测试文件、`153` 个测试。
+- `cd frontend; .\node_modules\.bin\vitest.cmd run --coverage --testTimeout=15000`：通过；`statements 93.47%`、`branches 83.56%`、`functions 82.11%`、`lines 93.47%`。
 - `cd frontend; npm run lint`：通过。
 - `cd frontend; npm run build:prod`：通过。
 
 ### 风险与后续
 
-- 当前项目仍处于开发阶段；按本轮约定，生产历史数据回填、字段废弃兼容和 M3 收紧不作为当前交付门槛，`backfill_project_storage_environments.py` 仅保留为集成环境审计工具。
-- 如果后续接入已有生产历史数据，再单独恢复备份、审计、回填计数、migration upgrade/downgrade 和回滚演练要求。
+- 当前项目仍处于初始开发阶段，不实现历史数据回填、字段兼容窗口或 M3；已删除旧 revision 和回填脚本。
+- 已使用删除前 revision 的开发数据库不支持原地升级；确认数据可丢弃后重建空库，再执行 `000000000001`。不得伪造 `alembic_version` 接续旧链。
 - 未连接真实 PostgreSQL、QuestDB、NetApp 或 Isilon 做端到端验证；外部连接、实际设备返回、QuestDB 表结构和跨库最终一致性仍需在集成环境验收。
+- 当前 baseline 未支持 MySQL：全 metadata 编译时 `14` 张表中 `13` 张失败；若后续把 MySQL 纳入部署范围，需要先统一补齐无长度 `String/VARCHAR` 的长度并重新通过三方言门禁。
 - 未执行外部浏览器 smoke；当前结果不包含仓库外浏览器交互或 E2E 验收。
-- `StoragePulseMonitor` 的逐 Volume/Group/Project 查询和 UPDATE 已验证结果正确，但尚未按生产数据规模做性能压测；legacy 或未调度 monitor 不在本次完成口径。
+- `StoragePulseMonitor` 的结果正确性已有测试覆盖，但尚未按生产数据规模做性能压测；无生产入口的旧 monitor 已删除。
 - 当前 `backend/celery_worker.py` 只启用 60 秒一次的 `storages_schedule_fetching_task`；告警、周报和定时备份 beat 条目仍为注释状态，优化后的路径尚未通过真实 Celery beat/worker 调度验收。
-- `npm run build:prod` 虽成功，但仍有既有的 `%VITE_APP_TITLE%` 未定义、chunk 大于 `500 kB` 和 Sass legacy JS API 弃用警告，本次未处理。
+- `npm run build:prod` 虽成功，但仍有既有的 `VITE_APP_TITLE` 未定义和 chunk 大于 `500 kB` warning，本次未处理。
 - 本次自动化测试覆盖模型、迁移契约、API、前端交互、采集事务和聚合边界，不等同于生产容量数据验收。
 
 ## 2026-07-13：项目未使用字段审计与清理
@@ -50,18 +53,20 @@
 - 复核 `ProjectStorageEnvironment` 新增字段；身份、绑定、容量、采集状态和最近成功采集时间均有明确链路，未发现可直接删除的环境核心字段。
 - 已从 ORM、Pydantic schema 和数据库迁移删除 `20` 个无业务读写字段；备份生命周期继续只使用 `status`。
 - 已从 `StorageConf`、配置 API schema 和设置页面删除 `4` 个运行时不生效的 `questdb_*` 字段；QuestDB 连接继续只读取 `backend/config.yml` 的 `database.questdb`。
-- 新增 `b7c9e2d4f610_remove_unused_fields.py`，统一删除 `24` 个数据库列并提供 downgrade 结构回滚；未增加历史数据回填、废弃兼容层或动态重连逻辑。
+- 这 `24` 个字段已从当前 ORM 和单一 initial baseline 中移除；没有独立清理 revision、历史数据回填、废弃兼容层或动态重连逻辑。
 - `StorageConf.name` 属于单独的无业务语义结构字段，不在本轮指定的两类删除范围内，继续保留。
 
 ### 验证状态
 
 - 已通过精确字段搜索核对候选字段的声明、业务读写和前端展示位置。
 - 已复核 `backend/appConfig.py`、`backend/questdb/database.py` 和 `backend/dependencies.py`，确认 QuestDB 连接只读取 `config.yml`，不会读取 `StorageConf.questdb_*`。
-- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test/test_backend_schema_contract.py backend/test/test_security_regressions.py backend/test/test_core_api.py -q`：通过，`20` 个测试；其中迁移在临时 SQLite 完成 upgrade/downgrade，并通过 SQLite、PostgreSQL、MySQL 删除列 DDL 编译检查。
-- `cd frontend; npx vitest run test/unit/settings-config.test.js --coverage.enabled=false`：通过，`1` 个测试。
-- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic -c backend/alembic.ini heads` 和 `history`：通过，唯一 head 为 `b7c9e2d4f610`；`compileall -q backend` 通过。
+- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test/test_backend_schema_contract.py backend/test/test_security_regressions.py backend/test/test_core_api.py -q`：通过，`20` 个测试；其中 baseline 在临时 SQLite 完成 upgrade/downgrade，并通过 PostgreSQL offline DDL 编译检查。MySQL 全 metadata 编译不在通过范围内。
+- `cd frontend; npx vitest run test/unit/settings-config.test.js --coverage.enabled=false`：通过，`2` 个测试。
+- 最终全量验证：后端 `146 passed`、`41 warnings`，覆盖率 `85%`（`2892` statements、`444` miss）；前端 `30` 个测试文件、`153 passed`，覆盖率 statements `93.47%`、branches `83.56%`、functions `82.11%`、lines `93.47%`。
+- `cd frontend; npm run lint`：通过。
+- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic -c backend/alembic.ini heads` 和 `history`：通过，唯一 root/head 为 `000000000001`；`compileall -q backend` 通过。
 - `cd frontend; npm run build:prod`：通过；仍有既有的 `%VITE_APP_TITLE%` 未定义和大 chunk 警告。
-- 尚未连接真实 PostgreSQL 执行 migration upgrade/downgrade；物理列删除和回滚仍需在集成数据库验证。
+- 尚未在真实 PostgreSQL 空库执行 initial baseline upgrade/downgrade；当前仅完成 SQLite 往返和 PostgreSQL offline DDL 验证。
 
 ## 2026-07-13：登录后 profile 请求补齐 Bearer scheme
 
@@ -196,7 +201,7 @@
 - 项目组、项目汇总和 QuestDB 当前态写入同步携带软限额字段；现有告警任务仍按硬利用率 `use_ratio`。
 - 用户用量、项目组、Qtree、Volume 列表新增软限额/软利用率列，硬限额列文案明确为“硬限额/硬利用率”。
 - 存储使用导出新增“软限额”“软使用率”列。
-- 新增 Alembic migration `f4b2c8d9e701_add_soft_quota_fields.py` 和功能文档 `docs/features/storage-quota/overview.md`。
+- 软限额字段已纳入单一 initial baseline；功能说明见 `docs/features/storage-quota/overview.md`。
 
 ### 验证状态
 
@@ -208,7 +213,7 @@
 ### 风险与后续
 
 - 未连接真实 NetApp/Isilon 设备做端到端采集验证，本次通过 mock quota payload 覆盖字段解析。
-- 当前工作区已有 `.gitignore` 修改和多份 `backend/migrate/versions/*` 删除，本次未回退也未纳入修复；新增 migration 的 `down_revision` 接到 Git 中既有链路末端 `a1d670c60836`。
+- 旧增量 revision 已删除；初始开发数据库统一从空库执行 `000000000001`，不支持从旧链升级。
 - `docs/standards/domain-terminology.md` 已在后续安全修复中补齐。
 
 ## 2026-06-30：后端核心接口测试与覆盖率门禁

@@ -35,21 +35,21 @@ erDiagram
 
 ### 1.1 可行性结论与实施门槛
 
-方案已在现有 FastAPI、SQLAlchemy、Celery、Vue 3 和 Vitest 技术栈内实施，不需要新增前端依赖，也没有为配置快照新增 Redis 缓存。当前自动化范围已完成，生产数据库审计、migration 演练和外部系统验证仍待执行。
+方案已在现有 FastAPI、SQLAlchemy、Celery、Vue 3 和 Vitest 技术栈内实施，不需要新增前端依赖，也没有为配置快照新增 Redis 缓存。项目仍处于初始开发阶段，PostgreSQL 使用单一初始基线 migration；真实 PostgreSQL、QuestDB 和存储设备验证仍待执行。
 
 实施成功标准：
 
 - 一个项目的多套环境在关系、当前容量、趋势、告警、扩容、备份和页面状态中均可独立追溯。
 - Celery 每轮使用同一份数据库配置快照，下一轮能够读取已经提交的新配置，不发生跨环境陈旧写入。
-- 新旧字段兼容期内可回滚；数据审计未通过时不得自动回填或收紧约束。
+- `Group` 从建表起只保存严格环境关系和单一 Volume/Qtree 目标，不保留重复项目/集群字段或兼容双写。
 - 每个生产批次都完成预期 RED、最小 GREEN 和同目标复测；未验证内容不标记为完成。
 
 前置依赖与停止条件：
 
-- 数据审计、生产 `alembic_version`、环境当前态字段和第 7.4 节前端契约未确认时，停止在实施前。
+- 单一 baseline、环境当前态字段和第 7.4 节前端契约未确认时，停止在实施前。
 - RED 若由语法、测试装配、依赖缺失或无关回归导致，不算有效 RED，停止修改生产代码。
 - 上游 migration、API 或聚合批次未 GREEN 时，下游不得用 speculative mock 契约越级交付。
-- 迁移审计发现项目、集群或 Qtree 关系不一致时，生成修复清单并停止自动回填。
+- 非空开发数据库不得直接套用已删除的历史 revision；先确认可清空后重建。
 - PostgreSQL、QuestDB、Redis 或真实存储设备不可用时，只能完成不依赖它们的自动化验证，相关集成验收保持“待验证”。
 
 ## 2. 当前设计问题
@@ -92,13 +92,13 @@ CREATE TABLE project_storage_environments (
     storage_cluster_id  INTEGER NOT NULL,
     name                VARCHAR(128) NOT NULL,
     description         TEXT NULL,
-    is_active           BOOLEAN NOT NULL DEFAULT TRUE,
+    is_active           BOOLEAN NOT NULL,
     limit               DOUBLE PRECISION NULL,
     soft_limit          DOUBLE PRECISION NULL,
     used                DOUBLE PRECISION NULL,
     use_ratio           DOUBLE PRECISION NULL,
     soft_use_ratio      DOUBLE PRECISION NULL,
-    collection_status   VARCHAR(16) NOT NULL DEFAULT 'pending',
+    collection_status   VARCHAR(16) NOT NULL,
     last_collected_at   TIMESTAMP NULL,
     created_at          TIMESTAMP NOT NULL,
     updated_at          TIMESTAMP NOT NULL,
@@ -122,7 +122,7 @@ CREATE TABLE project_storage_environments (
 - `(storage_cluster_id, project_id)`
 - `(project_id, collection_status, is_active)`
 
-`UNIQUE(project_id, name)` 已提供相同列前缀索引，不再重复创建 `(project_id, name)` 普通索引。所有参与唯一键或索引的字符串使用有界长度；migration 中 FK、UNIQUE、CHECK 和索引均使用稳定名称，SQLite 变更使用 Alembic `batch_alter_table`。
+`UNIQUE(project_id, name)` 已提供相同列前缀索引，不再重复创建 `(project_id, name)` 普通索引。单一 baseline 使用静态、显式的 `create_table/create_index`，FK、UNIQUE、CHECK 和索引名称与最终 ORM schema 一致；数据库 DDL 不写入 ORM 的 Python 侧默认值。
 
 当前态字段说明：
 
@@ -138,10 +138,10 @@ CREATE TABLE project_storage_environments (
 
 ### 4.2 修改 Group
 
-新增字段：
+最终关系字段：
 
 ~~~text
-project_environment_id  FK project_storage_environments.id
+project_environment_id  FK project_storage_environments.id，NOT NULL
 volume_id               FK volumes.id，nullable
 qtree_id                FK qtrees.id，nullable
 ~~~
@@ -181,7 +181,7 @@ CONSTRAINT uq_group_environment_name
 - 绑定 Qtree 时，其 Volume 必须属于同一 StorageCluster。
 - `project_id` 和 `storage_cluster_id` 不再由前端提交。
 
-迁移期间暂时保留 `groups.project_id` 和 `groups.storage_cluster_id`，仅作为兼容和回滚字段，由后端自动维护。稳定后再删除。
+`groups` 不包含 `project_id` 或 `storage_cluster_id` 物理列；项目和集群只能经 `ProjectStorageEnvironment` 推导。创建、更新和响应 schema 均不接受或返回这两个旧数字字段，列表查询参数如使用 `project_id/storage_cluster_id`，由后端 JOIN 环境表过滤。
 
 ### 4.3 Volume 与 Qtree 唯一标识
 
@@ -455,7 +455,7 @@ backend/test/test_project_storage_environment.py
 backend/test/test_project_storage_environment_migration.py
 backend/test/test_group_storage_binding.py
 backend/test/test_project_environment_aggregation.py
-backend/migrate/versions/<revision>_add_project_storage_environments.py
+backend/migrate/versions/000000000001_initial_schema.py
 ~~~
 
 ### 8.2 修改模块
@@ -498,8 +498,7 @@ storage_cluster
 ### 8.4 旧监控代码
 
 - 完整实现只放在当前生产入口 `StoragePulseMonitor`。
-- `NetAppMonitor`、`IsilonMonitor`、`StoreMonitor` 先确认是否仍有生产入口。
-- 未使用则后续删除；本轮只做保证导入和测试不报错的最小兼容。
+- 已删除无生产入口的 `NetAppMonitor`、`IsilonMonitor`、`StoreMonitor`，不保留旧监控兼容实现。
 - 不在多套监控器中复制相同环境聚合逻辑。
 
 ## 9. 前端优化方案
@@ -704,73 +703,27 @@ frontend/test/unit/project-environment-workspace.test.js
 frontend/test/unit/project-environment-usage-alert.test.js
 ~~~
 
-## 11. 数据迁移方案
+## 11. 数据库初始化方案
 
-### 11.1 迁移前审计
+### 11.1 PostgreSQL / Alembic baseline
 
-必须统计：
+- `backend/migrate/versions/` 仅保留 `000000000001_initial_schema.py`。
+- `revision = "000000000001"`，`down_revision = None`。
+- baseline 以静态、显式 DDL 一次创建当前 `14` 张 PostgreSQL 业务表及索引；`groups.project_environment_id` 从建表起为 `NOT NULL`，不存在 `groups.project_id/storage_cluster_id`。
+- baseline 只适用于空数据库，不包含 DML、历史数据转换、默认环境生成、假 Qtree 转换或兼容字段。
+- 已使用删除前 revision 的开发数据库不支持原地升级；确认数据可丢弃后删除并重建空库，再执行 `upgrade head`。
 
-~~~text
-Group.project_id 为空数量
-Group.storage_cluster_id 为空数量
-Group.qtree_id 为空数量
-Group 与 Qtree 所属集群不一致数量
-name='null' 的 Qtree 数量
-同一项目绑定相同集群数量
-同一资源关联多个 Group 的数量
-重复 StorageUsage(group_id, user_id) 数量
-~~~
+### 11.2 QuestDB 边界
 
-发现不一致数据时先形成修复清单，不自动猜测所属环境。
-
-### 11.2 M1：Expand 增量结构
-
-1. 创建 `project_storage_environments`。
-2. 同表增加环境当前态、`collection_status` 和 `last_collected_at`，初始状态为 `pending`。
-3. 给 Group 增加 `project_environment_id`、`volume_id`。
-4. Group 新关系字段先允许为空。
-5. 不删除旧字段。
-6. 创建必要索引。
-
-### 11.3 M2：数据回填
-
-按现有 `(project_id, storage_cluster_id)` 生成环境，默认环境名使用 `StorageCluster.name`。
-
-回填规则：
-
-- 普通 Qtree 保留 `qtree_id`。
-- `qtree.name='null'` 转换为 `volume_id=qtree.volume_id`，清空 `qtree_id`。
-- Group 没有 StorageCluster 时进入人工处理清单。
-- Group 与 Qtree 集群不一致时停止迁移并记录错误。
-- 同一项目同一集群只生成一条环境记录。
-- 回填只建立关系，不把未知容量猜成 `0`；当前态保持空值和 `pending`，等待该环境首次成功采集。
-
-### 11.4 B/C/F：切换应用
-
-1. 后端新接口上线。
-2. 前端切换为环境级 API。
-3. 监控和统计改读 `project_environment_id`。
-4. 停止创建假 Qtree。
-5. 保留旧列用于短期回滚。
-
-### 11.5 M3：收紧约束
-
-- `groups.project_environment_id` 改为 `NOT NULL`。
-- 添加唯一和 CHECK 约束。
-- API 停止接受旧字段。
-- 后续 migration 再删除 Group 中重复的 `project_id/storage_cluster_id`。
-
-当前仓库只跟踪 `f4b2c8d9e701_add_soft_quota_fields.py`，其父 revision `a1d670c60836` 文件缺失。实施前必须完成 G0：核对生产 `alembic_version`，恢复可解释历史链或建立受控 baseline，并补齐受控 Alembic 依赖；禁止直接猜测 `down_revision`。
+QuestDB 不属于 Alembic 管理范围。环境趋势表由 `backend/questdb/models.py` 和 QuestDB 初始化流程维护，不写入 `000000000001`，也不在本功能中迁移或回填历史 QuestDB 数据。
 
 ## 12. 回滚方案
 
-1. 旧 `groups.project_id/storage_cluster_id/qtree_id` 在稳定期内保留。
-2. 新增环境表不立即删除。
-3. 回滚旧后端和旧前端。
-4. 停止新版本采集任务。
-5. 不回滚已经生成的 QuestDB 环境趋势数据。
-6. 不移动或删除历史备份目录。
-7. 只有确认不再需要回滚后，才执行清理 migration。
+1. 停止 API、Celery beat 和 worker，避免重建期间继续写入。
+2. 初始开发数据库按与目标代码匹配的 baseline 重建；不恢复或伪造已经删除的 revision 链。
+3. `downgrade base` 仅用于空库 migration 往返验证，不作为保留开发数据的回滚工具。
+4. QuestDB schema 和数据独立管理，Alembic downgrade 不处理 QuestDB。
+5. 真实备份目录和外部设备数据不随本地数据库重建删除。
 
 ## 13. TDD 实施顺序与任务 DAG
 
@@ -778,12 +731,9 @@ name='null' 的 Qtree 数量
 
 ~~~mermaid
 flowchart LR
-    G0["G0 权限来源与迁移链决策"] --> M0["M0 生产数据审计"]
-    M0 --> M1["M1 Expand 模型与 migration"]
-    M1 --> B1["B1 环境 CRUD"]
-    B1 --> B2["B2 Group 绑定与兼容双写"]
-    B2 --> M2["M2 数据回填"]
-    M2 --> C1["C1 环境/项目聚合与 QuestDB"]
+    G0["G0 权限与单一 baseline"] --> B1["B1 环境 CRUD"]
+    B1 --> B2["B2 Group 严格绑定"]
+    B2 --> C1["C1 环境/项目聚合与 QuestDB"]
     C1 --> C2["C2 Celery 新鲜读取与事务隔离"]
     B1 --> F1["F1 环境 API/选择器/表单"]
     B2 --> F2["F2 Group 页面与级联"]
@@ -794,25 +744,23 @@ flowchart LR
     F3 --> V
     F4 --> V
     C2 --> V
-    V --> M3["M3 收紧约束和清理旧列"]
 ~~~
 
 ### G0：开工闸门
 
 - 冻结权限来源。当前仓库只有登录用户和超级管理员，没有完整 project admin/editor/reader 成员模型；若本次不新增成员模型，最小权限只能基于超级管理员、`Project.in_charge_user_id` 和 `Project.pt_user_id`，不得声称存在未实现的四级角色。
-- 当前唯一 migration `f4b2c8d9e701_add_soft_quota_fields.py` 的 `down_revision` 为 `a1d670c60836`，但历史 revision 文件不在当前仓库；当前 `.venv` 和 `backend/requirements.txt` 均缺少 Alembic。必须先补齐受控依赖并核对生产 `alembic_version`，决定恢复历史链或建立受控 baseline，禁止猜测修改 `down_revision`。
-- 开工门槛：Alembic 可导入，`heads/history` 可解释，数据库和第 7.4 节 API 契约冻结。任一项不满足即停止 M1。
+- 开工门槛：Alembic 可导入，`heads/history` 只显示 `000000000001` 单一 root/head，空 SQLite upgrade/downgrade 与 ORM 元数据无差异，数据库和第 7.4 节 API 契约冻结。
 
-### M0-M2：审计、Expand 与回填
+### Schema baseline：严格模型与空库初始化
 
 RED 测试与门槛：
 
-- 审计能识别缺失项目/集群、跨集群 Qtree、假 Qtree、重复环境和重复 StorageUsage；发现不一致数据后停止自动回填。
-- migration 在 SQLite、PostgreSQL、MySQL 方言下可编译或绑定；唯一键和索引列使用有界 `String(n)`，FK、UNIQUE、CHECK 具名，SQLite 修改使用 `batch_alter_table`。
+- `groups` 不含 `project_id/storage_cluster_id`，`project_environment_id` 为 `NOT NULL`，唯一和目标 CHECK 约束存在。
+- migration 在空 SQLite 可 upgrade/downgrade，upgrade 后 `alembic.autogenerate.compare_metadata(...)` 为空；PostgreSQL DDL 可编译。MySQL 全 `Base.metadata` 编译审计中，当前 `14` 张表有 `13` 张因无长度 `String/VARCHAR` 触发 `CompileError`；本次只声明支持 SQLite/PostgreSQL，不把默认三方言门禁描述为通过。
 - `UNIQUE(project_id, name)` 已覆盖相同前缀查询，不重复创建同列索引。
 - 并发创建重复环境由数据库 UNIQUE 保底；服务捕获 `IntegrityError`、rollback，并稳定返回 `409`。
-- Group 约束既禁止 Volume/Qtree 同时非空，也必须在 `enable_monitoring=true` 时保证至少一个目标；若三方言 CHECK 编译不一致，至少由服务校验和三方言测试保证行为。
-- M1 只 Expand；M2 按审计确认结果回填，并验证环境数量、目标转换数量和未处理清单，回填前后计数不一致时停止。
+- Group 约束既禁止 Volume/Qtree 同时非空，也在 `enable_monitoring=true` 时保证至少一个目标；服务层同步执行同一业务校验。
+- 不创建回填脚本、不接受旧字段、不双写重复关系。
 
 ### B1：环境 CRUD
 
@@ -824,13 +772,13 @@ RED 测试：
 - Volume/Qtree 被 Group 引用时删除得到稳定业务错误，不把 FK 异常暴露为 `500`。
 - 环境查询严格使用 G0 冻结的权限来源。
 
-### B2：Group 绑定、兼容双写和下游接口
+### B2：Group 严格绑定和下游接口
 
 RED 测试：
 
 - Group 可绑定 Volume 或 Qtree；同时提交、均未提交、Isilon 绑定 Qtree、目标集群不匹配均返回稳定 `422`。
 - Group 列表可按环境过滤，响应返回统一 `storage_target`；Volume 绑定的详情、扩容、告警和邮件不访问 `group.qtree`。
-- 兼容期旧 `project_id/storage_cluster_id` 只由后端从环境推导并双写，前端提交旧字段被拒绝。
+- Group 请求和响应都不包含旧 `project_id/storage_cluster_id` 数字字段；保留的项目/集群筛选参数通过 JOIN `ProjectStorageEnvironment` 执行。
 - StorageUsage 的集群由 Group 推导；导出、告警、周报和备份路径均能追溯到环境，历史备份仍按原 `destination_path` 查找。
 
 ### C1：环境/项目聚合与 QuestDB
@@ -865,10 +813,10 @@ RED 测试：
 
 每个前端批次先增加聚焦 Vitest RED，再实施最小 GREEN。新增或修改文件覆盖率以 lines、branches、functions、statements 均不低于 80% 为目标；仓库当前实际全局门禁仍以 `vitest.config.js` 为准：lines、branches、statements 为 70%，尚未设置 functions 门槛。规范中的 90%/95% 是后续目标，不得在本功能中宣称为当前已生效门禁。
 
-### V 与 M3：总验收和收紧
+### V：总验收
 
 - V 必须通过聚焦测试、全量现有门禁、lint、生产构建、migration 演练和外部浏览器烟测；真实设备和生产数据未验证时保持对应项“待验证”。
-- M3 只有在回填计数、兼容窗口和回滚演练通过后才把 `project_environment_id` 收紧为 NOT NULL、停止旧字段双写并另建 migration 清理旧列。
+- 严格 Group 约束和旧列清理已直接进入 initial baseline，不存在后续 M3 或兼容窗口。
 - 任一阶段出现非预期 RED、上游未 GREEN、审计失败或契约变化，立即停止下游并回到对应 owner 收敛，不在调用方堆 fallback。
 
 ## 14. 验证命令
@@ -884,13 +832,15 @@ RED 测试：
   backend\test\test_storage_soft_quota.py
 ~~~
 
-迁移（仅在 G0 确认 Alembic 可导入且历史链可解释后执行）：
+迁移（仅对可清空的初始开发数据库执行；旧 revision 数据库先重建为空库）：
 
 ~~~powershell
 .\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini heads
 .\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini history
 .\.venv\Scripts\python.exe -m alembic `
   -c backend\alembic.ini upgrade head
+.\.venv\Scripts\python.exe -m alembic `
+  -c backend\alembic.ini downgrade base
 ~~~
 
 后端回归：
@@ -948,8 +898,9 @@ git status --short --branch
 - [ ] 项目总量在完整成功轮次等于所有启用环境之和。
 - [ ] 只有全部启用环境在同一轮均成功时才刷新 Project current totals；失败或未完成时完整保留上一成功轮次及时间戳。
 - [ ] 环境级 QuestDB 趋势可查询。
-- [ ] migration 可升级并具备回滚路径。
-- [ ] SQLite、PostgreSQL、MySQL migration 编译或绑定测试通过。
+- [x] 单一 baseline 在空 SQLite 可 upgrade/downgrade，且与 ORM metadata 无差异。
+- [x] PostgreSQL baseline offline upgrade/downgrade DDL 可编译。
+- [ ] 真实 PostgreSQL 空库完成 upgrade/downgrade 验收。
 - [ ] 前后端聚焦测试、全量门禁、构建和 lint 通过。
 - [ ] 真实 NetApp/Isilon 环境完成至少一次只读采集验收。
 
@@ -957,18 +908,18 @@ git status --short --branch
 
 所有 Agent 都不得回退其他人的已有改动。文件所有权按阶段互斥，Main Coordinator 只负责需求收敛、调度、dirty worktree 检查、冲突复核和最终验收，不直接实现代码、测试或文档。
 
-### Data Migration Agent
+### Schema/Baseline Agent
 
 独占：
 
 ~~~text
 backend/models.py
 backend/requirements.txt
-backend/migrate/versions/<revision>_add_project_storage_environments.py
+backend/migrate/versions/000000000001_initial_schema.py
 backend/test/test_project_storage_environment_migration.py
 ~~~
 
-负责 G0 的迁移链证据、M0 审计、M1 Expand 和 M2 回填。`backend/models.py` 和 migration 是 B1 开工前的串行闸门；其他 Agent 不并发修改。
+负责严格 ORM schema、单一 root baseline、空 SQLite 往返、ORM metadata 对比和 PostgreSQL offline DDL 编译。`backend/models.py` 和 baseline 是 B1 开工前的串行闸门；不实现历史审计或回填。
 
 ### Backend API/Service Agent
 
@@ -997,7 +948,7 @@ backend/test/test_project_storage_environment.py
 backend/test/test_group_storage_binding.py
 ~~~
 
-负责权限、CRUD、稳定错误、目标解析、兼容双写、删除保护和用量/导出接口。`projectStorageEnvironmentCrud.py` 的 API 查询与后续 collection snapshot 由同一 owner 完成，或在 B2 GREEN 后书面交接给 Celery/Aggregation Agent；禁止两人并发编辑。
+负责权限、CRUD、稳定错误、目标解析、严格环境绑定、删除保护和用量/导出接口。`projectStorageEnvironmentCrud.py` 的 API 查询与后续 collection snapshot 由同一 owner 完成，或在 B2 GREEN 后书面交接给 Celery/Aggregation Agent；禁止两人并发编辑。
 
 ### Celery/Aggregation Agent
 
@@ -1072,41 +1023,38 @@ docs/tracking/current-release.md
 
 | 风险 | 控制措施 |
 | --- | --- |
-| 旧 Group 缺少项目或集群 | 迁移前审计，禁止自动猜测 |
-| Qtree 与 Group 集群不一致 | 迁移失败并写入错误日志 |
-| 假 Qtree 转换错误 | 按 `qtree.volume_id` 回填并核对数量 |
+| 已使用删除前 revision 的开发库无法升级 | 确认数据可丢弃后重建空库，只执行 `000000000001` |
+| 在非空数据库误执行 initial baseline | 初始化前检查目标库为空；失败后不伪造 `alembic_version` |
+| QuestDB 被误认为由 Alembic 管理 | PostgreSQL baseline 与 QuestDB 初始化、验证和清理完全分开 |
 | Project 被部分成功环境覆盖 | 所有集群结束后逐 Project 检查全部启用环境；仅完整成功时刷新，否则保留上一完整成功轮次 |
 | 同名项目组备份覆盖 | 新路径增加环境目录 |
-| 历史备份无法找到 | 历史记录保留原始 `destination_path` |
-| 前后端版本短暂不兼容 | 同一发布窗口部署，数据库先增量升级 |
-| 旧监控器重复实现 | 只维护 `StoragePulseMonitor` 主路径 |
+| 数据库与应用 schema 不一致 | 空库 upgrade 后执行 Alembic autogenerate metadata 对比 |
+| 监控器重复实现 | 只维护 `StoragePulseMonitor` 主路径，删除无入口旧实现 |
 | 环境级权限遗漏 | 所有环境查询先校验 Project 上下文 |
 | 真实设备行为与 Mock 不同 | 上线前执行 NetApp/Isilon 只读采集验收 |
 
 ## 19. 当前状态与未验证范围
 
-截至 2026-07-13，当前分支已完成本设计的核心模型、接口、采集、前端工作区、Dashboard 和 F4 下游适配；剩余实现项仅为 M3，生产迁移和真实外部系统仍未完成验收。
+截至 2026-07-14，当前分支已完成严格模型、单一 baseline、接口、采集、前端工作区、Dashboard 和 F4 下游适配；不存在回填、兼容窗口或后续 M3。真实 PostgreSQL、QuestDB 和外部系统仍待验收。
 
 ### 19.1 已完成
 
-- M0-M2：完成审计与回填工具、Expand 模型和 migration。`e6a1b2c3d4f5` 已创建 `project_storage_environments`，为 `groups` 增加环境和 Volume 绑定字段；回填脚本支持默认审计、阻塞项检查和显式 `--apply`，相关迁移与回填契约已有自动化测试。
-- B1/B2：完成项目存储环境 CRUD、权限校验、重复环境冲突、删除保护，以及 Group 对环境和单一 Volume/Qtree 目标的绑定、过滤和统一目标响应；Isilon 只允许绑定 Volume。
+- Schema baseline：`backend/migrate/versions/` 只保留 root/head `000000000001`，静态创建当前 `14` 张表和 `31` 个索引。空 SQLite upgrade 后与 `Base.metadata` 对比无差异，downgrade 后为 `0` 张表；PostgreSQL offline upgrade/downgrade DDL 编译和逆序 drop 审计通过，核心迁移测试 `13 passed`。
+- B1/B2：完成项目存储环境 CRUD、权限校验、重复环境冲突、删除保护，以及 Group 对环境和单一 Volume/Qtree 目标的严格绑定、过滤和统一目标响应；`groups.project_environment_id` 为 `NOT NULL`，不存在 `groups.project_id/storage_cluster_id`，请求与响应不暴露旧数字字段，Isilon 只允许绑定 Volume。
 - C1/C2：完成环境和完整轮次 Project 汇总、环境 QuestDB 读写入口、每轮新鲜标量快照、短读取会话、分集群事务和失败隔离。PostgreSQL 先提交，QuestDB 后写入；部分集群失败时保留成功集群结果，只有全部启用环境本轮成功的项目才刷新汇总。
 - Celery 主链路读取优化：任务按稳定 ID 和短会话重新读取当前数据库绑定；Group/User/Project/System 告警、项目周报、单次与批量备份、BPM 和删除流程批量预加载关联并复用当前 ORM 快照；Group TOP20 使用一次窗口查询；`enable_monitoring=false` 的 Group 不进入 Group/User 告警。该完成口径不代表整个 `celery_tasks` 目录已消除 N+1。
 - F1/F2：完成环境 API wrapper、管理表单与列表，以及项目→环境→目标类型→Volume/Qtree 的项目组级联绑定；Isilon 环境固定选择 Volume。
 - F3：完成项目列表环境概览、项目详情环境工作台、`RealTimePage` 环境趋势和 Dashboard 环境维度接入，包括有效环境 URL 保留、无效环境回退、仅加载当前环境、项目/环境筛选、环境独立容量展示，以及使用 `project_environment_id:group_id` 稳定 key 隔离跨环境同名 Group。
 - F4：完成 Usage、Alert 和导出的环境筛选、环境内 Group 约束与环境列；监控/扩容下游统一解析 Volume/Qtree 目标，备份路径增加环境目录，项目周报按环境分组。
-- V 已完成范围：后端和前端自动化测试、前端 lint 与生产构建已通过。该结论只覆盖仓库自动化门禁，不代表 migration 或外部系统验收完成。
+- V 自动化：后端全量 `146 passed`、`41 warnings`，覆盖率 `85%`（`2892` statements、`444` miss）；warning 为既有 SQLAlchemy、Pydantic、QuestDB 和 HTTP 422 弃用提示。前端 `30` 个文件、`153 passed`，覆盖率 statements `93.47%`、branches `83.56%`、functions `82.11%`、lines `93.47%`；lint 和生产构建通过。
 
-### 19.2 待实现
+### 19.2 待验证
 
-- M3：仅在生产数据审计、回填计数、migration upgrade/downgrade 和回滚演练通过后执行；届时把 `groups.project_environment_id` 收紧为 `NOT NULL`，停止兼容双写，并通过后续 migration 移除重复的 `project_id/storage_cluster_id` 旧字段。
-
-### 19.3 待验证
-
-- 尚未执行 migration upgrade/downgrade 演练，也未核对生产 `alembic_version` 或执行生产 Alembic upgrade。
-- 尚未对生产历史数据执行审计和回填，生产 PostgreSQL 实际数据质量、回填计数和回滚路径仍待确认。
+- 尚未在真实 PostgreSQL 空库执行 baseline upgrade/downgrade；自动化已覆盖 SQLite 往返和 PostgreSQL offline DDL 编译。
+- QuestDB 不属于 Alembic baseline，真实 QuestDB 环境趋势表初始化和读写仍待单独验收。
 - 尚未执行外部浏览器烟测。
 - 尚未连接真实 PostgreSQL、QuestDB、NetApp 或 Isilon 做端到端验收；外部连接、设备资源标识、目录映射、QuestDB 表结构和跨库最终一致性均待验证。
-- `StoragePulseMonitor` 仍包含逐 Volume/Group/Project 的查询和 UPDATE；当前结果正确性已有测试覆盖，但真实性能仍需结合生产规模压测后优化。legacy 或未调度 monitor 不在本次完成口径。
+- `StoragePulseMonitor` 当前结果正确性已有测试覆盖，但真实性能仍需结合生产规模压测后确认。
 - 当前 beat schedule 只启用 60 秒一次的 `storages_schedule_fetching_task`；告警、周报和定时备份条目仍为注释状态，尚未通过真实 Celery beat/worker 调度验收。
+- MySQL 全 metadata 编译未通过；若后续扩大到 MySQL 部署，必须先补齐无长度 `String/VARCHAR` 并重新执行三方言编译门禁。
+- 生产构建仍有既有的 `VITE_APP_TITLE` 未定义和 chunk 大于 `500 kB` warning。

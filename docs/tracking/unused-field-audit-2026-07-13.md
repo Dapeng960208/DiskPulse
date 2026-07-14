@@ -5,7 +5,7 @@
 - 本轮静态审计覆盖 `backend/models.py` 中 `14` 个 ORM 模型、`221` 个数据库字段，以及后端 router/CRUD/service/Celery、前端 `frontend/src` 的字段读写链路。
 - 共识别 `25` 个清理候选：本轮已安全删除 `20` 个没有业务读写的字段和 `4` 个运行时不生效的 QuestDB 重复配置字段；`1` 个没有业务语义的单例配置名称字段继续保留。
 - `ProjectStorageEnvironment` 的身份、绑定、容量、状态和采集时间字段均有明确链路；本次没有发现可直接归入“未使用”的环境核心字段。
-- 清理已同步 ORM、Pydantic schema、配置 API、管理设置页和 Alembic migration；项目仍在开发阶段，没有增加历史数据回填、字段废弃周期或外部兼容过渡代码。
+- 清理已同步 ORM、Pydantic schema、配置 API、管理设置页和单一 Alembic initial baseline；项目仍在开发阶段，没有历史数据回填、字段废弃周期或外部兼容过渡代码。
 
 ## 审计口径
 
@@ -41,7 +41,7 @@ StorageConf.questdb_password
 
 清理前这些字段可通过管理页面和 `/config/storage` 保存，但 QuestDB engine 实际由 `backend/appConfig.py` 从 `config.yml` 的 `database.questdb` 构建。`QuestDBSession(config=...)` 虽接收数据库配置对象，建立连接时仍直接使用全局 `QuestDBSessionLocal`，不会读取上述四个字段。
 
-现已以后端 YAML 为唯一 QuestDB 连接配置源，并从 `StorageConf`、配置 API schema、设置页面和数据库迁移删除这四个无效字段；没有新增第二套动态重连逻辑。
+现已以后端 YAML 为唯一 QuestDB 连接配置源，并从 `StorageConf`、配置 API schema、设置页面和 initial baseline 删除这四个无效字段；没有新增第二套动态重连逻辑。
 
 ## 无业务语义的结构字段
 
@@ -67,8 +67,9 @@ StorageConf.questdb_password
 
 ## 验证
 
-- RED：后端字段/迁移契约因旧字段仍存在且清理迁移缺失而失败；前端设置页契约因仍显示“时序数据库配置”而失败。
-- GREEN：`D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test/test_backend_schema_contract.py backend/test/test_security_regressions.py backend/test/test_core_api.py -q` 通过，`20` 个测试；其中清理迁移在临时 SQLite 完成 upgrade/downgrade，并通过 SQLite、PostgreSQL、MySQL 删除列 DDL 编译检查。
-- GREEN：`cd frontend; npx vitest run test/unit/settings-config.test.js --coverage.enabled=false` 通过，`1` 个测试。
-- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic -c backend/alembic.ini heads` 和 `history` 通过，唯一 head 为 `b7c9e2d4f610`；`compileall -q backend` 和 `cd frontend; npm run build:prod` 通过。
-- 尚未连接真实 PostgreSQL 执行 migration upgrade/downgrade；物理列删除和回滚仍需在集成数据库验证。
+- RED：后端字段契约因旧字段仍存在而失败；前端设置页契约因仍显示“时序数据库配置”而失败。
+- GREEN：确认删除字段未进入 ORM 和 `000000000001`；单一 baseline 在 SQLite upgrade 后与 `Base.metadata` 无差异，PostgreSQL offline DDL 编译通过。
+- GREEN：`cd frontend; npx vitest run test/unit/settings-config.test.js --coverage.enabled=false` 通过，`2` 个测试。
+- 最终全量验证：后端 `146 passed`、`41 warnings`，覆盖率 `85%`（`2892` statements、`444` miss）；前端 `30` 个测试文件、`153 passed`，覆盖率 statements `93.47%`、branches `83.56%`、functions `82.11%`、lines `93.47%`。
+- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic -c backend/alembic.ini heads` 和 `history` 通过，唯一 root/head 为 `000000000001`；`compileall -q backend`、`cd frontend; npm run lint` 和 `cd frontend; npm run build:prod` 通过。
+- 尚未在真实 PostgreSQL 空库执行 initial baseline upgrade/downgrade。

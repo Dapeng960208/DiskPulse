@@ -4,7 +4,7 @@
 
 - 删除 `Project`、`User`、`Host` 和 `StorageBackUpRecord` 中确认没有业务读写的 `20` 个字段，并同步收紧 API schema。
 - 管理设置页和 `/config/storage` 不再暴露 `questdb_host`、`questdb_port`、`questdb_user`、`questdb_password`；QuestDB 连接统一由 `backend/config.yml` 的 `database.questdb` 配置。
-- 新增 Alembic 清理迁移，删除对应 `24` 个数据库列并提供结构回滚。
+- 这 `24` 个字段不进入当前单一 Alembic initial baseline；项目处于初始开发阶段，不提供旧字段回填或兼容迁移。
 
 ## 2026-06-30：后端安全默认值与敏感信息保护
 
