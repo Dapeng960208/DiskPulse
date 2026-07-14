@@ -221,6 +221,6 @@
 - 触发：在 `frontend` 目录执行 `npm run test:coverage`。
 - 现象：`147/150` 个用例通过，`3` 个较慢用例因超过默认 `5000ms` 超时失败，命令返回非零。
 - 根因：全量 coverage 插桩增加执行耗时，三个用例超过 Vitest 默认 `5s` 限制，并非功能断言失败。
-- 修复：未修改全局超时配置；最终验证改用 `npx vitest run --coverage --testTimeout=20000`。
-- 验证：替代命令 `150/150` 通过，Statements/Lines `91.88%`、Branches `82.10%`、Functions `69.75%`。
-- 风险：默认 `npm run test:coverage` 仍会返回非零；若 CI 必须直接使用该脚本，需要后续优化慢用例或显式调整测试超时。
+- 修复：在 `frontend/vitest.config.js` 统一将 `testTimeout` 调整为 `15000ms`，覆盖普通测试和 coverage，不再依赖额外命令参数。
+- 验证：默认 `npm test` 和 `npm run test:coverage` 均为 `150/150` 通过；Statements/Lines `91.88%`、Branches `82.10%`、Functions `69.75%`。
+- 风险：慢用例当前最长约 `13.8s`；若继续增长接近 `15s`，应优化模块加载和挂载开销，而不是继续放宽超时。

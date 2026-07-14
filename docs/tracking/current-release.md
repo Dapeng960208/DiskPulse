@@ -22,8 +22,8 @@
 - 后端用户管理与 LDAP 分支测试通过，`35 passed`；`usersService` 分支覆盖率 `96%`，`ldap_directory` 分支覆盖率 `95%`。
 - 既有 CRUD 与认证 API 回归通过，`10 passed`；后端 `pip check` 和 `compileall` 通过。
 - 前端功能与相关回归测试通过，`18 passed`；`lint` 和 `build:prod` 通过。
-- 前端全量 `npm test` 完成 `147/150`，其余 `3` 项为既有 `5s` timeout；三个超时文件单独执行 `11/11` 通过。`test:coverage` 同因超时未生成总覆盖率报告。
-- 延长超时后执行 `npx vitest run --coverage --testTimeout=15000`，完整测试 `150/150` 通过；总 `lines/statements` 为 `91.88%`、`branches` 为 `82.1%`，用户页为 `91.24%`、表单为 `96.57%`，`users-api` 和 `routes` 为 `100%`。
+- Vitest 全局测试超时统一为 `15s`；默认 `npm test` 和 `npm run test:coverage` 均为 `150/150` 通过。
+- 前端总 `lines/statements` 为 `91.88%`、`branches` 为 `82.1%`，用户页为 `91.24%`、表单为 `96.57%`，`users-api` 和 `routes` 为 `100%`。
 - `git diff --check` 通过，仅有 LF→CRLF 提示。
 
 ### 风险与后续
