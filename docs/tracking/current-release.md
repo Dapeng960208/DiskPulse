@@ -405,3 +405,24 @@ cd frontend
 npx vitest run test/unit/auth-login.test.js --coverage.enabled=false
 npm test -- --coverage.enabled=false
 ```
+
+## 2026-07-14：修复 QuestDB 软限额指标写入失败
+
+### 已完成
+
+- 新增 `000000000002_add_soft_quota_metrics` 前向迁移，为 Volume、Qtree、Project、Group 和用户用量历史表补充 `soft_limit`、`soft_use_ratio`。
+- 保留已执行的 `000000000001_initial_schema` 不变，避免已有环境出现迁移校验和冲突。
+- Aggregate 和 StorageCluster 继续使用物理容量口径，不再向 Aggregate 指标写入软限额字段。
+- 增加迁移链、已有 `0001` 环境升级和 Aggregate 写入参数回归测试。
+
+### 验证状态
+
+- `cd backend && ..\.venv\Scripts\python.exe -m pytest test\test_questdb_migrations.py test\test_storage_soft_quota.py -q`：通过，`17 passed`。
+- `cd backend && ..\.venv\Scripts\python.exe -m pytest test\test_questdb_migrations.py test\test_storage_soft_quota.py test\test_storage_collection_trigger.py -q`：通过，`23 passed`。
+- `.\.venv\Scripts\python.exe -m compileall -q backend` 和 `.\.venv\Scripts\python.exe -m pip check`：通过。
+
+### 部署动作与风险
+
+- 当前开发实例已显示 revision `000000000002`，幂等 upgrade 返回 `up to date`；实际列检查确认五张配额历史表包含两个软限额列，Aggregate 不包含。
+- 其他环境更新代码后需在 `backend` 目录执行 `..\.venv\Scripts\python.exe -m questdb.migrate upgrade`，再重启 Celery worker。
+- 尚未重新触发真实 NetApp 采集；需要在 worker 加载新代码后观察一次 Volume、Aggregate 和 Cluster 三类写入日志。

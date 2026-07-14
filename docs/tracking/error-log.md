@@ -164,3 +164,21 @@
 - 修复：新增全局 `storage.tls_verify` 布尔配置并默认关闭，统一传入 NetApp/Isilon；API 连接和 HTTP 失败改为向上抛出，由集群事务回滚。
 - 验证：配置默认值、类型校验、两个客户端参数贯通和连接失败传播共 `7 passed`。
 - 风险：尚未连接真实 NetApp/Isilon 验证；默认关闭证书校验会降低中间人攻击防护，受信任证书环境应设为 `true`。
+
+### 2026-07-14：QuestDB 缺少软限额列且 Aggregate 误写软限额字段
+
+- 触发：NetApp 采集完成后，Celery worker 向 QuestDB 写入卷和聚合容量指标。
+- 现象：`volume_storage_usages` 和 `aggregate_storage_usages` 均报 `Invalid column: soft_limit`；集群总容量指标仍可写入。
+- 根因：软限额写入逻辑已启用，但 QuestDB 初始表没有对应列；通用写入分支还给不属于配额层的 Aggregate 强行加入了值为 `None` 的软限额字段。
+- 修复：新增 QuestDB 前向迁移 `000000000002_add_soft_quota_metrics`，为五张配额历史表补充 `soft_limit`、`soft_use_ratio`；写入器仅在实体实际具备软限额属性时携带字段，Aggregate 保持物理容量口径。
+- 验证：`cd backend && ..\.venv\Scripts\python.exe -m pytest test\test_questdb_migrations.py test\test_storage_soft_quota.py -q` 通过，`17 passed`。
+- 风险：当前开发实例已升级并验证实际列；其他环境仍需先执行 `python -m questdb.migrate upgrade`，真实 NetApp 采集尚未重新触发。
+
+### 2026-07-14：SQLAlchemy Inspector 无法读取 QuestDB 列元数据
+
+- 触发：使用 `inspect(questdb_engine).get_columns(table)` 验证迁移后的实际列。
+- 现象：`questdb-connect` inspector 调用 SQLAlchemy 2 已移除的 `Engine.execute()`，报 `AttributeError`；直接查询时未引用 `column` 又被 QuestDB 判定为保留字。
+- 根因：当前 `questdb-connect` inspector 仍使用旧 SQLAlchemy API，同时 QuestDB 的 `table_columns()` 结果字段 `column` 需要双引号引用。
+- 修复：验证命令改为通过显式 Connection 执行 `SELECT "column" FROM table_columns(:tn)`。
+- 验证：五张配额历史表均返回 `soft_limit`、`soft_use_ratio`，`aggregate_storage_usages` 返回空列表。
+- 风险：仅影响诊断命令，不影响业务写入；本轮不升级依赖，后续使用 Inspector 仍会复现。

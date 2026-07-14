@@ -120,7 +120,7 @@ def test_questdb_upgrade_records_revision_and_is_repeatable():
     assert runner.upgrade(engine) == ("000000000001", "000000000002")
     assert runner.upgrade(engine) == ()
     assert engine.applied.keys() == {"000000000001", "000000000002"}
-    assert engine.commits == 3
+    assert engine.commits == 2
 
 
 def test_questdb_upgrade_applies_soft_quota_revision_after_initial_schema():

@@ -692,13 +692,22 @@ class StoragePulseMonitor:
                 ]
                 table_name = 'storage_cluster_storage_usages'
             elif table_name != 'storage_usages':
-                data = [
-                    {'used': item.used, 'used_ratio': item.use_ratio,
-                     'soft_limit': getattr(item, 'soft_limit', None),
-                     'soft_use_ratio': getattr(item, 'soft_use_ratio', None),
-                     f'{table_name}_id': str(item.id), 'updated_at': datetime.now()}
-                    for item in items if item.used
-                ]
+                data = []
+                for item in items:
+                    if not item.used:
+                        continue
+                    row = {
+                        'used': item.used,
+                        'used_ratio': item.use_ratio,
+                        f'{table_name}_id': str(item.id),
+                        'updated_at': datetime.now(),
+                    }
+                    if hasattr(item, 'soft_limit'):
+                        row.update(
+                            soft_limit=item.soft_limit,
+                            soft_use_ratio=item.soft_use_ratio,
+                        )
+                    data.append(row)
                 table_name = f"{table_name}_storage_usages"
             else:
                 data = [

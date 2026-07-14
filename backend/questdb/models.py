@@ -54,6 +54,8 @@ class VolumeStorageUsage(QuestDBBase):
     volume_id = Column(Symbol, primary_key=True)
     used = Column(Double)
     used_ratio = Column(Double)
+    soft_limit = Column(Double)
+    soft_use_ratio = Column(Double)
     updated_at = Column(Timestamp, primary_key=True)
 
 
@@ -71,6 +73,8 @@ class QtreeStorageUsage(QuestDBBase):
     qtree_id = Column(Symbol, primary_key=True)
     used = Column(Double)
     used_ratio = Column(Double)
+    soft_limit = Column(Double)
+    soft_use_ratio = Column(Double)
     updated_at = Column(Timestamp, primary_key=True)
 
 
@@ -88,6 +92,8 @@ class ProjectStorageUsage(QuestDBBase):
     project_id = Column(Symbol, primary_key=True)
     used = Column(Double)
     used_ratio = Column(Double)
+    soft_limit = Column(Double)
+    soft_use_ratio = Column(Double)
     updated_at = Column(Timestamp, primary_key=True)
 
 
@@ -105,6 +111,8 @@ class GroupStorageUsage(QuestDBBase):
     group_id = Column(Symbol, primary_key=True)
     used = Column(Double)
     used_ratio = Column(Double)
+    soft_limit = Column(Double)
+    soft_use_ratio = Column(Double)
     updated_at = Column(Timestamp, primary_key=True)
 
 
@@ -124,4 +132,6 @@ class StorageUsage(QuestDBBase):
     used = Column(Double)
     used_ratio = Column(Double)
     file_used = Column(Double)
+    soft_limit = Column(Double)
+    soft_use_ratio = Column(Double)
     updated_at = Column(Timestamp, primary_key=True)

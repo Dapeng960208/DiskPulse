@@ -41,7 +41,7 @@ NetApp 和 Isilon 的 HTTPS 证书校验由 `backend/config.yml` 的 `storage.tl
 
 ## 数据库与迁移
 
-单一 initial baseline `000000000001` 在以下表直接创建 nullable 字段：
+PostgreSQL 的单一 initial baseline `000000000001` 在以下表直接创建 nullable 字段：
 
 - `projects.soft_limit`、`projects.soft_use_ratio`
 - `volumes.soft_limit`、`volumes.soft_use_ratio`
@@ -49,7 +49,9 @@ NetApp 和 Isilon 的 HTTPS 证书校验由 `backend/config.yml` 的 `storage.tl
 - `groups.soft_limit`、`groups.soft_use_ratio`
 - `storage_usages.soft_limit`、`storage_usages.soft_use_ratio`
 
-项目处于初始开发阶段，不保留软限额增量 revision，也不提供旧数据库字段回填；开发数据库从空库执行 baseline。
+PostgreSQL 不保留软限额增量 revision，也不提供旧数据库字段回填；开发数据库从空库执行 baseline。
+
+QuestDB 保留已执行的 `000000000001_initial_schema`，通过前向迁移 `000000000002_add_soft_quota_metrics` 为 `volume_storage_usages`、`qtree_storage_usages`、`project_storage_usages`、`group_storage_usages` 和 `storage_usages` 增加 nullable 的 `soft_limit`、`soft_use_ratio`。物理容量层的 `aggregate_storage_usages` 和 `storage_cluster_storage_usages` 不包含软限额字段。
 
 ## 验证
 
@@ -58,3 +60,4 @@ NetApp 和 Isilon 的 HTTPS 证书校验由 `backend/config.yml` 的 `storage.tl
 - `cd frontend && npx vitest run test/unit/utils/quota.test.js --coverage.enabled=false`
 - `cd frontend && npx vitest run test/unit/smoke/surface-regression.test.js --coverage.enabled=false`
 - `.\.venv\Scripts\python.exe -m pytest backend\test\test_core_api.py backend\test\test_storage_collection_trigger.py -q`
+- `cd backend && ..\.venv\Scripts\python.exe -m pytest test\test_questdb_migrations.py test\test_storage_soft_quota.py -q`
