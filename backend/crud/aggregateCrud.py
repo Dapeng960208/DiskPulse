@@ -61,9 +61,16 @@ def delete_aggregate(db: Session, aggregate_id: int):
     return db_aggregate
 
 
-def get_aggregate_tree_summary(db: Session, value_type: str) -> List:
+def get_aggregate_tree_summary(
+    db: Session,
+    value_type: str,
+    storage_cluster_id: int | None = None,
+) -> List:
     value_type = require_allowed(value_type, {"limit", "used", "use_ratio", "soft_limit", "soft_use_ratio"}, "value_type")
-    volume_dbs = db.query(Volume).filter(Volume.used >= 0).all()
+    query = db.query(Volume).filter(Volume.used >= 0)
+    if storage_cluster_id is not None:
+        query = query.filter(Volume.storage_cluster_id == storage_cluster_id)
+    volume_dbs = query.all()
     volumes = []
     for volume_db in volume_dbs:
         qtree_dbs = db.query(Qtree).filter(Qtree.volume_id == volume_db.id, Qtree.used >= 0).all()

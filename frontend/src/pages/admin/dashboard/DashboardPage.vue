@@ -1,25 +1,31 @@
 <script setup>
-import { ElRow,ElCol,ElDescriptions,ElDescriptionsItem } from 'element-plus';
-import { ref,onBeforeMount,watch} from 'vue';
+import { ref, watch } from 'vue';
 import aggregateApi from '@/api/aggregate-api.js';
-import { useQuery, useQueryParams } from '@/composables/query';
+import { useQuery } from '@/composables/query';
+import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import DiskUsage from '@/common/charts/DiskUsage.vue';
 import LoadingCharts from '@/common/charts/LoadingCharts.vue';
 import AnimatedTextChart from '@/common/charts/AnimatedTextChart.vue'
-const { result:storageSummary, querying:storageSummaryQuerying, query:fetchStorageSummary } = useQuery(() => aggregateApi.fetchAggregateTrees({}), {
+const storageClusterId = ref(null);
+const { result:storageSummary, querying:storageSummaryQuerying, query:fetchStorageSummary } = useQuery(() => aggregateApi.fetchAggregateTrees({
+  storage_cluster_id: storageClusterId.value,
+}), {
   data: [],
 });
-onBeforeMount(() => {
-  fetchStorageSummary();
-});
+watch(storageClusterId, fetchStorageSummary, { immediate: true });
 
 </script>
 
 <template>
   <div class="flex flex-1 flex-col mt-2.5">
-    <ElCard class="h-full">
+    <div class="w-80 mb-4">
+      <StorageClusterSelect
+        v-model="storageClusterId"
+        :clearable="true" />
+    </div>
+    <ElCard class="flex-1 min-h-0">
       <div
-        v-if="querying"
+        v-if="storageSummaryQuerying"
         class="h-full">
         <LoadingCharts
           :width="'100%'"

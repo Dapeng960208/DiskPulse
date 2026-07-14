@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import Annotated, List
 from datetime import datetime
 from schemas import aggregateSchema, commonSchema
 from crud import aggregateCrud
@@ -80,9 +80,16 @@ def delete_aggregate(
 
 
 @router.get('/storage-trees/', response_model=commonSchema.ResponseResourceModel)
-def get_aggregate_storage_trees(value_type: str = 'limit', db: Session = Depends(get_db)):
-    tree = aggregateCrud.get_aggregate_tree_summary(db=db,
-                                                    value_type=value_type)
+def get_aggregate_storage_trees(
+    value_type: str = 'limit',
+    storage_cluster_id: Annotated[int | None, Query(ge=1)] = None,
+    db: Session = Depends(get_db),
+):
+    tree = aggregateCrud.get_aggregate_tree_summary(
+        db=db,
+        value_type=value_type,
+        storage_cluster_id=storage_cluster_id,
+    )
     return commonSchema.ResponseResourceModel(data=tree)
 
 
