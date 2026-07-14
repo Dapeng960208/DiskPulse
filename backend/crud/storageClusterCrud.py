@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc
 from sqlalchemy.exc import IntegrityError
 
-from models import Group, ProjectStorageEnvironment, StorageCluster
+from models import ProjectStorageEnvironment, StorageCluster
 from schemas.storageClusterSchema import StorageClusterCreate, StorageClusterUpdate
 from typing import Optional, List
 from utils.query import get_sort_column
@@ -64,9 +64,6 @@ def delete_storage_cluster(db: Session, storage_cluster_id: int) -> bool:
         referenced = (
             db.query(ProjectStorageEnvironment.id)
             .filter(ProjectStorageEnvironment.storage_cluster_id == storage_cluster_id)
-            .first()
-            or db.query(Group.id)
-            .filter(Group.storage_cluster_id == storage_cluster_id)
             .first()
         )
         if referenced:

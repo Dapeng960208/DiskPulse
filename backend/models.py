@@ -101,7 +101,6 @@ class Project(Base):
     soft_use_ratio = Column(Float, nullable=True)
     updated_at = Column(DateTime, default=datetime.now)
 
-    groups = relationship("Group", back_populates="project", lazy=True)
     environments = relationship("ProjectStorageEnvironment", back_populates="project", lazy=True)
     in_charge_user = relationship("User", foreign_keys=[in_charge_user_id], lazy=True)
     pt_user = relationship("User", foreign_keys=[pt_user_id], lazy=True)
@@ -129,7 +128,6 @@ class StorageCluster(Base):
     volumes = relationship("Volume", back_populates="storage_cluster", lazy=True)
     qtrees = relationship("Qtree", back_populates="storage_cluster", lazy=True)
     storage_usages = relationship("StorageUsage", back_populates="storage_cluster", lazy=True)
-    groups = relationship("Group", back_populates="storage_cluster", lazy=True)
     environments = relationship(
         "ProjectStorageEnvironment", back_populates="storage_cluster", lazy=True
     )
@@ -264,19 +262,32 @@ class Qtree(Base):
 
 class Group(Base):
     __tablename__ = "groups"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_environment_id",
+            "name",
+            name="uq_group_environment_name",
+        ),
+        CheckConstraint(
+            "volume_id IS NULL OR qtree_id IS NULL",
+            name="ck_group_single_storage_target",
+        ),
+        CheckConstraint(
+            "enable_monitoring = FALSE OR volume_id IS NOT NULL OR qtree_id IS NOT NULL",
+            name="ck_group_monitored_has_storage_target",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     project_environment_id = Column(
         Integer,
         ForeignKey(
             "project_storage_environments.id",
             name="fk_group_project_storage_environment",
         ),
-        nullable=True,
+        nullable=False,
     )
     monitor_host_id = Column(Integer, nullable=True)
-    storage_cluster_id = Column(Integer, ForeignKey("storage_clusters.id"), nullable=True, index=True)
     volume_id = Column(
         Integer,
         ForeignKey("volumes.id", name="fk_group_volume"),
@@ -300,14 +311,12 @@ class Group(Base):
     updated_at = Column(DateTime, default=datetime.now)
 
     qtree = relationship("Qtree", back_populates="groups", lazy=True)
-    project = relationship("Project", back_populates="groups", lazy=True)
     project_environment = relationship(
         "ProjectStorageEnvironment", back_populates="groups", lazy=True
     )
     volume = relationship("Volume", lazy=True)
     storage_usages = relationship("StorageUsage", back_populates="group", lazy=True)
     in_charge_user = relationship("User", backref=backref("owned_groups", passive_deletes=True))
-    storage_cluster = relationship("StorageCluster", back_populates="groups", lazy=True)
 
 
 class StorageUsage(Base):

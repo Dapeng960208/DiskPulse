@@ -177,7 +177,11 @@ def get_common_project(db: Session):
 def get_project_storage_summary(db: Session) -> List[List[Any]]:
     all_groups = (
         db.query(Group.name, Group.used, Project.name)
-        .join(Project, Project.id == Group.project_id)
+        .join(
+            ProjectStorageEnvironment,
+            ProjectStorageEnvironment.id == Group.project_environment_id,
+        )
+        .join(Project, Project.id == ProjectStorageEnvironment.project_id)
         .filter(Project.name != "Common", Group.enable_monitoring.is_(True), Group.qtree_id.isnot(None))
         .all()
     )
@@ -201,7 +205,15 @@ def get_project_tree_summary(db: Session):
     for project_db in project_dbs:
         group_dbs = (
             db.query(Group)
-            .filter(Group.project_id == project_db.id, Group.enable_monitoring.is_(True), Group.qtree_id.isnot(None))
+            .join(
+                ProjectStorageEnvironment,
+                ProjectStorageEnvironment.id == Group.project_environment_id,
+            )
+            .filter(
+                ProjectStorageEnvironment.project_id == project_db.id,
+                Group.enable_monitoring.is_(True),
+                Group.qtree_id.isnot(None),
+            )
             .all()
         )
         groups = []
@@ -248,7 +260,15 @@ def get_project_tree_summary(db: Session):
 
 def get_project_tree_summary_by_id(db: Session, project_id: int, value_type: str) -> List:
     value_type = require_allowed(value_type, {"limit", "used", "use_ratio", "soft_limit", "soft_use_ratio"}, "value_type")
-    group_dbs = db.query(Group).filter(Group.project_id == project_id).all()
+    group_dbs = (
+        db.query(Group)
+        .join(
+            ProjectStorageEnvironment,
+            ProjectStorageEnvironment.id == Group.project_environment_id,
+        )
+        .filter(ProjectStorageEnvironment.project_id == project_id)
+        .all()
+    )
     groups = []
     for group_db in group_dbs:
         storage_dbs = db.query(StorageUsage).filter(StorageUsage.group_id == group_db.id).all()
@@ -287,7 +307,15 @@ def get_project_groups_storage_usage(db: Session):
     for project_db in project_dbs:
         group_dbs = (
             db.query(Group)
-            .filter(Group.project_id == project_db.id, Group.enable_monitoring.is_(True), Group.qtree_id.isnot(None))
+            .join(
+                ProjectStorageEnvironment,
+                ProjectStorageEnvironment.id == Group.project_environment_id,
+            )
+            .filter(
+                ProjectStorageEnvironment.project_id == project_db.id,
+                Group.enable_monitoring.is_(True),
+                Group.qtree_id.isnot(None),
+            )
             .all()
         )
         if group_dbs:

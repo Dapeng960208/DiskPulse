@@ -72,18 +72,6 @@ class GroupBindingUpdate(GroupWriteBase):
         return self
 
 
-class GroupCreate(GroupWriteBase):
-    """Legacy internal write schema; HTTP endpoints use the strict binding schema."""
-
-    project_id: int
-    storage_cluster_id: int | None = None
-    name: str
-
-
-class GroupUpdate(GroupCreate):
-    pass
-
-
 class ProjectEnvironmentSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -108,7 +96,6 @@ class StorageTargetSummary(BaseModel):
 class GroupBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    project_id: int | None = None
     project_environment_id: int | None = None
     volume_id: int | None = None
     monitor_host_id: int | None = None
@@ -129,7 +116,6 @@ class GroupBase(BaseModel):
     in_charge_user: usersSchema.OnlyUser | None = None
     completed: bool | None = False
     back_up_enabled: bool | None = True
-    storage_cluster_id: int | None = None
 
 
 class Group(GroupBase):

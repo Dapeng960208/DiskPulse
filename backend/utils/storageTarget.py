@@ -17,9 +17,7 @@ def resolve_group_storage_target(group):
         volume = None
 
     environment = group.project_environment
-    storage_cluster = (
-        environment.storage_cluster if environment is not None else group.storage_cluster
-    )
+    storage_cluster = environment.storage_cluster
     return {
         "target_type": target_type,
         "target": target,

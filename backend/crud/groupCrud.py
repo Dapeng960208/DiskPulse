@@ -25,10 +25,17 @@ def get_groups(db: Session, page: int | None = None, size: int | None = None, na
         conditions.append(or_(Group.name.like(f"%{nameLike}%"), Group.linux_path.like(f"%{nameLike}%")))
     if qtree_id:
         conditions.append(Group.qtree_id == qtree_id)
-    if project_id:
-        conditions.append(Group.project_id == project_id)
-    if storage_cluster_id:
-        conditions.append(Group.storage_cluster_id == storage_cluster_id)
+    if project_id is not None or storage_cluster_id is not None:
+        query = query.join(
+            ProjectStorageEnvironment,
+            ProjectStorageEnvironment.id == Group.project_environment_id,
+        )
+    if project_id is not None:
+        conditions.append(ProjectStorageEnvironment.project_id == project_id)
+    if storage_cluster_id is not None:
+        conditions.append(
+            ProjectStorageEnvironment.storage_cluster_id == storage_cluster_id
+        )
     if project_environment_id is not None:
         conditions.append(Group.project_environment_id == project_environment_id)
 
@@ -57,17 +64,12 @@ def get_group_real_time_data_by_id(db: Session, group_id: int, start_time: datet
 
 def create_group(
     db: Session,
-    group: groupSchema.GroupCreate | groupSchema.GroupBindingCreate,
+    group: groupSchema.GroupBindingCreate,
 ):
     data = group.model_dump(exclude_unset=True)
-    if data.get("project_environment_id") is not None:
-        environment = _validate_binding(db, data)
-        data.update(
-            project_id=environment.project_id,
-            storage_cluster_id=environment.storage_cluster_id,
-        )
-        data.setdefault("volume_id", None)
-        data.setdefault("qtree_id", None)
+    _validate_binding(db, data)
+    data.setdefault("volume_id", None)
+    data.setdefault("qtree_id", None)
     db_group = Group(**data)
     db.add(db_group)
     db.commit()
@@ -78,17 +80,13 @@ def create_group(
 def update_group(
     db: Session,
     group_id: int,
-    group: groupSchema.GroupUpdate | groupSchema.GroupBindingUpdate,
+    group: groupSchema.GroupBindingUpdate,
 ):
     db_group = db.query(Group).filter(Group.id == group_id).first()
     if db_group:
         data = group.model_dump(exclude_unset=True)
         if data.get("project_environment_id") is not None:
-            environment = _validate_binding(db, data)
-            data.update(
-                project_id=environment.project_id,
-                storage_cluster_id=environment.storage_cluster_id,
-            )
+            _validate_binding(db, data)
             data.setdefault("volume_id", None)
             data.setdefault("qtree_id", None)
         for key, value in data.items():
@@ -140,9 +138,12 @@ def serialize_group(group: Group) -> dict:
         column.name: getattr(group, column.name)
         for column in Group.__table__.columns
     }
-    result["project"] = group.project
-    result["project_environment"] = group.project_environment
-    result["storage_cluster"] = group.storage_cluster
+    environment = group.project_environment
+    project = environment.project
+    storage_cluster = environment.storage_cluster
+    result["project"] = project
+    result["project_environment"] = environment
+    result["storage_cluster"] = storage_cluster
 
     resolved = resolve_group_storage_target(group)
     target = resolved["target"]
@@ -164,7 +165,7 @@ def delete_group(db: Session, group_id: int):
     db.query(StorageUsage).filter_by(group_id=group_id).delete()
     db.commit()
     db_group = db.query(Group).options(
-        joinedload(Group.project),
+        joinedload(Group.project_environment),
         joinedload(Group.qtree)
     ).filter(Group.id == group_id).first()
     if db_group:
