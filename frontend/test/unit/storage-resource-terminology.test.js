@@ -57,4 +57,17 @@ describe('cross-vendor storage resource terminology', () => {
     expect(realtime).toContain("'暂无趋势数据'");
     expect(realtime).not.toContain("'NO DATA'");
   });
+
+  it('exposes each storage cluster protocol and TLS verification state', () => {
+    const form = source('src/pages/admin/storage-cluster/components/StorageClusterFormDialog.vue');
+    const list = source('src/pages/admin/storage-cluster/StorageClusterListPage.vue');
+    const detail = source('src/pages/admin/storage-cluster/StorageClusterDetailPage.vue');
+
+    expect(form).toContain('label="访问协议"');
+    expect(form).toContain('label="TLS 证书校验"');
+    expect(list).toContain('label="协议"');
+    expect(list).toContain('label="TLS 校验"');
+    expect(detail).toContain('label="访问协议"');
+    expect(detail).toContain('label="TLS 证书校验"');
+  });
 });

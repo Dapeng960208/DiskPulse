@@ -206,8 +206,12 @@ const ElSelectStub = defineComponent({
 
 const ElOptionStub = defineComponent({
   name: 'ElOption',
-  setup(_, { slots }) {
-    return () => h('option', slots.default?.());
+  props: {
+    label: String,
+    value: [String, Number],
+  },
+  setup(props, { slots }) {
+    return () => h('option', { value: props.value }, slots.default?.() ?? props.label);
   },
 });
 
@@ -236,6 +240,7 @@ const ElSwitchStub = defineComponent({
       type: Boolean,
       default: false,
     },
+    disabled: Boolean,
   },
   emits: ['update:modelValue'],
   setup(props, { emit }) {
@@ -415,6 +420,75 @@ describe('dialog component function coverage', () => {
 
     expect(storageClusterApi.create).toHaveBeenCalledWith(expect.objectContaining({ is_active: false }));
     expect(messageSuccess).toHaveBeenCalled();
+  }, 15000);
+
+  it('submits per-cluster transport defaults and disables TLS verification for HTTP', async () => {
+    const { default: StorageClusterFormDialog } = await import('@/pages/admin/storage-cluster/components/StorageClusterFormDialog.vue');
+    const wrapper = shallowMount(StorageClusterFormDialog, {
+      global: { stubs: globalStubs },
+    });
+
+    getExposed(wrapper).edit();
+    const protocolSelect = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((select) => select.props('modelValue') === 'https');
+    const protocolOptions = wrapper.findAllComponents({ name: 'ElOption' })
+      .map((option) => option.props('value'));
+
+    expect(protocolSelect).toBeDefined();
+    expect(protocolOptions).toEqual(expect.arrayContaining(['http', 'https']));
+    await findSubmitButton(wrapper).trigger('click');
+    await flushPromises();
+    expect(storageClusterApi.create).toHaveBeenLastCalledWith(expect.objectContaining({
+      protocol: 'https',
+      tls_verify: true,
+    }));
+
+    getExposed(wrapper).edit();
+    const freshProtocolSelect = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((select) => select.props('modelValue') === 'https');
+    freshProtocolSelect.vm.$emit('update:modelValue', 'http');
+    await flushPromises();
+    const tlsSwitch = wrapper.findAllComponents({ name: 'ElSwitch' })
+      .find((switchComponent) => switchComponent.props('modelValue') === false);
+
+    expect(tlsSwitch).toBeDefined();
+    expect(tlsSwitch.props('disabled')).toBe(true);
+    await findSubmitButton(wrapper).trigger('click');
+    await flushPromises();
+    expect(storageClusterApi.create).toHaveBeenLastCalledWith(expect.objectContaining({
+      protocol: 'http',
+      tls_verify: false,
+    }));
+  }, 15000);
+
+  it('loads persisted protocol and TLS verification values when editing a cluster', async () => {
+    const { default: StorageClusterFormDialog } = await import('@/pages/admin/storage-cluster/components/StorageClusterFormDialog.vue');
+    const wrapper = shallowMount(StorageClusterFormDialog, {
+      global: { stubs: globalStubs },
+    });
+
+    getExposed(wrapper).edit({
+      id: 12,
+      name: 'secure-cluster',
+      protocol: 'https',
+      tls_verify: false,
+    });
+    await flushPromises();
+
+    const protocolSelect = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((select) => select.props('modelValue') === 'https');
+    const tlsSwitch = wrapper.findAllComponents({ name: 'ElSwitch' })
+      .find((switchComponent) => switchComponent.props('modelValue') === false);
+    expect(protocolSelect).toBeDefined();
+    expect(tlsSwitch).toBeDefined();
+    expect(tlsSwitch.props('disabled')).toBe(false);
+
+    await findSubmitButton(wrapper).trigger('click');
+    await flushPromises();
+    expect(storageClusterApi.replace).toHaveBeenLastCalledWith(12, expect.objectContaining({
+      protocol: 'https',
+      tls_verify: false,
+    }));
   }, 15000);
 
   it('executes usage form dialog handlers', async () => {
