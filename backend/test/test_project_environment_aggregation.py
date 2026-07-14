@@ -607,9 +607,7 @@ def test_isilon_multi_group_without_usage_resets_stale_totals(db_session):
     )
     group = models.Group(
         id=1,
-        project_id=1,
         project_environment_id=1,
-        storage_cluster_id=1,
         name="group-empty-usage",
         enable_monitoring=True,
         associate_multiple_groups=True,

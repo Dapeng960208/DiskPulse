@@ -611,6 +611,30 @@ def test_group_alert_persists_minimal_project_environment_context(usage_scope):
     }
 
 
+def test_group_alert_derives_project_from_environment(usage_scope):
+    group = models.Group(
+        id=4,
+        project_environment_id=1,
+        volume_id=1,
+        name="environment-only-group",
+    )
+    usage_scope.add(group)
+    usage_scope.commit()
+    alert = object.__new__(StorageAlert)
+    alert.db = usage_scope
+    alert.logger = Mock()
+
+    alert.write_alerts_to_mysql(
+        data=[(group, 91.0)],
+        model=models.Group,
+        threshold=80,
+        description_template="group {name} reached {avg_use_ratio}%",
+    )
+
+    stored = usage_scope.query(models.StorageAlerts).one()
+    assert stored.related_info["project"] == {"id": 1, "name": "project-a"}
+
+
 def test_environment_alert_is_stored_against_project_storage_environment(usage_scope):
     alert = object.__new__(StorageAlert)
     alert.db = usage_scope
@@ -828,6 +852,38 @@ def test_new_backup_path_includes_environment_without_moving_legacy_record(usage
     )
     assert usage_scope.get(models.StorageBackUpRecord, 1).destination_path == (
         "/legacy/project-a/volume-group/admin"
+    )
+
+
+def test_backup_path_derives_project_from_environment(usage_scope):
+    usage_scope.add_all(
+        [
+            models.Group(
+                id=4,
+                project_environment_id=1,
+                volume_id=1,
+                name="environment-only-group",
+            ),
+            models.StorageUsage(
+                id=4,
+                storage_cluster_id=1,
+                user_id=3,
+                group_id=4,
+                linux_path="/data/environment-only-group/carol",
+                updated_at=NOW,
+            ),
+        ]
+    )
+    usage_scope.commit()
+    manager = object.__new__(RemoteFileManager)
+    manager.db = usage_scope
+    manager.storage_config = SimpleNamespace(back_up_dir="/backup")
+    manager.logger = Mock()
+
+    destination = manager.get_back_up_destination_path_by_id(storage_usage_id=4)
+
+    assert destination == os.path.join(
+        "/backup", "project-a", "environment-a", "environment-only-group", "carol"
     )
 
 
