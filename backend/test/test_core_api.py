@@ -334,6 +334,53 @@ class TestCoreApi:
         assert group_response.status_code == 200
         assert group_response.json()["content"][0]["soft_limit"] == 240
 
+    def test_aggregate_storage_tree_filters_by_cluster(self):
+        session = self.SessionLocal()
+        try:
+            session.add_all(
+                [
+                    models.StorageCluster(
+                        id=2,
+                        name="cluster-b",
+                        storage_type="netapp",
+                        storage_host="storage-b.local",
+                        storage_port=443,
+                        storage_user="svc",
+                        storage_password="secret",
+                        is_active=True,
+                    ),
+                    models.Volume(
+                        id=2,
+                        storage_cluster_id=2,
+                        name="vol-b",
+                        vserver="svm-b",
+                        aggregate="aggr-b",
+                        state="online",
+                        type="rw",
+                        limit=200,
+                        used=50,
+                        use_ratio=25,
+                        updated_at=datetime.fromisoformat(NOW),
+                    ),
+                ]
+            )
+            session.commit()
+        finally:
+            session.close()
+
+        response = self.client.get(
+            "/storage-pulse/api/aggregates/storage-trees/",
+            params={"storage_cluster_id": 2},
+        )
+        assert response.status_code == 200
+        assert [item["name"] for item in response.json()["data"]] == ["vol-b"]
+
+        invalid_response = self.client.get(
+            "/storage-pulse/api/aggregates/storage-trees/",
+            params={"storage_cluster_id": 0},
+        )
+        assert invalid_response.status_code == 422
+
     def test_legacy_group_payload_is_rejected(self):
         response = self.client.post(
             "/storage-pulse/api/groups/",
