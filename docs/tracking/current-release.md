@@ -98,6 +98,7 @@
 - 前端路由、列表、详情、选择器、项目组、用量和告警统一使用“容量池”“存储空间”“Qtree（NetApp）”，厂商原生类型由现有字段派生。
 - 保留 `Aggregate`、`Volume`、`Qtree` 模型、枚举和 API 路径；未新增 PostgreSQL、Alembic 或 QuestDB schema，QuestDB 当前 head 仍为 `000000000002`。
 - Isilon 未启用会话缓存时按 OneFS 规范显式注销服务端会话；注销失败不覆盖采集结果，并始终关闭本地 HTTP session。
+- `backend/scripts/manual_isilon_check.py` 支持按存储集群名称读取数据库中的 Isilon 连接配置，只读获取 Quota 并输出总数和类型统计。
 - 更新领域术语、资源映射、API 示例、迁移说明、最新功能和存储集群专题索引。
 
 ### 验证状态
@@ -109,6 +110,7 @@
 - 登录态 Chrome 冒烟通过容量池、存储空间、Qtree（NetApp）、项目组页面和 NetApp 存储目标选项；未发现页面级横向溢出。
 - Isilon 节点管理入口已确认集群身份和 OneFS `9.11.0.5`；Storage Pool 接口返回 `2` 个真实 Node Pool，Quota 接口完成 `3` 页、`2264` 条数据的读取，其中 `64` 条为 Directory Quota。
 - 新增会话注销 RED/GREEN 测试；会话关闭聚焦测试 `3 passed`，资源映射测试文件 `19 passed`。
+- 配置驱动的 Isilon Quota 手工检查脚本聚焦测试 `3 passed`，脚本 `compileall` 通过；尚未用部署数据库配置执行本轮真机命令。
 
 ### 风险与后续
 

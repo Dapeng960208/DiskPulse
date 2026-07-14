@@ -208,6 +208,14 @@ PostgreSQL 提交成功后写入 QuestDB
 - 同一目标绑定多个 Group 时，项目和集群容量汇总不重复计数。
 - 自动化测试覆盖两类存储的采集映射、项目组绑定校验、Group 汇总，以及菜单、标题、筛选、表格、详情和空状态术语。
 
+手工只读检查可从仓库根目录执行：
+
+```powershell
+.\.venv\Scripts\python.exe backend\scripts\manual_isilon_check.py "<存储集群名称>"
+```
+
+脚本按名称读取 `storage_clusters` 中的 Isilon 连接配置，只调用 Quota 查询并输出总数和类型统计；不会更新 PostgreSQL 或 QuestDB，也不会输出密码。
+
 ## 10. 风险与待验证项
 
 - Isilon-CR02（OneFS 9.11.0.5）已通过节点管理入口验证 `/platform/latest`、Storage Pool 实际列表和 Quota 分页；应用部署配置仍需从服务入口切换到节点或 System zone 管理入口。

@@ -80,4 +80,4 @@
 - 新增核心后端覆盖率门禁，当前 `coverage report` 结果为 `73%`，已达到初版 `70%+` 目标。
 - 修复存储使用导出接口的响应类型：`export_type=pdf` 返回 `application/pdf`，`export_type=excel` 返回 Excel MIME。
 - 修复大文件导出接口的响应类型，使 `.xlsx` 导出返回 Excel MIME。
-- NetApp 和 Isilon 手动验证脚本改为从环境变量读取连接信息，避免代码库保留真实设备地址和凭据。
+- NetApp 手工检查脚本从环境变量读取连接信息；Isilon Quota 手工检查脚本按名称读取数据库中的存储集群配置，两者都不在代码库保存真实设备地址和凭据。
