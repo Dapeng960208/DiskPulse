@@ -18,13 +18,21 @@ def get_group_by_id(db: Session, group_id: int):
 def get_groups(db: Session, page: int | None = None, size: int | None = None, nameLike: str | None = None,
                prop: str | None = None,
                order: str | None = None, qtree_id: int | None = None, project_id: int | None = None,
-               storage_cluster_id: int | None = None, group_tag_id: int | None = None):
+               storage_cluster_id: int | None = None, group_tag_id: int | None = None,
+               volume_id: int | None = None):
+    if volume_id is not None and qtree_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="volume_id and qtree_id cannot be used together",
+        )
     query = db.query(Group)
     conditions = []
     if nameLike:
         conditions.append(or_(Group.name.like(f"%{nameLike}%"), Group.linux_path.like(f"%{nameLike}%")))
-    if qtree_id:
+    if qtree_id is not None:
         conditions.append(Group.qtree_id == qtree_id)
+    if volume_id is not None:
+        conditions.append(Group.volume_id == volume_id)
     if project_id is not None:
         conditions.append(Group.project_id == project_id)
     if storage_cluster_id is not None:

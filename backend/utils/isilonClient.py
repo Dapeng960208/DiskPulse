@@ -8,6 +8,7 @@ Auth     : Session-based (POST /session/1/session).
 
 Endpoints:
   - Cluster statfs : GET /platform/1/cluster/statfs
+  - Storage pools  : GET /platform/16/storagepool/storagepools
   - Quotas         : GET /platform/1/quota/quotas       (paginated via resume)
   - NFS exports    : GET /platform/2/protocols/nfs/exports (paginated via resume)
 """
@@ -270,6 +271,17 @@ class IsilonClient:
     def get_cluster_stats(self) -> Optional[Dict]:
         """Return cluster filesystem statistics (POSIX statfs fields)."""
         return self._get('/1/cluster/statfs')
+
+    def get_storage_pools(self) -> List[Dict]:
+        """Return OneFS 9.11 top-level storage pools."""
+        data = self._get(
+            '/16/storagepool/storagepools',
+            params={'toplevels': 'true'},
+        )
+        pools = data.get('storagepools') if isinstance(data, dict) else None
+        if not isinstance(pools, list):
+            raise ValueError("Invalid OneFS storagepools response")
+        return pools
 
     def get_quotas(self, resolve_names: bool = True,
                    quota_type: Optional[str] = None,

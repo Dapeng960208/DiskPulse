@@ -78,6 +78,9 @@ def finalize_project_totals(db, cluster_results, collected_at):
         select(
             Group.project_id,
             Group.storage_cluster_id,
+            Group.volume_id,
+            Group.qtree_id,
+            Group.associate_multiple_groups,
             Group.limit,
             Group.soft_limit,
             Group.used,
@@ -92,10 +95,23 @@ def finalize_project_totals(db, cluster_results, collected_at):
         cluster_ids = {item.storage_cluster_id for item in project_groups}
         if not all(cluster_results.get(cluster_id) is True for cluster_id in cluster_ids):
             continue
-        limit = sum(item.limit or 0 for item in project_groups)
-        used = sum(item.used or 0 for item in project_groups)
+        unique_groups = []
+        seen_targets = set()
+        for item in project_groups:
+            if not item.associate_multiple_groups:
+                target = (
+                    item.storage_cluster_id,
+                    'qtree' if item.qtree_id is not None else 'volume',
+                    item.qtree_id if item.qtree_id is not None else item.volume_id,
+                )
+                if target in seen_targets:
+                    continue
+                seen_targets.add(target)
+            unique_groups.append(item)
+        limit = sum(item.limit or 0 for item in unique_groups)
+        used = sum(item.used or 0 for item in unique_groups)
         soft_values = [
-            item.soft_limit for item in project_groups if item.soft_limit is not None
+            item.soft_limit for item in unique_groups if item.soft_limit is not None
         ]
         soft_limit = sum(soft_values) if soft_values else None
         db.execute(

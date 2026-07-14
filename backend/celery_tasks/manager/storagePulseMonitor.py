@@ -109,8 +109,6 @@ class StoragePulseMonitor:
         group_query = self.db.query(Group).filter(
             Group.enable_monitoring.is_(True),
             Group.storage_cluster_id == self.storage_cluster_id)
-        if self.storage_type == 'netapp':
-            group_query = group_query.filter(Group.qtree_id.isnot(None))
         self.insert_metrics_to_questdb('group', group_query.all())
         self.insert_metrics_to_questdb('aggregate', self.db.query(Aggregate).filter(
             Aggregate.used >= 0, Aggregate.storage_cluster_id == self.storage_cluster_id).all())
@@ -159,13 +157,27 @@ class StoragePulseMonitor:
 
     def execute_data_collection(self, include_questdb=True):
         """执行数据采集流程"""
-        aggregates = self.fetch_aggregates()
+        capacity_pools = self.fetch_capacity_pools()
+        raw_isilon_quotas = self.client.get_quotas() if self.storage_type == 'isilon' else None
+        storage_spaces = (
+            self._isilon_directory_quota_spaces(raw_isilon_quotas)
+            if self.storage_type == 'isilon'
+            else self.fetch_storage_spaces()
+        )
 
-        volumes, user_quotas = self.fetch_user_quotas()
-        
-        self.sync_data_to_postgres(aggregates, Aggregate, ['name','storage_cluster_id'])
-        self.sync_data_to_postgres(volumes, Volume, ['name','storage_cluster_id'], delete_redundant=True)
-        
+        self.sync_data_to_postgres(
+            capacity_pools,
+            Aggregate,
+            ['name', 'storage_cluster_id'],
+            delete_redundant=True,
+        )
+        self.sync_data_to_postgres(
+            storage_spaces,
+            Volume,
+            ['name', 'storage_cluster_id'],
+            delete_redundant=True,
+        )
+
         if self.storage_type == 'netapp':
             qtrees = self.fetch_qtrees()
             self.sync_data_to_postgres(
@@ -174,9 +186,10 @@ class StoragePulseMonitor:
                 ['name', 'volume_id', 'storage_cluster_id'],
                 delete_redundant=True,
             )
-            self.update_null_qtree_from_volume()
+            self.migrate_null_qtree_bindings()
             self.calculate_volume_allocation()
 
+        user_quotas = self.fetch_user_quotas(raw_isilon_quotas)
         self.sync_data_to_postgres(user_quotas, StorageUsage, ['group_id', 'user_id','storage_cluster_id'],
                                     exclude_keys=['group_id', 'user_id','storage_cluster_id'])
 
@@ -189,115 +202,67 @@ class StoragePulseMonitor:
     # 数据获取方法
     # ------------------------------------------------------------------
 
-    def fetch_aggregates(self) -> List[aggregateSchema.AggregateBase]:
-        """获取聚合存储信息"""
+    def fetch_capacity_pools(self) -> List[aggregateSchema.AggregateBase]:
+        """获取容量池信息。"""
         result = []
         if self.client is None:
             return result
-        
-        try:
-            if self.storage_type == 'netapp':
-                records = self.client.get_aggregates()
-                for rec in records:
-                    space = rec.get('space', {})
-                    total = _bytes_to_gb(space.get('block_storage', {}).get('size'))
-                    available = _bytes_to_gb(space.get('block_storage', ).get('available'))
-                    if total is None or available is None:
-                        continue
-                    used = round(total - available, 2)
-                    use_ratio = round(used * 100 / total, 2) if total else 0
-                    result.append(aggregateSchema.AggregateBase(
-                        storage_cluster_id=self.storage_cluster_id,
-                        name=rec.get('name', ''),
-                        limit=total,
-                        used=used,
-                        use_ratio=use_ratio,
-                        updated_at=datetime.now()
-                    ))
-            else:  # isilon
-                stats = self.client.get_cluster_stats()
-                if stats:
-                    bsize = stats.get('f_bsize', 512)
-                    total = _bytes_to_gb(stats.get('f_blocks', 0) * bsize)
-                    available = _bytes_to_gb(stats.get('f_bavail', 0) * bsize)
-                    if total is not None and available is not None:
-                        used = round(total - available, 2)
-                        use_ratio = round(used * 100 / total, 2) if total else 0
-                        result.append(aggregateSchema.AggregateBase(
-                            storage_cluster_id=self.storage_cluster_id,
-                            name='isilon_cluster',
-                            limit=total,
-                            used=used,
-                            use_ratio=use_ratio,
-                            updated_at=datetime.now()
-                        ))
-            self.logger.info(f"{self._log_prefix} Fetched {len(result)} aggregates")
-        except Exception as e:
-            self.logger.error(f"{self._log_prefix} Failed to fetch aggregates: {e}")
-        return result
 
-    def fetch_volumes(self) -> List[volumeSchema.VolumeBase]:
-        """获取卷信息"""
-        result = []
-        if self.client is None:
-            return result
-        
-        try:
+        records = (
+            self.client.get_aggregates()
+            if self.storage_type == 'netapp'
+            else self.client.get_storage_pools()
+        )
+        for rec in records:
             if self.storage_type == 'netapp':
-                records = self.client.get_volumes()
-                for rec in records:
-                    space = rec.get('space', {})
-                    total = _bytes_to_gb(space.get('size'))
-                    available = _bytes_to_gb(space.get('available'))
-                    if total is None or available is None:
-                        continue
-                    used = round(total - available, 2)
-                    use_ratio = round(used * 100 / total, 2) if total else 0
-                    svm = rec.get('svm', {})
-                    agg_list = rec.get('aggregates', [])
-                    agg_name = agg_list[0].get('name', '') if agg_list else ''
-                    result.append(volumeSchema.VolumeBase(
-                        storage_cluster_id=self.storage_cluster_id,
-                        name=rec.get('name', ''),
-                        vserver=svm.get('name', ''),
-                        state=rec.get('state', ''),
-                        type=rec.get('type', ''),
-                        aggregate=agg_name,
-                        limit=total,
-                        used=used,
-                        use_ratio=use_ratio,
-                        updated_at=datetime.now()
-                    ))
-            else:  # isilon
-                pass
-            self.logger.info(f"{self._log_prefix} Fetched {len(result)} volumes")
-        except Exception as e:
-            self.logger.error(f"{self._log_prefix} Failed to fetch volumes: {e}")
-        return result
-
-    def _create_null_qtrees_for_volumes(self) -> List[qtreeSchema.QtreeBase]:
-        """为 Isilon volumes 创建对应的 null qtrees"""
-        result = []
-        volumes = self.db.query(Volume).filter(
-            Volume.storage_cluster_id == self.storage_cluster_id).all()
-        
-        for vol in volumes:
-            result.append(qtreeSchema.QtreeBase(
+                space = rec.get('space', {}).get('block_storage', {})
+                total = _bytes_to_gb(space.get('size'))
+                available = _bytes_to_gb(space.get('available'))
+                used = round(total - available, 2) if total is not None and available is not None else None
+            else:
+                usage = rec.get('usage', {})
+                total = _bytes_to_gb(usage.get('total_bytes'))
+                used = _bytes_to_gb(usage.get('used_bytes'))
+            if not rec.get('name') or total is None or used is None:
+                continue
+            result.append(aggregateSchema.AggregateBase(
                 storage_cluster_id=self.storage_cluster_id,
-                name='null',
-                volume_id=vol.id,
-                limit=vol.limit,
-                soft_limit=vol.soft_limit,
-                used=vol.used,
-                use_ratio=vol.use_ratio,
-                soft_use_ratio=vol.soft_use_ratio,
-                style='',
-                oplocks='',
-                status='',
-                updated_at=datetime.now()
+                name=rec['name'],
+                limit=total,
+                used=used,
+                use_ratio=round(used * 100 / total, 2) if total else 0,
+                updated_at=datetime.now(),
             ))
-        
-        self.logger.info(f"{self._log_prefix} Created {len(result)} null qtrees for volumes")
+        self.logger.info(f"{self._log_prefix} Fetched {len(result)} capacity pools")
+        return result
+
+    def fetch_storage_spaces(self) -> List[volumeSchema.VolumeBase]:
+        """获取 NetApp 存储空间信息。"""
+        result = []
+        if self.client is None:
+            return result
+
+        for rec in self.client.get_volumes():
+            space = rec.get('space', {})
+            total = _bytes_to_gb(space.get('size'))
+            available = _bytes_to_gb(space.get('available'))
+            if not rec.get('name') or total is None or available is None:
+                continue
+            used = round(total - available, 2)
+            agg_list = rec.get('aggregates', [])
+            result.append(volumeSchema.VolumeBase(
+                storage_cluster_id=self.storage_cluster_id,
+                name=rec['name'],
+                vserver=rec.get('svm', {}).get('name', ''),
+                state=rec.get('state', ''),
+                type=rec.get('type', ''),
+                aggregate=agg_list[0].get('name', '') if agg_list else '',
+                limit=total,
+                used=used,
+                use_ratio=round(used * 100 / total, 2) if total else 0,
+                updated_at=datetime.now(),
+            ))
+        self.logger.info(f"{self._log_prefix} Fetched {len(result)} storage spaces")
         return result
 
     def fetch_qtrees(self) -> List[qtreeSchema.QtreeBase]:
@@ -309,64 +274,43 @@ class StoragePulseMonitor:
         if self.storage_type == 'isilon':
             return result  # Isilon 不支持 qtree
         
-        try:
-            existing_volumes = self.db.query(Volume).filter(
-                Volume.storage_cluster_id == self.storage_cluster_id).all()
-            volumes_map = {vol.name: vol.id for vol in existing_volumes}
-            volumes_with_qtrees = set()
-
-            records = self.client.get_qtrees() or []
-            for rec in records:
-                volume_name = rec.get('volume', {}).get('name', '')
-                volume_id = volumes_map.get(volume_name)
-                if volume_id is None:
-                    continue
-                volumes_with_qtrees.add(volume_id)
-                name = rec.get('name', '')
-                if name == '':
-                    name = 'null'
-                result.append(qtreeSchema.QtreeBase(
-                    storage_cluster_id=self.storage_cluster_id,
-                    name=name,
-                    volume_id=volume_id,
-                    style=rec.get('security_style', ''),
-                    oplocks=str(rec.get('oplocks', {}).get('enabled', False)),
-                    status=rec.get('statistics', {}).get('status', ''),
-                    updated_at=datetime.now()
-                ))
-
-            # 为没有 qtree 的 volume 创建 null qtree
-            for vol in existing_volumes:
-                if vol.id not in volumes_with_qtrees:
-                    result.append(qtreeSchema.QtreeBase(
-                        storage_cluster_id=self.storage_cluster_id,
-                        name='null',
-                        volume_id=vol.id,
-                        limit=vol.limit,
-                        soft_limit=vol.soft_limit,
-                        used=vol.used,
-                        use_ratio=vol.use_ratio,
-                        soft_use_ratio=vol.soft_use_ratio,
-                        style='',
-                        oplocks='',
-                        status='',
-                        updated_at=datetime.now()
-                    ))
-
-            self.logger.info(f"{self._log_prefix} Fetched {len(result)} qtrees")
-        except Exception as e:
-            self.logger.error(f"{self._log_prefix} Failed to fetch qtrees: {e}")
+        volumes_map = {
+            vol.name: vol.id
+            for vol in self.db.query(Volume).filter(
+                Volume.storage_cluster_id == self.storage_cluster_id
+            )
+        }
+        for rec in self.client.get_qtrees() or []:
+            volume_id = volumes_map.get(rec.get('volume', {}).get('name', ''))
+            name = rec.get('name', '')
+            if volume_id is None or not name:
+                continue
+            result.append(qtreeSchema.QtreeBase(
+                storage_cluster_id=self.storage_cluster_id,
+                name=name,
+                volume_id=volume_id,
+                style=rec.get('security_style', ''),
+                oplocks=str(rec.get('oplocks', {}).get('enabled', False)),
+                status=rec.get('statistics', {}).get('status', ''),
+                updated_at=datetime.now(),
+            ))
+        self.logger.info(f"{self._log_prefix} Fetched {len(result)} qtrees")
         return result
 
-    def fetch_user_quotas(self) -> tuple[list[VolumeBase], list[StorageUsageBase]]:
+    def fetch_user_quotas(self, raw_isilon_quotas=None) -> list[StorageUsageBase]:
         """获取用户配额使用情况"""
         group_dbs = self.db.query(Group).filter(
             Group.enable_monitoring.is_(True),
             Group.storage_cluster_id == self.storage_cluster_id).all()
-        group_map: Dict[int, List] = {}
+        group_map: Dict[tuple[str, int], List] = {}
         for g in group_dbs:
-            target_id = g.qtree_id if self.storage_type == 'netapp' else g.volume_id
-            group_map.setdefault(target_id, []).append(g)
+            target_key = (
+                ('qtree', g.qtree_id)
+                if g.qtree_id is not None
+                else ('volume', g.volume_id)
+            )
+            if target_key[1] is not None:
+                group_map.setdefault(target_key, []).append(g)
 
         users = self.db.query(User).all()
         users_map = {u.rd_username: u.id for u in users if u}
@@ -378,7 +322,8 @@ class StoragePulseMonitor:
         storage_usage_map = {
             (
                 su.user_id,
-                su.group.qtree_id if self.storage_type == 'netapp' else su.group.volume_id,
+                'qtree' if su.group.qtree_id is not None else 'volume',
+                su.group.qtree_id if su.group.qtree_id is not None else su.group.volume_id,
             ): su
             for su in su_dbs if su.group
         }
@@ -387,88 +332,91 @@ class StoragePulseMonitor:
                 Volume, Qtree.volume_id == Volume.id).filter(
                 Qtree.storage_cluster_id == self.storage_cluster_id).all()
             target_map = {
-                (volume_name, qtree.name): qtree
+                (volume_name, qtree.name): ('qtree', qtree)
                 for qtree, volume_name in qtree_volume_dbs
             }
-            volumes = self.fetch_volumes()
-            quotas = self._fetch_user_quotas_netapp(target_map, group_map,
-                        users_map, users_uid_map, storage_usage_map)
-            return volumes,quotas
-        else:
-            target_map = {
-                volume.name: volume
+            target_map.update({
+                (volume.name, None): ('volume', volume)
                 for volume in self.db.query(Volume).filter(
                     Volume.storage_cluster_id == self.storage_cluster_id
                 )
-            }
-            volumes, quotas = self._fetch_user_quotas_isilon(target_map, group_map,
-                        users_map, users_uid_map, storage_usage_map)
-            return volumes,quotas
+            })
+            return self._fetch_user_quotas_netapp(
+                target_map, group_map, users_map, users_uid_map, storage_usage_map
+            )
 
-    def _fetch_user_quotas_netapp(self,qtree_map, group_map,
+        target_map = {
+            volume.name: volume
+            for volume in self.db.query(Volume).filter(
+                Volume.storage_cluster_id == self.storage_cluster_id
+            )
+        }
+        _, quotas = self._fetch_user_quotas_isilon(
+            target_map,
+            group_map,
+            users_map,
+            users_uid_map,
+            storage_usage_map,
+            raw_quotas=raw_isilon_quotas,
+        )
+        return quotas
+
+    def _fetch_user_quotas_netapp(self, target_map, group_map,
                         users_map, users_uid_map, storage_usage_map) -> List[storageUsageSchema.StorageUsageBase]:
         """NetApp 用户配额获取"""
         result = []
         if self.client is None:
             return result
-        try:
-            records = self.client.get_quota_reports()
-            for rec in records:
-                quota_type = rec.get('type', '')
-                if quota_type == 'user':
-                    item = self._process_quota_user_netapp(
-                        rec, qtree_map, group_map,
-                        users_map, users_uid_map, storage_usage_map
-                    )
-                    if item:
-                        result.append(item)
-                elif quota_type == 'tree':
-                    vol_name = rec.get('volume', {}).get('name', '')
-                    qtree_name = rec.get('qtree', {}).get('name', '') or 'null'
-                    qtree_db = qtree_map.get((vol_name, qtree_name))
-                    if qtree_db:
-                        space = rec.get('space', {})
-                        used = _bytes_to_gb(space.get('used'))
-                        limit = _quota_limit_to_gb(space.get('hard_limit'))
-                        soft_limit = _quota_limit_to_gb(space.get('soft_limit'))
-                        use_ratio = _calculate_use_ratio(used, limit)
-                        soft_use_ratio = _calculate_use_ratio(used, soft_limit)
-                        qtree_db.limit = limit
-                        qtree_db.soft_limit = soft_limit
-                        qtree_db.used = used
-                        qtree_db.use_ratio = use_ratio
-                        qtree_db.soft_use_ratio = soft_use_ratio
-                        self.db.flush()
-            
-            self.logger.info(f"{self._log_prefix} Fetched {len(result)} user quotas")
-        except Exception as e:
-            self.logger.error(f"{self._log_prefix} Failed to fetch user quotas: {e}")
+        records = self.client.get_quota_reports()
+        for rec in records:
+            quota_type = rec.get('type', '')
+            if quota_type == 'user':
+                item = self._process_quota_user_netapp(
+                    rec, target_map, group_map,
+                    users_map, users_uid_map, storage_usage_map
+                )
+                if item:
+                    result.append(item)
+            elif quota_type == 'tree':
+                vol_name = rec.get('volume', {}).get('name', '')
+                qtree_name = rec.get('qtree', {}).get('name') or None
+                resolved = target_map.get((vol_name, qtree_name))
+                if resolved:
+                    target = resolved[1] if isinstance(resolved, tuple) else resolved
+                    space = rec.get('space', {})
+                    used = _bytes_to_gb(space.get('used'))
+                    limit = _quota_limit_to_gb(space.get('hard_limit'))
+                    soft_limit = _quota_limit_to_gb(space.get('soft_limit'))
+                    target.limit = limit
+                    target.soft_limit = soft_limit
+                    target.used = used
+                    target.use_ratio = _calculate_use_ratio(used, limit)
+                    target.soft_use_ratio = _calculate_use_ratio(used, soft_limit)
+                    self.db.flush()
+
+        self.logger.info(f"{self._log_prefix} Fetched {len(result)} user quotas")
         return result
+
+    def migrate_null_qtree_bindings(self):
+        """把历史虚拟 null Qtree 绑定迁移到其 Volume。"""
+        null_qtrees = self.db.query(Qtree).filter(
+            Qtree.name == 'null',
+            Qtree.storage_cluster_id == self.storage_cluster_id,
+        ).all()
+        for qtree in null_qtrees:
+            self.db.query(Group).filter(Group.qtree_id == qtree.id).update(
+                {Group.volume_id: qtree.volume_id, Group.qtree_id: None},
+                synchronize_session=False,
+            )
+            self.db.delete(qtree)
+        self.db.flush()
+        self.logger.info(
+            f"{self._log_prefix} Migrated {len(null_qtrees)} null qtree bindings"
+        )
 
     # ------------------------------------------------------------------
     # 数据聚合计算方法
     # ------------------------------------------------------------------
-
-    def update_null_qtree_from_volume(self):
-        """更新 null qtree 的使用量，使其与 volume 保持一致"""
-        if self.storage_type == 'isilon':
-            return
-
-        null_qtrees = self.db.query(Qtree, Volume).join(Volume, Qtree.volume_id == Volume.id).filter(
-            Qtree.name == 'null',
-            Qtree.storage_cluster_id == self.storage_cluster_id
-        ).all()
-        
-        for qtree_db, volume_db in null_qtrees:
-            qtree_db.limit = volume_db.limit
-            qtree_db.soft_limit = volume_db.soft_limit
-            qtree_db.used = volume_db.used
-            qtree_db.use_ratio = volume_db.use_ratio
-            qtree_db.soft_use_ratio = volume_db.soft_use_ratio
-            qtree_db.updated_at = datetime.now()
-        
-        self.db.flush()
-        self.logger.info(f"{self._log_prefix} Updated {len(null_qtrees)} null qtrees from volumes")
 
     def calculate_volume_allocation(self):
         """计算 volume 已分配给 qtree 的容量"""
@@ -480,8 +428,6 @@ class StoragePulseMonitor:
         for volume_db in volume_dbs:
             qtree_sum = self.db.query(func.sum(Qtree.limit)).filter(
                 Qtree.volume_id == volume_db.id,
-                Qtree.name != 'null',
-                Qtree.used > 0
             ).scalar()
             volume_db.allocated = qtree_sum if qtree_sum else volume_db.limit
             self.db.flush()
@@ -489,131 +435,28 @@ class StoragePulseMonitor:
 
     def aggregate_group_usage(self):
         """聚合计算组的存储使用量"""
-        if self.storage_type == 'netapp':
-            self._aggregate_group_usage_netapp()
-        else:
-            self._aggregate_group_usage_isilon()
-
-    def _apply_group_update(self, group_id, values):
-        snapshot = self.group_snapshots.get(group_id)
-        if snapshot is None:
-            return False
-        result = self.db.execute(
-            update(Group)
-            .where(
-                Group.id == group_id,
-                Group.project_id == snapshot["project_id"],
-                Group.storage_cluster_id == snapshot["storage_cluster_id"],
-                Group.group_tag_id == snapshot["group_tag_id"],
+        direct_groups = []
+        for target_model, target_id in (
+            (Volume, Group.volume_id),
+            (Qtree, Group.qtree_id),
+        ):
+            rows = self.db.query(Group, target_model).join(
+                target_model, target_model.id == target_id
+            ).filter(
                 Group.enable_monitoring.is_(True),
-            )
-            .values(**values)
-        )
-        return result.rowcount > 0
-
-    def _aggregate_group_usage_netapp(self):
-        """NetApp 组使用量聚合"""
-        # case0: qtree_id 为空
-        case0_dbs = self.db.query(Group).filter(
-            Group.enable_monitoring.is_(True), Group.qtree_id.is_(None),
-            Group.storage_cluster_id == self.storage_cluster_id).all()
-        for group_db in case0_dbs:
-            self._apply_group_update(group_db.id, {
-                "limit": 0,
-                "soft_limit": None,
-                "used": 0,
-                "use_ratio": 0,
-                "soft_use_ratio": None,
-                "updated_at": datetime.now(),
-            })
-
-        # case1: 与 volume 直接关联（qtree name == 'null'）
-        case1_dbs = self.db.query(Group, Qtree, Volume)\
-            .join(Group, Qtree.id == Group.qtree_id)\
-            .join(Volume, Qtree.volume_id == Volume.id)\
-            .filter(
-                Qtree.name == 'null',
                 Group.associate_multiple_groups.is_(False),
-                Group.enable_monitoring.is_(True),
-                Group.qtree_id.isnot(None),
-                Group.storage_cluster_id == self.storage_cluster_id
+                Group.storage_cluster_id == self.storage_cluster_id,
             ).all()
-        for group_db, qtree_db, volume_db in case1_dbs:
-            self._apply_group_update(group_db.id, {
-                "limit": volume_db.limit,
-                "soft_limit": volume_db.soft_limit,
-                "used": volume_db.used,
-                "use_ratio": volume_db.use_ratio,
-                "soft_use_ratio": volume_db.soft_use_ratio,
-                "updated_at": datetime.now(),
-            })
-
-        # case2: 与 qtree 直接关联
-        case2_dbs = self.db.query(Group, Qtree)\
-            .join(Group, Qtree.id == Group.qtree_id)\
-            .filter(
-                Qtree.name != 'null',
-                Group.associate_multiple_groups.is_(False),
-                Group.enable_monitoring.is_(True),
-                Group.qtree_id.isnot(None),
-                Group.storage_cluster_id == self.storage_cluster_id
-            ).all()
-        for group_db, qtree_db in case2_dbs:
-            self._apply_group_update(group_db.id, {
-                "limit": qtree_db.limit,
-                "soft_limit": qtree_db.soft_limit,
-                "used": qtree_db.used,
-                "use_ratio": qtree_db.use_ratio,
-                "soft_use_ratio": qtree_db.soft_use_ratio,
-                "updated_at": datetime.now(),
-            })
-
-        # case3: 分组聚合计算
-        case3_dbs = self.db.query(
-            Group.id, func.sum(StorageUsage.used), func.sum(StorageUsage.limit), func.sum(StorageUsage.soft_limit)
-        ).join(Group, StorageUsage.group_id == Group.id)\
-            .filter(
-                Group.associate_multiple_groups.is_(True),
-                Group.enable_monitoring.is_(True),
-                Group.qtree_id.isnot(None),
-                Group.storage_cluster_id == self.storage_cluster_id
-            ).group_by(Group.id).all()
-        for group_id, sum_used, sum_limit, sum_soft_limit in case3_dbs:
-            group_db = self.db.query(Group).filter_by(id=group_id).first()
-            sum_used = sum_used if sum_used else 0
-            sum_limit = sum_limit if sum_limit else 0
-            soft_limit = sum_soft_limit if sum_soft_limit else None
-            limit = group_db.limit if group_db.limit is not None else sum_limit
-            use_ratio = round((sum_used * 100) / limit, 2) if limit > 0 else 0
-            self._apply_group_update(group_id, {
-                "used": sum_used,
-                "limit": limit,
-                "soft_limit": soft_limit,
-                "use_ratio": use_ratio,
-                "soft_use_ratio": _calculate_use_ratio(sum_used, soft_limit),
-                "updated_at": datetime.now(),
-            })
-
-        self.logger.info(f"{self._log_prefix} Aggregated usage for groups")
-
-    def _aggregate_group_usage_isilon(self):
-        """Isilon 组使用量聚合"""
-        direct_groups = self.db.query(Group, Volume).join(
-            Volume, Group.volume_id == Volume.id
-        ).filter(
-            Group.enable_monitoring.is_(True),
-            Group.associate_multiple_groups.is_(False),
-            Group.storage_cluster_id == self.storage_cluster_id,
-        ).all()
-        for group_db, volume in direct_groups:
-            self._apply_group_update(group_db.id, {
-                "used": volume.used,
-                "limit": volume.limit,
-                "soft_limit": volume.soft_limit,
-                "use_ratio": volume.use_ratio,
-                "soft_use_ratio": volume.soft_use_ratio,
-                "updated_at": datetime.now(),
-            })
+            direct_groups.extend(rows)
+            for group, target in rows:
+                self._apply_group_update(group.id, {
+                    "limit": target.limit,
+                    "soft_limit": target.soft_limit,
+                    "used": target.used,
+                    "use_ratio": target.use_ratio,
+                    "soft_use_ratio": target.soft_use_ratio,
+                    "updated_at": datetime.now(),
+                })
 
         grouped_usage = self.db.query(
             Group.id,
@@ -646,17 +489,44 @@ class StoragePulseMonitor:
             f"{len(direct_groups) + len(grouped_usage)} groups"
         )
 
-    def aggregate_cluster_usage(self, include_questdb=True):
-        """按 Aggregate 聚合计算 StorageCluster 的总使用量，更新 PostgreSQL 并写入 QuestDB"""
-        try:
-            result = self.db.query(
-                func.sum(Aggregate.used), func.sum(Aggregate.limit)
-            ).filter(
-                Aggregate.storage_cluster_id == self.storage_cluster_id
-            ).first()
+    def _apply_group_update(self, group_id, values):
+        snapshot = self.group_snapshots.get(group_id)
+        if snapshot is None:
+            return False
+        result = self.db.execute(
+            update(Group)
+            .where(
+                Group.id == group_id,
+                Group.project_id == snapshot["project_id"],
+                Group.storage_cluster_id == snapshot["storage_cluster_id"],
+                Group.group_tag_id == snapshot["group_tag_id"],
+                Group.enable_monitoring.is_(True),
+            )
+            .values(**values)
+        )
+        return result.rowcount > 0
 
-            total_used = result[0] if result[0] is not None else 0
-            total_limit = result[1] if result[1] is not None else 0
+    def aggregate_cluster_usage(self, include_questdb=True):
+        """汇总集群容量，更新 PostgreSQL 并按需写入 QuestDB。"""
+        try:
+            if self.storage_type == 'isilon':
+                stats = self.client.get_cluster_stats()
+                if not isinstance(stats, dict):
+                    raise ValueError("Invalid OneFS cluster statfs response")
+                block_size = stats.get('f_bsize', 512)
+                total_limit = _bytes_to_gb(stats.get('f_blocks', 0) * block_size)
+                available = _bytes_to_gb(stats.get('f_bavail', 0) * block_size)
+                if total_limit is None or available is None:
+                    raise ValueError("Invalid OneFS cluster statfs capacity")
+                total_used = round(total_limit - available, 2)
+            else:
+                result = self.db.query(
+                    func.sum(Aggregate.used), func.sum(Aggregate.limit)
+                ).filter(
+                    Aggregate.storage_cluster_id == self.storage_cluster_id
+                ).first()
+                total_used = result[0] if result[0] is not None else 0
+                total_limit = result[1] if result[1] is not None else 0
             use_ratio = round(total_used * 100 / total_limit, 2) if total_limit > 0 else 0
 
             # 更新 PostgreSQL StorageCluster
@@ -675,6 +545,7 @@ class StoragePulseMonitor:
             )
         except SQLAlchemyError as e:
             self.logger.error(f"{self._log_prefix} Failed to aggregate cluster usage: {e}")
+            raise
 
 
 
@@ -769,9 +640,28 @@ class StoragePulseMonitor:
                 data_keys = {tuple(getattr(item, key) for key in unique_keys) for item in data}
                 extra_data = [item for key, item in existing_data_map.items() if key not in data_keys]
                 if extra_data:
+                    deleted = 0
                     for item in extra_data:
+                        if model is Volume and (
+                            self.db.query(Group).filter(Group.volume_id == item.id).first()
+                            or self.db.query(Qtree).filter(Qtree.volume_id == item.id).first()
+                        ):
+                            self.logger.warning(
+                                f"{self._log_prefix} Preserved referenced storage space {item.id}"
+                            )
+                            continue
+                        if model is Qtree and self.db.query(Group).filter(
+                            Group.qtree_id == item.id
+                        ).first():
+                            self.logger.warning(
+                                f"{self._log_prefix} Preserved referenced qtree {item.id}"
+                            )
+                            continue
                         self.db.delete(item)
-                    self.logger.info(f"{self._log_prefix} Deleted {len(extra_data)} redundant {model.__name__} records")
+                        deleted += 1
+                    self.logger.info(
+                        f"{self._log_prefix} Deleted {deleted} redundant {model.__name__} records"
+                    )
 
             self.db.flush()
             self.logger.info(f"{self._log_prefix} Synced {len(data)} {model.__name__} records to PostgreSQL")
@@ -811,7 +701,10 @@ class StoragePulseMonitor:
                     self.db.flush()
                     user_id = new_user.id
                     users_map[rd_username] = user_id
-            group_dbs = group_map.get(target_id)
+            group_dbs = group_map.get(
+                ('volume', target_id),
+                group_map.get(target_id),
+            )
             if not group_dbs:
                 return None
             elif len(group_dbs) == 1:
@@ -822,7 +715,10 @@ class StoragePulseMonitor:
             if group_db and group_db.associate_multiple_groups is False:
                 group_id = group_db.id
             else:
-                su_db = storage_usage_map.get((user_id, target_id))
+                su_db = storage_usage_map.get(
+                    (user_id, 'volume', target_id),
+                    storage_usage_map.get((user_id, target_id)),
+                )
                 if su_db is None:
                     return None
                 group_db = su_db.group
@@ -840,24 +736,26 @@ class StoragePulseMonitor:
             self.logger.error(f"{self._log_prefix} Failed to process quota user record: {e}")
         return None
 
-    def _process_quota_user_netapp(self, record: Dict, qtree_map: Dict, group_map: Dict,
+    def _process_quota_user_netapp(self, record: Dict, target_map: Dict, group_map: Dict,
                                     users_map: Dict, users_uid_map: Dict,
                                     storage_usage_map: Dict) -> Optional[storageUsageSchema.StorageUsageBase]:
         """处理 netapp 用户配额记录"""
         try:
             vol_name = record.get('volume', {}).get('name', '')
-            qtree_name = record.get('qtree', {}).get('name', '') or 'null'
-            qtree_db = qtree_map.get((vol_name, qtree_name))
-            if qtree_db is None:
+            qtree_name = record.get('qtree', {}).get('name') or None
+            resolved = target_map.get((vol_name, qtree_name))
+            if resolved is None:
                 return None
+            if isinstance(resolved, tuple):
+                target_type, target = resolved
+            else:
+                target_type, target = 'qtree', resolved
 
             users_list = record.get('users', [])
             if not users_list:
                 return None
             user_entry = users_list[0]
             rd_username = user_entry.get('name', '').strip()
-            uid_str = str(user_entry.get('id', ''))
-
             if rd_username in ('*', 'root', ''):
                 return None
 
@@ -875,7 +773,7 @@ class StoragePulseMonitor:
             file_limit = files_rec.get('hard_limit')
 
 
-            qtree_id = qtree_db.id
+            target_id = target.id
             # 判断用户名是否为数字 为数字证明离职
             if rd_username.isdigit():
                 user = users_uid_map.get(rd_username)
@@ -892,7 +790,10 @@ class StoragePulseMonitor:
                     user_id = new_user.id
                     users_map[rd_username] = user_id
 
-            group_dbs = group_map.get(qtree_id)
+            group_dbs = group_map.get(
+                (target_type, target_id),
+                group_map.get(target_id),
+            )
             if not group_dbs or len(group_dbs) > 1:
                 group_db = None
             else:
@@ -901,7 +802,10 @@ class StoragePulseMonitor:
             if group_db and group_db.associate_multiple_groups is False:
                 group_id = group_db.id
             else:
-                su_db = storage_usage_map.get((user_id, qtree_id))
+                su_db = storage_usage_map.get(
+                    (user_id, target_type, target_id),
+                    storage_usage_map.get((user_id, target_id)),
+                )
                 if su_db is None:
                     return None
                 group_db = su_db.group
@@ -920,110 +824,88 @@ class StoragePulseMonitor:
         return None
 
 
+    def _isilon_directory_quota_spaces(self, raw_quotas):
+        spaces = []
+        for quota in raw_quotas:
+            if quota.get('type') != 'directory' or not quota.get('path'):
+                continue
+            thresholds = quota.get('thresholds', {})
+            used = _bytes_to_gb(quota.get('usage', {}).get('logical'))
+            limit = _bytes_to_gb(thresholds.get('hard'))
+            soft_limit = _quota_limit_to_gb(thresholds.get('soft'))
+            spaces.append(volumeSchema.VolumeBase(
+                storage_cluster_id=self.storage_cluster_id,
+                name=quota['path'],
+                vserver='',
+                state='',
+                type='directory_quota',
+                allocated=limit,
+                aggregate='',
+                limit=limit,
+                soft_limit=soft_limit,
+                used=used,
+                use_ratio=_calculate_use_ratio(used, limit),
+                soft_use_ratio=_calculate_use_ratio(used, soft_limit),
+                updated_at=datetime.now(),
+            ))
+        return spaces
+
     def _fetch_user_quotas_isilon(self, target_map, group_map,
-                        users_map, users_uid_map, storage_usage_map) -> tuple[list[VolumeBase], list[StorageUsageBase]]:
+                        users_map, users_uid_map, storage_usage_map,
+                        raw_quotas=None) -> tuple[list[VolumeBase], list[StorageUsageBase]]:
         """Isilon 用户配额获取"""
-        volumes =[]
+        volumes = []
         quotas = []
         if self.client is None:
-            return volumes,quotas
-        try:
-            user_quotas = []
-            group_quotas = []
-            default_user_quotas_map = {}
-            raw_quotas = self.client.get_quotas()
-
-
-            for quota in raw_quotas:
-                quota_type = quota.get('type')
-                thresholds = quota.get('thresholds', {})
-                path = quota.get('path')
-                linked = quota.get('linked',False)
-                usage = quota.get('usage', {})
-                hard_bytes = thresholds.get('hard')
-                soft_bytes = thresholds.get('soft')
-                used_bytes = usage.get('logical')
-
-                used = _bytes_to_gb(used_bytes)
-                hard_limit = _bytes_to_gb(hard_bytes)
-                soft_limit = _quota_limit_to_gb(soft_bytes)
-
-                if quota_type == 'default-user':
-                    default_user_quotas_map[path] = {
-                        'hard_limit':hard_limit,
-                        'soft_limit':soft_limit
-                    }
-                else:
-                    quota_new = {
-                        'path':path,
-                        'linked':linked,
-                        'used':used,
-                        'hard_limit': hard_limit,
-                        'soft_limit': soft_limit
-                    }
-                    if quota_type == 'user':
-                        persona = quota.get('persona')
-                        rd_username = persona.get('name', '').strip()
-                        if rd_username in ('*', 'root', ''):
-                            continue
-                        quota_new['rd_username'] = rd_username
-                        user_quotas.append(quota_new)
-                    if quota_type == 'directory':
-                        group_quotas.append(quota_new)
-
-            for quota in user_quotas:
-                path  = quota.get('path')
-                linked = quota.get('linked')
-                hard_limit = quota.get('hard_limit')
-                soft_limit = quota.get('soft_limit')
-                used = quota.get('used')
-                if linked is True:
-                    limit = default_user_quotas_map.get(path,{}).get('hard_limit')
-                    soft_limit = default_user_quotas_map.get(path,{}).get('soft_limit')
-                else:
-                    limit = hard_limit
-                use_ratio = _calculate_use_ratio(used, limit)
-                soft_use_ratio = _calculate_use_ratio(used, soft_limit)
-                quota['use_ratio'] = use_ratio
-                quota['limit'] = limit
-                quota['soft_limit'] = soft_limit
-                quota['soft_use_ratio'] = soft_use_ratio
-                item = self._process_quota_user_isilon(
-                    quota, target_map, group_map,
-                    users_map, users_uid_map, storage_usage_map
-                )
-
-                if item:
-                    quotas.append(item)
-
-            for group in group_quotas:
-                path = group.get('path')
-                hard_limit = group.get('hard_limit')
-                soft_limit = group.get('soft_limit')
-                used = group.get('used')
-                limit = hard_limit
-                use_ratio = _calculate_use_ratio(used, limit)
-                soft_use_ratio = _calculate_use_ratio(used, soft_limit)
-
-                volumes.append(volumeSchema.VolumeBase(
-                    storage_cluster_id=self.storage_cluster_id,
-                    name=path,
-                    vserver='',
-                    state='',
-                    type='',
-                    allocated=limit,
-                    aggregate='isilon_cluster',
-                    limit=limit,
-                    soft_limit=soft_limit,
-                    used=used,
-                    use_ratio=use_ratio,
-                    soft_use_ratio=soft_use_ratio,
-                    updated_at=datetime.now()
-                ))
-
-            self.logger.info(f"{self._log_prefix} Fetched {len(quotas)} user quotas {len(volumes)} volumes")
-
             return volumes, quotas
-        except Exception as e:
-            self.logger.error(f"{self._log_prefix} Failed to fetch user quotas: {e}")
+        raw_quotas = self.client.get_quotas() if raw_quotas is None else raw_quotas
+        volumes = self._isilon_directory_quota_spaces(raw_quotas)
+        default_user_quotas_map = {}
+        user_quotas = []
+        for quota in raw_quotas:
+            quota_type = quota.get('type')
+            thresholds = quota.get('thresholds', {})
+            path = quota.get('path')
+            hard_limit = _bytes_to_gb(thresholds.get('hard'))
+            soft_limit = _quota_limit_to_gb(thresholds.get('soft'))
+            if quota_type == 'default-user':
+                default_user_quotas_map[path] = (hard_limit, soft_limit)
+            elif quota_type == 'user':
+                rd_username = (quota.get('persona') or {}).get('name', '').strip()
+                if rd_username in ('*', 'root', ''):
+                    continue
+                user_quotas.append({
+                    'path': path,
+                    'linked': quota.get('linked', False),
+                    'used': _bytes_to_gb(quota.get('usage', {}).get('logical')),
+                    'hard_limit': hard_limit,
+                    'soft_limit': soft_limit,
+                    'rd_username': rd_username,
+                })
+
+        for quota in user_quotas:
+            limit = quota['hard_limit']
+            soft_limit = quota['soft_limit']
+            if quota['linked']:
+                limit, soft_limit = default_user_quotas_map.get(
+                    quota['path'],
+                    (None, None),
+                )
+            quota.update(
+                limit=limit,
+                soft_limit=soft_limit,
+                use_ratio=_calculate_use_ratio(quota['used'], limit),
+                soft_use_ratio=_calculate_use_ratio(quota['used'], soft_limit),
+            )
+            item = self._process_quota_user_isilon(
+                quota, target_map, group_map,
+                users_map, users_uid_map, storage_usage_map
+            )
+            if item:
+                quotas.append(item)
+
+        self.logger.info(
+            f"{self._log_prefix} Fetched {len(quotas)} user quotas "
+            f"{len(volumes)} storage spaces"
+        )
         return volumes, quotas
