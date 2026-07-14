@@ -3,6 +3,7 @@ from datetime import datetime
 from unittest.mock import Mock
 
 import pytest
+import requests
 
 import models
 from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
@@ -68,6 +69,46 @@ def test_isilon_storage_pools_reject_invalid_envelopes(payload):
 
     with pytest.raises(ValueError, match="storagepools"):
         client.get_storage_pools()
+
+
+def test_isilon_client_close_logs_out_uncached_session():
+    client = object.__new__(IsilonClient)
+    client.session = Mock()
+    client._session_cache_enabled = False
+    client._session_url = "https://storage.local:8080/session/1/session"
+    client._log = Mock()
+
+    client.close()
+
+    client.session.delete.assert_called_once_with(client._session_url, timeout=15)
+    client.session.close.assert_called_once_with()
+
+
+def test_isilon_client_close_still_closes_when_logout_fails():
+    client = object.__new__(IsilonClient)
+    client.session = Mock()
+    client.session.delete.side_effect = requests.ConnectionError("offline")
+    client._session_cache_enabled = False
+    client._session_url = "https://storage.local:8080/session/1/session"
+    client._log = Mock()
+
+    client.close()
+
+    client.session.close.assert_called_once_with()
+    client._log.assert_called_once()
+
+
+def test_isilon_client_close_preserves_cached_session():
+    client = object.__new__(IsilonClient)
+    client.session = Mock()
+    client._session_cache_enabled = True
+    client._session_url = "https://storage.local:8080/session/1/session"
+    client._log = Mock()
+
+    client.close()
+
+    client.session.delete.assert_not_called()
+    client.session.close.assert_called_once_with()
 
 
 def test_isilon_capacity_pools_map_real_storage_pool_usage(db_session):
