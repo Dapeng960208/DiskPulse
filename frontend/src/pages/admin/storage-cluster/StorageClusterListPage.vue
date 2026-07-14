@@ -112,6 +112,24 @@ query();
         show-overflow-tooltip
       />
       <ElTableColumn
+        label="协议"
+        prop="protocol"
+        align="center"
+        min-width="80">
+        <template #default="{ row }">
+          {{ row.protocol?.toUpperCase() }}
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="TLS 校验"
+        prop="tls_verify"
+        align="center"
+        min-width="90">
+        <template #default="{ row }">
+          {{ row.protocol === 'https' ? (row.tls_verify ? '开启' : '关闭') : '不适用' }}
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
         label="限额"
         sortable="custom"
         align="center"

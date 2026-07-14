@@ -241,6 +241,8 @@ const ElSwitchStub = defineComponent({
       default: false,
     },
     disabled: Boolean,
+    activeText: String,
+    inactiveText: String,
   },
   emits: ['update:modelValue'],
   setup(props, { emit }) {
@@ -410,9 +412,10 @@ describe('dialog component function coverage', () => {
     await wrapper.find('input[type="number"]').setValue(2022);
     await wrapper.findAll('input').at(4).setValue('storage-user');
     await wrapper.findAll('input').at(5).setValue('secret');
-    const activeSwitch = wrapper.find('input[type="checkbox"]');
-    expect(activeSwitch.element.checked).toBe(true);
-    await activeSwitch.setChecked(false);
+    const activeSwitch = wrapper.findAllComponents({ name: 'ElSwitch' })
+      .find((switchComponent) => switchComponent.props('activeText') === '启用');
+    expect(activeSwitch.find('input').element.checked).toBe(true);
+    await activeSwitch.find('input').setChecked(false);
     await findSubmitButton(wrapper).trigger('click');
     await wrapper.find('[data-test="dialog-model"]').trigger('click');
     await wrapper.find('[data-test="dialog-close"]').trigger('click');

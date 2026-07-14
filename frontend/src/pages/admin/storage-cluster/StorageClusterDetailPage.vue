@@ -118,8 +118,12 @@ onBeforeMount(() => {
         border>
         <ElDescriptionsItem label="集群名称">{{ infoResult.name }}</ElDescriptionsItem>
         <ElDescriptionsItem label="描述">{{ infoResult.description }}</ElDescriptionsItem>
-        <ElDescriptionsItem label="SSH 端口">{{ infoResult.storage_port }}</ElDescriptionsItem>
-        <ElDescriptionsItem label="SSH 用户名">{{ infoResult.storage_user }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="访问协议">{{ infoResult.protocol?.toUpperCase() }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="TLS 证书校验">
+          {{ infoResult.protocol === 'https' ? (infoResult.tls_verify ? '开启' : '关闭') : '不适用' }}
+        </ElDescriptionsItem>
+        <ElDescriptionsItem label="API 端口">{{ infoResult.storage_port }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="API 用户名">{{ infoResult.storage_user }}</ElDescriptionsItem>
         <ElDescriptionsItem label="创建时间">{{ infoResult.created_at }}</ElDescriptionsItem>
         <ElDescriptionsItem label="更新时间">{{ infoResult.updated_at }}</ElDescriptionsItem>
       </ElDescriptions>

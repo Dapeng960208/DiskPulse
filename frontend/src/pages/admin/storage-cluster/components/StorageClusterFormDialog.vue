@@ -3,6 +3,7 @@ import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElInputNumber, ElMessa
 import { useDialog } from '@/composables/dialog';
 import { useForm } from '@/composables/form';
 import storageClusterApi from '@/api/storage-cluster-api';
+import { watch } from 'vue';
 
 const emit = defineEmits(['submitted']);
 
@@ -23,6 +24,8 @@ const {
   storage_port: 22,
   storage_user: '',
   storage_password: '',
+  protocol: 'https',
+  tls_verify: true,
   is_active: true,
 }), {
   rules: () => ({
@@ -43,7 +46,10 @@ const {
     ],
   }),
   doSubmit(mode) {
-    const modelValue = { ...model.value };
+    const modelValue = {
+      ...model.value,
+      tls_verify: model.value.protocol === 'https' && model.value.tls_verify,
+    };
     return mode === 'create'
       ? storageClusterApi.create(modelValue)
       : storageClusterApi.replace(modelValue.id, modelValue);
@@ -53,6 +59,10 @@ const {
     emit('submitted');
     close();
   },
+});
+
+watch(() => model.value.protocol, (protocol) => {
+  if (protocol === 'http') model.value.tls_verify = false;
 });
 
 defineExpose({
@@ -119,7 +129,28 @@ defineExpose({
           placeholder="请输入主机地址" />
       </ElFormItem>
       <ElFormItem
-        label="SSH 端口"
+        label="访问协议"
+        prop="protocol">
+        <ElSelect v-model="model.protocol">
+          <ElOption
+            label="HTTPS"
+            value="https" />
+          <ElOption
+            label="HTTP"
+            value="http" />
+        </ElSelect>
+      </ElFormItem>
+      <ElFormItem
+        label="TLS 证书校验"
+        prop="tls_verify">
+        <ElSwitch
+          v-model="model.tls_verify"
+          :disabled="model.protocol === 'http'"
+          active-text="校验"
+          inactive-text="不校验" />
+      </ElFormItem>
+      <ElFormItem
+        label="API 端口"
         prop="storage_port">
         <ElInputNumber
           v-model="model.storage_port"
@@ -129,22 +160,22 @@ defineExpose({
           style="width: 100%" />
       </ElFormItem>
       <ElFormItem
-        label="SSH 用户名"
+        label="API 用户名"
         prop="storage_user">
         <ElInput
           v-model="model.storage_user"
           clearable
-          placeholder="请输入 SSH 用户名" />
+          placeholder="请输入 API 用户名" />
       </ElFormItem>
       <ElFormItem
-        label="SSH 密码"
+        label="API 密码"
         prop="storage_password">
         <ElInput
           v-model="model.storage_password"
           type="password"
           show-password
           clearable
-          placeholder="请输入 SSH 密码" />
+          placeholder="请输入 API 密码" />
       </ElFormItem>
       <ElFormItem
         label="是否启用"
