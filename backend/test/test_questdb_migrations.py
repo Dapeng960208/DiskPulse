@@ -1,0 +1,126 @@
+# -*- coding: utf-8 -*-
+import ast
+import importlib.util
+import sys
+from pathlib import Path
+
+import pytest
+from sqlalchemy.schema import CreateTable
+
+import questdb.models  # noqa: F401
+from questdb.database import QuestDBBase, questdb_engine
+
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+MIGRATION_MODULE = BACKEND_ROOT / "questdb" / "migrate.py"
+MIGRATION_ROOT = BACKEND_ROOT / "questdb" / "migrations"
+
+
+class _Rows:
+    def __init__(self, rows=()):
+        self._rows = rows
+
+    def all(self):
+        return list(self._rows)
+
+
+class _Connection:
+    def __init__(self, engine):
+        self.engine = engine
+
+    def execute(self, statement, parameters=None):
+        sql = " ".join(str(statement).split())
+        self.engine.statements.append(sql)
+        if sql.startswith("SELECT version, checksum"):
+            return _Rows(self.engine.applied.items())
+        if sql.startswith("INSERT INTO diskpulse_schema_migrations"):
+            self.engine.applied[parameters["version"]] = parameters["checksum"]
+        return _Rows()
+
+    def commit(self):
+        self.engine.commits += 1
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return False
+
+
+class _Engine:
+    def __init__(self, applied=None):
+        self.applied = dict(applied or {})
+        self.statements = []
+        self.commits = 0
+
+    def connect(self):
+        return _Connection(self)
+
+
+def _load_runner():
+    assert MIGRATION_MODULE.is_file(), "QuestDB requires a migration runner"
+    spec = importlib.util.spec_from_file_location("diskpulse_questdb_migrate", MIGRATION_MODULE)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _normalize(sql: str) -> str:
+    return " ".join(sql.split())
+
+
+def test_questdb_initial_revision_matches_current_models():
+    runner = _load_runner()
+    migrations = runner.load_migrations(MIGRATION_ROOT)
+
+    assert len(migrations) == 1
+    assert migrations[0].version == "000000000001"
+    expected = {
+        _normalize(
+            str(CreateTable(table).compile(dialect=questdb_engine.dialect)).replace(
+                "CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ", 1
+            )
+        )
+        for table in QuestDBBase.metadata.sorted_tables
+    }
+    assert set(map(_normalize, migrations[0].statements)) == expected
+
+
+def test_questdb_upgrade_records_revision_and_is_repeatable():
+    runner = _load_runner()
+    engine = _Engine()
+
+    assert runner.upgrade(engine) == ("000000000001",)
+    assert runner.upgrade(engine) == ()
+    assert engine.applied.keys() == {"000000000001"}
+    assert engine.commits == 2
+
+
+def test_questdb_upgrade_rejects_changed_applied_revision():
+    runner = _load_runner()
+    engine = _Engine({"000000000001": "changed"})
+
+    with pytest.raises(RuntimeError, match="checksum"):
+        runner.upgrade(engine)
+
+
+def test_startup_uses_versioned_questdb_migrations():
+    source = (BACKEND_ROOT / "main.py").read_text(encoding="utf-8")
+    module = ast.parse(source)
+    imported_aliases = {
+        alias.asname or alias.name
+        for node in module.body
+        if isinstance(node, ast.ImportFrom) and node.module == "questdb.migrate"
+        for alias in node.names
+    }
+    called_names = {
+        node.func.id
+        for node in ast.walk(module)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+
+    assert "upgrade_questdb" in imported_aliases
+    assert "upgrade_questdb" in called_names
+    assert "QuestDBBase.metadata.create_all" not in source
