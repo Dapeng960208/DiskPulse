@@ -1,6 +1,6 @@
 # NetApp 与 Isilon 存储资源术语及映射
 
-> 状态：代码已实现，后端与前端完整行为验证已通过。Isilon-CR02（OneFS 9.11.0.5）已发起只读验收，但当前账号缺少 PAPI `platform` 服务登录权限；真机响应、分页和容量口径待授权后验证。
+> 状态：代码已实现，后端与前端行为验证已通过。Isilon-CR02（OneFS 9.11.0.5）已完成身份、Storage Pool 列表和 Quota 分页的只读检查；真机 Storage Pool 未返回可选 `usage` 对象，容量字段来源仍待确认，因此真机采集尚未验收完成。
 
 ## 1. 目标
 
@@ -210,7 +210,9 @@ PostgreSQL 提交成功后写入 QuestDB
 
 ## 10. 风险与待验证项
 
-- Isilon-CR02（OneFS 9.11.0.5）只读验收已被账号的 PAPI `platform` 服务登录权限阻塞；授权后仍需验证 `/platform/latest`、Storage Pool `?describe`、实际字段、分页和容量单位。
+- Isilon-CR02（OneFS 9.11.0.5）已通过节点管理入口验证 `/platform/latest`、Storage Pool 实际列表和 Quota 分页；应用部署配置仍需从服务入口切换到节点或 System zone 管理入口。
+- 真机返回的 Storage Pool 条目包含名称和类型，但未包含 SDK 中定义为可选的 `usage` 对象；在确认容量字段的官方来源、所需权限和单位前，不添加猜测式回退，采集失败时保持整集群回滚。
+- 未缓存的 OneFS API 会话会在客户端关闭时通过 `DELETE /session/1/session` 注销，避免服务端会话持续占用并发名额。
 - Directory Quota 与 Storage Pool 不一定是一对一关系，当前不会为了填充“所属容量池”而人工指定默认池。
 - 运行时兼容清理已由自动化测试覆盖，但仍需在持有历史占位数据的集成库观察一次完整采集事务。
 
@@ -219,4 +221,5 @@ PostgreSQL 提交成功后写入 QuestDB
 - [NetApp：Disks and ONTAP local tiers](https://docs.netapp.com/us-en/ontap/disks-aggregates/)
 - [NetApp：Volumes, qtrees, files, and LUNs](https://docs.netapp.com/us-en/ontap/concepts/volumes-qtrees-files-luns-concept.html)
 - [Dell：PowerScale OneFS quota types](https://www.dell.com/support/manuals/en-us/isilon-onefs/ifs-pub-91300-administration-guide-gui/quota-types?guid=guid-8d7d96db-d24f-4edb-9789-f7ce88ca7d70&lang=en-us)
-- [Dell OneFS 9.11 SDK：Storagepool API](https://github.com/Isilon/isilon_sdk_python/blob/master/onefs/9.11.0/docs/StoragepoolApi.md)
+- [Dell OneFS 9.11 SDK：Storagepool API](https://github.com/Isilon/isilon_sdk_python/blob/Isilon_SDK_v0.7.0/isilon_sdk/isilon_sdk/v9_11_0/docs/StoragepoolApi.md)
+- [Dell OneFS API：注销会话](https://www.dell.com/support/manuals/en-us/isilon-onefs/ifs_pub_onefs_api_reference/log-out-of-a-session?guid=guid-6e944631-bc6b-435c-983a-fe01a7e0d6c2&lang=en-us)

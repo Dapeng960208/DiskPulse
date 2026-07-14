@@ -1,12 +1,12 @@
 # 错误记录
 
-### 2026-07-14：Isilon 真机账号缺少 PAPI 登录权限
+### 2026-07-14：Isilon 管理端点错误且 API 会话未释放
 - 触发：使用应用已配置的 Isilon 账号执行 OneFS 9.11 只读验收。
-- 现象：`POST /session/1/session` 返回 `403`，提示账号无权登录请求的 `platform` 服务；随后 `/platform/1/cluster/config` 返回 `401`。
-- 根因：当前账号未获得 OneFS PAPI（`platform` service）登录权限，尚未进入 Storage Pool 或 Quota 数据读取阶段。
-- 处理：停止后续请求，不触发采集、数据库更新或 QuestDB 写入；等待存储管理员补充只读 PAPI 权限后复验。
-- 验证：相同应用配置重复执行结果一致；浏览器直接访问 `/platform/latest` 同样返回 `401`。
-- 风险：设备身份、Storage Pool 字段、容量单位、分页和 Directory Quota 实际结构仍未完成真机确认。
+- 现象：应用配置的服务入口在 `POST /session/1/session` 拒绝 `platform` 服务；切换到该集群的节点管理入口后首次登录成功，但后续新会话再次被拒绝。
+- 根因：账号已启用、未锁定、密码未过期，且角色包含 Platform API、Cluster、SmartPools 和 Quota 权限，原“账号缺少 PAPI 权限”判断不成立。实际包含两个问题：应用使用了不适合 PAPI 管理请求的服务入口；客户端关闭时只释放本地连接，没有按 OneFS 规范删除服务端会话，可能耗尽并发管理会话。
+- 修复：未缓存会话关闭时调用 `DELETE /session/1/session`；注销请求失败只记录异常类型，并保证本地 HTTP session 关闭。应用连接入口仍需在部署配置中改为节点或 System zone 管理入口。
+- 验证：节点管理入口成功返回集群身份和 OneFS `9.11.0.5`；Storage Pool 接口返回 `2` 个真实 Node Pool；Quota 接口完成 `3` 页、共 `2264` 条数据的分页读取，其中 `64` 条为 Directory Quota。会话关闭聚焦测试 `3 passed`，资源映射测试文件 `19 passed`。
+- 风险：真机 Storage Pool 条目未返回可选的 `usage` 对象，当前容量池采集仍会因缺少总容量和已用容量而回滚；容量字段来源和单位确认前不得认定真机采集完成，也不得猜测性填充容量。
 
 ### 2026-07-14：存储一览加载态引用了不存在的变量
 - 触发：为“存储一览”新增集群切换页面测试并挂载 `DashboardPage.vue`。

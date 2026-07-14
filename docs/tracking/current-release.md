@@ -97,6 +97,7 @@
 - `GET /groups` 新增 `volume_id` 过滤；与 `qtree_id` 同时提交时返回 `422`。
 - 前端路由、列表、详情、选择器、项目组、用量和告警统一使用“容量池”“存储空间”“Qtree（NetApp）”，厂商原生类型由现有字段派生。
 - 保留 `Aggregate`、`Volume`、`Qtree` 模型、枚举和 API 路径；未新增 PostgreSQL、Alembic 或 QuestDB schema，QuestDB 当前 head 仍为 `000000000002`。
+- Isilon 未启用会话缓存时按 OneFS 规范显式注销服务端会话；注销失败不覆盖采集结果，并始终关闭本地 HTTP session。
 - 更新领域术语、资源映射、API 示例、迁移说明、最新功能和存储集群专题索引。
 
 ### 验证状态
@@ -106,11 +107,14 @@
 - 前端默认 `npm run test:coverage` 已为 `150/150` 通过；全局测试超时统一为 `15s`。
 - 前端覆盖率为 Statements/Lines `91.88%`、Branches `82.10%`、Functions `69.75%`；`npm run lint` 和 `npm run build:prod` 通过。
 - 登录态 Chrome 冒烟通过容量池、存储空间、Qtree（NetApp）、项目组页面和 NetApp 存储目标选项；未发现页面级横向溢出。
+- Isilon 节点管理入口已确认集群身份和 OneFS `9.11.0.5`；Storage Pool 接口返回 `2` 个真实 Node Pool，Quota 接口完成 `3` 页、`2264` 条数据的读取，其中 `64` 条为 Directory Quota。
+- 新增会话注销 RED/GREEN 测试；会话关闭聚焦测试 `3 passed`，资源映射测试文件 `19 passed`。
 
 ### 风险与后续
 
-- 已发起 Isilon-CR02（OneFS 9.11.0.5）只读验收，但已配置账号在 `/session/1/session` 被拒绝登录 `platform` 服务，真实 Storage Pool 与 Quota 请求尚未执行；待补充只读 PAPI 权限后复验。
-- 应用当前 Isilon 连接地址与计划中的验收入口不同；需由存储管理员确认两者是否属于同一集群或统一连接入口。
+- 已确认当前账号启用、未锁定、密码未过期，且角色权限覆盖 Platform API、Cluster、SmartPools 和 Quota；无需以“补充 PAPI 权限”为前提继续排查。
+- 应用当前配置的是服务入口，PAPI 管理会话需使用已验证的节点或 System zone 管理入口；本次未直接修改部署数据库中的连接地址。
+- 真机 Storage Pool 条目未返回 SDK 中定义为可选的 `usage` 对象，当前实现缺少容量池总容量和已用容量来源；确认官方字段来源和权限影响前，整集群采集仍保持回滚保护。
 - 尚未在持有历史 `isilon_cluster`/`null` Qtree 数据的集成 PostgreSQL 和 QuestDB 环境观察完整采集事务；QuestDB 历史占位指标按设计保留。
 - Directory Quota 与 Storage Pool 不保证一对一；无法确认唯一归属时 `Volume.aggregate` 保持为空。
 - 当前配置关闭 TLS 证书校验，真机请求会产生 `InsecureRequestWarning`；生产环境应配置可信 CA 并启用校验。
