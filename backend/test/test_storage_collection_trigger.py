@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+import pytest
+
+from appConfig import base_config
+from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
 from celery_tasks.tasks.storages import load_collection_snapshot
 from models import StorageCluster
 from routers.storage_cluster import _schedule_storage_collection
@@ -37,3 +41,56 @@ def test_schedule_failure_is_logged_without_rolling_back_cluster(caplog):
         _schedule_storage_collection(42)
 
     assert "Failed to schedule storage collection for cluster 42" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("storage_type", "client_name", "port"),
+    [("netapp", "NetAppClient", 443), ("isilon", "IsilonClient", 8080)],
+)
+def test_storage_monitor_disables_tls_verification_by_default(
+    db_session, storage_type, client_name, port
+):
+    db_session.add(
+        StorageCluster(
+            id=1,
+            name=f"{storage_type}-a",
+            storage_type=storage_type,
+            storage_host="storage.local",
+            storage_port=port,
+            storage_user="svc",
+            storage_password="secret",
+            is_active=True,
+        )
+    )
+    db_session.commit()
+
+    with patch(
+        f"celery_tasks.manager.storagePulseMonitor.{client_name}"
+    ) as client_class:
+        StoragePulseMonitor(db_session, Mock(), storage_cluster_id=1).setup()
+
+    assert client_class.call_args.kwargs["tls_verify"] is False
+
+
+def test_storage_monitor_honors_enabled_tls_verification(db_session, monkeypatch):
+    db_session.add(
+        StorageCluster(
+            id=1,
+            name="netapp-a",
+            storage_type="netapp",
+            storage_host="storage.local",
+            storage_port=443,
+            storage_user="svc",
+            storage_password="secret",
+            is_active=True,
+        )
+    )
+    db_session.commit()
+    monkeypatch.setitem(base_config.config["storage"], "tls_verify", True)
+
+    with patch(
+        "celery_tasks.manager.storagePulseMonitor.NetAppClient"
+    ) as client_class:
+        StoragePulseMonitor(db_session, Mock(), storage_cluster_id=1).setup()
+
+    assert client_class.call_args.kwargs["tls_verify"] is True

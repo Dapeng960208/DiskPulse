@@ -155,3 +155,12 @@
 - 修复：表单新增默认启用的 `ElSwitch` 并提交 `is_active`；调度改用 `uvicorn.error` logger 记录开始、成功和失败，Celery 任务补充开始日志。
 - 验证：同一组 RED 用例转为 GREEN；前端 `7 passed` 且生产构建通过，后端相关用例 `10 passed`、目标模块合计覆盖率 `93%`。
 - 风险：真实 Redis、Celery worker 和存储设备日志仍需部署环境验证。
+
+### 2026-07-14：自签名存储证书导致采集返回空数据
+
+- 触发：Celery worker 通过 HTTPS 连接使用自签名证书的 NetApp。
+- 现象：请求报 `CERTIFICATE_VERIFY_FAILED`，随后采集日志显示 `Fetched 0 volumes` 和 `Fetched 0 user quotas`。
+- 根因：NetApp/Isilon 客户端支持 `tls_verify`，但采集入口未从存储配置传入；客户端又将连接异常吞成空结果。
+- 修复：待增加全局 `storage.tls_verify` 配置并默认关闭，同时让 API 连接失败向上抛出以回滚本轮采集。
+- 验证：RED 已确认，配置默认值、客户端参数贯通和连接失败传播共 `6 failed`。
+- 风险：修复前继续运行 Beat 可能将采集失败误判为空设备数据。

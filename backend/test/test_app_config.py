@@ -6,6 +6,9 @@ import pytest
 from appConfig import Config
 
 
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+
 def _write_config(path: Path, ldap_flags: str = "lookup_user_dn: true\n  lookup_as_user: false") -> Path:
     path.write_text(
         f"""
@@ -114,3 +117,9 @@ def test_rejects_invalid_yaml(tmp_path, content):
 def test_rejects_missing_yaml_file(tmp_path):
     with pytest.raises(FileNotFoundError, match="Configuration file not found"):
         Config(tmp_path / "missing.yml")
+
+
+def test_example_storage_config_disables_tls_verification_by_default():
+    config = Config(BACKEND_ROOT / "config.example.yml")
+
+    assert config.get("storage.tls_verify") is False

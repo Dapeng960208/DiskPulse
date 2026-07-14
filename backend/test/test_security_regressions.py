@@ -3,9 +3,10 @@ import base64
 import hmac
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
+import requests
 from fastapi import APIRouter
 
 from appConfig import base_config
@@ -13,6 +14,7 @@ import models
 from celery_tasks.manager.remoteFileManager import RemoteFileManager
 from routers import common, config, storage_cluster
 from utils.netAppClient import NetAppClient
+from utils.isilonClient import IsilonClient
 from utils.security import decode_token, issue_token
 
 
@@ -148,6 +150,25 @@ def test_netapp_client_verifies_tls_by_default():
     client = NetAppClient("storage.local", "svc", "secret")
 
     assert client.session.verify is True
+
+
+def test_netapp_client_propagates_connection_failure():
+    client = NetAppClient("storage.local", "svc", "secret", tls_verify=False)
+    client.session.get = Mock(side_effect=requests.ConnectionError("unavailable"))
+
+    with pytest.raises(requests.ConnectionError, match="unavailable"):
+        client.get_volumes()
+
+
+def test_isilon_client_propagates_connection_failure():
+    client = object.__new__(IsilonClient)
+    client.base_url = "https://storage.local:8080/platform"
+    client.session = Mock()
+    client.session.get.side_effect = requests.ConnectionError("unavailable")
+    client._log = Mock()
+
+    with pytest.raises(requests.ConnectionError, match="unavailable"):
+        client._get("/1/cluster/statfs")
 
 
 def test_remote_file_manager_quotes_shell_path_arguments():
