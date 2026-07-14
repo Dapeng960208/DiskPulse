@@ -40,9 +40,10 @@ router.beforeEach(async (to, from) => {
   const currentUser = useCurrentUser();
 
   try {
-    const { result } = await usersApi.fetchProfile();
-
-    currentUser.setCurrentUser(result);
+    if (currentUser.id == null) {
+      const { result } = await usersApi.fetchProfile();
+      currentUser.setCurrentUser(result);
+    }
 
     if (requiredRoles.length > 0 && !hasAnyRole(requiredRoles)) {
       return '/403';
