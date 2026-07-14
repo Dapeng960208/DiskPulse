@@ -2,11 +2,15 @@ import { defineComponent, h } from 'vue';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { vi } from 'vitest';
 
-const volumeApi = vi.hoisted(() => ({
-  fetch: vi.fn(() => Promise.resolve({ content: [], total: 0 })),
-}));
+const resourceApis = vi.hoisted(() => Object.fromEntries(
+  ['volume', 'aggregate', 'qtree'].map((resource) => [resource, {
+    fetch: vi.fn(() => Promise.resolve({ content: [], total: 0 })),
+  }]),
+));
 
-vi.mock('@/api/volume-api.js', () => ({ default: volumeApi }));
+vi.mock('@/api/volume-api.js', () => ({ default: resourceApis.volume }));
+vi.mock('@/api/aggregate-api.js', () => ({ default: resourceApis.aggregate }));
+vi.mock('@/api/qtree-api.js', () => ({ default: resourceApis.qtree }));
 vi.mock('@/components/form/StorageClusterSelect.vue', () => ({
   default: {
     name: 'StorageClusterSelect',
@@ -17,6 +21,9 @@ vi.mock('@/components/form/StorageClusterSelect.vue', () => ({
     emits: ['update:modelValue'],
     template: '<select />',
   },
+}));
+vi.mock('@/components/form/VolumeSelect.vue', () => ({
+  default: { name: 'VolumeSelect', template: '<select />' },
 }));
 vi.mock('@/utils/authorization', () => ({ hasRole: () => false }));
 vi.mock('vue-router', async () => ({
@@ -51,10 +58,9 @@ const StorageClusterSelect = defineComponent({
   },
 });
 
-describe('VolumeListPage', () => {
-  it('filters volumes by storage cluster and clears the filter on reset', async () => {
-    const { default: VolumeListPage } = await import('@/pages/admin/volume/VolumeListPage.vue');
-    const wrapper = shallowMount(VolumeListPage, {
+async function mountPage(loadPage) {
+  const Page = await loadPage();
+  const wrapper = shallowMount(Page, {
       global: {
         stubs: {
           FilterForm,
@@ -70,9 +76,19 @@ describe('VolumeListPage', () => {
         },
       },
     });
-    await flushPromises();
+  await flushPromises();
+  return wrapper;
+}
 
-    expect(volumeApi.fetch).toHaveBeenNthCalledWith(1, {
+describe('storage resource list cluster filters', () => {
+  it.each([
+    ['volumes', () => import('@/pages/admin/volume/VolumeListPage.vue').then(({ default: page }) => page), resourceApis.volume],
+    ['aggregates', () => import('@/pages/admin/aggregate/AggregateListPage.vue').then(({ default: page }) => page), resourceApis.aggregate],
+    ['qtrees', () => import('@/pages/admin/qtree/QtreeListPage.vue').then(({ default: page }) => page), resourceApis.qtree],
+  ])('filters %s by storage cluster and clears the filter on reset', async (_, loadPage, api) => {
+    const wrapper = await mountPage(loadPage);
+
+    expect(api.fetch).toHaveBeenNthCalledWith(1, {
       page: 1,
       size: 20,
       storage_cluster_id: null,
@@ -84,7 +100,7 @@ describe('VolumeListPage', () => {
     await wrapper.findComponent({ name: 'FilterForm' }).vm.$emit('query');
     await flushPromises();
 
-    expect(volumeApi.fetch).toHaveBeenLastCalledWith({
+    expect(api.fetch).toHaveBeenLastCalledWith({
       page: 1,
       size: 20,
       storage_cluster_id: 12,
@@ -93,7 +109,7 @@ describe('VolumeListPage', () => {
     await wrapper.findComponent({ name: 'FilterForm' }).vm.$emit('reset');
     await flushPromises();
 
-    expect(volumeApi.fetch).toHaveBeenLastCalledWith({
+    expect(api.fetch).toHaveBeenLastCalledWith({
       page: 1,
       size: 20,
       storage_cluster_id: null,
