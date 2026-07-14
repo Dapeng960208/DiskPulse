@@ -7,6 +7,17 @@ const volumeApi = vi.hoisted(() => ({
 }));
 
 vi.mock('@/api/volume-api.js', () => ({ default: volumeApi }));
+vi.mock('@/components/form/StorageClusterSelect.vue', () => ({
+  default: {
+    name: 'StorageClusterSelect',
+    props: {
+      modelValue: { type: Number, default: null },
+      clearable: Boolean,
+    },
+    emits: ['update:modelValue'],
+    template: '<select />',
+  },
+}));
 vi.mock('@/utils/authorization', () => ({ hasRole: () => false }));
 vi.mock('vue-router', async () => ({
   ...(await vi.importActual('vue-router')),
