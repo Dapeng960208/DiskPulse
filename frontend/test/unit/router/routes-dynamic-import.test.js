@@ -38,6 +38,7 @@ vi.mock('@/pages/group/GroupDetailPage.vue', () => ({ default: createRoutePageSt
 vi.mock('@/pages/alert/AlertListPage.vue', () => ({ default: createRoutePageStub('AlertListPage') }));
 vi.mock('@/pages/admin/storage-cluster/StorageClusterListPage.vue', () => ({ default: createRoutePageStub('StorageClusterListPage') }));
 vi.mock('@/pages/admin/storage-cluster/StorageClusterDetailPage.vue', () => ({ default: createRoutePageStub('StorageClusterDetailPage') }));
+vi.mock('@/pages/admin/storage-environment/StorageEnvironmentListPage.vue', () => ({ default: createRoutePageStub('StorageEnvironmentListPage') }));
 vi.mock('@/pages/admin/dashboard/DashboardPage.vue', () => ({ default: createRoutePageStub('AdminDashboardPage') }));
 vi.mock('@/pages/admin/aggregate/AggregateListPage.vue', () => ({ default: createRoutePageStub('AggregateListPage') }));
 vi.mock('@/pages/admin/aggregate/AggregateDetailPage.vue', () => ({ default: createRoutePageStub('AggregateDetailPage') }));
@@ -71,7 +72,7 @@ describe('router lazy route components', () => {
   it('invokes every lazy route component loader', async () => {
     const lazyComponents = collectLazyComponents(routes);
 
-    expect(lazyComponents).toHaveLength(23);
+    expect(lazyComponents).toHaveLength(24);
 
     await Promise.all(lazyComponents.map((loadComponent) => loadComponent().catch(() => null)));
   });

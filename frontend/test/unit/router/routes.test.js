@@ -21,6 +21,7 @@ describe('router/routes and app shell', () => {
     expect(adminRoute.children.map((route) => route.name)).toEqual(
       expect.arrayContaining([
         'StorageClusters',
+        'StorageEnvironments',
         'AdminDashboard',
         'Aggregates',
         'Volumes',
@@ -30,6 +31,14 @@ describe('router/routes and app shell', () => {
         'Settings',
       ]),
     );
+
+    const storageEnvironmentRoute = adminRoute.children.find(
+      (route) => route.name === 'StorageEnvironments',
+    );
+    expect(storageEnvironmentRoute).toEqual(expect.objectContaining({
+      path: 'storage-environments',
+      meta: expect.objectContaining({ title: '存储环境' }),
+    }));
   });
 
   it('mounts the root app shell', () => {

@@ -81,6 +81,35 @@ const ElAlertStub = defineComponent({
   },
 });
 
+const QueryFormStub = defineComponent({
+  name: 'QueryForm',
+  emits: ['query', 'reset'],
+  setup(_, { emit, slots }) {
+    return () => h('div', [
+      slots.default?.(),
+      h('button', { onClick: () => emit('query') }, '搜索'),
+      h('button', { onClick: () => emit('reset') }, '重置'),
+    ]);
+  },
+});
+
+const ProjectSelectStub = defineComponent({
+  name: 'ProjectSelect',
+  props: { modelValue: Number },
+  emits: ['update:modelValue'],
+  setup() {
+    return () => h('div');
+  },
+});
+
+const EnvironmentTableStub = defineComponent({
+  name: 'ProjectStorageEnvironmentTable',
+  props: { projectId: Number },
+  setup() {
+    return () => h('div');
+  },
+});
+
 const ElFormStub = defineComponent({
   name: 'ElForm',
   props: {
@@ -207,6 +236,45 @@ describe('project storage environment frontend contract', () => {
     expect(wrapper.text()).toContain('存储环境');
     expect(environmentTable.exists()).toBe(true);
     expect(environmentTable.props('projectId')).toBe(42);
+  });
+
+  it('mounts the selected project environment table from system management', async () => {
+    const { default: StorageEnvironmentListPage } = await import(
+      '@/pages/admin/storage-environment/StorageEnvironmentListPage.vue'
+    );
+    const wrapper = shallowMount(StorageEnvironmentListPage, {
+      global: {
+        stubs: {
+          ElEmpty: ElEmptyStub,
+          ElFormItem: ElFormItemStub,
+          ProjectSelect: ProjectSelectStub,
+          ProjectStorageEnvironmentTable: EnvironmentTableStub,
+          QueryForm: QueryFormStub,
+        },
+      },
+    });
+
+    expect(wrapper.text()).toContain('请先选择项目');
+    expect(wrapper.findComponent(EnvironmentTableStub).exists()).toBe(false);
+
+    const projectSelect = wrapper.findComponent(ProjectSelectStub);
+    projectSelect.vm.$emit('update:modelValue', 42);
+    await wrapper.findAll('button').find((button) => button.text() === '搜索').trigger('click');
+    await nextTick();
+
+    const firstTable = wrapper.findComponent(EnvironmentTableStub);
+    expect(firstTable.props('projectId')).toBe(42);
+
+    projectSelect.vm.$emit('update:modelValue', 7);
+    await wrapper.findAll('button').find((button) => button.text() === '搜索').trigger('click');
+    await nextTick();
+    expect(wrapper.findComponent(EnvironmentTableStub).props('projectId')).toBe(7);
+    expect(wrapper.findComponent(EnvironmentTableStub).vm).not.toBe(firstTable.vm);
+
+    await wrapper.findAll('button').find((button) => button.text() === '重置').trigger('click');
+    await nextTick();
+    expect(wrapper.findComponent(EnvironmentTableStub).exists()).toBe(false);
+    expect(wrapper.text()).toContain('请先选择项目');
   });
 
   it('loads {content,total}, paginates, and never references cluster credentials', async () => {
