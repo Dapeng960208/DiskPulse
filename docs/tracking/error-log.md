@@ -1,5 +1,13 @@
 # 错误记录
 
+### 2026-07-14：设置页旧测试仍操作已隐藏的备份控件
+- 触发：执行离职备份前端隐藏的五文件聚焦回归测试。
+- 现象：`settings-config.test.js` 仍读取两个 `ElInputNumber` 和一个 `ElSwitch`，隐藏备份页签后数组为空并触发 `Cannot read properties of undefined (reading 'vm')`。
+- 根因：旧用例把离职备份控件视为系统设置页的固定可见输入，没有覆盖“隐藏展示但保留配置值”的新契约。
+- 修复：移除对隐藏控件的交互，继续断言保存其他可见设置时完整配置对象提交，已有备份字段和值保持不变。
+- 验证：同一聚焦命令通过，`5` 个文件、`19` 个测试；`npm run lint` 和 `npm run build:prod` 通过。
+- 风险：仅调整前端测试假设；未改变后端配置或备份执行逻辑。
+
 ### 2026-07-14：Volume 页面测试桩未隔离作用域插槽和 Select 依赖
 - 触发：执行 `.\node_modules\.bin\vitest.cmd run test/unit/pages/volume-list-page.test.js --coverage.enabled=false`。
 - 现象：首次挂载因 `ElTableColumn` 测试桩未提供 `row` 报错；页面引入 `StorageClusterSelect` 后又在加载真实依赖链时触发 `Class extends value undefined`。

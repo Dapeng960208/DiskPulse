@@ -1,5 +1,31 @@
 # 当前交付记录
 
+## 2026-07-14：隐藏离职备份前端入口
+
+### 主题
+
+仅在前端隐藏离职备份页面入口、配置项和操作入口，保留现有页面、路由、字段绑定、调用逻辑和后端能力。
+
+### 已完成
+
+- 为 `/admin/backup` 路由增加 `meta.isHidden`，系统管理菜单不再展示“离职备份”，路由和 `BackUpListPage.vue` 保持注册。
+- 隐藏系统设置中的“目录操作和备份配置”页签。
+- 隐藏项目组列表中的离职备份列、项目组表单中的离职备份开关、项目组详情中的备份路径，以及用户目录列表中的“移至备份”按钮。
+- 保留 `confirmBackUp`、备份配置字段绑定、备份页面操作和全部 API 调用代码；保存其他系统设置时，隐藏的备份配置值保持不变。
+- 新增前端可见性契约，覆盖菜单、设置、项目组列表/表单/详情和用户目录操作六个展示面。
+
+### 验证状态
+
+- RED：新增可见性契约在六个展示面按预期失败；旧设置页测试因仍操作已隐藏的数字框和开关失败。
+- GREEN：`npx vitest run test/unit/offboarding-backup-visibility.test.js test/unit/settings-config.test.js test/unit/router/routes.test.js test/unit/components/dialog-function-coverage.test.js test/unit/smoke/components-and-pages.test.js --coverage.enabled=false` 通过，`5` 个文件、`19` 个测试。
+- `npm run lint`：通过。
+- `npm run build:prod`：通过；仍有既有 Sass legacy API deprecation 和大于 `500 kB` chunk 警告，本次未处理。
+
+### 风险与后续
+
+- 本次仅隐藏前端展示，不是权限控制；直接访问 `/admin/backup` 仍可加载原页面，后端接口行为未变。
+- 未执行真实浏览器端到端测试，菜单和各页面的最终视觉结果待集成环境确认。
+
 ## 2026-07-14：存储资源按集群筛选
 
 ### 主题
