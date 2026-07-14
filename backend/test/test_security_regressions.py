@@ -152,6 +152,31 @@ def test_netapp_client_verifies_tls_by_default():
     assert client.session.verify is True
 
 
+def test_netapp_client_uses_configured_protocol_for_base_and_next_urls():
+    client = NetAppClient(
+        "storage.local",
+        "svc",
+        "secret",
+        port=80,
+        protocol="http",
+    )
+    first_response = Mock()
+    first_response.json.return_value = {
+        "records": [],
+        "_links": {"next": {"href": "/api/storage/volumes?start=2"}},
+    }
+    second_response = Mock()
+    second_response.json.return_value = {"records": []}
+    client.session.get = Mock(side_effect=[first_response, second_response])
+
+    client.get_volumes()
+
+    assert [item.args[0] for item in client.session.get.call_args_list] == [
+        "http://storage.local:80/api/storage/volumes",
+        "http://storage.local:80/api/storage/volumes?start=2",
+    ]
+
+
 def test_netapp_client_propagates_connection_failure():
     client = NetAppClient("storage.local", "svc", "secret", tls_verify=False)
     client.session.get = Mock(side_effect=requests.ConnectionError("unavailable"))
@@ -179,6 +204,33 @@ def test_isilon_client_propagates_connection_failure():
 
     with pytest.raises(requests.ConnectionError, match="unavailable"):
         client._get("/1/cluster/statfs")
+
+
+def test_isilon_client_uses_configured_protocol_for_all_session_urls():
+    with (
+        patch.object(IsilonClient, "_load_cached_session", return_value=True),
+        patch.object(IsilonClient, "_probe", return_value=True),
+    ):
+        client = IsilonClient(
+            "storage.local",
+            "svc",
+            "secret",
+            port=8080,
+            protocol="http",
+        )
+
+    assert client.base_url == "http://storage.local:8080/platform"
+    assert client._session_url == "http://storage.local:8080/session/1/session"
+
+    client._apply_cookies({"csrf": "cached-token"})
+    assert client.session.headers["Referer"] == "http://storage.local:8080/"
+
+    response = Mock(ok=True, status_code=201)
+    response.json.return_value = {}
+    client.session.post = Mock(return_value=response)
+    client.session.cookies.set("isicsrf", "fresh-token")
+    assert client._login() is True
+    assert client.session.headers["Referer"] == "http://storage.local:8080/"
 
 
 def test_remote_file_manager_quotes_shell_path_arguments():

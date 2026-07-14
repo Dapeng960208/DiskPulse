@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 import requests
 
 import models
-from scripts.manual_isilon_check import fetch_quota_summary, load_isilon_config
+from scripts.manual_isilon_check import fetch_quota_summary, load_isilon_config, main
 
 
 def test_load_isilon_config_reads_named_database_cluster(db_session):
@@ -17,6 +17,8 @@ def test_load_isilon_config_reads_named_database_cluster(db_session):
             storage_port=8080,
             storage_user="collector",
             storage_password="secret",
+            protocol="http",
+            tls_verify=False,
             is_active=True,
         )
     )
@@ -30,6 +32,8 @@ def test_load_isilon_config_reads_named_database_cluster(db_session):
         "port": 8080,
         "username": "collector",
         "password": "secret",
+        "protocol": "http",
+        "tls_verify": False,
     }
 
 
@@ -47,13 +51,11 @@ def test_fetch_quota_summary_uses_configured_client_and_closes_it():
         "port": 8080,
         "username": "collector",
         "password": "secret",
+        "protocol": "http",
+        "tls_verify": False,
     }
 
-    summary = fetch_quota_summary(
-        config,
-        tls_verify=False,
-        client_factory=client_factory,
-    )
+    summary = fetch_quota_summary(config, client_factory=client_factory)
 
     assert summary == {"total": 3, "types": {"directory": 2, "user": 1}}
     client_factory.assert_called_once_with(
@@ -61,6 +63,7 @@ def test_fetch_quota_summary_uses_configured_client_and_closes_it():
         "collector",
         "secret",
         port=8080,
+        protocol="http",
         tls_verify=False,
     )
     client.close.assert_called_once_with()
@@ -78,9 +81,37 @@ def test_fetch_quota_summary_closes_client_when_request_fails():
                 "port": 8080,
                 "username": "collector",
                 "password": "secret",
+                "protocol": "https",
+                "tls_verify": True,
             },
-            tls_verify=True,
             client_factory=Mock(return_value=client),
         )
 
     client.close.assert_called_once_with()
+
+
+def test_main_passes_database_transport_config_without_yaml_override():
+    config = {
+        "name": "isilon-a",
+        "host": "storage.local",
+        "port": 8080,
+        "username": "collector",
+        "password": "secret",
+        "protocol": "http",
+        "tls_verify": False,
+    }
+    session_context = Mock()
+    session_context.__enter__ = Mock(return_value=Mock())
+    session_context.__exit__ = Mock(return_value=False)
+
+    with (
+        patch("scripts.manual_isilon_check.SessionLocal", return_value=session_context),
+        patch("scripts.manual_isilon_check.load_isilon_config", return_value=config),
+        patch(
+            "scripts.manual_isilon_check.fetch_quota_summary",
+            return_value={"total": 1, "types": {"directory": 1}},
+        ) as fetch_summary,
+    ):
+        assert main(["isilon-a"]) == 0
+
+    fetch_summary.assert_called_once_with(config)

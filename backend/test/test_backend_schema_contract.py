@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 import ast
+import io
 import importlib.util
 from pathlib import Path
 
+import pytest
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
@@ -161,15 +163,30 @@ def _class_names(module: ast.Module) -> set[str]:
     return {node.name for node in module.body if isinstance(node, ast.ClassDef)}
 
 
+def _migration_modules():
+    modules = []
+    for path in sorted(MIGRATION_ROOT.glob("*.py")):
+        spec = importlib.util.spec_from_file_location(path.stem, path)
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+        modules.append((path, migration))
+    return modules
+
+
 def _baseline_migration():
-    migrations = sorted(MIGRATION_ROOT.glob("*.py"))
-    assert len(migrations) == 1, (
-        f"expected one initial migration, found {[path.name for path in migrations]}"
-    )
-    spec = importlib.util.spec_from_file_location("initial_schema", migrations[0])
-    migration = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(migration)
-    return migration
+    roots = [migration for _, migration in _migration_modules() if migration.down_revision is None]
+    assert len(roots) == 1
+    return roots[0]
+
+
+def _storage_cluster_transport_migration():
+    matches = [
+        migration
+        for path, migration in _migration_modules()
+        if "storage_cluster_transport" in path.stem
+    ]
+    assert len(matches) == 1, "expected one storage cluster transport migration"
+    return matches[0]
 
 
 def test_unused_storage_records_model_is_removed():
@@ -202,12 +219,14 @@ def test_confirmed_unused_fields_are_removed_from_models_and_schemas():
         )
 
 
-def test_database_migrations_are_one_root_baseline():
-    migration = _baseline_migration()
+def test_database_migrations_are_one_root_chain():
+    baseline = _baseline_migration()
+    transport = _storage_cluster_transport_migration()
 
-    assert migration.down_revision is None
-    assert isinstance(migration.revision, str)
-    assert 0 < len(migration.revision) <= 32
+    assert transport.down_revision == baseline.revision
+    for migration in (baseline, transport):
+        assert isinstance(migration.revision, str)
+        assert 0 < len(migration.revision) <= 32
 
 
 def test_initial_schema_upgrade_and_downgrade_on_empty_sqlite():
@@ -235,3 +254,61 @@ def test_initial_schema_upgrade_and_downgrade_on_empty_sqlite():
         migration.downgrade()
         inspector.clear_cache()
         assert inspector.get_table_names() == []
+
+
+def test_storage_cluster_transport_migration_backfills_and_downgrades_sqlite():
+    baseline = _baseline_migration()
+    transport = _storage_cluster_transport_migration()
+    with sa.create_engine("sqlite://").begin() as connection:
+        baseline.op = Operations(MigrationContext.configure(connection))
+        baseline.upgrade()
+        connection.execute(
+            sa.text(
+                "INSERT INTO storage_clusters (name, storage_type) "
+                "VALUES ('existing', 'isilon')"
+            )
+        )
+
+        transport.op = Operations(MigrationContext.configure(connection))
+        transport.upgrade()
+
+        columns = {
+            column["name"] for column in sa.inspect(connection).get_columns("storage_clusters")
+        }
+        assert {"protocol", "tls_verify"} <= columns
+        row = connection.execute(
+            sa.text(
+                "SELECT protocol, tls_verify FROM storage_clusters "
+                "WHERE name = 'existing'"
+            )
+        ).mappings().one()
+        assert row["protocol"] == "https"
+        assert bool(row["tls_verify"]) is False
+
+        transport.downgrade()
+        columns = {
+            column["name"] for column in sa.inspect(connection).get_columns("storage_clusters")
+        }
+        assert "protocol" not in columns
+        assert "tls_verify" not in columns
+
+
+@pytest.mark.parametrize("dialect_name", ["sqlite", "postgresql", "mysql"])
+def test_storage_cluster_transport_migration_compiles_for_supported_dialects(
+    dialect_name,
+):
+    migration = _storage_cluster_transport_migration()
+    output = io.StringIO()
+    migration.op = Operations(
+        MigrationContext.configure(
+            dialect_name=dialect_name,
+            opts={"as_sql": True, "output_buffer": output},
+        )
+    )
+
+    migration.upgrade()
+
+    sql = output.getvalue().lower()
+    assert "storage_clusters" in sql
+    assert "protocol" in sql
+    assert "tls_verify" in sql

@@ -355,6 +355,85 @@ class TestCoreApi:
         missing_response = self.client.get(f"/storage-pulse/api/storage-clusters/{cluster_id}")
         assert missing_response.status_code == 404
 
+    def test_storage_cluster_transport_fields_create_update_and_list(self):
+        with patch("routers.storage_cluster._schedule_storage_collection"):
+            create_response = self.client.post(
+                "/storage-pulse/api/storage-clusters/",
+                json={
+                    "name": "transport-cluster",
+                    "storage_type": "isilon",
+                    "storage_host": "storage.local",
+                    "storage_port": 8080,
+                    "protocol": "http",
+                    "tls_verify": False,
+                    "is_active": False,
+                },
+            )
+
+        assert create_response.status_code == 200
+        assert create_response.json()["protocol"] == "http"
+        assert create_response.json()["tls_verify"] is False
+        cluster_id = create_response.json()["id"]
+
+        with patch("routers.storage_cluster._schedule_storage_collection"):
+            update_response = self.client.put(
+                f"/storage-pulse/api/storage-clusters/{cluster_id}",
+                json={"protocol": "https", "tls_verify": True},
+            )
+
+        assert update_response.status_code == 200
+        assert update_response.json()["protocol"] == "https"
+        assert update_response.json()["tls_verify"] is True
+
+        list_response = self.client.get(
+            "/storage-pulse/api/storage-clusters/",
+            params={"nameLike": "transport-cluster"},
+        )
+        assert list_response.status_code == 200
+        assert list_response.json()["content"][0]["protocol"] == "https"
+        assert list_response.json()["content"][0]["tls_verify"] is True
+
+    def test_storage_cluster_transport_defaults_are_secure(self):
+        with patch("routers.storage_cluster._schedule_storage_collection"):
+            response = self.client.post(
+                "/storage-pulse/api/storage-clusters/",
+                json={
+                    "name": "default-transport-cluster",
+                    "storage_type": "netapp",
+                    "is_active": False,
+                },
+            )
+
+        assert response.status_code == 200
+        assert response.json()["protocol"] == "https"
+        assert response.json()["tls_verify"] is True
+
+    @pytest.mark.parametrize(
+        ("method", "path", "payload"),
+        [
+            (
+                "post",
+                "/storage-pulse/api/storage-clusters/",
+                {
+                    "name": "invalid-protocol-cluster",
+                    "storage_type": "netapp",
+                    "protocol": "ftp",
+                    "is_active": False,
+                },
+            ),
+            (
+                "put",
+                "/storage-pulse/api/storage-clusters/1",
+                {"protocol": "ftp"},
+            ),
+        ],
+    )
+    def test_storage_cluster_rejects_invalid_protocol(self, method, path, payload):
+        with patch("routers.storage_cluster._schedule_storage_collection"):
+            response = getattr(self.client, method)(path, json=payload)
+
+        assert response.status_code == 422
+
     @pytest.mark.parametrize("storage_type", ["netapp", "isilon"])
     def test_active_storage_cluster_create_schedules_collection(self, storage_type):
         with patch("routers.storage_cluster._schedule_storage_collection") as schedule_collection:

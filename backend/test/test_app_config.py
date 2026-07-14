@@ -12,7 +12,6 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 def _write_config(
     path: Path,
     ldap_flags: str = "lookup_user_dn: true\n  lookup_as_user: false",
-    tls_verify: str = "false",
 ) -> Path:
     path.write_text(
         f"""
@@ -65,7 +64,6 @@ ldap:
   {ldap_flags}
 storage:
   isilon_session_cache: false
-  tls_verify: {tls_verify}
 super_admin_usernames:
   - guojianpeng
 """.strip(),
@@ -124,12 +122,8 @@ def test_rejects_missing_yaml_file(tmp_path):
         Config(tmp_path / "missing.yml")
 
 
-def test_example_storage_config_disables_tls_verification_by_default():
+def test_example_storage_config_does_not_define_global_tls_verification():
     config = Config(BACKEND_ROOT / "config.example.yml")
 
-    assert config.get("storage.tls_verify") is False
-
-
-def test_rejects_non_boolean_storage_tls_verification(tmp_path):
-    with pytest.raises(ValueError, match="storage.tls_verify must be a boolean"):
-        Config(_write_config(tmp_path / "config.yml", tls_verify='"false"'))
+    assert config.get("storage.tls_verify") is None
+    assert config.get("storage.isilon_session_cache") is False

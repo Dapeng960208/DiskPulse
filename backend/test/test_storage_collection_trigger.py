@@ -3,7 +3,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from appConfig import base_config
 from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
 from celery_tasks.tasks.storages import load_collection_snapshot, run_collection_round
 from models import StorageCluster, Volume
@@ -14,7 +13,14 @@ def test_load_collection_snapshot_targets_one_cluster(db_session):
     db_session.add_all(
         [
             StorageCluster(id=1, name="netapp-a", storage_type="netapp", is_active=True),
-            StorageCluster(id=2, name="isilon-b", storage_type="isilon", is_active=True),
+            StorageCluster(
+                id=2,
+                name="isilon-b",
+                storage_type="isilon",
+                protocol="http",
+                tls_verify=False,
+                is_active=True,
+            ),
         ]
     )
     db_session.commit()
@@ -22,6 +28,8 @@ def test_load_collection_snapshot_targets_one_cluster(db_session):
     snapshot = load_collection_snapshot(db_session, storage_cluster_id=2)
 
     assert [row["storage_cluster_id"] for row in snapshot] == [2]
+    assert snapshot[0]["protocol"] == "http"
+    assert snapshot[0]["tls_verify"] is False
 
 
 def test_schedule_storage_collection_dispatches_target_cluster(caplog):
@@ -44,11 +52,14 @@ def test_schedule_failure_is_logged_without_rolling_back_cluster(caplog):
 
 
 @pytest.mark.parametrize(
-    ("storage_type", "client_name", "port"),
-    [("netapp", "NetAppClient", 443), ("isilon", "IsilonClient", 8080)],
+    ("storage_type", "client_name", "port", "protocol", "tls_verify"),
+    [
+        ("netapp", "NetAppClient", 80, "http", False),
+        ("isilon", "IsilonClient", 8080, "https", True),
+    ],
 )
-def test_storage_monitor_disables_tls_verification_by_default(
-    db_session, storage_type, client_name, port
+def test_storage_monitor_uses_snapshot_transport_settings(
+    db_session, storage_type, client_name, port, protocol, tls_verify
 ):
     db_session.add(
         StorageCluster(
@@ -63,37 +74,37 @@ def test_storage_monitor_disables_tls_verification_by_default(
         )
     )
     db_session.commit()
+    logger = Mock()
 
     with patch(
         f"celery_tasks.manager.storagePulseMonitor.{client_name}"
     ) as client_class:
-        StoragePulseMonitor(db_session, Mock(), storage_cluster_id=1).setup()
+        StoragePulseMonitor(
+            db_session,
+            logger,
+            storage_cluster_id=1,
+            snapshot={
+                "storage_type": storage_type,
+                "storage_cluster_name": f"{storage_type}-a",
+                "storage_host": "snapshot.local",
+                "storage_port": port,
+                "storage_user": "snapshot-user",
+                "storage_password": "snapshot-secret",
+                "protocol": protocol,
+                "tls_verify": tls_verify,
+                "rows": (),
+            },
+        ).setup()
 
-    assert client_class.call_args.kwargs["tls_verify"] is False
-
-
-def test_storage_monitor_honors_enabled_tls_verification(db_session, monkeypatch):
-    db_session.add(
-        StorageCluster(
-            id=1,
-            name="netapp-a",
-            storage_type="netapp",
-            storage_host="storage.local",
-            storage_port=443,
-            storage_user="svc",
-            storage_password="secret",
-            is_active=True,
-        )
+    client_class.assert_called_once_with(
+        hostname="snapshot.local",
+        username="snapshot-user",
+        password="snapshot-secret",
+        port=port,
+        logger=logger,
+        protocol=protocol,
+        tls_verify=tls_verify,
     )
-    db_session.commit()
-    monkeypatch.setitem(base_config.config["storage"], "tls_verify", True)
-
-    with patch(
-        "celery_tasks.manager.storagePulseMonitor.NetAppClient"
-    ) as client_class:
-        StoragePulseMonitor(db_session, Mock(), storage_cluster_id=1).setup()
-
-    assert client_class.call_args.kwargs["tls_verify"] is True
 
 
 def test_failed_collection_rolls_back_resource_changes(session_factory):
