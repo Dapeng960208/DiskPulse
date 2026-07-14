@@ -103,6 +103,41 @@ def test_list_ldap_directory_users_rejects_blank_username():
     assert list_ldap_directory_users("   ", bind_ldap=lambda: object()) == []
 
 
+def test_targeted_ldap_user_search_skips_bases_without_a_match():
+    from types import SimpleNamespace
+
+    from utils.ldap_directory import list_ldap_directory_users
+
+    class Connection:
+        entries = []
+
+        def search(self, *, search_base, search_filter, attributes):
+            if search_base.startswith("OU=Partners"):
+                self.entries = [
+                    SimpleNamespace(
+                        entry_dn="CN=Alice,OU=Partners,DC=example,DC=com",
+                        sAMAccountName=SimpleNamespace(value="alice"),
+                        cn=SimpleNamespace(value="Alice"),
+                        mail=SimpleNamespace(value="alice@example.com"),
+                    )
+                ]
+                return True
+            self.entries = []
+            return False
+
+        def unbind(self):
+            pass
+
+    base_config.set(
+        "ldap.user_bases",
+        ["OU=Users,DC=example,DC=com", "OU=Partners,DC=example,DC=com"],
+    )
+
+    users = list_ldap_directory_users("alice", bind_ldap=Connection)
+
+    assert [user["username"] for user in users] == ["alice"]
+
+
 def test_plain_ldap_without_starttls_is_rejected():
     from utils.ldap_directory import require_secure_ldap_transport
 
