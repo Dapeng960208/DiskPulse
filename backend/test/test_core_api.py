@@ -224,6 +224,93 @@ class TestCoreApi:
         finally:
             session.close()
 
+    def bind_seeded_group_to_volume(self, storage_type="netapp"):
+        session = self.SessionLocal()
+        try:
+            session.get(models.StorageCluster, 1).storage_type = storage_type
+            group_db = session.get(models.Group, 1)
+            group_db.volume_id = 1
+            group_db.qtree_id = None
+            session.commit()
+        finally:
+            session.close()
+
+    def test_volume_bound_group_realtime_serializes_storage_target(self):
+        self.bind_seeded_group_to_volume()
+
+        with patch("crud.groupCrud.get_real_time_data_by_id", return_value=[[NOW, 75]]):
+            response = self.client.get("/storage-pulse/api/groups/1/realtime")
+
+        assert response.status_code == 200
+        assert response.json()["info"]["storage_target"] == {
+            "type": "volume",
+            "id": 1,
+            "name": "vol-a",
+        }
+
+    def test_volume_bound_group_image_resolves_owning_volume(self, tmp_path):
+        self.bind_seeded_group_to_volume()
+        image_path = tmp_path / "group.png"
+        session = self.SessionLocal()
+        try:
+            with (
+                patch(
+                    "routers.group.groupCrud.get_group_real_time_data_by_id",
+                    return_value=[[NOW, 75]],
+                ),
+                patch(
+                    "routers.group.plot_real_time_line",
+                    return_value=str(image_path),
+                ),
+            ):
+                response = group.get_storage_usage_image_by_id(
+                    1,
+                    role="cad",
+                    db=session,
+                )
+        finally:
+            session.close()
+
+        assert response.path == str(image_path)
+
+    def test_volume_bound_storage_usage_image_resolves_owning_volume(self, tmp_path):
+        self.bind_seeded_group_to_volume()
+        image_path = tmp_path / "usage.png"
+        session = self.SessionLocal()
+        try:
+            with (
+                patch(
+                    "routers.storage_usage.storageUsageCrud.get_storage_usages_real_time_data_by_id",
+                    return_value=[[NOW, 20]],
+                ),
+                patch(
+                    "routers.storage_usage.plot_real_time_line",
+                    return_value=str(image_path),
+                ),
+            ):
+                response = storage_usage.get_storage_usage_image_by_id(
+                    1,
+                    role="cad",
+                    db=session,
+                )
+        finally:
+            session.close()
+
+        assert response.path == str(image_path)
+
+    def test_isilon_group_expansion_is_rejected_before_storage_write(self):
+        self.bind_seeded_group_to_volume("isilon")
+
+        with patch("routers.storage_usage.StorageManagement") as management:
+            response = self.client.post(
+                "/storage-pulse/api/storage-usages/expand",
+                json={"expand_id": 1, "expand_type": "Group", "size": 1},
+            )
+
+        assert response.status_code == 422
+        assert "Isilon" in response.json()["detail"]
+        management.assert_not_called()
+
     def test_storage_cluster_crud_and_realtime_contract(self):
         with patch("routers.storage_cluster._schedule_storage_collection") as schedule_collection:
             create_response = self.client.post(

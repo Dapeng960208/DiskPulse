@@ -93,6 +93,48 @@ def test_isilon_capacity_pools_map_real_storage_pool_usage(db_session):
     assert all(pool.name != "isilon_cluster" for pool in pools)
 
 
+@pytest.mark.parametrize(
+    "invalid_record",
+    [
+        {"usage": {"total_bytes": str(200 * GB), "used_bytes": str(50 * GB)}},
+        {"name": "pool-b", "usage": {"used_bytes": str(50 * GB)}},
+        {"name": "pool-b", "usage": {"total_bytes": str(200 * GB)}},
+    ],
+    ids=["missing-name", "missing-total-bytes", "missing-used-bytes"],
+)
+def test_isilon_capacity_pools_reject_any_malformed_record(
+    db_session, invalid_record
+):
+    _seed_cluster(db_session, "isilon")
+    db_session.add(
+        models.Aggregate(
+            id=1,
+            storage_cluster_id=1,
+            name="old-pool",
+            limit=100,
+            used=25,
+        )
+    )
+    db_session.commit()
+    monitor = _monitor(db_session, "isilon")
+    monitor.client = Mock()
+    monitor.client.get_storage_pools.return_value = [
+        {
+            "name": "pool-a",
+            "usage": {
+                "total_bytes": str(200 * GB),
+                "used_bytes": str(50 * GB),
+            },
+        },
+        invalid_record,
+    ]
+
+    with pytest.raises(ValueError):
+        monitor.fetch_capacity_pools()
+
+    assert db_session.get(models.Aggregate, 1).name == "old-pool"
+
+
 def test_isilon_directory_quota_is_a_storage_space(db_session):
     _seed_cluster(db_session, "isilon")
     monitor = _monitor(db_session, "isilon")
