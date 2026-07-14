@@ -4,10 +4,8 @@ import importlib.util
 from pathlib import Path
 
 import sqlalchemy as sa
-from alembic.ddl.base import DropColumn
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy.dialects import mysql, postgresql, sqlite
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -89,6 +87,51 @@ REMOVED_SCHEMA_FIELDS = {
     },
     ("schemas/usersSchema.py", "UserBase"): REMOVED_MODEL_FIELDS["User"],
 }
+FINAL_TABLES = {
+    "aggregates",
+    "groups",
+    "hosts",
+    "large_files",
+    "project_storage_environments",
+    "projects",
+    "qtrees",
+    "storage_alerts",
+    "storage_back_up_records",
+    "storage_clusters",
+    "storage_conf",
+    "storage_usages",
+    "users",
+    "volumes",
+}
+KEY_COLUMNS = {
+    "aggregates": {"id", "storage_cluster_id", "limit", "used"},
+    "groups": {"id", "project_environment_id", "volume_id", "qtree_id"},
+    "hosts": {"id", "name", "ip"},
+    "large_files": {"id", "user_id", "group_id", "linux_path"},
+    "project_storage_environments": {
+        "id",
+        "project_id",
+        "storage_cluster_id",
+        "name",
+        "collection_status",
+    },
+    "projects": {"id", "name", "soft_limit", "soft_use_ratio"},
+    "qtrees": {"id", "storage_cluster_id", "volume_id", "soft_limit"},
+    "storage_alerts": {"id", "alert_level", "related_id", "related_type"},
+    "storage_back_up_records": {"id", "user_id", "source_path", "status"},
+    "storage_clusters": {"id", "name", "storage_type", "storage_host"},
+    "storage_conf": {"id", "name", "back_up_enabled"},
+    "storage_usages": {
+        "id",
+        "storage_cluster_id",
+        "user_id",
+        "group_id",
+        "soft_limit",
+        "soft_use_ratio",
+    },
+    "users": {"id", "rd_username", "is_alert"},
+    "volumes": {"id", "storage_cluster_id", "soft_limit", "soft_use_ratio"},
+}
 
 
 def _parse_backend_file(relative_path: str) -> ast.Module:
@@ -124,37 +167,15 @@ def _class_names(module: ast.Module) -> set[str]:
     return {node.name for node in module.body if isinstance(node, ast.ClassDef)}
 
 
-def _migration_columns(function: ast.FunctionDef, operation: str) -> dict[str, set[str]]:
-    columns = {}
-    for node in function.body:
-        if not isinstance(node, ast.With) or len(node.items) != 1:
-            continue
-        context = node.items[0].context_expr
-        if (
-            not isinstance(context, ast.Call)
-            or not isinstance(context.func, ast.Attribute)
-            or context.func.attr != "batch_alter_table"
-            or not context.args
-            or not isinstance(context.args[0], ast.Constant)
-        ):
-            continue
-        table_name = context.args[0].value
-        table_columns = set()
-        for call in ast.walk(node):
-            if (
-                not isinstance(call, ast.Call)
-                or not isinstance(call.func, ast.Attribute)
-                or call.func.attr != operation
-                or not call.args
-            ):
-                continue
-            argument = call.args[0]
-            if operation == "add_column" and isinstance(argument, ast.Call):
-                argument = argument.args[0]
-            if isinstance(argument, ast.Constant):
-                table_columns.add(argument.value)
-        columns[table_name] = table_columns
-    return columns
+def _baseline_migration():
+    migrations = sorted(MIGRATION_ROOT.glob("*.py"))
+    assert len(migrations) == 1, (
+        f"expected one initial migration, found {[path.name for path in migrations]}"
+    )
+    spec = importlib.util.spec_from_file_location("initial_schema", migrations[0])
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    return migration
 
 
 def test_unused_storage_records_model_is_removed():
@@ -187,65 +208,35 @@ def test_confirmed_unused_fields_are_removed_from_models_and_schemas():
         )
 
 
-def test_unused_field_cleanup_migration_covers_all_removed_database_columns():
-    migrations = list(MIGRATION_ROOT.glob("*_remove_unused_fields.py"))
+def test_database_migrations_are_one_root_baseline():
+    migration = _baseline_migration()
 
-    assert len(migrations) == 1
-    module = ast.parse(migrations[0].read_text(encoding="utf-8"))
-    upgrade = next(
-        node
-        for node in module.body
-        if isinstance(node, ast.FunctionDef) and node.name == "upgrade"
-    )
-    downgrade = next(
-        node
-        for node in module.body
-        if isinstance(node, ast.FunctionDef) and node.name == "downgrade"
-    )
-    assert _migration_columns(upgrade, "drop_column") == REMOVED_DATABASE_FIELDS
-    assert _migration_columns(downgrade, "add_column") == REMOVED_DATABASE_FIELDS
+    assert migration.down_revision is None
+    assert isinstance(migration.revision, str)
+    assert 0 < len(migration.revision) <= 32
 
 
-def test_unused_field_cleanup_migration_applies_and_rolls_back_on_sqlite():
-    migration_path = next(MIGRATION_ROOT.glob("*_remove_unused_fields.py"))
-    spec = importlib.util.spec_from_file_location("unused_field_cleanup", migration_path)
-    migration = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(migration)
-    metadata = sa.MetaData()
-    for table_name, field_names in REMOVED_DATABASE_FIELDS.items():
-        sa.Table(
-            table_name,
-            metadata,
-            sa.Column("id", sa.Integer(), primary_key=True),
-            *(sa.Column(name, sa.String()) for name in field_names),
-        )
-
+def test_initial_schema_upgrade_and_downgrade_on_empty_sqlite():
+    migration = _baseline_migration()
     with sa.create_engine("sqlite://").begin() as connection:
-        metadata.create_all(connection)
         migration.op = Operations(MigrationContext.configure(connection))
         migration.upgrade()
         inspector = sa.inspect(connection)
+
+        assert set(inspector.get_table_names()) == FINAL_TABLES
+        for table_name, expected_columns in KEY_COLUMNS.items():
+            columns = {column["name"] for column in inspector.get_columns(table_name)}
+            assert expected_columns <= columns
         for table_name, field_names in REMOVED_DATABASE_FIELDS.items():
             columns = {column["name"] for column in inspector.get_columns(table_name)}
             assert columns.isdisjoint(field_names)
 
+        group_columns = {
+            column["name"]: column for column in inspector.get_columns("groups")
+        }
+        assert {"project_id", "storage_cluster_id"}.isdisjoint(group_columns)
+        assert group_columns["project_environment_id"]["nullable"] is False
+
         migration.downgrade()
         inspector.clear_cache()
-        for table_name, field_names in REMOVED_DATABASE_FIELDS.items():
-            columns = {column["name"] for column in inspector.get_columns(table_name)}
-            assert field_names <= columns
-
-
-def test_drop_column_ddl_compiles_for_supported_dialects():
-    metadata = sa.MetaData()
-    table = sa.Table(
-        "cleanup_target",
-        metadata,
-        sa.Column("unused_field", sa.String(64)),
-    )
-
-    for dialect in (sqlite.dialect(), postgresql.dialect(), mysql.dialect()):
-        sql = str(
-            DropColumn(table.name, table.c.unused_field).compile(dialect=dialect)
-        )
-        assert "DROP COLUMN unused_field" in sql
+        assert inspector.get_table_names() == []
