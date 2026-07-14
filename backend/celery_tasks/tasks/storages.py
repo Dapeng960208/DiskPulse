@@ -7,7 +7,7 @@ from sqlalchemy import select, update
 from dependencies import DBSession
 from database import SessionLocal
 from celery_worker import lsf_app
-from celery_tasks.manager.storageMonitor import StoreMonitor, SynchronousPathState
+from celery_tasks.manager.storageMonitor import SynchronousPathState
 from celery_tasks.manager.remoteFileManager import RemoteFileManager
 from celery.utils.log import get_task_logger
 from datetime import datetime, timedelta
