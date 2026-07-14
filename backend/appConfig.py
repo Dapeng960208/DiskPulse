@@ -36,10 +36,6 @@ class Config:
         ):
             raise ValueError("LDAP requires lookup_user_dn=true and lookup_as_user=false")
 
-        storage = loaded.get("storage")
-        if isinstance(storage, dict) and not isinstance(storage.get("tls_verify", False), bool):
-            raise ValueError("storage.tls_verify must be a boolean")
-
         self.config = loaded
         self._loaded = True
 

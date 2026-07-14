@@ -114,6 +114,8 @@ class StorageCluster(Base):
     storage_type = Column(String, nullable=False)
     storage_host = Column(String)
     storage_port = Column(Integer, default=22)
+    protocol = Column(String(8), default="https", nullable=False)
+    tls_verify = Column(Boolean, default=True, nullable=False)
     storage_user = Column(String)
     storage_password = Column(String)
     description = Column(Text)

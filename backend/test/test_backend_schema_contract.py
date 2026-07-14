@@ -285,6 +285,21 @@ def test_storage_cluster_transport_migration_backfills_and_downgrades_sqlite():
         assert row["protocol"] == "https"
         assert bool(row["tls_verify"]) is False
 
+        connection.execute(
+            sa.text(
+                "INSERT INTO storage_clusters (name, storage_type) "
+                "VALUES ('new', 'netapp')"
+            )
+        )
+        new_row = connection.execute(
+            sa.text(
+                "SELECT protocol, tls_verify FROM storage_clusters "
+                "WHERE name = 'new'"
+            )
+        ).mappings().one()
+        assert new_row["protocol"] == "https"
+        assert bool(new_row["tls_verify"]) is True
+
         transport.downgrade()
         columns = {
             column["name"] for column in sa.inspect(connection).get_columns("storage_clusters")

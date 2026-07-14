@@ -40,22 +40,26 @@ class IsilonClient:
     """
 
     def __init__(self, hostname: str, username: str, password: str,
-                 port: int = 8080, logger=None, tls_verify=True):
+                 port: int = 8080, logger=None, protocol: str = "https",
+                 tls_verify=True):
+        if protocol not in ("http", "https"):
+            raise ValueError(f"Unsupported storage protocol: {protocol}")
         self.hostname = hostname
         self.port = port
         self.username = username
         self.password = password
         self.logger = logger
-        self.base_url = f"https://{hostname}:{port}/platform"
-        self._session_url = f"https://{hostname}:{port}/session/1/session"
+        self.origin = f"{protocol}://{hostname}:{port}"
+        self.base_url = f"{self.origin}/platform"
+        self._session_url = f"{self.origin}/session/1/session"
         self.api_version: str = "1"  # updated by _probe()
         self._session_cache_enabled = base_config.get("storage.isilon_session_cache", False)
 
-        # Cache key unique per host/port/user
-        self._cache_key = f"{hostname}:{port}:{username}"
+        # Cache key unique per protocol/host/port/user
+        self._cache_key = f"{protocol}:{hostname}:{port}:{username}"
 
         self.session = requests.Session()
-        self.session.verify = tls_verify
+        self.session.verify = tls_verify if protocol == "https" else False
         self.session.headers.update({
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -134,7 +138,7 @@ class IsilonClient:
         csrf = entry.get('csrf', '')
         if csrf:
             self.session.headers['X-CSRF-Token'] = csrf
-            self.session.headers['Referer'] = f"https://{self.hostname}:{self.port}/"
+            self.session.headers['Referer'] = f"{self.origin}/"
 
     def _load_cached_session(self) -> bool:
         """Load cached cookies and validate via GET /session/1/session.
@@ -199,7 +203,7 @@ class IsilonClient:
             csrf = self.session.cookies.get('isicsrf', '')
             if csrf:
                 self.session.headers['X-CSRF-Token'] = csrf
-                self.session.headers['Referer'] = f"https://{self.hostname}:{self.port}/"
+                self.session.headers['Referer'] = f"{self.origin}/"
 
             data = resp.json()
             self._log('info',

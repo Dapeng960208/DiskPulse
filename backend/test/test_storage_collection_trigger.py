@@ -52,14 +52,35 @@ def test_schedule_failure_is_logged_without_rolling_back_cluster(caplog):
 
 
 @pytest.mark.parametrize(
-    ("storage_type", "client_name", "port", "protocol", "tls_verify"),
+    (
+        "storage_type",
+        "client_name",
+        "port",
+        "protocol",
+        "tls_verify",
+        "expected_warning",
+    ),
     [
-        ("netapp", "NetAppClient", 80, "http", False),
-        ("isilon", "IsilonClient", 8080, "https", True),
+        ("netapp", "NetAppClient", 80, "http", False, "storage API uses unencrypted HTTP"),
+        ("isilon", "IsilonClient", 8080, "https", True, None),
+        (
+            "netapp",
+            "NetAppClient",
+            443,
+            "https",
+            False,
+            "TLS certificate verification is disabled",
+        ),
     ],
 )
 def test_storage_monitor_uses_snapshot_transport_settings(
-    db_session, storage_type, client_name, port, protocol, tls_verify
+    db_session,
+    storage_type,
+    client_name,
+    port,
+    protocol,
+    tls_verify,
+    expected_warning,
 ):
     db_session.add(
         StorageCluster(
@@ -105,6 +126,10 @@ def test_storage_monitor_uses_snapshot_transport_settings(
         protocol=protocol,
         tls_verify=tls_verify,
     )
+    if expected_warning is None:
+        logger.warning.assert_not_called()
+    else:
+        assert expected_warning in logger.warning.call_args.args[0]
 
 
 def test_failed_collection_rolls_back_resource_changes(session_factory):

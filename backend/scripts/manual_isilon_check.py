@@ -10,7 +10,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import select
 
-from appConfig import base_config
 from database import SessionLocal
 from models import StorageCluster
 from utils.isilonClient import IsilonClient
@@ -22,6 +21,8 @@ def load_isilon_config(db, cluster_name):
             StorageCluster.name,
             StorageCluster.storage_host.label("host"),
             StorageCluster.storage_port.label("port"),
+            StorageCluster.protocol,
+            StorageCluster.tls_verify,
             StorageCluster.storage_user.label("username"),
             StorageCluster.storage_password.label("password"),
         ).where(
@@ -43,13 +44,14 @@ def load_isilon_config(db, cluster_name):
     return config
 
 
-def fetch_quota_summary(config, *, tls_verify, client_factory=IsilonClient):
+def fetch_quota_summary(config, *, client_factory=IsilonClient):
     client = client_factory(
         config["host"],
         config["username"],
         config["password"],
         port=config["port"],
-        tls_verify=tls_verify,
+        protocol=config["protocol"],
+        tls_verify=config["tls_verify"],
     )
     try:
         counts = Counter(
@@ -68,10 +70,7 @@ def main(argv=None):
     with SessionLocal() as db:
         config = load_isilon_config(db, args.cluster_name)
 
-    summary = fetch_quota_summary(
-        config,
-        tls_verify=base_config.get("storage.tls_verify", True),
-    )
+    summary = fetch_quota_summary(config)
     print(f"集群：{config['name']}")
     print(f"Quota 总数：{summary['total']}")
     for quota_type, count in summary["types"].items():

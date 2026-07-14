@@ -4,7 +4,6 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from schemas.storageUsageSchema import StorageUsageBase
 from schemas.volumeSchema import VolumeBase
-from appConfig import base_config
 from utils.netAppClient import NetAppClient
 from utils.isilonClient import IsilonClient
 from schemas import aggregateSchema, volumeSchema, qtreeSchema, storageUsageSchema
@@ -121,8 +120,12 @@ class StoragePulseMonitor:
         username = cluster.get("storage_user", self.storage_cluster.storage_user)
         password = cluster.get("storage_password", self.storage_cluster.storage_password)
         configured_port = cluster.get("storage_port", self.storage_cluster.storage_port)
-        tls_verify = base_config.get("storage.tls_verify", False)
-        if not tls_verify:
+        protocol = cluster.get("protocol", self.storage_cluster.protocol)
+        tls_verify = cluster.get("tls_verify", self.storage_cluster.tls_verify)
+        if protocol == "http":
+            tls_verify = False
+            self.logger.warning(f"{self._log_prefix} storage API uses unencrypted HTTP")
+        elif not tls_verify:
             self.logger.warning(f"{self._log_prefix} TLS certificate verification is disabled")
         if self.storage_type == 'netapp':
             self.client = NetAppClient(
@@ -131,6 +134,7 @@ class StoragePulseMonitor:
                 password=password,
                 port=configured_port or 443,
                 logger=self.logger,
+                protocol=protocol,
                 tls_verify=tls_verify,
             )
         else:  # isilon
@@ -140,6 +144,7 @@ class StoragePulseMonitor:
                 password=password,
                 port=configured_port or 8080,
                 logger=self.logger,
+                protocol=protocol,
                 tls_verify=tls_verify,
             )
 

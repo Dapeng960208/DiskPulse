@@ -6,14 +6,18 @@ from typing import List, Dict, Optional
 class NetAppClient:
     """NetApp ONTAP REST API client (ONTAP 9.6+)."""
 
-    def __init__(self, hostname: str, username: str, password: str, port: int = 443, logger=None, tls_verify=True):
+    def __init__(self, hostname: str, username: str, password: str, port: int = 443,
+                 logger=None, protocol: str = "https", tls_verify=True):
+        if protocol not in ("http", "https"):
+            raise ValueError(f"Unsupported storage protocol: {protocol}")
         self.hostname = hostname
         self.port = port
         self.logger = logger
-        self.base_url = f"https://{hostname}:{port}/api"
+        self.origin = f"{protocol}://{hostname}:{port}"
+        self.base_url = f"{self.origin}/api"
         self.session = requests.Session()
         self.session.auth = (username, password)
-        self.session.verify = tls_verify
+        self.session.verify = tls_verify if protocol == "https" else False
         self.session.headers.update({
             'Content-Type': 'application/json',
             'Accept': 'application/json'
@@ -34,7 +38,7 @@ class NetAppClient:
                 records.extend(data.get('records', []))
                 next_link = data.get('_links', {}).get('next', {}).get('href')
                 if next_link:
-                    url = f"https://{self.hostname}:{self.port}{next_link}"
+                    url = f"{self.origin}{next_link}"
                     params = {}
                 else:
                     url = None

@@ -221,6 +221,7 @@ def test_isilon_client_uses_configured_protocol_for_all_session_urls():
 
     assert client.base_url == "http://storage.local:8080/platform"
     assert client._session_url == "http://storage.local:8080/session/1/session"
+    assert client._cache_key == "http:storage.local:8080:svc"
 
     client._apply_cookies({"csrf": "cached-token"})
     assert client.session.headers["Referer"] == "http://storage.local:8080/"

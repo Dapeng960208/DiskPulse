@@ -365,7 +365,7 @@ class TestCoreApi:
                     "storage_host": "storage.local",
                     "storage_port": 8080,
                     "protocol": "http",
-                    "tls_verify": False,
+                    "tls_verify": True,
                     "is_active": False,
                 },
             )
@@ -385,13 +385,23 @@ class TestCoreApi:
         assert update_response.json()["protocol"] == "https"
         assert update_response.json()["tls_verify"] is True
 
+        with patch("routers.storage_cluster._schedule_storage_collection"):
+            update_response = self.client.put(
+                f"/storage-pulse/api/storage-clusters/{cluster_id}",
+                json={"protocol": "http", "tls_verify": True},
+            )
+
+        assert update_response.status_code == 200
+        assert update_response.json()["protocol"] == "http"
+        assert update_response.json()["tls_verify"] is False
+
         list_response = self.client.get(
             "/storage-pulse/api/storage-clusters/",
             params={"nameLike": "transport-cluster"},
         )
         assert list_response.status_code == 200
-        assert list_response.json()["content"][0]["protocol"] == "https"
-        assert list_response.json()["content"][0]["tls_verify"] is True
+        assert list_response.json()["content"][0]["protocol"] == "http"
+        assert list_response.json()["content"][0]["tls_verify"] is False
 
     def test_storage_cluster_transport_defaults_are_secure(self):
         with patch("routers.storage_cluster._schedule_storage_collection"):

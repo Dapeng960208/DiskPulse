@@ -31,6 +31,8 @@ def load_collection_snapshot(db, storage_cluster_id=None):
             StorageCluster.storage_type.label("storage_type"),
             StorageCluster.storage_host.label("storage_host"),
             StorageCluster.storage_port.label("storage_port"),
+            StorageCluster.protocol.label("protocol"),
+            StorageCluster.tls_verify.label("tls_verify"),
             StorageCluster.storage_user.label("storage_user"),
             StorageCluster.storage_password.label("storage_password"),
             StorageCluster.is_active.label("cluster_active"),
