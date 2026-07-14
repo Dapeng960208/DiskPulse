@@ -152,6 +152,6 @@
 - 触发：在管理后台编辑存储集群，并使用 `uvicorn main:app --reload` 观察保存后的采集调度。
 - 现象：表单没有“是否启用”选项；开发控制台只有 HTTP access log，没有集群采集任务投递日志。
 - 根因：`StorageClusterFormDialog` 的初始模型和模板遗漏 `is_active`；调度服务只记录异常，且普通应用 logger 的 INFO 不在 Uvicorn 默认输出中显示。
-- 修复：待实现前端开关、布尔值提交和 Uvicorn 可见的调度生命周期日志。
-- 验证：RED 已确认；前端因找不到 checkbox 失败，后端因缺少调度成功日志失败。
+- 修复：表单新增默认启用的 `ElSwitch` 并提交 `is_active`；调度改用 `uvicorn.error` logger 记录开始、成功和失败，Celery 任务补充开始日志。
+- 验证：同一组 RED 用例转为 GREEN；前端 `7 passed` 且生产构建通过，后端相关用例 `10 passed`、目标模块合计覆盖率 `93%`。
 - 风险：真实 Redis、Celery worker 和存储设备日志仍需部署环境验证。

@@ -210,6 +210,10 @@ def run_collection_round(
 @lsf_app.task(soft_time_limit=120, time_limit=180, expires=60)
 def storages_schedule_fetching_task(storage_cluster_id=None):
     try:
+        logger.info(
+            "Storage collection task started: cluster=%s",
+            "all" if storage_cluster_id is None else storage_cluster_id,
+        )
         with redis_lock('storages_schedule_fetching_task_lock', expires=240) as have_lock:
             if have_lock:
                 with DBSession() as db:

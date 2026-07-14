@@ -11,6 +11,8 @@
 - 存储集群创建、更新接口在事务提交后按最终 `is_active` 状态投递异步采集；未启用集群不投递。
 - 复用 `storages_schedule_fetching_task` 和 `StoragePulseMonitor`，新增可选 `storage_cluster_id` 过滤，不新建第二套设备采集逻辑。
 - Celery 依赖声明改为 `celery[redis]`，补齐现有 Redis broker/lock 代码的 transport 依赖。
+- 存储集群新增/编辑表单新增“是否启用”开关，新建默认启用并提交 `is_active` 布尔值。
+- API 调度使用 Uvicorn logger 记录投递开始、成功和失败；Celery worker 记录任务开始，日志不包含设备凭据。
 
 ### 验证状态
 
@@ -18,6 +20,9 @@
 - GREEN：`.\.venv\Scripts\python.exe -m pytest backend\test\test_storage_soft_quota.py backend\test\test_core_api.py backend\test\test_storage_collection_trigger.py -q` 通过，`13 passed`。
 - `.\.venv\Scripts\python.exe -m pip check` 与 `.\.venv\Scripts\python.exe -m compileall -q backend`：通过。
 - 任务范围 coverage：`storage_cluster.py` `92%`、`storageClusterService.py` `100%`，合计 `93%`。
+- `.\node_modules\.bin\vitest.cmd run test/unit/components/dialog-function-coverage.test.js --coverage.enabled=false`：通过，`7 passed`。
+- `.\.venv\Scripts\python.exe -m coverage run -m pytest backend\test\test_storage_collection_trigger.py backend\test\test_core_api.py -q`：通过，`10 passed`；目标模块合计覆盖率 `93%`。
+- `npm run build:prod`：通过；仍有既有的 chunk 大于 `500 kB` warning，本次未处理。
 
 ### 风险与后续
 

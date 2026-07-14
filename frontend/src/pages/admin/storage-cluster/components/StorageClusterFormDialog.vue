@@ -1,5 +1,5 @@
 <script setup>
-import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElInputNumber, ElMessage, ElSelect, ElOption } from 'element-plus';
+import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElInputNumber, ElMessage, ElOption, ElSelect, ElSwitch } from 'element-plus';
 import { useDialog } from '@/composables/dialog';
 import { useForm } from '@/composables/form';
 import storageClusterApi from '@/api/storage-cluster-api';
@@ -23,6 +23,7 @@ const {
   storage_port: 22,
   storage_user: '',
   storage_password: '',
+  is_active: true,
 }), {
   rules: () => ({
     name: [
@@ -144,6 +145,14 @@ defineExpose({
           show-password
           clearable
           placeholder="请输入 SSH 密码" />
+      </ElFormItem>
+      <ElFormItem
+        label="是否启用"
+        prop="is_active">
+        <ElSwitch
+          v-model="model.is_active"
+          active-text="启用"
+          inactive-text="停用" />
       </ElFormItem>
     </ElForm>
     <template #footer>
