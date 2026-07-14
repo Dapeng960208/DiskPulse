@@ -226,63 +226,11 @@ def upgrade() -> None:
     )
 
     op.create_table(
-        "project_storage_environments",
+        "group_tags",
         sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("project_id", sa.Integer(), nullable=False),
-        sa.Column("storage_cluster_id", sa.Integer(), nullable=False),
         sa.Column("name", sa.String(length=128), nullable=False),
-        sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("is_active", sa.Boolean(), nullable=False),
-        sa.Column("limit", sa.Float(), nullable=True),
-        sa.Column("soft_limit", sa.Float(), nullable=True),
-        sa.Column("used", sa.Float(), nullable=True),
-        sa.Column("use_ratio", sa.Float(), nullable=True),
-        sa.Column("soft_use_ratio", sa.Float(), nullable=True),
-        sa.Column("collection_status", sa.String(length=16), nullable=False),
-        sa.Column("last_collected_at", sa.DateTime(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.CheckConstraint(
-            "collection_status IN ('pending', 'success', 'failed')",
-            name="ck_project_storage_environment_collection_status",
-        ),
-        sa.ForeignKeyConstraint(
-            ["project_id"],
-            ["projects.id"],
-            name="fk_project_storage_environment_project",
-        ),
-        sa.ForeignKeyConstraint(
-            ["storage_cluster_id"],
-            ["storage_clusters.id"],
-            name="fk_project_storage_environment_cluster",
-        ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "project_id", "name", name="uq_project_storage_environment_project_name"
-        ),
-        sa.UniqueConstraint(
-            "project_id",
-            "storage_cluster_id",
-            name="uq_project_storage_environment_project_cluster",
-        ),
-    )
-    op.create_index(
-        "ix_project_storage_environment_cluster_project",
-        "project_storage_environments",
-        ["storage_cluster_id", "project_id"],
-        unique=False,
-    )
-    op.create_index(
-        "ix_project_storage_environment_project_active_id",
-        "project_storage_environments",
-        ["project_id", "is_active", "id"],
-        unique=False,
-    )
-    op.create_index(
-        "ix_project_storage_environment_project_collection_active",
-        "project_storage_environments",
-        ["project_id", "collection_status", "is_active"],
-        unique=False,
+        sa.UniqueConstraint("name", name="uq_group_tag_name"),
     )
 
     op.create_table(
@@ -316,7 +264,9 @@ def upgrade() -> None:
     op.create_table(
         "groups",
         sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("project_environment_id", sa.Integer(), nullable=False),
+        sa.Column("project_id", sa.Integer(), nullable=False),
+        sa.Column("storage_cluster_id", sa.Integer(), nullable=False),
+        sa.Column("group_tag_id", sa.Integer(), nullable=False),
         sa.Column("monitor_host_id", sa.Integer(), nullable=True),
         sa.Column("volume_id", sa.Integer(), nullable=True),
         sa.Column("qtree_id", sa.Integer(), nullable=True),
@@ -347,9 +297,15 @@ def upgrade() -> None:
             ["in_charge_user_id"], ["users.id"], ondelete="SET NULL"
         ),
         sa.ForeignKeyConstraint(
-            ["project_environment_id"],
-            ["project_storage_environments.id"],
-            name="fk_group_project_storage_environment",
+            ["project_id"], ["projects.id"], name="fk_group_project"
+        ),
+        sa.ForeignKeyConstraint(
+            ["storage_cluster_id"],
+            ["storage_clusters.id"],
+            name="fk_group_storage_cluster",
+        ),
+        sa.ForeignKeyConstraint(
+            ["group_tag_id"], ["group_tags.id"], name="fk_group_tag"
         ),
         sa.ForeignKeyConstraint(["qtree_id"], ["qtrees.id"]),
         sa.ForeignKeyConstraint(
@@ -357,8 +313,18 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
-            "project_environment_id", "name", name="uq_group_environment_name"
+            "project_id",
+            "storage_cluster_id",
+            "group_tag_id",
+            "name",
+            name="uq_group_scope_name",
         ),
+    )
+    op.create_index(
+        "ix_group_project_cluster_tag",
+        "groups",
+        ["project_id", "storage_cluster_id", "group_tag_id"],
+        unique=False,
     )
     op.create_index("ix_groups_id", "groups", ["id"], unique=False)
     op.create_index("ix_groups_linux_path", "groups", ["linux_path"], unique=False)
@@ -439,6 +405,7 @@ def downgrade() -> None:
     op.drop_index("ix_large_files_linux_path", table_name="large_files")
     op.drop_index("ix_large_files_id", table_name="large_files")
     op.drop_table("large_files")
+    op.drop_index("ix_group_project_cluster_tag", table_name="groups")
     op.drop_index("ix_groups_name", table_name="groups")
     op.drop_index("ix_groups_linux_path", table_name="groups")
     op.drop_index("ix_groups_id", table_name="groups")
@@ -447,19 +414,7 @@ def downgrade() -> None:
     op.drop_index("ix_qtrees_name", table_name="qtrees")
     op.drop_index("ix_qtrees_id", table_name="qtrees")
     op.drop_table("qtrees")
-    op.drop_index(
-        "ix_project_storage_environment_project_collection_active",
-        table_name="project_storage_environments",
-    )
-    op.drop_index(
-        "ix_project_storage_environment_project_active_id",
-        table_name="project_storage_environments",
-    )
-    op.drop_index(
-        "ix_project_storage_environment_cluster_project",
-        table_name="project_storage_environments",
-    )
-    op.drop_table("project_storage_environments")
+    op.drop_table("group_tags")
     op.drop_index("ix_volumes_storage_cluster_id", table_name="volumes")
     op.drop_index("ix_volumes_name", table_name="volumes")
     op.drop_index("ix_volumes_id", table_name="volumes")

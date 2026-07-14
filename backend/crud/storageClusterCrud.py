@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc
 from sqlalchemy.exc import IntegrityError
 
-from models import ProjectStorageEnvironment, StorageCluster
+from models import Group, StorageCluster
 from schemas.storageClusterSchema import StorageClusterCreate, StorageClusterUpdate
 from typing import Optional, List
 from utils.query import get_sort_column
@@ -62,15 +62,15 @@ def delete_storage_cluster(db: Session, storage_cluster_id: int) -> bool:
     db_storage_cluster = get_storage_cluster(db, storage_cluster_id)
     if db_storage_cluster:
         referenced = (
-            db.query(ProjectStorageEnvironment.id)
-            .filter(ProjectStorageEnvironment.storage_cluster_id == storage_cluster_id)
+            db.query(Group.id)
+            .filter(Group.storage_cluster_id == storage_cluster_id)
             .first()
         )
         if referenced:
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Storage cluster is referenced by an environment or group",
+                detail="Storage cluster is referenced by a group",
             )
         try:
             db.delete(db_storage_cluster)

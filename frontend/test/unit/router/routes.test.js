@@ -21,7 +21,7 @@ describe('router/routes and app shell', () => {
     expect(adminRoute.children.map((route) => route.name)).toEqual(
       expect.arrayContaining([
         'StorageClusters',
-        'StorageEnvironments',
+        'GroupTags',
         'AdminDashboard',
         'Aggregates',
         'Volumes',
@@ -32,12 +32,12 @@ describe('router/routes and app shell', () => {
       ]),
     );
 
-    const storageEnvironmentRoute = adminRoute.children.find(
-      (route) => route.name === 'StorageEnvironments',
+    const groupTagRoute = adminRoute.children.find(
+      (route) => route.name === 'GroupTags',
     );
-    expect(storageEnvironmentRoute).toEqual(expect.objectContaining({
-      path: 'storage-environments',
-      meta: expect.objectContaining({ title: '存储环境' }),
+    expect(groupTagRoute).toEqual(expect.objectContaining({
+      path: 'group-tags',
+      meta: expect.objectContaining({ title: '项目组标签' }),
     }));
   });
 

@@ -1,5 +1,13 @@
 # 最新功能与修复
 
+## 2026-07-14：项目组标签替代项目存储环境
+
+- 删除 `ProjectStorageEnvironment`，新增仅包含 `id`、`name` 的全局 `GroupTag`。
+- `Group` 直接关联 `Project`、`StorageCluster` 和 `GroupTag`，标签只用于分类，不承载容量、采集状态或实时趋势。
+- 新增 `/group-tags` 全局 CRUD 和“项目组标签”管理页；项目组表单直接选择项目、集群和标签。
+- 采集、告警、用户目录、备份和周报改为从 `Group` 的直接关系解析项目、集群和标签。
+- 单一 Alembic initial baseline 已改写为新模型；旧开发数据库不提供原地兼容迁移。
+
 ## 2026-07-13：清理未使用字段和无效 QuestDB 配置
 
 - 删除 `Project`、`User`、`Host` 和 `StorageBackUpRecord` 中确认没有业务读写的 `20` 个字段，并同步收紧 API schema。

@@ -65,7 +65,7 @@ class StorageUsage(StorageUsageBase):
     user: usersSchema.OnlyUser
     group: groupSchema.GroupBase
     project: ProjectSummary | None = None
-    project_environment: groupSchema.ProjectEnvironmentSummary | None = None
+    group_tag: groupSchema.GroupTagSummary | None = None
     storage_cluster: groupSchema.StorageClusterSummary | None = None
     storage_target: groupSchema.StorageTargetSummary | None = None
 

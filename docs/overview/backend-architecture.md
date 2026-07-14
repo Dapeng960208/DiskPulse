@@ -41,6 +41,7 @@ FastAPI: backend/main.py
 | `projects` | `/projects` | 项目元数据和项目级存储汇总 |
 | `config` | `/config` | 系统集成配置 |
 | `group` | `/groups` | 项目组目录监控配置 |
+| `group_tag` | `/group-tags` | 全局项目组标签管理 |
 | `storage_cluster` | `/storage-clusters` | NetApp/Isilon 集群配置 |
 | `aggregate` | `/aggregates` | Aggregate 容量和趋势 |
 | `volumes` | `/volumes` | Volume 容量和趋势 |
@@ -80,6 +81,7 @@ FastAPI: backend/main.py
 | `Host` | `hosts` | SSH 主机信息，路径状态和大文件检查仍在使用 |
 | `Project` | `projects` | 项目和项目级资源统计 |
 | `StorageCluster` | `storage_clusters` | 存储集群配置 |
+| `GroupTag` | `group_tags` | 只包含名称的项目组全局标签 |
 | `Aggregate` | `aggregates` | Aggregate 容量 |
 | `Volume` | `volumes` | Volume 容量和分配量 |
 | `Qtree` | `qtrees` | Qtree 容量和状态 |
@@ -116,6 +118,9 @@ StorageCluster
 Project
     +-- Group
 
+GroupTag
+    +-- Group
+
 User
     +-- StorageUsage
     +-- owned Group
@@ -139,4 +144,4 @@ User
 - 不要删除 `Host` 或 `Group.monitor_host_id`，除非同步替换路径状态和大文件检查链路。
 - 不要删除 `StorageUsage` 文件元数据字段，除非同步修改详情页、导出和告警模板。
 - CRUD 中的动态排序参数应逐步改为白名单，避免调用方传入任意 ORM 属性。
-- PostgreSQL 使用单一 Alembic initial baseline `000000000001` 从空库创建当前 `14` 张表；旧 revision 数据库不支持原地升级。QuestDB 由独立模型和初始化流程维护，不属于 Alembic。
+- PostgreSQL 使用单一 Alembic initial baseline `000000000001` 从空库创建当前 `14` 张表；`Group` 直接保存项目、存储集群和项目组标签外键，旧 revision 数据库不支持原地升级。QuestDB 由独立模型和初始化流程维护，不属于 Alembic。

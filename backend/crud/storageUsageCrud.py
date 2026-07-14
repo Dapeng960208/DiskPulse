@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from sqlalchemy.orm import Session
-from models import Group, ProjectStorageEnvironment, StorageUsage
+from models import Group, StorageUsage
 from schemas import storageUsageSchema
 from sqlalchemy import or_, desc, asc
 from crud.questDbCrud import get_real_time_data_by_id, get_real_time_data_by_ids
@@ -23,7 +23,7 @@ def get_storage_usages(db: Session, page: int | None = None, size: int | None = 
                        prop: str | None = None,
                        order: str | None = None, user_id: int | None = None, group_id: int | None = None,
                        storage_cluster_id: int | None = None, project_id: int | None = None,
-                       project_environment_id: int | None = None):
+                       group_tag_id: int | None = None):
     query = db.query(StorageUsage)
     conditions = []
     if nameLike and len(nameLike.strip()) > 0:
@@ -32,21 +32,14 @@ def get_storage_usages(db: Session, page: int | None = None, size: int | None = 
         conditions.append(StorageUsage.user_id == user_id)
     if group_id:
         conditions.append(StorageUsage.group_id == group_id)
-    if project_id is not None or project_environment_id is not None or storage_cluster_id is not None:
+    if project_id is not None or group_tag_id is not None or storage_cluster_id is not None:
         query = query.join(Group, Group.id == StorageUsage.group_id)
-    if project_id is not None or storage_cluster_id is not None:
-        query = query.join(
-            ProjectStorageEnvironment,
-            ProjectStorageEnvironment.id == Group.project_environment_id,
-        )
     if project_id is not None:
-        conditions.append(ProjectStorageEnvironment.project_id == project_id)
-    if project_environment_id is not None:
-        conditions.append(Group.project_environment_id == project_environment_id)
+        conditions.append(Group.project_id == project_id)
+    if group_tag_id is not None:
+        conditions.append(Group.group_tag_id == group_tag_id)
     if storage_cluster_id is not None:
-        conditions.append(
-            ProjectStorageEnvironment.storage_cluster_id == storage_cluster_id
-        )
+        conditions.append(Group.storage_cluster_id == storage_cluster_id)
     query = query.filter(*conditions)
     total = query.count()
     sort_column = get_sort_column(StorageUsage, prop)
@@ -83,7 +76,7 @@ def create_storage_usage(
     ).first()
     if existing_assignment:
         existing_assignment.storage_cluster_id = (
-            group.project_environment.storage_cluster_id if group is not None else None
+            group.storage_cluster_id if group is not None else None
         )
         db.commit()
         db.refresh(existing_assignment)
@@ -95,7 +88,7 @@ def create_storage_usage(
         user_id=storage_usage.user_id,
         group_id=storage_usage.group_id,
         storage_cluster_id=(
-            group.project_environment.storage_cluster_id if group is not None else None
+            group.storage_cluster_id if group is not None else None
         ),
         linux_path=linux_path,
         updated_at=datetime.now(),
@@ -112,7 +105,7 @@ def update_storage_usage(db: Session, storage_usage_id: int, storage_usage: stor
         data = storage_usage.model_dump(exclude_unset=True)
         group = db.query(Group).filter(Group.id == data["group_id"]).first()
         if group is not None:
-            data["storage_cluster_id"] = group.project_environment.storage_cluster_id
+            data["storage_cluster_id"] = group.storage_cluster_id
         for key, value in data.items():
             setattr(db_storage_usage, key, value)
         db.commit()
@@ -136,18 +129,17 @@ def serialize_storage_usage(storage_usage: StorageUsage) -> dict:
     result["user"] = storage_usage.user
     result["group"] = storage_usage.group
     if storage_usage.group is None:
-        result.update(project=None, project_environment=None, storage_cluster=None, storage_target=None)
+        result.update(project=None, group_tag=None, storage_cluster=None, storage_target=None)
         return result
 
     resolved = resolve_group_storage_target(storage_usage.group)
     target = resolved["target"]
     cluster = resolved["storage_cluster"]
-    environment = storage_usage.group.project_environment
-    project = environment.project
+    project = storage_usage.group.project
     result["project"] = (
         {"id": project.id, "name": project.name} if project is not None else None
     )
-    result["project_environment"] = environment
+    result["group_tag"] = storage_usage.group.group_tag
     result["storage_cluster"] = cluster
     result["storage_cluster_id"] = cluster.id if cluster is not None else None
     result["storage_target"] = (
@@ -165,11 +157,11 @@ def serialize_storage_usage(storage_usage: StorageUsage) -> dict:
 def get_export_data(db: Session, nameLike: str | None = None, prop: str | None = None,
                     order: str | None = None, user_id: int | None = None, group_id: int | None = None,
                     storage_cluster_id: int | None = None, project_id: int | None = None,
-                    project_environment_id: int | None = None):
+                    group_tag_id: int | None = None):
     storage_usage_dbs, _ = get_storage_usages(db=db, nameLike=nameLike, prop=prop, order=order, user_id=user_id,
                                               group_id=group_id, storage_cluster_id=storage_cluster_id,
                                               project_id=project_id,
-                                              project_environment_id=project_environment_id)
+                                              group_tag_id=group_tag_id)
     rows = []
     for storage_usage in storage_usage_dbs:
         group = storage_usage.group
@@ -178,7 +170,7 @@ def get_export_data(db: Session, nameLike: str | None = None, prop: str | None =
             target = None
             volume = None
             cluster = storage_usage.storage_cluster
-            environment = None
+            group_tag = None
             project = None
         else:
             resolved = resolve_group_storage_target(group)
@@ -186,11 +178,11 @@ def get_export_data(db: Session, nameLike: str | None = None, prop: str | None =
             target = resolved["target"]
             volume = resolved["volume"]
             cluster = resolved["storage_cluster"]
-            environment = group.project_environment
-            project = environment.project
+            group_tag = group.group_tag
+            project = group.project
         rows.append({
             "项目": project.name if project is not None else "",
-            "项目环境": environment.name if environment is not None else "",
+            "项目组标签": group_tag.name if group_tag is not None else "",
             "存储集群": cluster.name if cluster is not None else "",
             "存储类型": cluster.storage_type if cluster is not None else "",
             "项目组": group.name if group is not None else "",
@@ -207,7 +199,7 @@ def get_export_data(db: Session, nameLike: str | None = None, prop: str | None =
             "修改时间": storage_usage.modify_time,
         })
     columns = [
-        "项目", "项目环境", "存储集群", "存储类型", "项目组", "Volume", "Qtree", "路径",
+        "项目", "项目组标签", "存储集群", "存储类型", "项目组", "Volume", "Qtree", "路径",
         "硬限额", "软限额", "已使用", "硬使用率", "软使用率", "文件数", "访问时间", "修改时间",
     ]
     return pd.DataFrame(rows, columns=columns)
@@ -216,9 +208,9 @@ def get_export_data(db: Session, nameLike: str | None = None, prop: str | None =
 def export_storage_usage_to_excel(db: Session, nameLike: str | None = None, prop: str | None = None,
                                   order: str | None = None, user_id: int | None = None, group_id: int | None = None,
                                   storage_cluster_id: int | None = None, project_id: int | None = None,
-                                  project_environment_id: int | None = None):
+                                  group_tag_id: int | None = None):
     df_storage_usage = get_export_data(db, nameLike, prop, order, user_id, group_id, storage_cluster_id,
-                                       project_id, project_environment_id)
+                                       project_id, group_tag_id)
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_storage_usage.to_excel(writer, sheet_name='存储使用明细', index=False)
@@ -229,10 +221,10 @@ def export_storage_usage_to_excel(db: Session, nameLike: str | None = None, prop
 def export_storage_usage_to_pdf(db: Session, nameLike: str | None = None, prop: str | None = None,
                                 order: str | None = None, user_id: int | None = None, group_id: int | None = None,
                                 storage_cluster_id: int | None = None, project_id: int | None = None,
-                                project_environment_id: int | None = None):
+                                group_tag_id: int | None = None):
     from appConfig import base_config
     df_storage_usage = get_export_data(db, nameLike, prop, order, user_id, group_id, storage_cluster_id,
-                                       project_id, project_environment_id)
+                                       project_id, group_tag_id)
     company_name = base_config.get('application.company_name')
     logo_path = str(base_config.app_logo_path)
     pdf_generator = PDFReportGenerator(company_name=company_name, logo_path=logo_path, title='存储使用明细报告',

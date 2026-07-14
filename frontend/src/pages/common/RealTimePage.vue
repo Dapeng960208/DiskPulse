@@ -20,7 +20,6 @@ import alertApi from '@/api/alert-api.js';
 import aggregateApi from '@/api/aggregate-api.js';
 import projectApi from '@/api/project-api.js';
 import storageUsageApi from '@/api/storage-usage-api.js';
-import projectStorageEnvironmentApi from '@/api/project-storage-environment-api';
 import { getDefaultTime } from '@/composables/common';
 import { useQuery, useQueryParams } from '@/composables/query';
 
@@ -33,7 +32,6 @@ const props = defineProps({
       'qtree',
       'aggregate',
       'project',
-      'project-environment',
       'storage-usage',
     ].includes(value),
   },
@@ -54,7 +52,6 @@ const apiMap = {
   qtree: qtreeApi,
   aggregate: aggregateApi,
   project: projectApi,
-  'project-environment': projectStorageEnvironmentApi,
   group: groupApi,
   'storage-usage': storageUsageApi
 };
@@ -64,7 +61,6 @@ const selectMap = {
   qtree: QtreeSelect,
   aggregate: AggregateSelect,
   project: ProjectSelect,
-  'project-environment': null,
   group: GroupSelect,
   'storage-usage': StorageUsageSelect
 };
@@ -74,7 +70,6 @@ const relatedTypeMap = {
   qtree: 'Qtree',
   aggregate: 'Aggregate',
   project: 'Project',
-  'project-environment': 'ProjectStorageEnvironment',
   group: 'Group',
   'storage-usage': 'StorageUsage',
 };

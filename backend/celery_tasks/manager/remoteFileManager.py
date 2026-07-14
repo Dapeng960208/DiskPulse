@@ -3,7 +3,7 @@ from crud.configCrud import get_storage_config
 from utils.sshClient import SSHClientBase
 import os
 import shlex
-from models import StorageUsage, StorageBackUpRecord, User, Group, ProjectStorageEnvironment
+from models import StorageUsage, StorageBackUpRecord, User, Group
 from datetime import datetime, timedelta
 from schemas import storageBackUpRecordSchema
 from utils.mailTools.emailNotification import EmailNotification
@@ -158,14 +158,13 @@ class RemoteFileManager:
 
     def _build_back_up_destination_path(self, storage_usage_db, back_up_dir):
         group = storage_usage_db.group
-        environment = group.project_environment
-        project_name = environment.project.name.replace(' ', '_')
-        environment_name = environment.name.replace(' ', '_')
+        project_name = group.project.name.replace(' ', '_')
+        group_tag_name = group.group_tag.name.replace(' ', '_')
         group_name = group.name
         user_path = storage_usage_db.linux_path
         base_name = os.path.basename(user_path)
         group_back_dir = os.path.join(
-            back_up_dir, project_name, environment_name, group_name
+            back_up_dir, project_name, group_tag_name, group_name
         )
         destination_path = os.path.join(group_back_dir, base_name)
         return destination_path
@@ -341,9 +340,8 @@ class RemoteFileManager:
         quit_days = self.storage_config.back_up_quit_days if self.storage_config.back_up_quit_days else 30
         storage_usages_dbs = self.db.query(StorageUsage).options(
             joinedload(StorageUsage.user),
-            joinedload(StorageUsage.group).joinedload(Group.project_environment).joinedload(
-                ProjectStorageEnvironment.project
-            ),
+            joinedload(StorageUsage.group).joinedload(Group.project),
+            joinedload(StorageUsage.group).joinedload(Group.group_tag),
         ).join(User, StorageUsage.user_id == User.id).join(
             Group, Group.id == StorageUsage.group_id
         ).filter(
@@ -499,9 +497,8 @@ class RemoteFileManager:
         quit_days = self.storage_config.back_up_quit_days if self.storage_config.back_up_quit_days else 30
         storage_usage_dbs = self.db.query(StorageUsage).options(
             joinedload(StorageUsage.user),
-            joinedload(StorageUsage.group).joinedload(Group.project_environment).joinedload(
-                ProjectStorageEnvironment.project
-            ),
+            joinedload(StorageUsage.group).joinedload(Group.project),
+            joinedload(StorageUsage.group).joinedload(Group.group_tag),
             joinedload(StorageUsage.group).joinedload(Group.in_charge_user),
         ).join(
             User, StorageUsage.user_id == User.id

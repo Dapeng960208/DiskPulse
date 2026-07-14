@@ -119,3 +119,21 @@
 - 修复：新增 `docs/standards/domain-terminology.md`，并将前端标准中的全局样式入口改为 `frontend/src/styles/style.scss`。
 - 验证：`docs/standards/domain-terminology.md` 已存在；前端实际入口由 `frontend/src/main.js` 引入 `frontend/src/styles/style.scss`。
 - 风险：历史交付记录中如引用旧路径，需要以后续当前标准为准。
+
+### 2026-07-14：通过 npm test 传递 Vitest 超时参数未生效
+
+- 触发：执行 `npm test -- --testTimeout=15000` 全量验证前端。
+- 现象：耗时约 `7.5` 秒的既有设置页测试仍按默认 `5000ms` 超时失败，npm 同时提示该参数被识别为未知 CLI 配置。
+- 根因：当前 npm/脚本参数转发方式没有把 `--testTimeout` 传给 Vitest。
+- 修复：直接执行 `.\\node_modules\\.bin\\vitest.cmd run --testTimeout=15000`。
+- 验证：`25` 个测试文件、`126` 个测试全部通过。
+- 风险：继续通过 `npm test -- ...` 追加 Vitest 参数可能重复触发默认超时，应直接调用仓库内 Vitest 命令。
+
+### 2026-07-14：PowerShell 直接解析 ESLint brace glob 失败
+
+- 触发：执行 `.\\node_modules\\.bin\\eslint.cmd src/**/*.{js,jsx,vue,ts,tsx} --fix`。
+- 现象：PowerShell 在 `{js,jsx,...}` 处报 `Missing argument in parameter list`，ESLint 未启动。
+- 根因：未引用的 brace glob 被 PowerShell 自身解析。
+- 修复：使用调用运算符并把 glob 作为单个字符串传入：`& '.\\node_modules\\.bin\\eslint.cmd' 'src/**/*.{js,jsx,vue,ts,tsx}' --fix`。
+- 验证：自动修复完成，随后 `npm run lint` 通过。
+- 风险：PowerShell 下直接复制类 Unix brace glob 命令会再次失败，需要引用 glob 或通过 npm script 执行。

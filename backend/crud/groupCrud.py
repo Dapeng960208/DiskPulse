@@ -2,7 +2,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 
-from models import Group, ProjectStorageEnvironment, Qtree, StorageUsage, Volume
+from models import Group, GroupTag, Project, Qtree, StorageCluster, StorageUsage, Volume
 from schemas import groupSchema
 from sqlalchemy import or_, desc, asc
 from datetime import datetime, timedelta
@@ -18,26 +18,19 @@ def get_group_by_id(db: Session, group_id: int):
 def get_groups(db: Session, page: int | None = None, size: int | None = None, nameLike: str | None = None,
                prop: str | None = None,
                order: str | None = None, qtree_id: int | None = None, project_id: int | None = None,
-               storage_cluster_id: int | None = None, project_environment_id: int | None = None):
+               storage_cluster_id: int | None = None, group_tag_id: int | None = None):
     query = db.query(Group)
     conditions = []
     if nameLike:
         conditions.append(or_(Group.name.like(f"%{nameLike}%"), Group.linux_path.like(f"%{nameLike}%")))
     if qtree_id:
         conditions.append(Group.qtree_id == qtree_id)
-    if project_id is not None or storage_cluster_id is not None:
-        query = query.join(
-            ProjectStorageEnvironment,
-            ProjectStorageEnvironment.id == Group.project_environment_id,
-        )
     if project_id is not None:
-        conditions.append(ProjectStorageEnvironment.project_id == project_id)
+        conditions.append(Group.project_id == project_id)
     if storage_cluster_id is not None:
-        conditions.append(
-            ProjectStorageEnvironment.storage_cluster_id == storage_cluster_id
-        )
-    if project_environment_id is not None:
-        conditions.append(Group.project_environment_id == project_environment_id)
+        conditions.append(Group.storage_cluster_id == storage_cluster_id)
+    if group_tag_id is not None:
+        conditions.append(Group.group_tag_id == group_tag_id)
 
     query = query.filter(*conditions)
     total = query.count()
@@ -85,7 +78,13 @@ def update_group(
     db_group = db.query(Group).filter(Group.id == group_id).first()
     if db_group:
         data = group.model_dump(exclude_unset=True)
-        if data.get("project_environment_id") is not None:
+        if {
+            "project_id",
+            "storage_cluster_id",
+            "group_tag_id",
+            "volume_id",
+            "qtree_id",
+        }.intersection(data):
             _validate_binding(db, data)
             data.setdefault("volume_id", None)
             data.setdefault("qtree_id", None)
@@ -96,23 +95,29 @@ def update_group(
     return db_group
 
 
-def _validate_binding(db: Session, data: dict) -> ProjectStorageEnvironment:
-    environment = (
-        db.query(ProjectStorageEnvironment)
-        .filter(ProjectStorageEnvironment.id == data["project_environment_id"])
-        .first()
-    )
-    if environment is None:
+def _validate_binding(db: Session, data: dict) -> None:
+    if db.get(Project, data["project_id"]) is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Project storage environment not found",
+            detail="Project not found",
+        )
+    storage_cluster = db.get(StorageCluster, data["storage_cluster_id"])
+    if storage_cluster is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Storage cluster not found",
+        )
+    if db.get(GroupTag, data["group_tag_id"]) is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Group tag not found",
         )
 
     if data.get("volume_id") is not None:
         target = db.query(Volume).filter(Volume.id == data["volume_id"]).first()
         target_name = "Volume"
     else:
-        if (environment.storage_cluster.storage_type or "").lower() == "isilon":
+        if (storage_cluster.storage_type or "").lower() == "isilon":
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Isilon environments do not support qtree targets",
@@ -125,12 +130,11 @@ def _validate_binding(db: Session, data: dict) -> ProjectStorageEnvironment:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"{target_name} not found",
         )
-    if target.storage_cluster_id != environment.storage_cluster_id:
+    if target.storage_cluster_id != storage_cluster.id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"{target_name} does not belong to the environment storage cluster",
+            detail=f"{target_name} does not belong to the selected storage cluster",
         )
-    return environment
 
 
 def serialize_group(group: Group) -> dict:
@@ -138,12 +142,9 @@ def serialize_group(group: Group) -> dict:
         column.name: getattr(group, column.name)
         for column in Group.__table__.columns
     }
-    environment = group.project_environment
-    project = environment.project
-    storage_cluster = environment.storage_cluster
-    result["project"] = project
-    result["project_environment"] = environment
-    result["storage_cluster"] = storage_cluster
+    result["project"] = group.project
+    result["group_tag"] = group.group_tag
+    result["storage_cluster"] = group.storage_cluster
 
     resolved = resolve_group_storage_target(group)
     target = resolved["target"]
@@ -165,7 +166,7 @@ def delete_group(db: Session, group_id: int):
     db.query(StorageUsage).filter_by(group_id=group_id).delete()
     db.commit()
     db_group = db.query(Group).options(
-        joinedload(Group.project_environment),
+        joinedload(Group.group_tag),
         joinedload(Group.qtree)
     ).filter(Group.id == group_id).first()
     if db_group:

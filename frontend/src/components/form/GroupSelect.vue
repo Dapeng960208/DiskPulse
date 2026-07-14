@@ -25,7 +25,7 @@ const props = defineProps({
     type:Number,
     default:null
   },
-  projectEnvironmentId: {
+  groupTagId: {
     type: Number,
     default: null,
   }
@@ -41,7 +41,7 @@ const searchingUserGroups = ref(false);
 
 watch(normalizedModelValue, initDefaultOptions, { immediate: true });
 watch(
-  () => [props.projectId, props.projectEnvironmentId],
+  () => [props.projectId, props.groupTagId],
   (value, previousValue) => {
     if (previousValue && value.some((item, index) => item !== previousValue[index])) {
       emit('update:modelValue', props.multiple ? [] : null);
@@ -56,10 +56,10 @@ function applyScope() {
   } else {
     delete queryParams.value.project_id;
   }
-  if (props.projectEnvironmentId) {
-    queryParams.value.project_environment_id = props.projectEnvironmentId;
+  if (props.groupTagId) {
+    queryParams.value.group_tag_id = props.groupTagId;
   } else {
-    delete queryParams.value.project_environment_id;
+    delete queryParams.value.group_tag_id;
   }
 }
 

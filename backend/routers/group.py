@@ -30,12 +30,12 @@ def create_group(
 @router.get("/", response_model=commonSchema.ResponseModel)
 def read_groups(page: int | None = 1, size: int | None = 20, nameLike: str | None = None, prop: str | None = None,
                 order: str | None = None, qtree_id: int | None = None, project_id: int | None = None,
-                storage_cluster_id: int | None = None, project_environment_id: int | None = None,
+                storage_cluster_id: int | None = None, group_tag_id: int | None = None,
                 db: Session = Depends(get_db)):
     groups, total = groupCrud.get_groups(db=db, page=page, size=size, nameLike=nameLike, prop=prop, order=order,
                                          qtree_id=qtree_id, project_id=project_id,
                                          storage_cluster_id=storage_cluster_id,
-                                         project_environment_id=project_environment_id)
+                                         group_tag_id=group_tag_id)
     return commonSchema.ResponseModel[groupSchema.Group](
         content=[groupCrud.serialize_group(group) for group in groups],
         total=total,

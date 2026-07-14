@@ -8,7 +8,6 @@ import storageUsageApi from '@/api/storage-usage-api';
 import GroupSelect from '@/components/form/GroupSelect.vue';
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
 import ProjectSelect from '@/components/form/ProjectSelect.vue';
-import ProjectStorageEnvironmentSelect from '@/components/form/ProjectStorageEnvironmentSelect.vue';
 import { ref, computed } from 'vue';
 import { number } from 'echarts';
 
@@ -27,15 +26,11 @@ const {
   group_id: null,
   user_id: null,
   project_id: null,
-  project_environment_id: null,
   linux_path: '',
 }), {
   rules: (model) => ({
     project_id: [
       { type: number, required: true, message: '项目不能为空', trigger: 'blur' },
-    ],
-    project_environment_id: [
-      { type: number, required: true, message: '项目环境不能为空', trigger: 'blur' },
     ],
     group_id: [
       { type: number, required: true, message: '关联项目组不能为空', trigger: 'blur' },
@@ -75,12 +70,11 @@ const getGroupName = async (groupId) => {
   if (groupId) {
     try {
       const group = await groupApi.fetchById(groupId);
-      if (model.value.project_environment_id
-        && group.project_environment?.id !== model.value.project_environment_id) {
+      if (model.value.project_id && group.project?.id !== model.value.project_id) {
         model.value.group_id = null;
         groupName.value = '';
         selectedGroup.value = null;
-        ElMessage.error('所选项目组不属于当前项目环境');
+        ElMessage.error('所选项目组不属于当前项目');
         return;
       }
       groupName.value = group.linux_path;
@@ -114,14 +108,6 @@ const handleGroupChange = (groupId) => {
 
 const handleProjectChange = (projectId) => {
   model.value.project_id = projectId;
-  model.value.project_environment_id = null;
-  model.value.group_id = null;
-  groupName.value = '';
-  selectedGroup.value = null;
-};
-
-const handleEnvironmentChange = (environmentId) => {
-  model.value.project_environment_id = environmentId;
   model.value.group_id = null;
   groupName.value = '';
   selectedGroup.value = null;
@@ -138,8 +124,6 @@ defineExpose({
       edit({
         ...existing,
         project_id: existing.project?.id ?? existing.project_id,
-        project_environment_id: existing.project_environment?.id
-          ?? existing.project_environment_id,
       });
       getGroupName(existing.group_id);
       getUserName(existing.user_id);
@@ -169,20 +153,12 @@ defineExpose({
           :clearable="true"
           @update:model-value="handleProjectChange" />
       </ElFormItem>
-      <ElFormItem label="项目环境">
-        <ProjectStorageEnvironmentSelect
-          :model-value="model.project_environment_id"
-          :project-id="model.project_id"
-          :clearable="true"
-          @update:model-value="handleEnvironmentChange" />
-      </ElFormItem>
       <ElFormItem
         label="关联项目组"
         prop="group_id">
         <GroupSelect
           v-model="model.group_id"
           :project-id="model.project_id"
-          :project-environment-id="model.project_environment_id"
           :multiple="false"
           @change="handleGroupChange" />
       </ElFormItem>

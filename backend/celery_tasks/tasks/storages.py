@@ -15,7 +15,7 @@ from celery_tasks.manager.storageAlert import StorageAlert
 from celery_tasks.tasks.redis_lock import redis_lock
 from celery.exceptions import SoftTimeLimitExceeded
 from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
-from models import Group, Project, ProjectStorageEnvironment, Qtree, StorageCluster, Volume
+from models import Group, Project, Qtree, StorageCluster, Volume
 logger = get_task_logger(__name__)
 
 
@@ -31,9 +31,8 @@ def load_collection_snapshot(db):
             StorageCluster.storage_user.label("storage_user"),
             StorageCluster.storage_password.label("storage_password"),
             StorageCluster.is_active.label("cluster_active"),
-            ProjectStorageEnvironment.id.label("project_environment_id"),
-            ProjectStorageEnvironment.project_id.label("project_id"),
-            ProjectStorageEnvironment.is_active.label("environment_active"),
+            Group.project_id.label("project_id"),
+            Group.group_tag_id.label("group_tag_id"),
             Group.id.label("group_id"),
             Group.enable_monitoring.label("group_enable_monitoring"),
             Group.volume_id.label("volume_id"),
@@ -41,22 +40,17 @@ def load_collection_snapshot(db):
             Volume.name.label("volume_name"),
             Qtree.name.label("qtree_name"),
         )
-        .join(
-            ProjectStorageEnvironment,
-            ProjectStorageEnvironment.storage_cluster_id == StorageCluster.id,
-        )
         .outerjoin(
             Group,
-            (Group.project_environment_id == ProjectStorageEnvironment.id)
+            (Group.storage_cluster_id == StorageCluster.id)
             & Group.enable_monitoring.is_(True),
         )
         .outerjoin(Volume, Volume.id == Group.volume_id)
         .outerjoin(Qtree, Qtree.id == Group.qtree_id)
         .where(
             StorageCluster.is_active.is_(True),
-            ProjectStorageEnvironment.is_active.is_(True),
         )
-        .order_by(StorageCluster.id, ProjectStorageEnvironment.id, Group.id)
+        .order_by(StorageCluster.id, Group.id)
     )
     return tuple(
         MappingProxyType(dict(row)) for row in db.execute(statement).mappings().all()
@@ -68,7 +62,9 @@ def apply_group_snapshot_update(db, snapshot, values):
         update(Group)
         .where(
             Group.id == snapshot["group_id"],
-            Group.project_environment_id == snapshot["project_environment_id"],
+            Group.project_id == snapshot["project_id"],
+            Group.storage_cluster_id == snapshot["storage_cluster_id"],
+            Group.group_tag_id == snapshot["group_tag_id"],
             Group.enable_monitoring.is_(True),
         )
         .values(**values)
@@ -76,28 +72,29 @@ def apply_group_snapshot_update(db, snapshot, values):
     return result.rowcount > 0
 
 
-def finalize_project_totals(db, environment_results, collected_at):
-    environments = db.execute(
+def finalize_project_totals(db, cluster_results, collected_at):
+    groups = db.execute(
         select(
-            ProjectStorageEnvironment.id,
-            ProjectStorageEnvironment.project_id,
-            ProjectStorageEnvironment.limit,
-            ProjectStorageEnvironment.soft_limit,
-            ProjectStorageEnvironment.used,
-        ).where(ProjectStorageEnvironment.is_active.is_(True))
+            Group.project_id,
+            Group.storage_cluster_id,
+            Group.limit,
+            Group.soft_limit,
+            Group.used,
+        ).where(Group.enable_monitoring.is_(True))
     ).all()
     by_project = defaultdict(list)
-    for environment in environments:
-        by_project[environment.project_id].append(environment)
+    for group in groups:
+        by_project[group.project_id].append(group)
 
     refreshed = set()
-    for project_id, project_environments in by_project.items():
-        if not all(environment_results.get(item.id) is True for item in project_environments):
+    for project_id, project_groups in by_project.items():
+        cluster_ids = {item.storage_cluster_id for item in project_groups}
+        if not all(cluster_results.get(cluster_id) is True for cluster_id in cluster_ids):
             continue
-        limit = sum(item.limit or 0 for item in project_environments)
-        used = sum(item.used or 0 for item in project_environments)
+        limit = sum(item.limit or 0 for item in project_groups)
+        used = sum(item.used or 0 for item in project_groups)
         soft_values = [
-            item.soft_limit for item in project_environments if item.soft_limit is not None
+            item.soft_limit for item in project_groups if item.soft_limit is not None
         ]
         soft_limit = sum(soft_values) if soft_values else None
         db.execute(
@@ -136,16 +133,11 @@ def run_collection_round(
     questdb_writer=None,
     logger=logger,
 ):
-    environment_results = {}
+    cluster_results = {}
     succeeded_clusters = []
     failed_clusters = []
     for cluster in _cluster_snapshots(snapshot):
         cluster_id = cluster["storage_cluster_id"]
-        environment_ids = {
-            row["project_environment_id"]
-            for row in cluster["rows"]
-            if row.get("project_environment_id") is not None
-        }
         db = None
         monitor = None
         try:
@@ -161,7 +153,7 @@ def run_collection_round(
                 else:
                     monitor = monitor_factory(db, logger, cluster)
                 metrics = monitor.collect_postgres()
-            environment_results.update(dict.fromkeys(environment_ids, True))
+            cluster_results[cluster_id] = True
             succeeded_clusters.append(cluster_id)
             try:
                 if questdb_writer is None:
@@ -175,7 +167,7 @@ def run_collection_round(
                     exc,
                 )
         except Exception as exc:
-            environment_results.update(dict.fromkeys(environment_ids, False))
+            cluster_results[cluster_id] = False
             failed_clusters.append(cluster_id)
             logger.error(
                 "Error monitoring cluster %s: %s",
@@ -210,7 +202,7 @@ def run_collection_round(
     return {
         "succeeded_clusters": tuple(succeeded_clusters),
         "failed_clusters": tuple(failed_clusters),
-        "environment_results": environment_results,
+        "cluster_results": cluster_results,
     }
 
 
@@ -235,7 +227,7 @@ def storages_schedule_fetching_task():
                     with db.begin():
                         finalize_project_totals(
                             db,
-                            environment_results=summary["environment_results"],
+                            cluster_results=summary["cluster_results"],
                             collected_at=collected_at,
                         )
             else:

@@ -43,20 +43,8 @@ class Project(ProjectBase):
         from_attributes = True
 
 
-class StorageEnvironmentStatusCounts(BaseModel):
-    pending: int = 0
-    success: int = 0
-    failed: int = 0
-    inactive: int = 0
-
-
 class ProjectOverview(Project):
-    storage_environment_count: int = 0
-    active_storage_environment_count: int = 0
     storage_cluster_types: list[str] = Field(default_factory=list)
-    storage_environment_status_counts: StorageEnvironmentStatusCounts = Field(
-        default_factory=StorageEnvironmentStatusCounts
-    )
 
 
 class ProjectUpdate(BaseModel):

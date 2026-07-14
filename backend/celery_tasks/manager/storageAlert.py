@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from models import (
-    StorageUsage, Group, Project, ProjectStorageEnvironment, Aggregate, Volume,
+    StorageUsage, Group, Project, Aggregate, Volume,
     Qtree, StorageAlerts, User,
 )
 from sqlalchemy import func, inspect as sa_inspect
@@ -59,12 +59,9 @@ class StorageAlert:
         storage_usage_dbs = self.db.query(StorageUsage).options(
             joinedload(StorageUsage.user),
             joinedload(StorageUsage.storage_cluster),
-            joinedload(StorageUsage.group).joinedload(Group.project_environment).joinedload(
-                ProjectStorageEnvironment.project
-            ),
-            joinedload(StorageUsage.group).joinedload(Group.project_environment).joinedload(
-                ProjectStorageEnvironment.storage_cluster
-            ),
+            joinedload(StorageUsage.group).joinedload(Group.project),
+            joinedload(StorageUsage.group).joinedload(Group.storage_cluster),
+            joinedload(StorageUsage.group).joinedload(Group.group_tag),
             joinedload(StorageUsage.group).joinedload(Group.volume),
             joinedload(StorageUsage.group).joinedload(Group.qtree).joinedload(Qtree.volume),
         ).join(
@@ -200,12 +197,9 @@ class StorageAlert:
         )
         group_ids = {group_id for group_id, _avg_use_ratio in storage_usage_quest_dbs}
         group_dbs = self.db.query(Group).options(
-            joinedload(Group.project_environment).joinedload(
-                ProjectStorageEnvironment.project
-            ),
-            joinedload(Group.project_environment).joinedload(
-                ProjectStorageEnvironment.storage_cluster
-            ),
+            joinedload(Group.project),
+            joinedload(Group.storage_cluster),
+            joinedload(Group.group_tag),
             joinedload(Group.volume),
             joinedload(Group.qtree).joinedload(Qtree.volume),
             joinedload(Group.in_charge_user),
@@ -256,12 +250,9 @@ class StorageAlert:
             ).subquery()
             top_storage_usages = self.db.query(StorageUsage).options(
                 joinedload(StorageUsage.user),
-                joinedload(StorageUsage.group).joinedload(Group.project_environment).joinedload(
-                    ProjectStorageEnvironment.project
-                ),
-                joinedload(StorageUsage.group).joinedload(Group.project_environment).joinedload(
-                    ProjectStorageEnvironment.storage_cluster
-                ),
+                joinedload(StorageUsage.group).joinedload(Group.project),
+                joinedload(StorageUsage.group).joinedload(Group.storage_cluster),
+                joinedload(StorageUsage.group).joinedload(Group.group_tag),
                 joinedload(StorageUsage.group).joinedload(Group.volume),
                 joinedload(StorageUsage.group).joinedload(Group.qtree).joinedload(Qtree.volume),
                 joinedload(StorageUsage.group).joinedload(Group.in_charge_user),
@@ -418,12 +409,12 @@ class StorageAlert:
                 avg_use_ratio=avg_use_ratio)
             related_info = None
             if model.__name__ == Group.__name__:
-                environment = related_db.project_environment
-                project = environment.project
+                project = related_db.project
+                group_tag = related_db.group_tag
                 description = f"{project.name}" + description
                 related_info = {
                     "project": {"id": project.id, "name": project.name},
-                    "project_environment": {"id": environment.id, "name": environment.name},
+                    "group_tag": {"id": group_tag.id, "name": group_tag.name},
                     "group": {"id": related_db.id, "name": related_db.name},
                 }
             related_id = related_db.id
@@ -450,25 +441,19 @@ class StorageAlert:
             for project_dbs in alarm_data.values()
             for project_db, _avg_use_ratio in project_dbs
         }
-        all_group_dbs = self.db.query(Group).join(
-            ProjectStorageEnvironment,
-            Group.project_environment_id == ProjectStorageEnvironment.id,
-        ).options(
-            joinedload(Group.project_environment).joinedload(
-                ProjectStorageEnvironment.project
-            ),
-            joinedload(Group.project_environment).joinedload(
-                ProjectStorageEnvironment.storage_cluster
-            ),
+        all_group_dbs = self.db.query(Group).options(
+            joinedload(Group.project),
+            joinedload(Group.storage_cluster),
+            joinedload(Group.group_tag),
             joinedload(Group.qtree).joinedload(Qtree.volume),
             joinedload(Group.in_charge_user),
-        ).filter(ProjectStorageEnvironment.project_id.in_(project_ids)).order_by(
-            ProjectStorageEnvironment.project_id, Group.used.desc()
+        ).filter(Group.project_id.in_(project_ids)).order_by(
+            Group.project_id, Group.used.desc()
         ).all() if project_ids else []
         groups_by_project = {}
         for group_db in all_group_dbs:
             groups_by_project.setdefault(
-                group_db.project_environment.project_id, []
+                group_db.project_id, []
             ).append(group_db)
         result = []
         for email, project_dbs in alarm_data.items():
@@ -485,15 +470,15 @@ class StorageAlert:
                     project_dict['avg_use_ratio'] = round(avg_use_ratio, 2)
                     group_dbs = groups_by_project.get(project_db.id, [])
                     group_usages = [_group_payload(group_db) for group_db in group_dbs]
-                    environment_usages = {}
+                    tag_usages = {}
                     for group_db, group_usage in zip(group_dbs, group_usages):
-                        environment = group_db.project_environment
-                        section = environment_usages.setdefault(
-                            environment.id,
+                        group_tag = group_db.group_tag
+                        section = tag_usages.setdefault(
+                            group_tag.id,
                             {
-                                'project_environment': {
-                                    'id': environment.id,
-                                    'name': environment.name,
+                                'group_tag': {
+                                    'id': group_tag.id,
+                                    'name': group_tag.name,
                                 },
                                 'group_usages': [],
                             },
@@ -503,9 +488,9 @@ class StorageAlert:
                         recipient += [group_db.in_charge_user.email for group_db in group_dbs if
                                       group_db.in_charge_user and group_db.in_charge_user.email]
                     project_dict['group_usages'] = group_usages
-                    project_dict['environment_usages'] = [
-                        environment_usages[environment_id]
-                        for environment_id in sorted(environment_usages)
+                    project_dict['tag_usages'] = [
+                        tag_usages[group_tag_id]
+                        for group_tag_id in sorted(tag_usages)
                     ]
                     project_usages.append(project_dict)
                 if len(project_usages) == 0:

@@ -101,7 +101,7 @@ class Project(Base):
     soft_use_ratio = Column(Float, nullable=True)
     updated_at = Column(DateTime, default=datetime.now)
 
-    environments = relationship("ProjectStorageEnvironment", back_populates="project", lazy=True)
+    groups = relationship("Group", back_populates="project", lazy=True)
     in_charge_user = relationship("User", foreign_keys=[in_charge_user_id], lazy=True)
     pt_user = relationship("User", foreign_keys=[pt_user_id], lazy=True)
 
@@ -128,78 +128,17 @@ class StorageCluster(Base):
     volumes = relationship("Volume", back_populates="storage_cluster", lazy=True)
     qtrees = relationship("Qtree", back_populates="storage_cluster", lazy=True)
     storage_usages = relationship("StorageUsage", back_populates="storage_cluster", lazy=True)
-    environments = relationship(
-        "ProjectStorageEnvironment", back_populates="storage_cluster", lazy=True
-    )
+    groups = relationship("Group", back_populates="storage_cluster", lazy=True)
 
 
-class ProjectStorageEnvironment(Base):
-    __tablename__ = "project_storage_environments"
-    __table_args__ = (
-        UniqueConstraint(
-            "project_id",
-            "name",
-            name="uq_project_storage_environment_project_name",
-        ),
-        UniqueConstraint(
-            "project_id",
-            "storage_cluster_id",
-            name="uq_project_storage_environment_project_cluster",
-        ),
-        CheckConstraint(
-            "collection_status IN ('pending', 'success', 'failed')",
-            name="ck_project_storage_environment_collection_status",
-        ),
-        Index(
-            "ix_project_storage_environment_project_active_id",
-            "project_id",
-            "is_active",
-            "id",
-        ),
-        Index(
-            "ix_project_storage_environment_cluster_project",
-            "storage_cluster_id",
-            "project_id",
-        ),
-        Index(
-            "ix_project_storage_environment_project_collection_active",
-            "project_id",
-            "collection_status",
-            "is_active",
-        ),
-    )
+class GroupTag(Base):
+    __tablename__ = "group_tags"
+    __table_args__ = (UniqueConstraint("name", name="uq_group_tag_name"),)
 
     id = Column(Integer, primary_key=True)
-    project_id = Column(
-        Integer,
-        ForeignKey("projects.id", name="fk_project_storage_environment_project"),
-        nullable=False,
-    )
-    storage_cluster_id = Column(
-        Integer,
-        ForeignKey(
-            "storage_clusters.id", name="fk_project_storage_environment_cluster"
-        ),
-        nullable=False,
-    )
     name = Column(String(128), nullable=False)
-    description = Column(Text, nullable=True)
-    is_active = Column(Boolean, default=True, nullable=False)
-    limit = Column(Float, nullable=True)
-    soft_limit = Column(Float, nullable=True)
-    used = Column(Float, nullable=True)
-    use_ratio = Column(Float, nullable=True)
-    soft_use_ratio = Column(Float, nullable=True)
-    collection_status = Column(String(16), default="pending", nullable=False)
-    last_collected_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.now, nullable=False)
-    updated_at = Column(DateTime, default=datetime.now, nullable=False)
 
-    project = relationship("Project", back_populates="environments", lazy=True)
-    storage_cluster = relationship(
-        "StorageCluster", back_populates="environments", lazy=True
-    )
-    groups = relationship("Group", back_populates="project_environment", lazy=True)
+    groups = relationship("Group", back_populates="group_tag", lazy=True)
 
 
 class Aggregate(Base):
@@ -264,9 +203,11 @@ class Group(Base):
     __tablename__ = "groups"
     __table_args__ = (
         UniqueConstraint(
-            "project_environment_id",
+            "project_id",
+            "storage_cluster_id",
+            "group_tag_id",
             "name",
-            name="uq_group_environment_name",
+            name="uq_group_scope_name",
         ),
         CheckConstraint(
             "volume_id IS NULL OR qtree_id IS NULL",
@@ -276,15 +217,28 @@ class Group(Base):
             "enable_monitoring = FALSE OR volume_id IS NOT NULL OR qtree_id IS NOT NULL",
             name="ck_group_monitored_has_storage_target",
         ),
+        Index(
+            "ix_group_project_cluster_tag",
+            "project_id",
+            "storage_cluster_id",
+            "group_tag_id",
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    project_environment_id = Column(
+    project_id = Column(
         Integer,
-        ForeignKey(
-            "project_storage_environments.id",
-            name="fk_group_project_storage_environment",
-        ),
+        ForeignKey("projects.id", name="fk_group_project"),
+        nullable=False,
+    )
+    storage_cluster_id = Column(
+        Integer,
+        ForeignKey("storage_clusters.id", name="fk_group_storage_cluster"),
+        nullable=False,
+    )
+    group_tag_id = Column(
+        Integer,
+        ForeignKey("group_tags.id", name="fk_group_tag"),
         nullable=False,
     )
     monitor_host_id = Column(Integer, nullable=True)
@@ -311,9 +265,9 @@ class Group(Base):
     updated_at = Column(DateTime, default=datetime.now)
 
     qtree = relationship("Qtree", back_populates="groups", lazy=True)
-    project_environment = relationship(
-        "ProjectStorageEnvironment", back_populates="groups", lazy=True
-    )
+    project = relationship("Project", back_populates="groups", lazy=True)
+    storage_cluster = relationship("StorageCluster", back_populates="groups", lazy=True)
+    group_tag = relationship("GroupTag", back_populates="groups", lazy=True)
     volume = relationship("Volume", lazy=True)
     storage_usages = relationship("StorageUsage", back_populates="group", lazy=True)
     in_charge_user = relationship("User", backref=backref("owned_groups", passive_deletes=True))

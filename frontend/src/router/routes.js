@@ -129,6 +129,14 @@ export default [
     },
     children: [
       {
+        path: 'group-tags',
+        name: 'GroupTags',
+        component: () => import('@/pages/group-tag/GroupTagListPage.vue'),
+        meta: {
+          title: '项目组标签',
+        },
+      },
+      {
         path: 'storage-clusters',
         name: 'StorageClusters',
         component: () => import('@/pages/admin/storage-cluster/StorageClusterListPage.vue'),

@@ -87,14 +87,7 @@ class TestCoreApi:
                 used=250,
                 use_ratio=25,
             )
-            environment = models.ProjectStorageEnvironment(
-                id=1,
-                project_id=1,
-                storage_cluster_id=1,
-                name="cluster-a",
-                created_at=datetime.fromisoformat(NOW),
-                updated_at=datetime.fromisoformat(NOW),
-            )
+            group_tag = models.GroupTag(id=1, name="production")
             aggregate_db = models.Aggregate(
                 id=1,
                 storage_cluster_id=1,
@@ -137,7 +130,9 @@ class TestCoreApi:
             )
             group_db = models.Group(
                 id=1,
-                project_environment_id=1,
+                project_id=1,
+                storage_cluster_id=1,
+                group_tag_id=1,
                 qtree_id=1,
                 in_charge_user_id=1,
                 name="alpha-team",
@@ -213,7 +208,7 @@ class TestCoreApi:
                     user,
                     project,
                     cluster,
-                    environment,
+                    group_tag,
                     aggregate_db,
                     volume,
                     qtree,

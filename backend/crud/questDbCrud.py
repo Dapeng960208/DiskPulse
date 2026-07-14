@@ -14,7 +14,6 @@ ALLOWED_TABLE_PREFIXES = {
     "volume",
     "qtree",
     "project",
-    "project_environment",
     "group",
 }
 ALLOWED_INDICATORS = {"used", "used_ratio", "file_used"}

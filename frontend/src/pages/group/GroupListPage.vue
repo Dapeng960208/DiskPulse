@@ -11,7 +11,8 @@ import Progress from '@/components/form/Progress.vue';
 import UserAvatar from '@/components/data/UserAvatar.vue'
 import QtreeSelect from '@/components/form/QtreeSelect.vue';
 import ProjectSelect from '@/components/form/ProjectSelect.vue';
-import ProjectStorageEnvironmentSelect from '@/components/form/ProjectStorageEnvironmentSelect.vue';
+import GroupTagSelect from '@/components/form/GroupTagSelect.vue';
+import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import GroupFormDialog from './components/GroupFormDialog.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 
@@ -30,7 +31,6 @@ const { result, querying, query } = useQuery(() => groupApi.fetch(queryParams.va
 
 function changeProjectFilter(projectId) {
   queryParams.value.project_id = projectId;
-  queryParams.value.project_environment_id = null;
 }
 
 query();
@@ -80,11 +80,17 @@ function confirmDelete(row) {
           @update:model-value="changeProjectFilter" />
       </ElFormItem>
       <ElFormItem
-        label="存储环境"
+        label="项目组标签"
         class="form-item-center">
-        <ProjectStorageEnvironmentSelect
-          v-model="queryParams.project_environment_id"
-          :project-id="queryParams.project_id"
+        <GroupTagSelect
+          v-model="queryParams.group_tag_id"
+          :clearable="true" />
+      </ElFormItem>
+      <ElFormItem
+        label="存储集群"
+        class="form-item-center">
+        <StorageClusterSelect
+          v-model="queryParams.storage_cluster_id"
           :clearable="true" />
       </ElFormItem>
       <ElFormItem
@@ -155,11 +161,11 @@ function confirmDelete(row) {
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="存储环境"
+        label="项目组标签"
         align="center"
         min-width="120">
         <template #default="{ row }">
-          {{ row.project_environment?.name || '-' }}
+          {{ row.group_tag?.name || '-' }}
         </template>
       </ElTableColumn>
       <ElTableColumn

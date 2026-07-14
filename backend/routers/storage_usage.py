@@ -55,14 +55,14 @@ def read_storage_usages(page: int | None = 1, size: int | None = 20, nameLike: s
                          prop: str | None = None,
                          order: str | None = None, user_id: int | str = Query(None), group_id: int | None = None,
                          storage_cluster_id: int | None = None, project_id: int | None = None,
-                         project_environment_id: int | None = None, db: Session = Depends(get_db)):
+                         group_tag_id: int | None = None, db: Session = Depends(get_db)):
     if user_id == "":
         user_id = None
     storage_usages, total = storageUsageCrud.get_storage_usages(db=db, page=page, size=size, nameLike=nameLike,
                                                                  prop=prop, order=order, user_id=user_id,
                                                                  group_id=group_id, storage_cluster_id=storage_cluster_id,
                                                                  project_id=project_id,
-                                                                 project_environment_id=project_environment_id)
+                                                                 group_tag_id=group_tag_id)
     return commonSchema.ResponseModel[storageUsageSchema.StorageUsage](
         content=[storageUsageCrud.serialize_storage_usage(item) for item in storage_usages],
         total=total,
@@ -73,7 +73,7 @@ def read_storage_usages(page: int | None = 1, size: int | None = 20, nameLike: s
 def export_storage_usages(export_type: str = 'pdf', nameLike: str | None = None, prop: str | None = None,
                           order: str | None = None, user_id: int | str = Query(None), group_id: int | None = None,
                           storage_cluster_id: int | None = None, project_id: int | None = None,
-                          project_environment_id: int | None = None, db: Session = Depends(get_db)):
+                          group_tag_id: int | None = None, db: Session = Depends(get_db)):
     if user_id == "":
         user_id = None
     headers = {
@@ -83,14 +83,14 @@ def export_storage_usages(export_type: str = 'pdf', nameLike: str | None = None,
     if export_type == 'pdf':
         content = storageUsageCrud.export_storage_usage_to_pdf(
             db, nameLike, prop, order, user_id, group_id, storage_cluster_id,
-            project_id, project_environment_id,
+            project_id, group_tag_id,
         )
         file_name = f"存储使用明细报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         media_type = "application/pdf"
     elif export_type == 'excel':
         content = storageUsageCrud.export_storage_usage_to_excel(
             db, nameLike, prop, order, user_id, group_id, storage_cluster_id,
-            project_id, project_environment_id,
+            project_id, group_tag_id,
         )
         file_name = f"存储使用明细报表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

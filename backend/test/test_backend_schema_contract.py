@@ -92,7 +92,7 @@ FINAL_TABLES = {
     "groups",
     "hosts",
     "large_files",
-    "project_storage_environments",
+    "group_tags",
     "projects",
     "qtrees",
     "storage_alerts",
@@ -105,16 +105,10 @@ FINAL_TABLES = {
 }
 KEY_COLUMNS = {
     "aggregates": {"id", "storage_cluster_id", "limit", "used"},
-    "groups": {"id", "project_environment_id", "volume_id", "qtree_id"},
+    "groups": {"id", "project_id", "storage_cluster_id", "group_tag_id", "volume_id", "qtree_id"},
     "hosts": {"id", "name", "ip"},
     "large_files": {"id", "user_id", "group_id", "linux_path"},
-    "project_storage_environments": {
-        "id",
-        "project_id",
-        "storage_cluster_id",
-        "name",
-        "collection_status",
-    },
+    "group_tags": {"id", "name"},
     "projects": {"id", "name", "soft_limit", "soft_use_ratio"},
     "qtrees": {"id", "storage_cluster_id", "volume_id", "soft_limit"},
     "storage_alerts": {"id", "alert_level", "related_id", "related_type"},
@@ -234,8 +228,9 @@ def test_initial_schema_upgrade_and_downgrade_on_empty_sqlite():
         group_columns = {
             column["name"]: column for column in inspector.get_columns("groups")
         }
-        assert {"project_id", "storage_cluster_id"}.isdisjoint(group_columns)
-        assert group_columns["project_environment_id"]["nullable"] is False
+        assert group_columns["project_id"]["nullable"] is False
+        assert group_columns["storage_cluster_id"]["nullable"] is False
+        assert group_columns["group_tag_id"]["nullable"] is False
 
         migration.downgrade()
         inspector.clear_cache()

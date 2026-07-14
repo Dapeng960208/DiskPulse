@@ -40,8 +40,9 @@ const projectApi = {
   })),
 };
 
-const projectStorageEnvironmentApi = {
-  fetchByProject: vi.fn(),
+const groupTagApi = {
+  fetch: vi.fn(() => Promise.resolve({ content: [] })),
+  fetchById: vi.fn((id) => Promise.resolve({ id, name: `Tag-${id}` })),
 };
 
 const groupApi = {
@@ -52,7 +53,7 @@ const groupApi = {
 vi.mock('@/api/account-api', () => ({ default: accountApi }));
 vi.mock('@/api/domain-group-api', () => ({ default: domainGroupApi }));
 vi.mock('@/api/project-api', () => ({ default: projectApi }));
-vi.mock('@/api/project-storage-environment-api', () => ({ default: projectStorageEnvironmentApi }));
+vi.mock('@/api/group-tag-api', () => ({ default: groupTagApi }));
 vi.mock('@/api/group-api', () => ({ default: groupApi }));
 vi.mock('@/components/data/UserAvatar.vue', () => ({
   default: defineComponent({
@@ -236,15 +237,11 @@ describe('form select function coverage', () => {
     expect(projectApi.fetchById).toHaveBeenCalledWith(99);
   }, 15000);
 
-  it('handles project storage environment loading failures', async () => {
-    projectStorageEnvironmentApi.fetchByProject.mockRejectedValueOnce(new Error('offline'));
-    const { default: ProjectStorageEnvironmentSelect } = await import(
-      '@/components/form/ProjectStorageEnvironmentSelect.vue'
-    );
-    const wrapper = shallowMount(ProjectStorageEnvironmentSelect, {
+  it('loads project group tag options', async () => {
+    const { default: GroupTagSelect } = await import('@/components/form/GroupTagSelect.vue');
+    const wrapper = shallowMount(GroupTagSelect, {
       props: {
         modelValue: null,
-        projectId: 31,
       },
       global: {
         stubs: globalStubs,
@@ -253,28 +250,28 @@ describe('form select function coverage', () => {
 
     await flushPromises();
 
-    expect(projectStorageEnvironmentApi.fetchByProject).toHaveBeenCalledWith(31, {
+    expect(groupTagApi.fetch).toHaveBeenCalledWith({
       page: 1,
-      size: 100,
+      size: 20,
     });
     expect(wrapper.findAllComponents({ name: 'ElOption' })).toHaveLength(0);
     expect(wrapper.findComponent({ name: 'ElSelect' }).props('loading')).toBe(false);
   });
 
-  it('scopes GroupSelect requests to the environment and clears on scope change', async () => {
+  it('scopes GroupSelect requests to the group tag and clears on scope change', async () => {
     const { default: GroupSelect } = await import('@/components/form/GroupSelect.vue');
     const wrapper = shallowMount(GroupSelect, {
       props: {
         modelValue: 9,
         projectId: 31,
-        projectEnvironmentId: 7,
+        groupTagId: 7,
       },
       global: { stubs: globalStubs },
     });
     await flushPromises();
 
     expect(groupApi.fetchById).toHaveBeenCalledWith(9);
-    await wrapper.setProps({ projectEnvironmentId: 8 });
+    await wrapper.setProps({ groupTagId: 8 });
     await flushPromises();
 
     expect(wrapper.emitted('update:modelValue')).toContainEqual([null]);
@@ -282,7 +279,7 @@ describe('form select function coverage', () => {
       page: 1,
       size: 20,
       project_id: 31,
-      project_environment_id: 8,
+      group_tag_id: 8,
     });
 
     const select = wrapper.findComponent({ name: 'ElSelect' });
@@ -294,7 +291,7 @@ describe('form select function coverage', () => {
       page: 1,
       size: 20,
       project_id: 31,
-      project_environment_id: 8,
+      group_tag_id: 8,
       nameLike: 'ops',
     });
     expect(wrapper.emitted('update:modelValue')).toContainEqual([12]);

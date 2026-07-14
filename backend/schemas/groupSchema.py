@@ -21,7 +21,9 @@ class GroupWriteBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str | None = None
-    project_environment_id: int | None = None
+    project_id: int | None = None
+    storage_cluster_id: int | None = None
+    group_tag_id: int | None = None
     volume_id: int | None = None
     qtree_id: int | None = None
     monitor_host_id: int | None = None
@@ -50,7 +52,9 @@ class GroupWriteBase(BaseModel):
 
 class GroupBindingCreate(GroupWriteBase):
     name: str
-    project_environment_id: int
+    project_id: int
+    storage_cluster_id: int
+    group_tag_id: int
 
     @model_validator(mode="after")
     def validate_target(self):
@@ -62,17 +66,29 @@ class GroupBindingCreate(GroupWriteBase):
 class GroupBindingUpdate(GroupWriteBase):
     @model_validator(mode="after")
     def validate_binding_update(self):
-        binding_fields = {"project_environment_id", "volume_id", "qtree_id"}
+        binding_fields = {
+            "project_id",
+            "storage_cluster_id",
+            "group_tag_id",
+            "volume_id",
+            "qtree_id",
+        }
         if not self.model_fields_set.intersection(binding_fields):
             return self
-        if self.project_environment_id is None:
-            raise ValueError("project_environment_id is required when changing storage target")
+        if any(
+            getattr(self, field) is None
+            for field in ("project_id", "storage_cluster_id", "group_tag_id")
+        ):
+            raise ValueError(
+                "project_id, storage_cluster_id and group_tag_id are required "
+                "when changing storage target"
+            )
         if (self.volume_id is None) == (self.qtree_id is None):
             raise ValueError("Exactly one of volume_id or qtree_id is required")
         return self
 
 
-class ProjectEnvironmentSummary(BaseModel):
+class GroupTagSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -96,7 +112,9 @@ class StorageTargetSummary(BaseModel):
 class GroupBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    project_environment_id: int | None = None
+    project_id: int | None = None
+    storage_cluster_id: int | None = None
+    group_tag_id: int | None = None
     volume_id: int | None = None
     monitor_host_id: int | None = None
     name: str
@@ -120,9 +138,11 @@ class GroupBase(BaseModel):
 
 class Group(GroupBase):
     id: int
-    project_environment_id: int
+    project_id: int
+    storage_cluster_id: int
+    group_tag_id: int
     project: projectsSchema.ProjectBaseInfo
-    project_environment: ProjectEnvironmentSummary
+    group_tag: GroupTagSummary
     qtree: qtreeSchema.QtreeForGroup | None = None
     storage_cluster: StorageClusterSummary | None = None
     storage_target: StorageTargetSummary | None = None

@@ -1,5 +1,30 @@
 # 当前交付记录
 
+## 2026-07-14：项目组标签与直接资源绑定
+
+### 主题
+
+删除项目级存储环境关系，将其收敛为只包含名称的全局 `GroupTag`；`Group` 直接绑定项目、存储集群和标签。
+
+### 已完成
+
+- `group_tags` 只保留 `id`、`name`，名称全局唯一；标签不绑定项目或存储集群，也不保存容量、状态或采集时间。
+- `groups` 直接保存非空的 `project_id`、`storage_cluster_id`、`group_tag_id`，并继续严格校验 Volume/Qtree 必须属于所选集群。
+- 新增 `/storage-pulse/api/group-tags` 全局 CRUD；标签写操作要求超级管理员，重复名称和删除已引用标签返回 `409`。
+- 采集、告警、Usage、备份和周报改为读取 Group 的直接关系；删除环境级 QuestDB、汇总、告警和实时趋势语义。
+- 前端新增“项目组标签”管理页和选择器；项目组表单分别选择项目、存储集群、标签，项目详情和 Dashboard 按 Group 直接展示。
+- 单一 Alembic baseline 已改写；不提供旧 `project_storage_environments` 数据兼容或回填。
+
+### 验证状态
+
+- 后端 `python -m pytest backend/test -q`：`66 passed`；`python -m compileall -q backend`：通过。
+- 前端 `.\\node_modules\\.bin\\vitest.cmd run --testTimeout=15000`：`25` 个测试文件、`126 passed`；`npm run build:prod`：通过。
+
+### 风险与后续
+
+- 使用旧 baseline 的开发数据库不能原地升级，需确认数据可丢弃后重建空库。
+- 未连接真实 PostgreSQL、QuestDB、NetApp、Isilon 或 Celery worker 做端到端验证。
+
 ## 2026-07-14：QuestDB 版本管控与启动初始化
 
 ### 主题
@@ -27,7 +52,9 @@
 - QuestDB migration 不提供自动 downgrade；破坏性回退必须先备份，再使用独立修复 revision 或重建实例。
 - 多副本生产部署应由单一迁移节点先执行 `python -m questdb.migrate upgrade`，再启动 API/worker，避免并发执行未来可能不具备天然幂等性的 DDL。
 
-## 2026-07-13：项目存储环境分层、绑定与采集隔离
+## 2026-07-13：项目存储环境分层、绑定与采集隔离（已废弃）
+
+> 该方案已由 2026-07-14 的 `GroupTag + Group` 直接绑定模型替代，仅保留为历史交付记录。
 
 ### 主题
 

@@ -2,14 +2,13 @@
 from datetime import datetime
 from typing import Any, List
 
-from sqlalchemy import asc, desc, func
+from sqlalchemy import asc, desc
 from sqlalchemy.orm import Session
 
 from crud.questDbCrud import get_real_time_data_by_id
 from models import (
     Group,
     Project,
-    ProjectStorageEnvironment,
     StorageCluster,
     StorageUsage,
 )
@@ -105,26 +104,16 @@ def get_projects(
         query = query.order_by(Project.name.asc())
 
     projects_db = query.offset((page - 1) * size).limit(size).all()
-    _attach_storage_environment_overviews(db, projects_db)
+    _attach_storage_cluster_overviews(db, projects_db)
     return projects_db, total
 
 
-def _attach_storage_environment_overviews(
+def _attach_storage_cluster_overviews(
     db: Session,
     projects: list[Project],
 ) -> None:
     overviews = {
-        project.id: {
-            "storage_environment_count": 0,
-            "active_storage_environment_count": 0,
-            "storage_cluster_types": set(),
-            "storage_environment_status_counts": {
-                "pending": 0,
-                "success": 0,
-                "failed": 0,
-                "inactive": 0,
-            },
-        }
+        project.id: {"storage_cluster_types": set()}
         for project in projects
     }
     if not overviews:
@@ -132,34 +121,16 @@ def _attach_storage_environment_overviews(
 
     rows = (
         db.query(
-            ProjectStorageEnvironment.project_id,
-            ProjectStorageEnvironment.is_active,
-            ProjectStorageEnvironment.collection_status,
-            StorageCluster.storage_type,
-            func.count(ProjectStorageEnvironment.id),
-        )
-        .join(
-            StorageCluster,
-            StorageCluster.id == ProjectStorageEnvironment.storage_cluster_id,
-        )
-        .filter(ProjectStorageEnvironment.project_id.in_(overviews))
-        .group_by(
-            ProjectStorageEnvironment.project_id,
-            ProjectStorageEnvironment.is_active,
-            ProjectStorageEnvironment.collection_status,
+            Group.project_id,
             StorageCluster.storage_type,
         )
+        .join(StorageCluster, StorageCluster.id == Group.storage_cluster_id)
+        .filter(Group.project_id.in_(overviews))
+        .distinct()
         .all()
     )
-    for project_id, is_active, collection_status, storage_type, count in rows:
-        overview = overviews[project_id]
-        overview["storage_environment_count"] += count
-        overview["storage_cluster_types"].add(storage_type)
-        if is_active:
-            overview["active_storage_environment_count"] += count
-            overview["storage_environment_status_counts"][collection_status] += count
-        else:
-            overview["storage_environment_status_counts"]["inactive"] += count
+    for project_id, storage_type in rows:
+        overviews[project_id]["storage_cluster_types"].add(storage_type)
 
     for project in projects:
         overview = overviews[project.id]
@@ -177,11 +148,7 @@ def get_common_project(db: Session):
 def get_project_storage_summary(db: Session) -> List[List[Any]]:
     all_groups = (
         db.query(Group.name, Group.used, Project.name)
-        .join(
-            ProjectStorageEnvironment,
-            ProjectStorageEnvironment.id == Group.project_environment_id,
-        )
-        .join(Project, Project.id == ProjectStorageEnvironment.project_id)
+        .join(Project, Project.id == Group.project_id)
         .filter(Project.name != "Common", Group.enable_monitoring.is_(True), Group.qtree_id.isnot(None))
         .all()
     )
@@ -205,12 +172,8 @@ def get_project_tree_summary(db: Session):
     for project_db in project_dbs:
         group_dbs = (
             db.query(Group)
-            .join(
-                ProjectStorageEnvironment,
-                ProjectStorageEnvironment.id == Group.project_environment_id,
-            )
             .filter(
-                ProjectStorageEnvironment.project_id == project_db.id,
+                Group.project_id == project_db.id,
                 Group.enable_monitoring.is_(True),
                 Group.qtree_id.isnot(None),
             )
@@ -262,11 +225,7 @@ def get_project_tree_summary_by_id(db: Session, project_id: int, value_type: str
     value_type = require_allowed(value_type, {"limit", "used", "use_ratio", "soft_limit", "soft_use_ratio"}, "value_type")
     group_dbs = (
         db.query(Group)
-        .join(
-            ProjectStorageEnvironment,
-            ProjectStorageEnvironment.id == Group.project_environment_id,
-        )
-        .filter(ProjectStorageEnvironment.project_id == project_id)
+        .filter(Group.project_id == project_id)
         .all()
     )
     groups = []
@@ -307,12 +266,8 @@ def get_project_groups_storage_usage(db: Session):
     for project_db in project_dbs:
         group_dbs = (
             db.query(Group)
-            .join(
-                ProjectStorageEnvironment,
-                ProjectStorageEnvironment.id == Group.project_environment_id,
-            )
             .filter(
-                ProjectStorageEnvironment.project_id == project_db.id,
+                Group.project_id == project_db.id,
                 Group.enable_monitoring.is_(True),
                 Group.qtree_id.isnot(None),
             )

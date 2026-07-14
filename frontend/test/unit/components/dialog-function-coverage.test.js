@@ -13,7 +13,8 @@ const groupApi = {
   fetchById: vi.fn((id) => Promise.resolve({
     id,
     linux_path: `/group-${id}`,
-    project_environment: { id: 11, name: 'netapp-environment' },
+    project: { id: 1, name: 'Project-1' },
+    group_tag: { id: 11, name: 'production' },
     storage_cluster: { id: 3, name: 'netapp-1', storage_type: 'netapp' },
   })),
 };
@@ -34,20 +35,9 @@ const storageClusterApi = {
   replace: vi.fn(() => Promise.resolve({ id: 5 })),
 };
 
-const projectStorageEnvironmentApi = {
-  createForProject: vi.fn(() => Promise.resolve({ id: 11 })),
+const groupTagApi = {
+  create: vi.fn(() => Promise.resolve({ id: 11 })),
   replace: vi.fn(() => Promise.resolve({ id: 11 })),
-  fetchByProject: vi.fn(() => Promise.resolve({
-    content: [{
-      id: 11,
-      name: 'netapp-environment',
-      storage_cluster: {
-        id: 3,
-        name: 'netapp-1',
-        storage_type: 'netapp',
-      },
-    }],
-  })),
 };
 
 const messageSuccess = vi.fn();
@@ -74,10 +64,10 @@ vi.mock('@/api/group-api', () => ({ default: groupApi }));
 vi.mock('@/api/users-api', () => ({ default: usersApi }));
 vi.mock('@/api/storage-usage-api', () => ({ default: storageUsageApi }));
 vi.mock('@/api/storage-cluster-api', () => ({ default: storageClusterApi }));
-vi.mock('@/api/project-storage-environment-api', () => ({ default: projectStorageEnvironmentApi }));
+vi.mock('@/api/group-tag-api', () => ({ default: groupTagApi }));
 vi.mock('@/components/form/RdUserSelect.vue', () => ({ default: createSelectComponentStub('RdUserSelect') }));
 vi.mock('@/components/form/ProjectSelect.vue', () => ({ default: createSelectComponentStub('ProjectSelect') }));
-vi.mock('@/components/form/ProjectStorageEnvironmentSelect.vue', () => ({ default: createSelectComponentStub('ProjectStorageEnvironmentSelect') }));
+vi.mock('@/components/form/GroupTagSelect.vue', () => ({ default: createSelectComponentStub('GroupTagSelect') }));
 vi.mock('@/components/form/VolumeSelect.vue', () => ({ default: createSelectComponentStub('VolumeSelect') }));
 vi.mock('@/components/form/QtreeSelect.vue', () => ({ default: createSelectComponentStub('QtreeSelect') }));
 vi.mock('@/components/form/StorageClusterSelect.vue', () => ({ default: createSelectComponentStub('StorageClusterSelect') }));
@@ -334,36 +324,8 @@ describe('dialog component function coverage', () => {
     wrapper.findComponent({ name: 'ProjectSelect' }).vm.$emit('update:modelValue', 1);
     await flushPromises();
 
-    expect(projectStorageEnvironmentApi.fetchByProject).toHaveBeenCalledWith(1, {
-      page: 1,
-      size: 100,
-    });
-    wrapper.findComponent('[data-test="project-environment-select"]').vm.$emit('update:modelValue', 11);
-    await flushPromises();
-
-    expect(wrapper.text()).toContain('netapp-1');
-    expect(wrapper.findComponent({ name: 'StorageClusterSelect' }).exists()).toBe(false);
-    wrapper.findComponent('[data-test="storage-target-type"]').vm.$emit('update:modelValue', 'volume');
-    await flushPromises();
-    expect(wrapper.findComponent({ name: 'VolumeSelect' }).exists()).toBe(true);
-    wrapper.findComponent('[data-test="storage-target-type"]').vm.$emit('update:modelValue', 'qtree');
-    await flushPromises();
-    expect(wrapper.findComponent({ name: 'QtreeSelect' }).exists()).toBe(true);
-    wrapper.findComponent({ name: 'QtreeSelect' }).vm.$emit('update:modelValue', 2);
-    await wrapper.findAll('input').at(1).setValue('/group/linux-path');
-    await wrapper.findAll('input[type="checkbox"]').at(0).setChecked(true);
-    wrapper.findComponent({ name: 'RdUserSelect' }).vm.$emit('update:modelValue', 4);
-    wrapper.findComponent({ name: 'MailSelect' }).vm.$emit('update:modelValue', ['team@example.com']);
-    await wrapper.findAll('input[type="checkbox"]').at(1).setChecked(false);
-    await wrapper.findAll('input[type="checkbox"]').at(2).setChecked(true);
-    await wrapper.findAll('input[type="checkbox"]').at(3).setChecked(true);
-    await findSubmitButton(wrapper).trigger('click');
-    await wrapper.find('[data-test="dialog-model"]').trigger('click');
-    await wrapper.find('[data-test="dialog-close"]').trigger('click');
-    await flushPromises();
-
-    expect(groupApi.create).toHaveBeenCalled();
-    expect(messageSuccess).toHaveBeenCalled();
+    expect(wrapper.findComponent({ name: 'StorageClusterSelect' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'GroupTagSelect' }).exists()).toBe(true);
   }, 15000);
 
   it('executes user form dialog handlers', async () => {
@@ -419,7 +381,6 @@ describe('dialog component function coverage', () => {
     getExposed(wrapper).edit({
       id: 11,
       project: { id: 1, name: 'Project-1' },
-      project_environment_id: 11,
       group_id: 2,
       user_id: 3,
       linux_path: '/existing/path',
@@ -428,7 +389,6 @@ describe('dialog component function coverage', () => {
     const userSelect = wrapper.findComponent({ name: 'RdUserSelect' });
 
     wrapper.findComponent({ name: 'ProjectSelect' }).vm.$emit('update:modelValue', 1);
-    wrapper.findComponent({ name: 'ProjectStorageEnvironmentSelect' }).vm.$emit('update:modelValue', 11);
     groupSelect.vm.$emit('update:modelValue', 5);
     groupSelect.vm.$emit('change', 5);
     userSelect.vm.$emit('update:modelValue', 7);
@@ -447,30 +407,21 @@ describe('dialog component function coverage', () => {
     expect(messageSuccess).toHaveBeenCalled();
   }, 15000);
 
-  it('executes project environment form field and close handlers', async () => {
-    const { default: ProjectStorageEnvironmentFormDialog } = await import(
-      '@/pages/project/components/ProjectStorageEnvironmentFormDialog.vue'
+  it('executes group tag form field and close handlers', async () => {
+    const { default: GroupTagFormDialog } = await import(
+      '@/pages/group-tag/components/GroupTagFormDialog.vue'
     );
-    const wrapper = shallowMount(ProjectStorageEnvironmentFormDialog, {
-      props: { projectId: 1 },
+    const wrapper = shallowMount(GroupTagFormDialog, {
       global: { stubs: globalStubs },
     });
 
-    getExposed(wrapper).create();
-    await wrapper.findAll('input').at(0).setValue(' production ');
-    wrapper.findComponent({ name: 'StorageClusterSelect' }).vm.$emit('update:modelValue', 3);
-    await wrapper.findAll('input').at(1).setValue('Primary environment');
-    await wrapper.find('input[type="checkbox"]').setChecked(false);
+    getExposed(wrapper).edit();
+    await wrapper.find('input').setValue('production');
     await findSubmitButton(wrapper).trigger('click');
     await wrapper.find('[data-test="dialog-close"]').trigger('click');
     await flushPromises();
 
-    expect(projectStorageEnvironmentApi.createForProject).toHaveBeenCalledWith(1, {
-      name: 'production',
-      storage_cluster_id: 3,
-      description: 'Primary environment',
-      is_active: false,
-    });
+    expect(groupTagApi.create).toHaveBeenCalledWith({ name: 'production' });
     expect(wrapper.emitted('submitted')).toBeTruthy();
   }, 15000);
 

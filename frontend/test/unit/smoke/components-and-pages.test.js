@@ -43,13 +43,6 @@ vi.mock('vue-router', async () => {
   };
 });
 
-vi.mock('@/api/project-storage-environment-api', () => ({
-  default: {
-    fetchByProject: vi.fn(() => Promise.resolve({ content: [], total: 0 })),
-    fetchSummaryById: vi.fn(() => Promise.resolve({})),
-  },
-}));
-
 vi.mock('@/api/group-api.js', () => ({
   default: {
     fetch: vi.fn(() => Promise.resolve({ content: [], total: 0 })),

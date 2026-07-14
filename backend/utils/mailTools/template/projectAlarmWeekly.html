@@ -94,8 +94,8 @@ a {
       </tr>
     </table>
 
-    {% for environment in project.environment_usages %}
-      <h4>📁 {{ environment.project_environment.name }} - 项目组使用详情</h4>
+    {% for tag in project.tag_usages %}
+      <h4>📁 {{ tag.group_tag.name }} - 项目组使用详情</h4>
       <table>
         <tr>
           <th>项目组</th>
@@ -104,7 +104,7 @@ a {
           <th>使用量 (TB)</th>
           <th>使用率 (%)</th>
         </tr>
-        {% for group in environment.group_usages %}
+        {% for group in tag.group_usages %}
           <tr class="{% if group.get('use_ratio') >= 90 %}highlight{% endif %}">
             <td><a href="{{ data.domain_name }}/group/{{ group.get('id') }}">{{ group.name }}</a></td>
             <td>{{ group.get('linux_path') }}</td>

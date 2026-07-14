@@ -10,7 +10,7 @@ import { useQuery, useQueryParams } from '@/composables/query';
 import Progress from '@/components/form/Progress.vue'
 import GroupSelect from '@/components/form/GroupSelect.vue'
 import ProjectSelect from '@/components/form/ProjectSelect.vue';
-import ProjectStorageEnvironmentSelect from '@/components/form/ProjectStorageEnvironmentSelect.vue';
+import GroupTagSelect from '@/components/form/GroupTagSelect.vue';
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import UsageFormDialog from './components/UsageFormDialog.vue'
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
@@ -26,7 +26,7 @@ const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
   size: 20,
   project_id: null,
-  project_environment_id: null,
+  group_tag_id: null,
   group_id: null,
   storage_cluster_id: null,
   user_id: null,
@@ -44,12 +44,12 @@ const handleExport = (exportType) => {
 };
 const handleProjectChange = (projectId) => {
   queryParams.value.project_id = projectId;
-  queryParams.value.project_environment_id = null;
+  queryParams.value.group_tag_id = null;
   queryParams.value.group_id = null;
   queryParams.value.storage_cluster_id = null;
 };
-const handleEnvironmentChange = (environmentId) => {
-  queryParams.value.project_environment_id = environmentId;
+const handleGroupTagChange = (groupTagId) => {
+  queryParams.value.group_tag_id = groupTagId;
   queryParams.value.group_id = null;
   queryParams.value.storage_cluster_id = null;
 };
@@ -96,12 +96,11 @@ query();
           :clearable="true"
           @update:model-value="handleProjectChange" />
       </ElFormItem>
-      <ElFormItem label="项目环境">
-        <ProjectStorageEnvironmentSelect
-          :model-value="queryParams.project_environment_id"
-          :project-id="queryParams.project_id"
+      <ElFormItem label="项目组标签">
+        <GroupTagSelect
+          :model-value="queryParams.group_tag_id"
           :clearable="true"
-          @update:model-value="handleEnvironmentChange" />
+          @update:model-value="handleGroupTagChange" />
       </ElFormItem>
       <ElFormItem label="Linux目录">
         <ElInput
@@ -112,7 +111,7 @@ query();
         <GroupSelect
           v-model="queryParams.group_id"
           :project-id="queryParams.project_id"
-          :project-environment-id="queryParams.project_environment_id"
+          :group-tag-id="queryParams.group_tag_id"
           :multiple="false"
           :clearable="true" />
       </ElFormItem>
@@ -230,11 +229,11 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="项目环境"
+        label="项目组标签"
         align="center"
         min-width="80">
         <template #default="{ row }">
-          <span>{{ row.project_environment?.name || '-' }}</span>
+          <span>{{ row.group_tag?.name || '-' }}</span>
         </template>
       </ElTableColumn>
       <ElTableColumn

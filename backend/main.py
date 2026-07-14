@@ -12,8 +12,8 @@ from routers import (
     aggregate,
     config,
     group,
+    group_tag,
     large_files,
-    project_storage_environment,
     projects,
     qtrees,
     storage_alerts,
@@ -39,7 +39,7 @@ app = FastAPI(
 storage_router = APIRouter(prefix="/storage-pulse/api", dependencies=[Depends(require_authenticated_request)])
 storage_router.include_router(users.router)
 storage_router.include_router(projects.router)
-storage_router.include_router(project_storage_environment.router)
+storage_router.include_router(group_tag.router)
 storage_router.include_router(config.router)
 storage_router.include_router(group.router)
 storage_router.include_router(storage_cluster.router)

@@ -19,6 +19,7 @@
 | 卷 | 存储卷，通常承载多个 qtree 或目录。 | `Volume` |
 | qtree | NetApp qtree，用于细分卷内目录和配额。 | `Qtree` |
 | 项目组 | 组织或业务维度的存储使用单位。 | `Project` / `Group` |
+| 项目组标签 | 只包含名称、由项目组引用的全局分类标签；不绑定项目或存储集群。 | `GroupTag` / `group_tag_id` |
 | 用户目录 | 分配给单个用户的目录和配额记录。 | `StorageUsage` |
 | 大文件 | 满足阈值条件、需要清理或告警的文件记录。 | `LargeFiles` |
 
