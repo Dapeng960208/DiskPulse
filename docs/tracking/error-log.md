@@ -1,5 +1,13 @@
 # 错误记录
 
+### 2026-07-14：登录认证慢且 profile 和当前用户被重复查询
+- 触发：使用真实 LDAP 配置登录后，观察 `/users/login`、重复的 `/users/current/profile` 及后续业务接口响应。
+- 现象：LDAP 精确用户查询三次为 `1738.9/1548.0/1601.1 ms`，均为 `matches=1`；独立进程数据库查询 cold 为 `777.4 ms`、warm 为 `41.9–46.1 ms`。登录跳转还会请求两次 profile，同一后端请求内重复读取当前用户。
+- 根因：前端登录页取得 profile 后，路由守卫没有复用 store；后端认证依赖与 `CurrentUserDep` 没有共享当前请求的用户；ldap3 `Server` 使用 `get_info=ALL`，精确用户查询前额外读取无关目录 schema/info。
+- 修复：路由守卫复用登录页已写入的 profile；后端通过当前 `Request` 复用已验证用户，但每个新请求仍独立校验 JWT；LDAP `Server` 改用 `get_info=NONE`，保留 STARTTLS、CA 和 timeout。
+- 验证：后端 RED `2 failed, 14 passed`、GREEN `43 passed`；前端 RED `1` 个预期失败且刷新用例通过、GREEN `4 passed`。优化后 LDAP 精确用户查询为 `651.4/353.6/366.4 ms`，均为 `matches=1`。
+- 风险：尚未使用真实密码测量包含用户 bind 的完整登录耗时，浏览器真实登录冒烟待最终验证；数据库 cold 连接耗时仍存在。
+
 ### 2026-07-14：Isilon PAPI 登录间歇性拒绝且客户端未释放会话
 - 触发：使用应用已配置的 Isilon 账号执行 OneFS 9.11 只读验收。
 - 现象：初次检查时应用配置入口的 `POST /session/1/session` 间歇性拒绝 `platform` 服务；节点管理入口曾成功登录，后续新会话也出现拒绝。

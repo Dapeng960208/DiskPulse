@@ -1,5 +1,38 @@
 # 当前交付记录
 
+## 2026-07-14：登录认证请求去重与 LDAP 连接轻量化
+
+### 主题
+
+减少登录跳转和认证依赖中的重复请求、重复数据库查询，以及 ldap3 建连时无关的目录信息读取。
+
+### 基线与根因
+
+- 部署环境 LDAP 精确用户查询三次为 `1738.9/1548.0/1601.1 ms`，均为 `matches=1`；配置包含两个 `ldap.user_bases` 并启用 STARTTLS。
+- 独立进程 PostgreSQL 用户查询 cold 为 `777.4 ms`，warm 为 `41.9–46.1 ms`，说明首个数据库连接建立也会影响冷启动请求。
+- 登录页取得 profile 后，路由守卫仍会重复请求 profile；后端认证依赖和 `CurrentUserDep` 在同一请求内重复读取当前用户。
+- ldap3 `Server` 使用 `get_info=ALL`，每次连接会读取本次精确用户查询不需要的目录 schema/info。
+
+### 已完成
+
+- 登录页取得 profile 后写入 store，路由守卫优先复用；刷新后 store 为空时仍正常请求一次 profile。
+- 后端把已验证用户保存到当前 `Request` 并在同一请求内复用；每个新请求仍独立执行 JWT 校验和用户查询，不引入跨请求认证缓存。
+- ldap3 `Server` 从 `get_info=ALL` 改为 `NONE`，保留 STARTTLS、CA 证书校验、连接超时和 TLS-before-bind。
+
+### 验证状态
+
+- 后端 RED 为 `2 failed, 14 passed`；GREEN 聚焦回归为 `43 passed`。
+- 前端 RED 为 `1` 个预期失败，刷新后加载 profile 的既有用例通过；GREEN 聚焦回归为 `4 passed`。
+- 后端完整回归为 `154 passed`，`compileall` 和 `pip check` 通过。
+- 前端完整回归为 `155 passed`，lint 和 `build:prod` 通过；构建仅保留既有的大于 `500 kB` chunk warning。
+- 优化后部署环境 LDAP 精确用户查询三次为 `651.4/353.6/366.4 ms`，均为 `matches=1`。
+- 尚未使用真实密码测量用户 bind 在内的完整登录耗时，浏览器真实登录冒烟待最终验证。
+
+### 风险与后续
+
+- 两组 LDAP 数据是组件级顺序测量，会受目录服务和网络波动影响，不能替代完整登录链路监控。
+- 数据库 cold 查询仍明显慢于 warm 查询；只有生产首请求持续成为问题时再评估连接预热，不为单次测量新增缓存或后台任务。
+
 ## 2026-07-14：存储集群协议与 TLS 校验改为逐集群配置
 
 ### 主题

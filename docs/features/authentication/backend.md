@@ -47,10 +47,18 @@ DiskPulse 后端通过 LDAP 校验人工用户身份，登录成功后签发 JWT
 - 登出会撤销当前 JWT 的 `jti`，同一进程内后续请求会被拒绝。
 - 错误响应保持通用，不回显密码、token、LDAP 原始异常或敏感配置。
 
+## 请求与连接性能
+
+- 登录页取得 profile 后，路由守卫复用前端 store；只有刷新后 store 为空时才重新请求 `GET /users/current/profile`。
+- 后端把已通过 JWT 校验并从数据库读取的用户保存到当前 `Request`，同一请求内的依赖直接复用；每个新请求仍独立校验 JWT 和查询用户，不跨请求缓存认证结果。
+- LDAP `Server` 使用 `get_info=NONE`，不在每次连接时读取无关的目录 schema/info；STARTTLS、CA 证书校验、连接超时和 TLS-before-bind 保持不变。
+- 部署环境精确用户查询优化前为 `1738.9/1548.0/1601.1 ms`，优化后为 `651.4/353.6/366.4 ms`，六次均为 `matches=1`。独立进程数据库查询 cold 为 `777.4 ms`，warm 为 `41.9–46.1 ms`。
+- 上述数据是 LDAP 查询和数据库查询的分项测量，不包含真实密码用户 bind 的完整登录耗时；浏览器真实登录仍需单独冒烟验证。
+
 ## 验证
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest backend\test\test_app_config.py backend\test\test_auth_ldap.py backend\test\test_auth_api.py
+.\.venv\Scripts\python.exe -m pytest backend\test\test_auth_api.py backend\test\test_auth_ldap.py backend\test\test_user_management_ldap_sync.py
 cd frontend
-npx vitest run test/unit/auth-login.test.js --coverage.enabled=false
+npx vitest run test/unit/auth-login.test.js test/unit/router/index.test.js --coverage.enabled=false
 ```
