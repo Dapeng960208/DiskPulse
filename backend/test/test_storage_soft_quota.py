@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
+from types import SimpleNamespace
 
 import models
 from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
@@ -223,3 +224,41 @@ def test_storage_usage_export_includes_soft_quota_columns(db_session):
     assert "软使用率" in df.columns
     assert df.iloc[0]["软限额"] == 80
     assert df.iloc[0]["软使用率"] == 25
+
+
+def test_aggregate_questdb_metrics_omit_soft_quota_columns(monkeypatch):
+    captured = {}
+
+    class FakeTransaction:
+        def commit(self):
+            pass
+
+    class FakeConnection:
+        def begin(self):
+            return FakeTransaction()
+
+        def execute(self, _statement, parameters):
+            captured["parameters"] = parameters
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(
+        "celery_tasks.manager.storagePulseMonitor.QuestDBSession",
+        FakeConnection,
+    )
+    monitor = object.__new__(StoragePulseMonitor)
+    monitor.logger = DummyLogger()
+    monitor.storage_type = "netapp"
+    monitor.storage_cluster_name = "cluster-a"
+
+    monitor.insert_metrics_to_questdb(
+        "aggregate",
+        [SimpleNamespace(id=1, used=10, use_ratio=20)],
+    )
+
+    assert "soft_limit" not in captured["parameters"][0]
+    assert "soft_use_ratio" not in captured["parameters"][0]

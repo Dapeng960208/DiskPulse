@@ -5,10 +5,9 @@ import sys
 from pathlib import Path
 
 import pytest
-from sqlalchemy.schema import CreateTable
 
 import questdb.models  # noqa: F401
-from questdb.database import QuestDBBase, questdb_engine
+from questdb.database import QuestDBBase
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -80,30 +79,60 @@ def _normalize(sql: str) -> str:
     return " ".join(sql.split())
 
 
-def test_questdb_initial_revision_matches_current_models():
+def test_questdb_migrations_add_soft_quota_metric_columns():
     runner = _load_runner()
     migrations = runner.load_migrations(MIGRATION_ROOT)
 
-    assert migrations[0].version == "000000000001"
-    expected = {
-        _normalize(
-            str(CreateTable(table).compile(dialect=questdb_engine.dialect)).replace(
-                "CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ", 1
-            )
-        )
-        for table in QuestDBBase.metadata.sorted_tables
+    assert tuple(migration.version for migration in migrations) == (
+        "000000000001",
+        "000000000002",
+    )
+    soft_quota_tables = {
+        "volume_storage_usages",
+        "qtree_storage_usages",
+        "project_storage_usages",
+        "group_storage_usages",
+        "storage_usages",
     }
-    assert set(map(_normalize, migrations[0].statements)) == expected
+    expected = {
+        f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {column_name} DOUBLE"
+        for table_name in soft_quota_tables
+        for column_name in ("soft_limit", "soft_use_ratio")
+    }
+    assert set(map(_normalize, migrations[1].statements)) == expected
+
+    for table_name in soft_quota_tables:
+        assert {"soft_limit", "soft_use_ratio"} <= set(
+            QuestDBBase.metadata.tables[table_name].columns.keys()
+        )
+    for table_name in {
+        "aggregate_storage_usages",
+        "storage_cluster_storage_usages",
+    }:
+        assert "soft_limit" not in QuestDBBase.metadata.tables[table_name].columns
+        assert "soft_use_ratio" not in QuestDBBase.metadata.tables[table_name].columns
 
 
 def test_questdb_upgrade_records_revision_and_is_repeatable():
     runner = _load_runner()
     engine = _Engine()
 
-    assert runner.upgrade(engine) == ("000000000001",)
+    assert runner.upgrade(engine) == ("000000000001", "000000000002")
     assert runner.upgrade(engine) == ()
-    assert engine.applied.keys() == {"000000000001"}
-    assert engine.commits == 2
+    assert engine.applied.keys() == {"000000000001", "000000000002"}
+    assert engine.commits == 3
+
+
+def test_questdb_upgrade_applies_soft_quota_revision_after_initial_schema():
+    runner = _load_runner()
+    initial = runner.load_migrations(MIGRATION_ROOT)[0]
+    engine = _Engine(
+        {"000000000001": initial.checksum},
+        tables={"diskpulse_schema_migrations"},
+    )
+
+    assert runner.upgrade(engine) == ("000000000002",)
+    assert engine.applied.keys() == {"000000000001", "000000000002"}
 
 
 def test_questdb_upgrade_rejects_changed_applied_revision():
@@ -158,10 +187,15 @@ def test_questdb_current_reports_base_and_applied_revisions():
 @pytest.mark.parametrize(
     ("command", "current_versions", "upgraded_versions", "expected"),
     [
-        ("history", (), (), "000000000001 initial_schema"),
-        ("current", ("000000000001",), (), "000000000001"),
+        (
+            "history",
+            (),
+            (),
+            "000000000001 initial_schema\n000000000002 add_soft_quota_metrics",
+        ),
+        ("current", ("000000000002",), (), "000000000002"),
         ("current", (), (), "base"),
-        ("upgrade", (), ("000000000001",), "upgraded: 000000000001"),
+        ("upgrade", (), ("000000000002",), "upgraded: 000000000002"),
         ("upgrade", (), (), "up to date"),
     ],
 )
