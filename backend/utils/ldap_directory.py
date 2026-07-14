@@ -66,6 +66,10 @@ def ldap_user_fullname_attribute() -> str:
     return str(base_config.get("ldap.user_fullname_attribute", "cn")).strip() or "cn"
 
 
+def ldap_user_department_attribute() -> str:
+    return str(base_config.get("ldap.user_department_attribute", "department")).strip() or "department"
+
+
 def ldap_user_extra_filters() -> list[str]:
     return base_config.get("ldap.user_extra_filters", DEFAULT_LDAP_USER_EXTRA_FILTERS)
 
@@ -158,9 +162,14 @@ def list_ldap_directory_users(
     if username is not None and not normalized_username:
         return []
 
-    attributes = [ldap_user_name_attribute(), ldap_user_fullname_attribute()]
+    attributes = [
+        ldap_user_name_attribute(),
+        ldap_user_fullname_attribute(),
+        ldap_user_department_attribute(),
+    ]
     if include_email:
         attributes.append("mail")
+    attributes = list(dict.fromkeys(attributes))
 
     connection_factory = _service_bind_ldap if bind_ldap is None else bind_ldap
     connection = connection_factory()
@@ -174,7 +183,7 @@ def list_ldap_directory_users(
                 attributes=attributes,
             )
             if not found:
-                continue
+                raise RuntimeError("incomplete LDAP directory snapshot")
             for entry in connection.entries:
                 username_attr = getattr(entry, ldap_user_name_attribute(), None)
                 entry_username = str(getattr(username_attr, "value", "") or normalized_username).strip()
@@ -185,15 +194,18 @@ def list_ldap_directory_users(
                 display_name = str(getattr(fullname_attr, "value", "") or "").strip() or entry_username
                 email_attr = getattr(entry, "mail", None)
                 email = str(getattr(email_attr, "value", "") or "").strip() or None
-                users.append(
-                    {
-                        "username": entry_username,
-                        "display_name": display_name,
-                        "email": email,
-                        "user_dn": str(entry.entry_dn),
-                        "matched_base": base,
-                    }
-                )
+                department_attr = getattr(entry, ldap_user_department_attribute(), None)
+                department = str(getattr(department_attr, "value", "") or "").strip() or None
+                user = {
+                    "username": entry_username,
+                    "display_name": display_name,
+                    "email": email,
+                    "user_dn": str(entry.entry_dn),
+                    "matched_base": base,
+                }
+                if department:
+                    user["department"] = department
+                users.append(user)
                 seen_usernames.add(entry_username)
     finally:
         if hasattr(connection, "unbind"):

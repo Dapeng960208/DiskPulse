@@ -24,6 +24,10 @@ class UsersApi extends CrudApi {
     });
   }
 
+  syncLdap() {
+    return super.post('/sync-ldap');
+  }
+
   /**
    * 获取指定用户摘要信息
    */

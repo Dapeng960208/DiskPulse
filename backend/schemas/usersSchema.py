@@ -1,7 +1,22 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import List
+from typing import Annotated, List, Literal
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    StrictBool,
+    StringConstraints,
+)
+
+
+UserType = Literal[0, 1, 2]
+RdUsername = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
+]
 
 
 class UserBase(BaseModel):
@@ -43,11 +58,33 @@ class User(UserBase):
         }
 
 
-class UserUpdate(BaseModel):
+class UserCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rd_username: RdUsername
     username: str | None = None
-    email: str | None = None
-    user_type: int | None = 2
-    is_alert: bool | None = True
+    email: EmailStr | None = None
+    department: str | None = None
+    user_type: UserType = 2
+    is_alert: StrictBool = True
+
+
+class UserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str | None = None
+    email: EmailStr | None = None
+    department: str | None = None
+    user_type: UserType = 2
+    is_alert: StrictBool = True
+
+
+class UserSyncResult(BaseModel):
+    ldap_total: int = Field(ge=0)
+    created: int = Field(ge=0)
+    updated: int = Field(ge=0)
+    reactivated: int = Field(ge=0)
+    marked_inactive: int = Field(ge=0)
 
 
 class LoginIn(BaseModel):

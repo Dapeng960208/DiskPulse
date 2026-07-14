@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 
-from sqlalchemy import asc, desc, or_
+from sqlalchemy import asc, desc, func, or_
 from sqlalchemy.orm import Session
 
 from models import StorageUsage, User
@@ -15,11 +15,19 @@ def get_user_by_rd_username(db: Session, rd_username: str | None):
     return db.query(User).filter_by(rd_username=rd_username).first()
 
 
+def get_user_by_rd_username_case_insensitive(db: Session, rd_username: str):
+    return (
+        db.query(User)
+        .filter(func.lower(User.rd_username) == rd_username.lower())
+        .first()
+    )
+
+
 def get_user_by_id(db: Session, id: int):
     return db.query(User).filter_by(id=id).first()
 
 
-def create_user(db: Session, user: usersSchema.UserBase):
+def create_user(db: Session, user: usersSchema.UserBase | usersSchema.UserCreate):
     user_db = User(
         email=user.email,
         username=user.username,
@@ -35,6 +43,60 @@ def create_user(db: Session, user: usersSchema.UserBase):
     db.commit()
     db.refresh(user_db)
     return user_db
+
+
+def list_all_users(db: Session):
+    return db.query(User).all()
+
+
+def add_ldap_user(
+    db: Session,
+    *,
+    rd_username: str,
+    username: str,
+    email: str | None,
+    department: str | None,
+):
+    user = User(
+        rd_username=rd_username,
+        username=username,
+        email=email,
+        department=department,
+        user_type=2,
+        is_alert=True,
+        quit_days=0,
+        updated_at=datetime.now(),
+    )
+    db.add(user)
+    return user
+
+
+def apply_ldap_profile(
+    user: User,
+    *,
+    username: str | None,
+    email: str | None,
+    department: str | None,
+) -> None:
+    if username:
+        user.username = username
+    if email:
+        user.email = email
+    if department:
+        user.department = department
+    user.updated_at = datetime.now()
+
+
+def set_ldap_lifecycle(
+    user: User,
+    *,
+    user_type: int,
+    quit_days: int | None = None,
+) -> None:
+    user.user_type = user_type
+    if quit_days is not None:
+        user.quit_days = quit_days
+    user.updated_at = datetime.now()
 
 
 async def get_users(
@@ -68,10 +130,8 @@ def update_user(db: Session, user_id: int, user: usersSchema.UserUpdate):
     if user_db is None:
         return None
 
-    user_db.email = user.email
-    user_db.username = user.username
-    user_db.user_type = user.user_type
-    user_db.is_alert = user.is_alert
+    for field, value in user.model_dump(exclude_unset=True).items():
+        setattr(user_db, field, value)
     user_db.updated_at = datetime.now()
     db.commit()
     db.refresh(user_db)

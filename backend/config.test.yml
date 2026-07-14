@@ -45,6 +45,7 @@ ldap:
   user_class: user
   user_name_attribute: sAMAccountName
   user_fullname_attribute: cn
+  user_department_attribute: department
   user_extra_filters:
     - (!(objectClass=computer))
     - (!(objectClass=group))

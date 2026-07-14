@@ -18,22 +18,32 @@ const {
   rd_username: '',
   username: '',
   email: '',
+  department: '',
   is_alert: true,
-  user_group_ids: [],
-  user_type: 2, // Default to '在职账户'
+  user_type: 2,
 }), {
-  rules: (model) => ({
-    name: [
-      { type: 'string', required: true, message: '名称不能为空', trigger: 'blur' },
+  rules: () => ({
+    rd_username: [
+      { required: true, whitespace: true, message: '用户名不能为空', trigger: 'blur' },
+    ],
+    email: [
+      { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
     ],
   }),
   doSubmit(mode) {
-    const modelValue = {
-      ...model.value,
+    const editable = {
+      username: model.value.username?.trim() || null,
+      email: model.value.email?.trim() || null,
+      department: model.value.department?.trim() || null,
+      user_type: model.value.user_type,
+      is_alert: model.value.is_alert,
     };
     return (mode === 'create'
-      ? usersApi.create(modelValue)
-      : usersApi.replace(modelValue.id, modelValue));
+      ? usersApi.create({
+        rd_username: model.value.rd_username.trim(),
+        ...editable,
+      })
+      : usersApi.replace(model.value.id, editable));
   },
   onSuccess(mode) {
     ElMessage.success(`${mode === 'create' ? '新增' : '修改'}成功`);
@@ -68,28 +78,33 @@ defineExpose({
       :rules="modelRules"
     >
       <ElFormItem
-        label="研发用户名"
+        label="用户名"
         prop="rd_username">
         <ElInput
           v-model="model.rd_username"
           clearable
-          :disabled="true" />
+          :disabled="mode !== 'create'" />
       </ElFormItem>
       <ElFormItem
-        label="域控用户名"
+        label="姓名"
         prop="username">
         <ElInput
           v-model="model.username"
-          clearable
-          :disabled="model.user_type === 2" />
+          clearable />
       </ElFormItem>
       <ElFormItem
         label="邮箱"
         prop="email">
         <ElInput
           v-model="model.email"
-          clearable
-          :disabled="model.user_type === 2" />
+          clearable />
+      </ElFormItem>
+      <ElFormItem
+        label="部门"
+        prop="department">
+        <ElInput
+          v-model="model.department"
+          clearable />
       </ElFormItem>
       <ElFormItem
         label="账户类型"
@@ -109,7 +124,7 @@ defineExpose({
         </ElSelect>
       </ElFormItem>
       <ElFormItem
-        label="是否告警"
+        label="告警状态"
         prop="is_alert">
         <ElSwitch v-model="model.is_alert" />
       </ElFormItem>

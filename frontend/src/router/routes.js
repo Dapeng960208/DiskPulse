@@ -1,5 +1,6 @@
 // @unocss-include to extract icon class
 import AppLayout from '@/layouts/AppLayout.vue';
+import { hasRole } from '@/utils/authorization';
 
 export default [
   {
@@ -217,7 +218,8 @@ export default [
         name: 'UsersManagement',
         component: () => import('@/pages/admin/user/UserListPage.vue'),
         meta: {
-          title: '账号管理',
+          title: '用户信息管理',
+          isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },
       {

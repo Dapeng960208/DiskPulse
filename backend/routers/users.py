@@ -1,10 +1,18 @@
 # -*- coding: utf-8 -*-
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
-from crud import usersCrud
-from dependencies import CurrentTokenDep, CurrentUserDep, get_db, require_authenticated_request, require_super_admin
+from dependencies import (
+    CurrentTokenDep,
+    CurrentUserDep,
+    get_db,
+    require_authenticated_request,
+    require_super_admin,
+)
 from schemas import commonSchema, usersSchema
+from services import usersService
 from utils.auth_service import build_frontend_profile, login_user
 from utils.security import revoke_token
 
@@ -14,11 +22,19 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
     dependencies=[Depends(require_authenticated_request)],
 )
+DBDep = Annotated[Session, Depends(get_db)]
+AdminDep = Annotated[None, Depends(require_super_admin)]
 
 
 @router.post("/login")
-def login(payload: usersSchema.LoginIn, db: Session = Depends(get_db)) -> dict:
-    return {"result": login_user(db, username=payload.username, password=payload.password)}
+def login(payload: usersSchema.LoginIn, db: DBDep) -> dict:
+    return {
+        "result": login_user(
+            db,
+            username=payload.username,
+            password=payload.password,
+        )
+    }
 
 
 @router.post("/logout")
@@ -32,16 +48,19 @@ def current_profile(current_user: CurrentUserDep) -> dict:
     return {"result": build_frontend_profile(current_user)}
 
 
-@router.post("/", response_model=usersSchema.User, dependencies=[Depends(require_super_admin)])
-def create_user(user: usersSchema.UserBase, db: Session = Depends(get_db)):
-    user_db = usersCrud.get_user_by_rd_username(db, rd_username=user.rd_username)
-    if user_db is not None:
-        raise HTTPException(status_code=400, detail="The user exists")
-    return usersCrud.create_user(db=db, user=user)
+@router.post("/sync-ldap", response_model=usersSchema.UserSyncResult)
+def sync_ldap_users(_admin: AdminDep, db: DBDep):
+    return usersService.sync_ldap_users(db)
+
+
+@router.post("/", response_model=usersSchema.User)
+def create_user(user: usersSchema.UserCreate, _admin: AdminDep, db: DBDep):
+    return usersService.create_user(db, user)
 
 
 @router.get("/", response_model=commonSchema.ResponseModel)
 async def read_users(
+    db: DBDep,
     page: int = 1,
     size: int = 20,
     nameLike: str | None = None,
@@ -49,9 +68,8 @@ async def read_users(
     prop: str | None = None,
     order: str | None = None,
     load_detail: bool = Query(True),
-    db: Session = Depends(get_db),
 ):
-    users, total = await usersCrud.get_users(
+    users, total = await usersService.list_users(
         db,
         page=page,
         size=size,
@@ -66,25 +84,21 @@ async def read_users(
 
 
 @router.get("/{user_id}", response_model=usersSchema.User)
-def read_user(user_id: int, db: Session = Depends(get_db)):
-    db_user = usersCrud.get_user_by_id(db, id=user_id)
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return db_user
+def read_user(user_id: int, db: DBDep):
+    return usersService.get_user(db, user_id)
 
 
-@router.put("/{user_id}", response_model=usersSchema.User, dependencies=[Depends(require_super_admin)])
-def update_user(user_id: int, user: usersSchema.UserUpdate, db: Session = Depends(get_db)):
-    db_user = usersCrud.get_user_by_id(db, id=user_id)
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return usersCrud.update_user(db, user_id=user_id, user=user)
+@router.put("/{user_id}", response_model=usersSchema.User)
+def update_user(
+    user_id: int,
+    user: usersSchema.UserUpdate,
+    _admin: AdminDep,
+    db: DBDep,
+):
+    return usersService.update_user(db, user_id, user)
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_super_admin)])
-def delete_user(user_id: int, db: Session = Depends(get_db)):
-    db_user = usersCrud.get_user_by_id(db, user_id)
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    usersCrud.delete_user_by_id(db, user_id)
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(user_id: int, _admin: AdminDep, db: DBDep):
+    usersService.delete_user(db, user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -1,17 +1,16 @@
 <script setup>
-import { ElButton, ElFormItem, ElInput, ElTableColumn, ElDivider, ElTag,ElCard,ElMessageBox,ElMessage,ElSelect,ElOption } from 'element-plus';
+import { ElButton, ElFormItem, ElInput, ElTableColumn, ElTag, ElMessageBox, ElMessage, ElSelect, ElOption } from 'element-plus';
 import { ref, onBeforeMount } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { useRoute } from 'vue-router';
 import usersApi from '@/api/users-api';
 import FilterForm from '@/components/form/QueryForm.vue';
 import DataTable from '@/components/data/DataTable.vue';
 import { useQuery, useQueryParams } from '@/composables/query';
 import UserFormDialog from './components/UserFormDialog.vue';
-import { hasRole } from '@/utils/authorization';
 import UserAvatar from '@/components/data/UserAvatar.vue';
 // 定义引用
 const userFormDialogRef = ref();
-const router = useRouter();
+const syncing = ref(false);
 const route = useRoute();
 // 初始化查询参数
 const { queryParams, reset } = useQueryParams(() => ({
@@ -46,6 +45,37 @@ function confirmDelete(row) {
   }).then(() => {}).catch(() => {});
 }
 
+async function syncLdapUsers() {
+  if (syncing.value) return;
+  syncing.value = true;
+
+  const confirmed = await ElMessageBox.confirm(
+    '缺失的在职用户会转为离职；离职用户重新出现会恢复在职；公共用户类型不会自动改变；不会删除任何用户。',
+    '同步 LDAP 用户',
+    {
+      type: 'warning',
+      confirmButtonText: '开始同步',
+      cancelButtonText: '取消',
+    },
+  ).then(() => true).catch(() => false);
+
+  if (!confirmed) {
+    syncing.value = false;
+    return;
+  }
+
+  try {
+    const stats = await usersApi.syncLdap();
+    ElMessage.success(
+      `LDAP 用户 ${stats.ldap_total}；新增 ${stats.created}；更新 ${stats.updated}；恢复在职 ${stats.reactivated}；标记离职 ${stats.marked_inactive}`,
+    );
+    queryParams.value.page = 1;
+    await query();
+  } finally {
+    syncing.value = false;
+  }
+}
+
 // 初始查询
 onBeforeMount(() => {
   if (route.query?.nameLike) {
@@ -68,11 +98,11 @@ onBeforeMount(() => {
         query();
       }"
     >
-      <ElFormItem label="研发用户名">
+      <ElFormItem label="用户名">
         <ElInput
           v-model="queryParams.nameLike"
           :clearable="true"
-          placeholder="根据研发用户名搜索" />
+          placeholder="根据用户名搜索" />
       </ElFormItem>
       <ElFormItem label="账户类型">
         <ElSelect
@@ -90,6 +120,20 @@ onBeforeMount(() => {
         </ElSelect>
       </ElFormItem>
     </FilterForm>
+
+    <div class="user-actions">
+      <ElButton
+        type="primary"
+        @click="userFormDialogRef.edit()">
+        新增用户
+      </ElButton>
+      <ElButton
+        :disabled="syncing"
+        :loading="syncing"
+        @click="syncLdapUsers">
+        同步 LDAP 用户
+      </ElButton>
+    </div>
 
     <!-- 数据表格 -->
     <DataTable
@@ -112,7 +156,7 @@ onBeforeMount(() => {
       }"
     >
       <ElTableColumn
-        label="研发用户名"
+        label="用户名"
         align="center"
         sortable="custom"
       >
@@ -126,64 +170,12 @@ onBeforeMount(() => {
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="域账号"
+        label="姓名"
         prop="username"
         align="center"
         sortable
         min-width="100"
       />
-      <ElTableColumn
-        label="账号类型"
-        align="center"
-        min-width="100"
-      >
-        <template #default="{ row }">
-          <ElTag v-if="row.user_type===2">在职账户</ElTag>
-          <ElTag
-            v-if="row.user_type===1"
-            type="warning">公共账户</ElTag>
-          <ElTag
-            v-if="row.user_type===0"
-            type="danger">离职账户</ElTag>
-        </template>
-      </ElTableColumn>
-      <ElTableColumn
-        label="是否告警"
-        align="center"
-        min-width="100"
-      >
-        <template #default="{ row }">
-          <ElTag v-if="row.is_alert">是</ElTag>
-          <ElTag
-            v-else
-            type="danger">否</ElTag>
-        </template>
-      </ElTableColumn>
-      <ElTableColumn
-        label="累计使用存储"
-        align="center"
-        sortable
-        prop="storage_used"
-        min-width="100"
-      >
-        <template #default="{ row }">
-          <span v-if="row.storage_used>1024">{{ parseFloat(row.storage_used/1024).toFixed(2) }} TB </span>
-          <span v-else>{{ row.storage_used }} GB </span>
-        </template>
-      </ElTableColumn>
-      <!-- <ElTableColumn
-        label="研发用户名"
-        prop="rd_username"
-        align="center"
-        sortable="custom"
-        min-width="100"
-      >
-      <template #default="{ row }">
-        <span>{{ row.rd_username }}</span>
-        <ElTag v-if="row.user_type===1" type="warning" class="ml-2.5">公共账户</ElTag>
-        <ElTag v-if="row.user_type===0" type="danger" class="ml-2.5">离职账户</ElTag>
-      </template>
-      </ElTableColumn> -->
       <ElTableColumn
         label="邮箱"
         prop="email"
@@ -198,6 +190,45 @@ onBeforeMount(() => {
         sortable
         min-width="100"
       />
+      <ElTableColumn
+        label="账户类型"
+        align="center"
+        min-width="100"
+      >
+        <template #default="{ row }">
+          <ElTag v-if="row.user_type===2">在职账户</ElTag>
+          <ElTag
+            v-if="row.user_type===1"
+            type="warning">公共账户</ElTag>
+          <ElTag
+            v-if="row.user_type===0"
+            type="danger">离职账户</ElTag>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="告警状态"
+        align="center"
+        min-width="100"
+      >
+        <template #default="{ row }">
+          <ElTag v-if="row.is_alert">是</ElTag>
+          <ElTag
+            v-else
+            type="danger">否</ElTag>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="存储用量"
+        align="center"
+        sortable
+        prop="storage_used"
+        min-width="100"
+      >
+        <template #default="{ row }">
+          <span v-if="row.storage_used>1024">{{ parseFloat(row.storage_used/1024).toFixed(2) }} TB </span>
+          <span v-else>{{ row.storage_used }} GB </span>
+        </template>
+      </ElTableColumn>
       <ElTableColumn
         align="center"
         min-width="120"
@@ -227,8 +258,16 @@ onBeforeMount(() => {
     <UserFormDialog
       ref="userFormDialogRef"
       @submitted="query" />
-  </div></template>
+  </div>
+</template>
 <style scoped>
+.user-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  margin: var(--spacing-sm) 0;
+}
+
 :deep(.el-form-item){
   margin-bottom: 0px;
 }
