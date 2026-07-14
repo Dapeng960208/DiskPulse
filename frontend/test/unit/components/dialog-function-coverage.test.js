@@ -33,6 +33,7 @@ const storageUsageApi = {
 const storageClusterApi = {
   create: vi.fn(() => Promise.resolve({ id: 5 })),
   replace: vi.fn(() => Promise.resolve({ id: 5 })),
+  fetchById: vi.fn((id) => Promise.resolve({ id, storage_type: 'netapp' })),
 };
 
 const groupTagApi = {
@@ -326,6 +327,47 @@ describe('dialog component function coverage', () => {
 
     expect(wrapper.findComponent({ name: 'StorageClusterSelect' }).exists()).toBe(true);
     expect(wrapper.findComponent({ name: 'GroupTagSelect' }).exists()).toBe(true);
+  }, 15000);
+
+  it('clears stale project-group target ids when the target type changes', async () => {
+    const { default: GroupFormDialog } = await import('@/pages/group/components/GroupFormDialog.vue');
+    const wrapper = shallowMount(GroupFormDialog, {
+      global: { stubs: globalStubs },
+    });
+
+    getExposed(wrapper).edit();
+    wrapper.findComponent({ name: 'StorageClusterSelect' }).vm.$emit('update:modelValue', 3);
+    await flushPromises();
+
+    wrapper.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'volume');
+    await flushPromises();
+    wrapper.findComponent({ name: 'VolumeSelect' }).vm.$emit('update:modelValue', 42);
+    wrapper.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'qtree');
+    await flushPromises();
+    wrapper.findComponent({ name: 'QtreeSelect' }).vm.$emit('update:modelValue', 84);
+    wrapper.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'volume');
+    await flushPromises();
+    await findSubmitButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(groupApi.create).toHaveBeenCalledWith(expect.objectContaining({ volume_id: null }));
+    expect(groupApi.create.mock.lastCall[0]).not.toHaveProperty('qtree_id');
+  }, 15000);
+
+  it('fixes Isilon project groups to a Directory Quota storage space', async () => {
+    storageClusterApi.fetchById.mockResolvedValueOnce({ id: 8, storage_type: 'isilon' });
+    const { default: GroupFormDialog } = await import('@/pages/group/components/GroupFormDialog.vue');
+    const wrapper = shallowMount(GroupFormDialog, {
+      global: { stubs: globalStubs },
+    });
+
+    getExposed(wrapper).edit();
+    wrapper.findComponent({ name: 'StorageClusterSelect' }).vm.$emit('update:modelValue', 8);
+    await flushPromises();
+
+    expect(wrapper.findComponent({ name: 'ElSelect' }).exists()).toBe(false);
+    expect(wrapper.findComponent({ name: 'VolumeSelect' }).exists()).toBe(true);
+    expect(wrapper.text()).toContain('存储空间（Directory Quota）');
   }, 15000);
 
   it('executes user form dialog handlers', async () => {
