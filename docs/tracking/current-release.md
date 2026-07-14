@@ -1,5 +1,27 @@
 # 当前交付记录
 
+## 2026-07-14：Volume 按存储集群筛选
+
+### 主题
+
+在 Volume 列表筛选栏增加存储集群下拉框，按所属集群查询 Volume。
+
+### 已完成
+
+- 复用 `StorageClusterSelect` 的远程搜索、清空和默认选项加载能力。
+- Volume 列表请求新增 `storage_cluster_id` 筛选参数；重置后恢复为 `null`。
+- 新增页面级测试，覆盖初始请求、选择集群后搜索和重置清空。
+
+### 验证状态
+
+- RED：聚焦测试因初始请求仍包含 `project_id` 且缺少 `storage_cluster_id` 失败。
+- GREEN：`.\node_modules\.bin\vitest.cmd run test/unit/pages/volume-list-page.test.js --coverage.enabled=false` 通过，`1 passed`。
+- `npm run build:prod`：通过；仍有既有的 chunk 大于 `500 kB` warning，本次未处理。
+
+### 风险与后续
+
+- 未连接真实后端或运行浏览器端到端测试；下拉选项加载和实际集群过滤待集成环境确认。
+
 ## 2026-07-14：集群配置后自动同步卷信息
 
 ### 主题

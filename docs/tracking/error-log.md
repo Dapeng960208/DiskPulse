@@ -1,5 +1,13 @@
 # 错误记录
 
+### 2026-07-14：Volume 页面测试桩未隔离作用域插槽和 Select 依赖
+- 触发：执行 `.\node_modules\.bin\vitest.cmd run test/unit/pages/volume-list-page.test.js --coverage.enabled=false`。
+- 现象：首次挂载因 `ElTableColumn` 测试桩未提供 `row` 报错；页面引入 `StorageClusterSelect` 后又在加载真实依赖链时触发 `Class extends value undefined`。
+- 根因：页面级测试错误地渲染了表格列作用域插槽，且只在挂载配置中 stub 组件，没有在模块加载阶段 mock 新增的 Select import。
+- 修复：表格列桩不再渲染作用域插槽，并在导入页面前 mock `StorageClusterSelect.vue`，使测试只覆盖 Volume 页面的筛选接线。
+- 验证：同一聚焦测试命令通过，`1 passed`；`npm run build:prod` 通过。
+- 风险：仅影响新增测试装配，不影响生产页面；真实浏览器交互尚未执行。
+
 ### 2026-07-14：QuestDB migration 聚焦覆盖率被全局排除规则过滤
 - 触发：使用仓库默认 `.coveragerc` 对 `backend/questdb/migrate.py` 运行聚焦覆盖率。
 - 现象：测试通过，但 coverage 输出 `No data to report`，并提示命令行 `--include` 因配置中的 `source` 被忽略。
