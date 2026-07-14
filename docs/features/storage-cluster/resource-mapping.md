@@ -218,7 +218,7 @@ PostgreSQL 提交成功后写入 QuestDB
 
 ## 10. 风险与待验证项
 
-- Isilon-CR02（OneFS 9.11.0.5）已通过节点管理入口验证 `/platform/latest`、Storage Pool 实际列表和 Quota 分页；应用部署配置仍需从服务入口切换到节点或 System zone 管理入口。
+- Isilon-CR02（OneFS 9.11.0.5）已验证 `/platform/latest`、Storage Pool 实际列表和 Quota 分页；部署数据库中的原连接入口可成功读取全部 `2264` 条 Quota，无需为 Quota 采集切换入口。
 - 真机返回的 Storage Pool 条目包含名称和类型，但未包含 SDK 中定义为可选的 `usage` 对象；在确认容量字段的官方来源、所需权限和单位前，不添加猜测式回退，采集失败时保持整集群回滚。
 - 未缓存的 OneFS API 会话会在客户端关闭时通过 `DELETE /session/1/session` 注销，避免服务端会话持续占用并发名额。
 - Directory Quota 与 Storage Pool 不一定是一对一关系，当前不会为了填充“所属容量池”而人工指定默认池。

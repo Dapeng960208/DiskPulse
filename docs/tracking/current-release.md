@@ -110,12 +110,12 @@
 - 登录态 Chrome 冒烟通过容量池、存储空间、Qtree（NetApp）、项目组页面和 NetApp 存储目标选项；未发现页面级横向溢出。
 - Isilon 节点管理入口已确认集群身份和 OneFS `9.11.0.5`；Storage Pool 接口返回 `2` 个真实 Node Pool，Quota 接口完成 `3` 页、`2264` 条数据的读取，其中 `64` 条为 Directory Quota。
 - 新增会话注销 RED/GREEN 测试；会话关闭聚焦测试 `3 passed`，资源映射测试文件 `19 passed`。
-- 配置驱动的 Isilon Quota 手工检查脚本聚焦测试 `3 passed`，脚本 `compileall` 通过；尚未用部署数据库配置执行本轮真机命令。
+- 配置驱动的 Isilon Quota 手工检查脚本聚焦测试 `3 passed`，脚本 `compileall` 通过；使用部署数据库中的原 Isilon 配置真机执行成功，读取 `2264` 条 Quota：`40` 条 default-user、`64` 条 directory、`2160` 条 user。
 
 ### 风险与后续
 
 - 已确认当前账号启用、未锁定、密码未过期，且角色权限覆盖 Platform API、Cluster、SmartPools 和 Quota；无需以“补充 PAPI 权限”为前提继续排查。
-- 应用当前配置的是服务入口，PAPI 管理会话需使用已验证的节点或 System zone 管理入口；本次未直接修改部署数据库中的连接地址。
+- 部署数据库中的原 Isilon 连接入口已通过 PAPI 登录和 Quota 分页验证，无需为本次 Quota 采集切换入口。
 - 真机 Storage Pool 条目未返回 SDK 中定义为可选的 `usage` 对象，当前实现缺少容量池总容量和已用容量来源；确认官方字段来源和权限影响前，整集群采集仍保持回滚保护。
 - 尚未在持有历史 `isilon_cluster`/`null` Qtree 数据的集成 PostgreSQL 和 QuestDB 环境观察完整采集事务；QuestDB 历史占位指标按设计保留。
 - Directory Quota 与 Storage Pool 不保证一对一；无法确认唯一归属时 `Volume.aggregate` 保持为空。
