@@ -5,8 +5,8 @@ import pytest
 
 from appConfig import base_config
 from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
-from celery_tasks.tasks.storages import load_collection_snapshot
-from models import StorageCluster
+from celery_tasks.tasks.storages import load_collection_snapshot, run_collection_round
+from models import StorageCluster, Volume
 from routers.storage_cluster import _schedule_storage_collection
 
 
@@ -94,3 +94,46 @@ def test_storage_monitor_honors_enabled_tls_verification(db_session, monkeypatch
         StoragePulseMonitor(db_session, Mock(), storage_cluster_id=1).setup()
 
     assert client_class.call_args.kwargs["tls_verify"] is True
+
+
+def test_failed_collection_rolls_back_resource_changes(session_factory):
+    with session_factory() as db:
+        db.add(
+            StorageCluster(
+                id=1,
+                name="isilon-a",
+                storage_type="isilon",
+                is_active=True,
+            )
+        )
+        db.add(
+            Volume(
+                id=1,
+                storage_cluster_id=1,
+                name="/ifs/team",
+                type="directory_quota",
+            )
+        )
+        db.commit()
+        snapshot = load_collection_snapshot(db, storage_cluster_id=1)
+
+    class FailingMonitor:
+        def __init__(self, db, _logger, _snapshot):
+            self.db = db
+
+        def collect_postgres(self):
+            self.db.query(Volume).delete()
+            raise RuntimeError("storage API failed")
+
+        def close(self):
+            pass
+
+    with pytest.raises(RuntimeError, match="all storage clusters failed"):
+        run_collection_round(
+            snapshot,
+            session_factory=session_factory,
+            monitor_factory=FailingMonitor,
+        )
+
+    with session_factory() as db:
+        assert db.get(Volume, 1) is not None

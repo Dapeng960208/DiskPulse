@@ -113,15 +113,31 @@ def tag_api(api_client_factory, session_factory):
             ]
         )
         session.flush()
-        session.add(
-            models.Group(
+        session.add_all(
+            [
+                models.Qtree(
+                    id=1,
+                    storage_cluster_id=1,
+                    volume_id=1,
+                    name="qtree-1",
+                ),
+                models.Group(
                 id=1,
                 name="group-1",
                 project_id=1,
                 storage_cluster_id=1,
                 group_tag_id=1,
                 volume_id=1,
-            )
+                ),
+                models.Group(
+                    id=99,
+                    name="qtree-group",
+                    project_id=1,
+                    storage_cluster_id=1,
+                    group_tag_id=1,
+                    qtree_id=1,
+                ),
+            ]
         )
         session.commit()
     finally:
@@ -178,3 +194,19 @@ def test_linked_group_tag_cannot_be_deleted(tag_api):
 
     assert response.status_code == 409
     assert "group" in response.text.lower()
+
+
+def test_group_list_filters_by_volume_id(tag_api):
+    response = tag_api.get(f"{API_PREFIX}/groups/", params={"volume_id": 1})
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["content"]] == [1]
+
+
+def test_group_list_rejects_volume_and_qtree_filters_together(tag_api):
+    response = tag_api.get(
+        f"{API_PREFIX}/groups/",
+        params={"volume_id": 1, "qtree_id": 1},
+    )
+
+    assert response.status_code == 422
