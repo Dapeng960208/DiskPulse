@@ -55,6 +55,7 @@ ldap:
 
 storage:
   isilon_session_cache: false
+  tls_verify: false
 
 super_admin_usernames:
   - admin

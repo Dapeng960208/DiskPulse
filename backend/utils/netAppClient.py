@@ -41,15 +41,15 @@ class NetAppClient:
             except requests.exceptions.ConnectionError as e:
                 if self.logger:
                     self.logger.error(f"[Storage_Pulse] NetApp API connection failed for endpoint '{endpoint}': {e}")
-                break
+                raise
             except requests.exceptions.HTTPError as e:
                 if self.logger:
                     self.logger.error(f"[Storage_Pulse] NetApp API HTTP error for endpoint '{endpoint}': {e}")
-                break
+                raise
             except Exception as e:
                 if self.logger:
                     self.logger.error(f"[Storage_Pulse] NetApp API request failed for endpoint '{endpoint}': {e}")
-                break
+                raise
 
         return records
 

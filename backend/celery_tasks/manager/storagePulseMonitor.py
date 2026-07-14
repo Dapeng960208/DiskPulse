@@ -4,6 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from schemas.storageUsageSchema import StorageUsageBase
 from schemas.volumeSchema import VolumeBase
+from appConfig import base_config
 from utils.netAppClient import NetAppClient
 from utils.isilonClient import IsilonClient
 from schemas import aggregateSchema, volumeSchema, qtreeSchema, storageUsageSchema
@@ -122,13 +123,17 @@ class StoragePulseMonitor:
         username = cluster.get("storage_user", self.storage_cluster.storage_user)
         password = cluster.get("storage_password", self.storage_cluster.storage_password)
         configured_port = cluster.get("storage_port", self.storage_cluster.storage_port)
+        tls_verify = base_config.get("storage.tls_verify", False)
+        if not tls_verify:
+            self.logger.warning(f"{self._log_prefix} TLS certificate verification is disabled")
         if self.storage_type == 'netapp':
             self.client = NetAppClient(
                 hostname=hostname,
                 username=username,
                 password=password,
                 port=configured_port or 443,
-                logger=self.logger
+                logger=self.logger,
+                tls_verify=tls_verify,
             )
         else:  # isilon
             self.client = IsilonClient(
@@ -136,7 +141,8 @@ class StoragePulseMonitor:
                 username=username,
                 password=password,
                 port=configured_port or 8080,
-                logger=self.logger
+                logger=self.logger,
+                tls_verify=tls_verify,
             )
 
         port = configured_port or (443 if self.storage_type == 'netapp' else 8080)

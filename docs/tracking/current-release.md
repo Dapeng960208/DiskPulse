@@ -14,6 +14,8 @@
 - 存储集群新增/编辑表单新增“是否启用”开关，新建默认启用并提交 `is_active` 布尔值。
 - API 调度使用 Uvicorn logger 记录投递开始、成功和失败；Celery worker 记录任务开始，日志不包含设备凭据。
 - Celery 实例及任务装饰器统一使用 `diskpulse_app`，Windows 和 Linux 启动入口显式指定 `celery_worker:diskpulse_app`。
+- 新增全局 `storage.tls_verify` 布尔配置并默认设为 `false`，NetApp/Isilon 客户端统一读取；关闭时记录 warning。
+- 存储 API 连接或 HTTP 失败改为向上抛出，由现有集群事务回滚，避免空结果删除已有 Volume/Qtree。
 
 ### 验证状态
 
@@ -25,11 +27,14 @@
 - `.\.venv\Scripts\python.exe -m coverage run -m pytest backend\test\test_storage_collection_trigger.py backend\test\test_core_api.py -q`：通过，`10 passed`；目标模块合计覆盖率 `93%`。
 - `npm run build:prod`：通过；仍有既有的 chunk 大于 `500 kB` warning，本次未处理。
 - RED：Celery 应用命名契约因仍定义 `lsf_app` 失败；GREEN：命名契约与采集调度聚焦测试 `4 passed`，`diskpulse_app` 导入和任务注册检查通过。
+- TLS 配置与失败回滚 RED 为 `6 failed`，布尔值校验 RED 为 `1 failed`；同组 GREEN 为 `7 passed`。
+- `.\.venv\Scripts\python.exe -m pytest backend\test\test_app_config.py backend\test\test_storage_collection_trigger.py backend\test\test_security_regressions.py backend\test\test_storage_soft_quota.py -q`：通过，`30 passed`。
 
 ### 风险与后续
 
 - 未连接真实 NetApp、Isilon、Redis 或 Celery worker；真实设备卷数据和任务消费链路待部署环境验证。
 - 任务投递失败不会回滚已保存配置，错误写入服务端日志，后续周期采集继续兜底。
+- 默认关闭 TLS 证书校验会降低中间人攻击防护；设备证书受信任后应将 `storage.tls_verify` 改为 `true`。
 
 ## 2026-07-14：项目组标签与直接资源绑定
 

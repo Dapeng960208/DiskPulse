@@ -64,9 +64,11 @@ FastAPI: backend/main.py
 | `database.questdb` | QuestDB 连接和连接池 |
 | `redis` | Celery broker/backend 地址 |
 | `jwt`、`ldap`、`super_admin_usernames` | 登录、令牌和超级管理员 |
-| `storage` | 存储客户端运行开关 |
+| `storage` | 存储客户端运行开关；`tls_verify` 控制 NetApp/Isilon HTTPS 证书校验，默认 `false` |
 
 真实 `backend/config.yml` 和 LDAP 密码文件不得提交；仓库只保留 `backend/config.example.yml` 与无敏感值的 `backend/config.test.yml`。相对密码文件路径以 YAML 所在目录为基准，PostgreSQL 和 QuestDB URL 由加载器集中生成并转义凭据。
+
+`storage.tls_verify=false` 用于连接内部自签名存储设备，Worker 会记录证书校验已关闭的 warning。具备受信任证书的环境应改为 `true`；配置只接受 YAML 布尔值。存储 API 连接或 HTTP 请求失败会中止并回滚当前集群采集，避免将失败误判为空数据。
 
 ## 5. 数据层
 

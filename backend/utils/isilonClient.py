@@ -257,10 +257,10 @@ class IsilonClient:
                 return resp.json()
             except requests.HTTPError as exc:
                 self._log('error', f"[IsilonClient] GET {path} failed: {exc}")
-                return None
+                raise
             except Exception as exc:
                 self._log('error', f"[IsilonClient] GET {path} error: {exc}")
-                return None
+                raise
         return None
 
     # ------------------------------------------------------------------

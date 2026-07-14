@@ -161,6 +161,6 @@
 - 触发：Celery worker 通过 HTTPS 连接使用自签名证书的 NetApp。
 - 现象：请求报 `CERTIFICATE_VERIFY_FAILED`，随后采集日志显示 `Fetched 0 volumes` 和 `Fetched 0 user quotas`。
 - 根因：NetApp/Isilon 客户端支持 `tls_verify`，但采集入口未从存储配置传入；客户端又将连接异常吞成空结果。
-- 修复：待增加全局 `storage.tls_verify` 配置并默认关闭，同时让 API 连接失败向上抛出以回滚本轮采集。
-- 验证：RED 已确认，配置默认值、客户端参数贯通和连接失败传播共 `6 failed`。
-- 风险：修复前继续运行 Beat 可能将采集失败误判为空设备数据。
+- 修复：新增全局 `storage.tls_verify` 布尔配置并默认关闭，统一传入 NetApp/Isilon；API 连接和 HTTP 失败改为向上抛出，由集群事务回滚。
+- 验证：配置默认值、类型校验、两个客户端参数贯通和连接失败传播共 `7 passed`。
+- 风险：尚未连接真实 NetApp/Isilon 验证；默认关闭证书校验会降低中间人攻击防护，受信任证书环境应设为 `true`。
