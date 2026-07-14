@@ -327,3 +327,5 @@ def test_storage_cluster_transport_migration_compiles_for_supported_dialects(
     assert "storage_clusters" in sql
     assert "protocol" in sql
     assert "tls_verify" in sql
+    if dialect_name == "sqlite":
+        assert "tls_verify boolean default 1 not null" in " ".join(sql.split())

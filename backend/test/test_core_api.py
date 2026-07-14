@@ -403,6 +403,17 @@ class TestCoreApi:
         assert list_response.json()["content"][0]["protocol"] == "http"
         assert list_response.json()["content"][0]["tls_verify"] is False
 
+        with patch("routers.storage_cluster._schedule_storage_collection"):
+            partial_update_response = self.client.put(
+                f"/storage-pulse/api/storage-clusters/{cluster_id}",
+                json={"tls_verify": True},
+            )
+
+        assert partial_update_response.status_code == 200
+        assert partial_update_response.json()["tls_verify"] is False
+        with self.SessionLocal() as session:
+            assert session.get(models.StorageCluster, cluster_id).tls_verify is False
+
     def test_storage_cluster_transport_defaults_are_secure(self):
         with patch("routers.storage_cluster._schedule_storage_collection"):
             response = self.client.post(
@@ -441,6 +452,16 @@ class TestCoreApi:
     def test_storage_cluster_rejects_invalid_protocol(self, method, path, payload):
         with patch("routers.storage_cluster._schedule_storage_collection"):
             response = getattr(self.client, method)(path, json=payload)
+
+        assert response.status_code == 422
+
+    @pytest.mark.parametrize("payload", [{"protocol": None}, {"tls_verify": None}])
+    def test_storage_cluster_rejects_null_transport_fields(self, payload):
+        with patch("routers.storage_cluster._schedule_storage_collection"):
+            response = self.client.put(
+                "/storage-pulse/api/storage-clusters/1",
+                json=payload,
+            )
 
         assert response.status_code == 422
 
