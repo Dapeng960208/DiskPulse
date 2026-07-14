@@ -146,3 +146,12 @@
 - 修复：将依赖声明改为 `celery[redis]`，安装 transport 后恢复定向快照测试。
 - 验证：定向快照和 API 调度测试已进入目标断言；最终聚焦测试 `13 passed`，`pip check` 通过。
 - 风险：本轮不会启动真实 Celery/Redis，后台任务消费仍需部署环境验证。
+
+### 2026-07-14：存储集群表单缺少启用开关且调度无开发日志
+
+- 触发：在管理后台编辑存储集群，并使用 `uvicorn main:app --reload` 观察保存后的采集调度。
+- 现象：表单没有“是否启用”选项；开发控制台只有 HTTP access log，没有集群采集任务投递日志。
+- 根因：`StorageClusterFormDialog` 的初始模型和模板遗漏 `is_active`；调度服务只记录异常，且普通应用 logger 的 INFO 不在 Uvicorn 默认输出中显示。
+- 修复：待实现前端开关、布尔值提交和 Uvicorn 可见的调度生命周期日志。
+- 验证：RED 已确认；前端因找不到 checkbox 失败，后端因缺少调度成功日志失败。
+- 风险：真实 Redis、Celery worker 和存储设备日志仍需部署环境验证。
