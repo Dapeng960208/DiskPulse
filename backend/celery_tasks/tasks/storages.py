@@ -19,8 +19,11 @@ from models import Group, Project, Qtree, StorageCluster, Volume
 logger = get_task_logger(__name__)
 
 
-def load_collection_snapshot(db):
+def load_collection_snapshot(db, storage_cluster_id=None):
     """Load one scalar, session-independent configuration snapshot."""
+    filters = [StorageCluster.is_active.is_(True)]
+    if storage_cluster_id is not None:
+        filters.append(StorageCluster.id == storage_cluster_id)
     statement = (
         select(
             StorageCluster.id.label("storage_cluster_id"),
@@ -47,9 +50,7 @@ def load_collection_snapshot(db):
         )
         .outerjoin(Volume, Volume.id == Group.volume_id)
         .outerjoin(Qtree, Qtree.id == Group.qtree_id)
-        .where(
-            StorageCluster.is_active.is_(True),
-        )
+        .where(*filters)
         .order_by(StorageCluster.id, Group.id)
     )
     return tuple(
@@ -207,12 +208,12 @@ def run_collection_round(
 
 
 @lsf_app.task(soft_time_limit=120, time_limit=180, expires=60)
-def storages_schedule_fetching_task():
+def storages_schedule_fetching_task(storage_cluster_id=None):
     try:
         with redis_lock('storages_schedule_fetching_task_lock', expires=240) as have_lock:
             if have_lock:
                 with DBSession() as db:
-                    snapshot = load_collection_snapshot(db)
+                    snapshot = load_collection_snapshot(db, storage_cluster_id)
                 collected_at = datetime.now()
                 summary = run_collection_round(
                     snapshot,

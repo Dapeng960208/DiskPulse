@@ -1,5 +1,29 @@
 # 当前交付记录
 
+## 2026-07-14：集群配置后自动同步卷信息
+
+### 主题
+
+启用的 NetApp 或 Isilon 集群在创建、更新后立即投递对应集群的卷采集任务。
+
+### 已完成
+
+- 存储集群创建、更新接口在事务提交后按最终 `is_active` 状态投递异步采集；未启用集群不投递。
+- 复用 `storages_schedule_fetching_task` 和 `StoragePulseMonitor`，新增可选 `storage_cluster_id` 过滤，不新建第二套设备采集逻辑。
+- Celery 依赖声明改为 `celery[redis]`，补齐现有 Redis broker/lock 代码的 transport 依赖。
+
+### 验证状态
+
+- RED：集群 CRUD 聚焦测试 3 个用例因缺少调度行为失败；定向快照测试因不支持 `storage_cluster_id` 失败。
+- GREEN：`.\.venv\Scripts\python.exe -m pytest backend\test\test_storage_soft_quota.py backend\test\test_core_api.py backend\test\test_storage_collection_trigger.py -q` 通过，`13 passed`。
+- `.\.venv\Scripts\python.exe -m pip check` 与 `.\.venv\Scripts\python.exe -m compileall -q backend`：通过。
+- 任务范围 coverage：`storage_cluster.py` `92%`、`storageClusterService.py` `100%`，合计 `93%`。
+
+### 风险与后续
+
+- 未连接真实 NetApp、Isilon、Redis 或 Celery worker；真实设备卷数据和任务消费链路待部署环境验证。
+- 任务投递失败不会回滚已保存配置，错误写入服务端日志，后续周期采集继续兜底。
+
 ## 2026-07-14：项目组标签与直接资源绑定
 
 ### 主题
