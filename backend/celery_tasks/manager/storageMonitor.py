@@ -527,8 +527,12 @@ class StorageManagement:
             if storage_usage_db is None:
                 return False, 'User path does not exist'
 
-            qtree_name = storage_usage_db.group.qtree.name
-            volume_name = storage_usage_db.group.qtree.volume.name
+            resolved = resolve_group_storage_target(storage_usage_db.group)
+            volume = resolved["volume"]
+            if volume is None:
+                return False, 'Group storage target does not exist'
+            qtree_name = resolved["target"].name if resolved["target_type"] == "qtree" else "null"
+            volume_name = volume.name
             rd_username = storage_usage_db.user.rd_username
             limit = round(storage_usage_db.limit / 1024, 2)
             size = limit + size

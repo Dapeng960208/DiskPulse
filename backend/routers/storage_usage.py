@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, Backgrou
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
 from schemas import storageUsageSchema, commonSchema
-from crud import storageUsageCrud, usersCrud, groupCrud
+from crud import storageUsageCrud, usersCrud, groupCrud, volumeCrud
 from dependencies import get_db, require_super_admin
 from datetime import datetime, timedelta
 from utils.plot import plot_real_time_line
@@ -14,6 +14,7 @@ from utils.common import convert_timestamp_to_datetime
 import logging
 from routers.common import handle_exceptions
 from celery_tasks.manager.storageMonitor import StorageManagement
+from utils.storageTarget import resolve_group_storage_target
 from fastapi.responses import StreamingResponse
 import urllib.parse
 from routers.common import create_user_folder_by_storage_usage_id, back_up_user_storage_usage_by_storage_usage_id
@@ -151,6 +152,19 @@ def expand_storage_usage_limit(
     expand_id = payload.expand_id
     expand_type = payload.expand_type
     size = payload.size
+    if expand_type == "Group":
+        target = groupCrud.get_group_by_id(db, expand_id)
+        cluster = target.storage_cluster if target is not None else None
+    elif expand_type == "StorageUsage":
+        target = storageUsageCrud.get_storage_usage_by_id(db, expand_id)
+        cluster = target.group.storage_cluster if target is not None and target.group is not None else None
+    elif expand_type == "Volume":
+        target = volumeCrud.get_volume_by_id(db, expand_id)
+        cluster = target.storage_cluster if target is not None else None
+    else:
+        cluster = None
+    if cluster is not None and (cluster.storage_type or "").lower() == "isilon":
+        raise HTTPException(status_code=422, detail="Isilon storage targets do not support expansion")
     manage = StorageManagement(db, logger)
     try:
         manage.expand(expand_id=expand_id, size=size, expand_type=expand_type)
@@ -180,7 +194,9 @@ def get_storage_usage_image_by_id(storage_usage_id: int, end_time: str | None = 
         # if not result:
         #     raise HTTPException(status_code=404, detail="No data found for the given storage usage ID")
         if role == 'cad':
-            volume = storage_usage_db.group.qtree.volume
+            volume = resolve_group_storage_target(storage_usage_db.group)["volume"]
+            if volume is None:
+                raise HTTPException(status_code=422, detail="Group storage target does not exist")
             message = f"Volume {volume.name} 限额{round(volume.limit / 1024, 2)}T,已分配{round(volume.allocated / 1024, 2)}T,可用内存为:{round((volume.limit - volume.used) / 1024, 2)}T,使用率{volume.use_ratio}%"
             if volume.use_ratio >= 95 and volume.allocated > volume.limit:
                 message += "(不建议扩容)"

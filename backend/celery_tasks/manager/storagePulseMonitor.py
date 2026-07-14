@@ -220,10 +220,14 @@ class StoragePulseMonitor:
                 available = _bytes_to_gb(space.get('available'))
                 used = round(total - available, 2) if total is not None and available is not None else None
             else:
-                usage = rec.get('usage', {})
+                usage = rec.get('usage')
+                if not isinstance(usage, dict):
+                    raise ValueError('Invalid Isilon storage pool record')
                 total = _bytes_to_gb(usage.get('total_bytes'))
                 used = _bytes_to_gb(usage.get('used_bytes'))
             if not rec.get('name') or total is None or used is None:
+                if self.storage_type == 'isilon':
+                    raise ValueError('Invalid Isilon storage pool record')
                 continue
             result.append(aggregateSchema.AggregateBase(
                 storage_cluster_id=self.storage_cluster_id,

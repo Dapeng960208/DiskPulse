@@ -8,6 +8,7 @@ from dependencies import get_db, require_super_admin
 import logging
 from utils.common import convert_timestamp_to_datetime
 from utils.plot import plot_real_time_line
+from utils.storageTarget import resolve_group_storage_target
 from fastapi.responses import FileResponse
 
 logger = logging.getLogger('app:groups')
@@ -63,7 +64,7 @@ def read_group_realtime_data(group_id: int, start_time: datetime | None = None, 
                                                               start_time=start_time, end_time=end_time,
                                                               indicator=indicator)
     return commonSchema.ResponseStorageUsageModel[groupSchema.Group](data=real_time_data,
-                                                                     info=db_group)
+                                                                     info=groupCrud.serialize_group(db_group))
 
 
 @router.put("/{group_id}", response_model=groupSchema.Group)
@@ -110,7 +111,9 @@ def get_storage_usage_image_by_id(group_id: int, end_time: str | None = None, ro
     if not result:
         raise HTTPException(status_code=404, detail="No data found for the given storage usage ID")
     if role == 'cad':
-        volume = group_db.qtree.volume
+        volume = resolve_group_storage_target(group_db)["volume"]
+        if volume is None:
+            raise HTTPException(status_code=422, detail="Group storage target does not exist")
         message = f"Volume {volume.name}限额{round(volume.limit / 1024, 2)}T,已分配{round(volume.allocated / 1024, 2)}T,可用内存为:{round((volume.limit - volume.used) / 1024, 2)}T,使用率{volume.use_ratio}%"
         if volume.use_ratio >= 95 and volume.allocated >= volume.limit:
             message += "(不建议扩容)"
