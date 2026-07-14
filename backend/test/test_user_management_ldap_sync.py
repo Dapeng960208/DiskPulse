@@ -1,9 +1,16 @@
 # -*- coding: utf-8 -*-
+import ssl
+from unittest.mock import Mock
+
 import pytest
+from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 
 from appConfig import base_config
 import models
 from routers import users
+from schemas import usersSchema
+from services import usersService
 from utils import ldap_directory
 from utils.security import issue_token
 
@@ -387,3 +394,189 @@ def test_manual_update_maintains_editable_user_fields(admin_api, session_factory
             1,
             False,
         )
+
+
+def test_user_service_crud_success_conflict_and_not_found(admin_api):
+    payload = {
+        "rd_username": "service-user",
+        "username": "Service User",
+        "email": "service@example.com",
+        "department": "Platform",
+        "user_type": 2,
+        "is_alert": True,
+    }
+
+    created = admin_api.post("/storage-pulse/api/users/", json=payload)
+    duplicate = admin_api.post("/storage-pulse/api/users/", json=payload)
+    listed = admin_api.get("/storage-pulse/api/users/", params={"nameLike": "service-user"})
+    missing = admin_api.get("/storage-pulse/api/users/9999")
+    deleted = admin_api.delete(f"/storage-pulse/api/users/{created.json()['id']}")
+
+    assert created.status_code == 200
+    assert duplicate.status_code == 409
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 1
+    assert missing.status_code == 404
+    assert deleted.status_code == 204
+
+
+def test_user_service_create_rolls_back_integrity_error(monkeypatch):
+    db = Mock()
+    data = usersSchema.UserCreate(rd_username="conflict")
+    monkeypatch.setattr(
+        usersService.usersCrud,
+        "get_user_by_rd_username_case_insensitive",
+        lambda _db, _username: None,
+    )
+
+    def raise_integrity_error(_db, _data):
+        raise IntegrityError("insert", {}, RuntimeError("duplicate"))
+
+    monkeypatch.setattr(usersService.usersCrud, "create_user", raise_integrity_error)
+
+    with pytest.raises(HTTPException) as error:
+        usersService.create_user(db, data)
+
+    assert error.value.status_code == 409
+    db.rollback.assert_called_once_with()
+
+
+def test_user_sync_converts_integrity_error_and_rolls_back(monkeypatch):
+    db = Mock()
+    db.commit.side_effect = IntegrityError("insert", {}, RuntimeError("duplicate"))
+    monkeypatch.setattr(
+        ldap_directory,
+        "list_ldap_directory_users",
+        lambda: [_directory_user("new-user")],
+    )
+    monkeypatch.setattr(usersService.usersCrud, "list_all_users", lambda _db: [])
+
+    with pytest.raises(HTTPException) as error:
+        usersService.sync_ldap_users(db)
+
+    assert error.value.status_code == 409
+    db.rollback.assert_called_once_with()
+
+
+def test_ldap_config_defaults_and_secure_transport_variants(tmp_path):
+    base_config.set("ldap.uri", "ldaps://dc.example.com")
+    base_config.set("ldap.starttls", False)
+    ldap_directory.require_secure_ldap_transport()
+
+    base_config.set("ldap.uri", "")
+    ldap_directory.require_secure_ldap_transport()
+
+    base_config.set("ldap.bind_dn", "  CN=Service  ")
+    base_config.set("ldap.bind_password", " direct-secret ")
+    base_config.set("ldap.bind_password_file", None)
+    base_config.set("ldap.ca_cert_path", str(tmp_path / "ca.pem"))
+    base_config.set("ldap.user_department_attribute", "")
+
+    assert ldap_directory.ldap_bind_dn() == "CN=Service"
+    assert ldap_directory.ldap_bind_password() == "direct-secret"
+    assert ldap_directory.ldap_ca_cert_path() == str(tmp_path / "ca.pem")
+    assert ldap_directory.ldap_user_department_attribute() == "department"
+
+    base_config.set("ldap.bind_password", "")
+    base_config.set("ldap.bind_password_file", None)
+    base_config.set("ldap.ca_cert_path", None)
+    assert ldap_directory.ldap_bind_password() == ""
+    assert ldap_directory.ldap_ca_cert_path() == ""
+
+
+def test_ldap_server_requires_uri():
+    base_config.set("ldap.uri", "")
+
+    with pytest.raises(RuntimeError, match="missing ldap.uri"):
+        ldap_directory._ldap_server()
+
+
+@pytest.mark.parametrize("with_ca", [False, True])
+def test_ldap_server_builds_optional_tls(monkeypatch, tmp_path, with_ca):
+    created = {}
+
+    class FakeTls:
+        def __init__(self, **kwargs):
+            created["tls_kwargs"] = kwargs
+
+    class FakeServer:
+        def __init__(self, url, **kwargs):
+            created["url"] = url
+            created["server_kwargs"] = kwargs
+
+    base_config.set("ldap.uri", "ldaps://dc.example.com")
+    base_config.set("ldap.starttls", False)
+    base_config.set("ldap.ca_cert_path", str(tmp_path / "ca.pem") if with_ca else None)
+    monkeypatch.setattr(
+        ldap_directory,
+        "_ldap_runtime_primitives",
+        lambda: (
+            FakeServer,
+            object,
+            FakeTls,
+            {"ssl": ssl, "all": "ALL", "auto_bind_no_tls": "AUTO"},
+        ),
+    )
+
+    server = ldap_directory._ldap_server()
+
+    assert isinstance(server, FakeServer)
+    assert created["url"] == "ldaps://dc.example.com"
+    assert ("tls_kwargs" in created) is with_ca
+
+
+def test_service_bind_requires_dn_and_password():
+    base_config.set("ldap.bind_dn", "")
+    base_config.set("ldap.bind_password", "secret")
+    with pytest.raises(RuntimeError, match="missing ldap.bind_dn"):
+        ldap_directory._service_bind_ldap()
+
+    base_config.set("ldap.bind_dn", "CN=Service")
+    base_config.set("ldap.bind_password", "")
+    base_config.set("ldap.bind_password_file", None)
+    with pytest.raises(RuntimeError, match="missing LDAP bind password"):
+        ldap_directory._service_bind_ldap()
+
+
+@pytest.mark.parametrize(
+    ("start_tls_result", "bind_result", "expected_error"),
+    [
+        (False, True, "service bind start_tls rejected"),
+        (True, False, "service bind rejected"),
+        (True, True, None),
+    ],
+)
+def test_service_bind_starttls_outcomes(
+    monkeypatch,
+    start_tls_result,
+    bind_result,
+    expected_error,
+):
+    class Connection:
+        def __init__(self, *args, **kwargs):
+            self.unbound = False
+
+        def start_tls(self):
+            return start_tls_result
+
+        def bind(self):
+            return bind_result
+
+        def unbind(self):
+            self.unbound = True
+
+    base_config.set("ldap.bind_dn", "CN=Service")
+    base_config.set("ldap.bind_password", "secret")
+    base_config.set("ldap.starttls", True)
+    monkeypatch.setattr(ldap_directory, "_ldap_server", lambda: object())
+    monkeypatch.setattr(
+        ldap_directory,
+        "_ldap_runtime_primitives",
+        lambda: (object, Connection, object, {"auto_bind_no_tls": "AUTO"}),
+    )
+
+    if expected_error:
+        with pytest.raises(RuntimeError, match=expected_error):
+            ldap_directory._service_bind_ldap()
+    else:
+        assert isinstance(ldap_directory._service_bind_ldap(), Connection)
