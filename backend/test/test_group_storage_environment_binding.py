@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
+from typing import get_args
 
 import pytest
 from sqlalchemy import event
@@ -7,6 +8,7 @@ from sqlalchemy import event
 from appConfig import base_config
 import models
 from routers import group, qtrees, storage_cluster, volumes
+from schemas import groupSchema
 from utils.security import issue_token
 
 
@@ -21,6 +23,13 @@ def _bound_group(*, project_id: int, storage_cluster_id: int, **values):
     if hasattr(models.Group, "storage_cluster_id"):
         record.storage_cluster_id = storage_cluster_id
     return record
+
+
+def test_group_response_requires_environment_binding_contract():
+    for field_name in ("project_environment_id", "project_environment"):
+        field = groupSchema.Group.model_fields[field_name]
+        assert field.is_required()
+        assert type(None) not in get_args(field.annotation)
 
 
 @pytest.fixture

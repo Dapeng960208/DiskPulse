@@ -224,6 +224,24 @@ describe('group project storage environment binding', () => {
     expect(updatePayload).not.toHaveProperty('storage_cluster_id');
   });
 
+  it('derives the edit project only from the canonical project summary', async () => {
+    const { wrapper } = await mountGroupForm();
+
+    wrapper.vm.$.exposed.edit({
+      id: 20,
+      name: 'strict-group',
+      project_id: 999,
+      project: { id: 1, name: 'project-1' },
+      storage_cluster_id: 888,
+      project_environment_id: 11,
+      volume_id: 501,
+      qtree_id: null,
+    });
+    await nextTick();
+
+    expect(wrapper.findComponent(ElFormStub).props('model').project_id).toBe(1);
+  });
+
   it('cascades project to environment and clears lower selections', async () => {
     const environments = {
       content: [
