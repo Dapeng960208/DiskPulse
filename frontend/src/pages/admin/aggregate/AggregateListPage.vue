@@ -6,11 +6,13 @@ import FilterForm from '@/components/form/QueryForm.vue';
 import DataTable from '@/components/data/DataTable.vue';
 import { useQuery, useQueryParams } from '@/composables/query';
 import Progress from '@/components/form/Progress.vue';
+import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import { hasRole } from '@/utils/authorization';
 const router = useRouter();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
   size: 20,
+  storage_cluster_id: null,
 }));
 
 const { result, querying, query } = useQuery(() => aggregateApi.fetch(queryParams.value), {
@@ -33,6 +35,13 @@ query();
         query();
       }"
     >
+      <ElFormItem
+        label="存储集群"
+        class="form-item-center">
+        <StorageClusterSelect
+          v-model="queryParams.storage_cluster_id"
+          :clearable="true" />
+      </ElFormItem>
       <ElFormItem label="聚合名">
         <ElInput
           v-model="queryParams.nameLike"

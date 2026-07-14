@@ -8,11 +8,13 @@ import { hasRole } from '@/utils/authorization';
 import { useQuery, useQueryParams } from '@/composables/query';
 import Progress from '@/components/form/Progress.vue'
 import VolumeSelect from '@/components/form/VolumeSelect.vue'
+import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 const router = useRouter();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
   size: 20,
+  storage_cluster_id: null,
 }));
 
 const { result, querying, query } = useQuery(() => qtreeApi.fetch(queryParams.value), {
@@ -35,6 +37,13 @@ query();
         query();
       }"
     >
+      <ElFormItem
+        label="存储集群"
+        class="form-item-center">
+        <StorageClusterSelect
+          v-model="queryParams.storage_cluster_id"
+          :clearable="true" />
+      </ElFormItem>
       <ElFormItem label="Qtree">
         <ElInput
           v-model="queryParams.nameLike"
