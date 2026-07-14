@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -146,6 +147,53 @@ def test_plain_ldap_without_starttls_is_rejected():
 
     with pytest.raises(RuntimeError, match="START_TLS must be enabled"):
         require_secure_ldap_transport()
+
+
+def test_ldap_server_skips_metadata_and_keeps_ca_validation(monkeypatch, tmp_path):
+    from utils import ldap_directory
+
+    captured = {}
+    all_info = object()
+    no_info = object()
+    cert_required = object()
+    ca_cert = tmp_path / "ldap-ca.pem"
+    ca_cert.write_text("test-ca", encoding="utf-8")
+
+    class FakeTls:
+        def __init__(self, **kwargs):
+            captured["tls"] = kwargs
+
+    def fake_server(uri, **kwargs):
+        captured["uri"] = uri
+        captured["server"] = kwargs
+        return object()
+
+    base_config.set("ldap.uri", "ldap://dc.example.com")
+    base_config.set("ldap.starttls", True)
+    base_config.set("ldap.ca_cert_path", str(ca_cert))
+    monkeypatch.setattr(
+        ldap_directory,
+        "_ldap_runtime_primitives",
+        lambda: (
+            fake_server,
+            object,
+            FakeTls,
+            {
+                "ssl": SimpleNamespace(CERT_REQUIRED=cert_required),
+                "all": all_info,
+                "none": no_info,
+                "auto_bind_no_tls": object(),
+            },
+        ),
+    )
+
+    ldap_directory._ldap_server()
+
+    assert captured["server"]["get_info"] is no_info
+    assert captured["tls"] == {
+        "ca_certs_file": str(ca_cert),
+        "validate": cert_required,
+    }
 
 
 def test_bind_password_file_is_relative_to_config(tmp_path):
