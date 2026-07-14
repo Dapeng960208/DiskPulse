@@ -1,9 +1,18 @@
 # -*- coding: utf-8 -*-
 import ast
+import importlib.util
 from pathlib import Path
 
 import models
-from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint, inspect
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from sqlalchemy import (
+    CheckConstraint,
+    ForeignKeyConstraint,
+    UniqueConstraint,
+    create_engine,
+    inspect,
+)
 from sqlalchemy.dialects import mysql, postgresql, sqlite
 from sqlalchemy.schema import CreateIndex, CreateTable
 
@@ -70,11 +79,17 @@ def _foreign_key_targets(column) -> set[str]:
 
 
 def _migration_path() -> Path:
-    migrations = list(MIGRATION_ROOT.glob("*_add_project_storage_environments.py"))
-    assert len(migrations) == 1, (
-        "M1 requires exactly one *_add_project_storage_environments.py migration"
-    )
+    migrations = list(MIGRATION_ROOT.glob("*.py"))
+    assert len(migrations) == 1, "initial development requires one baseline revision"
     return migrations[0]
+
+
+def _load_migration(path: Path):
+    spec = importlib.util.spec_from_file_location("diskpulse_initial_migration", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _module_assignments(module: ast.Module) -> dict[str, ast.expr]:
@@ -160,15 +175,12 @@ def test_m1_environment_relationships_constraints_and_indexes():
     assert {"project_environment_id", "volume_id"} <= {
         column.name for column in group_table.c
     }
-    assert group_table.c.project_environment_id.nullable is True
     assert group_table.c.volume_id.nullable is True
     assert _foreign_key_targets(group_table.c.project_environment_id) == {
         "project_storage_environments.id"
     }
     assert _foreign_key_targets(group_table.c.volume_id) == {"volumes.id"}
-    assert {"project_id", "storage_cluster_id", "qtree_id"} <= {
-        column.name for column in group_table.c
-    }
+    assert "qtree_id" in group_table.c
 
     foreign_keys = {
         constraint.name: (
@@ -217,6 +229,47 @@ def test_m1_environment_relationships_constraints_and_indexes():
     assert ("project_id", "name") not in indexes.values()
 
 
+def test_group_model_removes_derived_project_and_cluster_columns():
+    assert {"project_id", "storage_cluster_id"}.isdisjoint(
+        models.Group.__table__.c.keys()
+    )
+
+
+def test_group_model_requires_environment_binding():
+    assert models.Group.__table__.c.project_environment_id.nullable is False
+
+
+def test_group_model_enforces_environment_name_and_target_constraints():
+    table = models.Group.__table__
+    unique_constraints = {
+        constraint.name: tuple(column.name for column in constraint.columns)
+        for constraint in table.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    checks = {
+        constraint.name: " ".join(str(constraint.sqltext).lower().split())
+        for constraint in table.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+
+    assert unique_constraints["uq_group_environment_name"] == (
+        "project_environment_id",
+        "name",
+    )
+    assert checks["ck_group_single_storage_target"] == (
+        "volume_id is null or qtree_id is null"
+    )
+    monitored_target = checks["ck_group_monitored_has_storage_target"]
+    assert all(
+        clause in monitored_target
+        for clause in (
+            "enable_monitoring = false",
+            "volume_id is not null",
+            "qtree_id is not null",
+        )
+    )
+
+
 def test_m1_environment_table_ddl_compiles_for_supported_dialects():
     table = _environment_model().__table__
 
@@ -226,7 +279,7 @@ def test_m1_environment_table_ddl_compiles_for_supported_dialects():
             assert index.name in str(CreateIndex(index).compile(dialect=dialect))
 
 
-def test_m1_migration_has_expand_and_rollback_structure():
+def test_initial_migration_is_single_root_revision():
     path = _migration_path()
     source = path.read_text(encoding="utf-8")
     compile(source, str(path), "exec")
@@ -237,49 +290,44 @@ def test_m1_migration_has_expand_and_rollback_structure():
     revision = ast.literal_eval(assignments["revision"])
     assert isinstance(revision, str) and revision
     assert len(revision) <= 32
-    assert "down_revision" in assignments  # Exact parent is a separate G0 decision.
+    assert "down_revision" in assignments
+    assert ast.literal_eval(assignments["down_revision"]) is None
 
     upgrade = _function(module, "upgrade")
     downgrade = _function(module, "downgrade")
-    create_table_calls = [
-        call
+    expected_tables = set(models.Base.metadata.tables)
+    created_tables = {
+        _literal_string(call.args[0])
         for call in _calls(upgrade, "create_table")
-        if call.args and _literal_string(call.args[0]) == ENVIRONMENT_TABLE
-    ]
-    assert len(create_table_calls) == 1
-    created_columns = {
-        name
-        for argument in create_table_calls[0].args[1:]
-        if (name := _column_name(argument)) is not None
-    }
-    assert created_columns == ENVIRONMENT_COLUMNS
-
-    assert any(
-        call.args and _literal_string(call.args[0]) == "groups"
-        for call in _calls(upgrade, "batch_alter_table")
-    )
-    added_group_columns = {
-        _column_name(call.args[0])
-        for call in _calls(upgrade, "add_column")
         if call.args
     }
-    assert {"project_environment_id", "volume_id"} <= added_group_columns
-
-    created_indexes = {
+    dropped_tables = {
         _literal_string(call.args[0])
-        for call in _calls(upgrade, "create_index")
-        if call.args
-    }
-    assert ENVIRONMENT_INDEXES.keys() <= created_indexes
-    assert not _calls(upgrade, "execute")
-
-    dropped_group_columns = {
-        _literal_string(call.args[0])
-        for call in _calls(downgrade, "drop_column")
-        if call.args
-    }
-    assert {"project_environment_id", "volume_id"} <= dropped_group_columns
-    assert any(
-        call.args and _literal_string(call.args[0]) == ENVIRONMENT_TABLE
         for call in _calls(downgrade, "drop_table")
-    )
+        if call.args
+    }
+    assert created_tables == expected_tables
+    assert dropped_tables == expected_tables
+
+
+def test_initial_migration_upgrades_empty_database_and_downgrades(tmp_path):
+    migration = _load_migration(_migration_path())
+    database_path = (tmp_path / "diskpulse-baseline.db").as_posix()
+    engine = create_engine(f"sqlite:///{database_path}")
+
+    try:
+        with engine.begin() as connection:
+            migration.op = Operations(MigrationContext.configure(connection))
+            migration.upgrade()
+
+            database = inspect(connection)
+            assert set(database.get_table_names()) == set(models.Base.metadata.tables)
+            for table_name, table in models.Base.metadata.tables.items():
+                assert {column["name"] for column in database.get_columns(table_name)} == {
+                    column.name for column in table.c
+                }
+
+            migration.downgrade()
+            assert inspect(connection).get_table_names() == []
+    finally:
+        engine.dispose()

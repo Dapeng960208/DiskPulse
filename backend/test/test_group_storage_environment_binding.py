@@ -14,6 +14,15 @@ API_PREFIX = "/storage-pulse/api"
 NOW = datetime.fromisoformat("2026-07-13T10:00:00")
 
 
+def _bound_group(*, project_id: int, storage_cluster_id: int, **values):
+    record = models.Group(**values)
+    if hasattr(models.Group, "project_id"):
+        record.project_id = project_id
+    if hasattr(models.Group, "storage_cluster_id"):
+        record.storage_cluster_id = storage_cluster_id
+    return record
+
+
 @pytest.fixture
 def binding_api(api_client_factory, session_factory):
     base_config.set("jwt.secret_key", "test-secret")
@@ -110,7 +119,7 @@ def binding_api(api_client_factory, session_factory):
         session.flush()
         session.add_all(
             [
-                models.Group(
+                _bound_group(
                     id=1,
                     name="volume-group",
                     project_environment_id=1,
@@ -118,7 +127,7 @@ def binding_api(api_client_factory, session_factory):
                     project_id=1,
                     storage_cluster_id=1,
                 ),
-                models.Group(
+                _bound_group(
                     id=2,
                     name="qtree-group",
                     project_environment_id=1,
@@ -126,7 +135,7 @@ def binding_api(api_client_factory, session_factory):
                     project_id=1,
                     storage_cluster_id=1,
                 ),
-                models.Group(
+                _bound_group(
                     id=3,
                     name="other-environment-group",
                     project_environment_id=2,
@@ -134,13 +143,19 @@ def binding_api(api_client_factory, session_factory):
                     project_id=1,
                     storage_cluster_id=2,
                 ),
-                models.Group(
+                _bound_group(
                     id=4,
                     name="protected-volume-group",
                     project_environment_id=3,
                     volume_id=4,
                     project_id=2,
                     storage_cluster_id=3,
+                ),
+                models.Group(
+                    id=5,
+                    name="environment-derived-filter-group",
+                    project_environment_id=3,
+                    volume_id=3,
                 ),
             ]
         )
@@ -207,7 +222,7 @@ def test_group_payload_forbids_derived_and_extra_fields(binding_api, forbidden_f
     assert update_response.status_code == 422
 
 
-def test_group_create_and_update_derive_compatibility_columns(binding_api, session_factory):
+def test_group_create_and_update_persist_environment_target(binding_api, session_factory):
     created = binding_api.post(
         f"{API_PREFIX}/groups/",
         json={
@@ -228,12 +243,38 @@ def test_group_create_and_update_derive_compatibility_columns(binding_api, sessi
     try:
         created_group = session.query(models.Group).filter_by(name="derived-create").one()
         updated_group = session.get(models.Group, 1)
-        assert (created_group.project_id, created_group.storage_cluster_id) == (1, 1)
-        assert (updated_group.project_id, updated_group.storage_cluster_id) == (1, 2)
+        assert created_group.project_environment_id == 1
+        assert created_group.volume_id == 1
+        assert created_group.qtree_id is None
+        assert updated_group.project_environment_id == 2
         assert updated_group.volume_id == 2
         assert updated_group.qtree_id is None
     finally:
         session.close()
+
+
+@pytest.mark.parametrize(
+    ("filter_name", "filter_value"),
+    [("project_id", 2), ("storage_cluster_id", 3)],
+    ids=("project", "storage-cluster"),
+)
+def test_group_list_derives_project_and_cluster_filters_from_environment(
+    binding_api, filter_name, filter_value
+):
+    response = binding_api.get(
+        f"{API_PREFIX}/groups/",
+        params={
+            "nameLike": "environment-derived-filter-group",
+            filter_name: filter_value,
+            "page": 1,
+            "size": 20,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert [item["id"] for item in payload["content"]] == [5]
 
 
 def test_group_list_filters_environment_and_returns_unified_targets(binding_api):
