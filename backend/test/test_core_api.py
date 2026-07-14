@@ -225,17 +225,19 @@ class TestCoreApi:
             session.close()
 
     def test_storage_cluster_crud_and_realtime_contract(self):
-        create_response = self.client.post(
-            "/storage-pulse/api/storage-clusters/",
-            json={
-                "name": "cluster-b",
-                "storage_type": "isilon",
-                "storage_host": "isilon.local",
-                "storage_port": 8080,
-                "is_active": False,
-                "limit": 800,
-            },
-        )
+        with patch("routers.storage_cluster._schedule_storage_collection") as schedule_collection:
+            create_response = self.client.post(
+                "/storage-pulse/api/storage-clusters/",
+                json={
+                    "name": "cluster-b",
+                    "storage_type": "isilon",
+                    "storage_host": "isilon.local",
+                    "storage_port": 8080,
+                    "is_active": False,
+                    "limit": 800,
+                },
+            )
+            schedule_collection.assert_not_called()
         assert create_response.status_code == 200
         cluster_id = create_response.json()["id"]
 
@@ -247,10 +249,12 @@ class TestCoreApi:
         assert list_response.json()["total"] == 1
         assert list_response.json()["content"][0]["name"] == "cluster-b"
 
-        update_response = self.client.put(
-            f"/storage-pulse/api/storage-clusters/{cluster_id}",
-            json={"name": "cluster-b-renamed", "is_active": True, "used": 200, "use_ratio": 25},
-        )
+        with patch("routers.storage_cluster._schedule_storage_collection") as schedule_collection:
+            update_response = self.client.put(
+                f"/storage-pulse/api/storage-clusters/{cluster_id}",
+                json={"name": "cluster-b-renamed", "is_active": True, "used": 200, "use_ratio": 25},
+            )
+            schedule_collection.assert_called_once_with(cluster_id)
         assert update_response.status_code == 200
         assert update_response.json()["name"] == "cluster-b-renamed"
 
@@ -263,6 +267,23 @@ class TestCoreApi:
         assert delete_response.status_code == 200
         missing_response = self.client.get(f"/storage-pulse/api/storage-clusters/{cluster_id}")
         assert missing_response.status_code == 404
+
+    @pytest.mark.parametrize("storage_type", ["netapp", "isilon"])
+    def test_active_storage_cluster_create_schedules_collection(self, storage_type):
+        with patch("routers.storage_cluster._schedule_storage_collection") as schedule_collection:
+            response = self.client.post(
+                "/storage-pulse/api/storage-clusters/",
+                json={
+                    "name": f"{storage_type}-cluster",
+                    "storage_type": storage_type,
+                    "storage_host": f"{storage_type}.local",
+                    "storage_port": 443 if storage_type == "netapp" else 8080,
+                    "is_active": True,
+                },
+            )
+
+        assert response.status_code == 200
+        schedule_collection.assert_called_once_with(response.json()["id"])
 
     def test_project_user_and_storage_resource_lists(self):
         users_response = self.client.get(

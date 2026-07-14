@@ -137,3 +137,12 @@
 - 修复：使用调用运算符并把 glob 作为单个字符串传入：`& '.\\node_modules\\.bin\\eslint.cmd' 'src/**/*.{js,jsx,vue,ts,tsx}' --fix`。
 - 验证：自动修复完成，随后 `npm run lint` 通过。
 - 风险：PowerShell 下直接复制类 Unix brace glob 命令会再次失败，需要引用 glob 或通过 npm script 执行。
+
+### 2026-07-14：聚焦测试导入 Celery 任务时缺少 Redis 包
+
+- 触发：为集群保存后定向采集编写 RED 测试并直接导入 `celery_tasks.tasks.storages`。
+- 现象：pytest 收集阶段报 `ModuleNotFoundError: No module named 'redis'`，目标断言未执行。
+- 根因：`celery_worker.py` 直接导入 `redis`，当前仓库 `.venv` 未安装该运行时包。
+- 修复：移除依赖 Celery 模块导入的测试，把 RED 测试收窄到存储集群 API 的任务调度契约。
+- 验证：聚焦测试已执行，3 个用例均按预期因 `_schedule_storage_collection` 尚不存在而失败。
+- 风险：本轮不会启动真实 Celery/Redis，后台任务消费仍需部署环境验证。
