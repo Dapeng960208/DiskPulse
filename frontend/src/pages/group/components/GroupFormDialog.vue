@@ -184,7 +184,7 @@ defineExpose({
     const normalized = {
       ...initialModel(),
       ...existing,
-      project_id: existing.project_id ?? existing.project?.id ?? null,
+      project_id: existing.project?.id ?? null,
       project_environment_id: existing.project_environment_id
         ?? existing.project_environment?.id
         ?? null,

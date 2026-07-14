@@ -16,15 +16,6 @@ API_PREFIX = "/storage-pulse/api"
 NOW = datetime.fromisoformat("2026-07-13T10:00:00")
 
 
-def _bound_group(*, project_id: int, storage_cluster_id: int, **values):
-    record = models.Group(**values)
-    if hasattr(models.Group, "project_id"):
-        record.project_id = project_id
-    if hasattr(models.Group, "storage_cluster_id"):
-        record.storage_cluster_id = storage_cluster_id
-    return record
-
-
 def test_group_response_requires_environment_binding_contract():
     for field_name in ("project_environment_id", "project_environment"):
         field = groupSchema.Group.model_fields[field_name]
@@ -128,37 +119,29 @@ def binding_api(api_client_factory, session_factory):
         session.flush()
         session.add_all(
             [
-                _bound_group(
+                models.Group(
                     id=1,
                     name="volume-group",
                     project_environment_id=1,
                     volume_id=1,
-                    project_id=1,
-                    storage_cluster_id=1,
                 ),
-                _bound_group(
+                models.Group(
                     id=2,
                     name="qtree-group",
                     project_environment_id=1,
                     qtree_id=1,
-                    project_id=1,
-                    storage_cluster_id=1,
                 ),
-                _bound_group(
+                models.Group(
                     id=3,
                     name="other-environment-group",
                     project_environment_id=2,
                     volume_id=2,
-                    project_id=1,
-                    storage_cluster_id=2,
                 ),
-                _bound_group(
+                models.Group(
                     id=4,
                     name="protected-volume-group",
                     project_environment_id=3,
                     volume_id=4,
-                    project_id=2,
-                    storage_cluster_id=3,
                 ),
                 models.Group(
                     id=5,

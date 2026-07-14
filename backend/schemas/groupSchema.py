@@ -120,8 +120,9 @@ class GroupBase(BaseModel):
 
 class Group(GroupBase):
     id: int
+    project_environment_id: int
     project: projectsSchema.ProjectBaseInfo
-    project_environment: ProjectEnvironmentSummary | None = None
+    project_environment: ProjectEnvironmentSummary
     qtree: qtreeSchema.QtreeForGroup | None = None
     storage_cluster: StorageClusterSummary | None = None
     storage_target: StorageTargetSummary | None = None
