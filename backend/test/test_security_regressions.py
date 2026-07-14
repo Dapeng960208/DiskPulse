@@ -160,6 +160,16 @@ def test_netapp_client_propagates_connection_failure():
         client.get_volumes()
 
 
+def test_netapp_qtree_request_omits_unsupported_oplocks_field():
+    client = NetAppClient("storage.local", "svc", "secret")
+    client._get_all_records = Mock(return_value=[])
+
+    client.get_qtrees()
+
+    fields = client._get_all_records.call_args.kwargs["params"]["fields"].split(",")
+    assert "oplocks" not in fields
+
+
 def test_isilon_client_propagates_connection_failure():
     client = object.__new__(IsilonClient)
     client.base_url = "https://storage.local:8080/platform"
