@@ -80,19 +80,19 @@ curl "http://localhost:8000/storage-pulse/api/storage-clusters/1/realtime?start_
 
 ## 按集群过滤存储资源
 
-### 获取指定集群的 Aggregates
+### 获取指定集群的容量池（Aggregate / Storage Pool）
 
 ```bash
 curl "http://localhost:8000/storage-pulse/api/aggregates?storage_cluster_id=1"
 ```
 
-### 获取指定集群的 Volumes
+### 获取指定集群的存储空间（Volume / Directory Quota）
 
 ```bash
 curl "http://localhost:8000/storage-pulse/api/volumes?storage_cluster_id=1"
 ```
 
-### 获取指定集群的 Qtrees
+### 获取指定集群的 Qtree（NetApp）
 
 ```bash
 curl "http://localhost:8000/storage-pulse/api/qtrees?storage_cluster_id=1"
@@ -109,6 +109,18 @@ curl "http://localhost:8000/storage-pulse/api/aggregates/storage-trees/?storage_
 ```bash
 curl "http://localhost:8000/storage-pulse/api/storage-usages?storage_cluster_id=1"
 ```
+
+### 按存储目标过滤项目组
+
+```bash
+# 绑定指定存储空间的项目组
+curl "http://localhost:8000/storage-pulse/api/groups?volume_id=10"
+
+# 绑定指定 Qtree（NetApp）的项目组
+curl "http://localhost:8000/storage-pulse/api/groups?qtree_id=20"
+```
+
+`volume_id` 与 `qtree_id` 不能同时提交；同时提交时返回 `422`。模型名、字段名和 `/aggregates`、`/volumes`、`/qtrees` 路径保持不变。
 
 ## Python 示例
 
@@ -140,7 +152,7 @@ def get_cluster_realtime(cluster_id):
     )
     return response.json()
 
-# 获取集群下的所有 Aggregate
+# 获取集群下的所有容量池
 def get_cluster_aggregates(cluster_id):
     response = requests.get(
         f"{BASE_URL}/aggregates",

@@ -81,6 +81,38 @@
 - 本次仅隐藏前端展示，不是权限控制；直接访问 `/admin/backup` 仍可加载原页面，后端接口行为未变。
 - 未执行真实浏览器端到端测试，菜单和各页面的最终视觉结果待集成环境确认。
 
+## 2026-07-14：统一 NetApp/Isilon 存储资源术语与采集
+
+### 主题
+
+统一 NetApp 与 Isilon 的容量池、存储空间、Qtree（NetApp）、用户用量和项目组绑定语义，并让采集、汇总、接口和页面使用同一映射。
+
+### 已完成
+
+- Isilon 使用 OneFS 9.11 `/platform/16/storagepool/storagepools?toplevels=true` 采集真实 Storage Pool 并写入 `Aggregate`；Directory Quota 写入 `Volume`，类型为 `directory_quota`。
+- 同一轮 Isilon 采集复用一次 quota 响应生成存储空间和用户配额；cluster stats 只更新集群总容量，不再生成 `isilon_cluster` Aggregate。
+- NetApp 只保存真实 Qtree；成功采集后把历史 `null` Qtree 项目组绑定迁移到对应 `volume_id`，再清理占位记录。
+- 项目组汇总支持 NetApp Volume、NetApp Qtree 和 Isilon Directory Quota；项目汇总按集群、目标类型和目标 ID 去重直接目标。
+- `GET /groups` 新增 `volume_id` 过滤；与 `qtree_id` 同时提交时返回 `422`。
+- 前端路由、列表、详情、选择器、项目组、用量和告警统一使用“容量池”“存储空间”“Qtree（NetApp）”，厂商原生类型由现有字段派生。
+- 保留 `Aggregate`、`Volume`、`Qtree` 模型、枚举和 API 路径；未新增 PostgreSQL、Alembic 或 QuestDB schema，QuestDB 当前 head 仍为 `000000000002`。
+- 更新领域术语、资源映射、API 示例、迁移说明、最新功能和存储集群专题索引。
+
+### 验证状态
+
+- 后端聚焦测试：`9 passed`；完整后端：`122 passed`；覆盖率 `84%`。
+- 后端 `compileall`、`pip check`、Alembic `heads` 通过。
+- 前端默认 `npm run test:coverage` 因 `3` 个用例超过 `5s` 超时限制，结果为 `147/150`，命令返回失败；改用 `npx vitest run --coverage --testTimeout=20000` 后 `150/150` 通过。
+- 前端覆盖率为 Statements/Lines `91.88%`、Branches `82.10%`、Functions `69.75%`；`npm run lint` 和 `npm run build:prod` 通过。
+- 登录态 Chrome 冒烟通过容量池、存储空间、Qtree（NetApp）、项目组页面和 NetApp 存储目标选项；未发现页面级横向溢出。
+
+### 风险与后续
+
+- 尚未对 Isilon-CR02（OneFS 9.11.0.5）执行 `/platform/latest`、Storage Pool `?describe` 和真实数据只读验证；权限、字段、分页与容量单位待集成环境确认。
+- 尚未在持有历史 `isilon_cluster`/`null` Qtree 数据的集成 PostgreSQL 和 QuestDB 环境观察完整采集事务；QuestDB 历史占位指标按设计保留。
+- Directory Quota 与 Storage Pool 不保证一对一；无法确认唯一归属时 `Volume.aggregate` 保持为空。
+- 前端默认覆盖率脚本仍受 `5s` 超时限制并返回非零；本轮未扩大全局超时，最终行为验证使用显式 `20s` 参数完成。
+
 ## 2026-07-14：存储资源按集群筛选
 
 ### 主题

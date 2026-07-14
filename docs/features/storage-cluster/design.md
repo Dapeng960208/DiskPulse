@@ -1,5 +1,7 @@
 # StorageCluster 多存储支持设计文档
 
+> 本文保留早期多集群设计背景，不作为当前实现说明。当前接口和行为以 [专题概览](./overview.md) 与 [NetApp/Isilon 资源映射](./resource-mapping.md) 为准。
+
 ## 1. 需求背景
 
 当前系统仅支持单一存储集群的管理和监控。随着业务发展，需要支持多个存储集群（NetApp、Isilon等）的统一管理和监控。

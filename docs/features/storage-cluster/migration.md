@@ -30,9 +30,10 @@ PostgreSQL 与 QuestDB 使用独立 revision 链。PostgreSQL 由 Alembic 管理
 
 ```text
 000000000001_initial_schema.sql
+000000000002_add_soft_quota_metrics.sql
 ```
 
-该 revision 从空 QuestDB 创建当前 `7` 张趋势表。迁移执行器会先创建 `diskpulse_schema_migrations`，记录 revision、SHA-256 checksum 和应用时间；重复执行会跳过已应用 revision，已应用文件被修改或数据库存在本地未知 revision 时会拒绝继续。
+`000000000001` 从空 QuestDB 创建当前 `7` 张趋势表；`000000000002` 为 Volume、Qtree、Project、Group 和用户用量历史表补充软限额指标。迁移执行器会先创建 `diskpulse_schema_migrations`，记录 revision、SHA-256 checksum 和应用时间；重复执行会跳过已应用 revision，已应用文件被修改或数据库存在本地未知 revision 时会拒绝继续。
 
 ```powershell
 Push-Location backend
@@ -46,11 +47,13 @@ Pop-Location
 
 QuestDB migration 为前向、幂等 DDL：每个新 revision 必须使用 `IF NOT EXISTS` 等可重试语句，并在所有语句成功后才写版本账本。QuestDB 不支持 PostgreSQL 式事务回滚和 PGWire `DELETE`，因此不提供自动 downgrade；破坏性回退必须先备份，再使用独立修复 revision 或重建实例。
 
+本次 NetApp/Isilon 资源映射不修改 PostgreSQL 或 QuestDB schema，因此不新增 revision。历史 `isilon_cluster` Aggregate 和 `null` Qtree 由成功的设备采集在当前 PostgreSQL 事务内清理；QuestDB 历史指标保留，新采集不再写入占位资源。
+
 ## 已验证与待验证
 
-- versions 恰好 `1` 个，`000000000001` 为 root/head。
+- PostgreSQL versions 恰好 `1` 个，`000000000001` 为 root/head。
 - SQLite upgrade 后与 `Base.metadata` 对比无差异，downgrade 后为 `0` 张表。
 - PostgreSQL offline upgrade/downgrade DDL 编译和逆序 drop 审计通过。
-- QuestDB migration 契约测试验证初始 revision 与当前 `QuestDBBase.metadata` 的 `7` 张表一致、重复升级安全、checksum 漂移会失败。
-- 当前配置指向的 QuestDB 已验证 `current=000000000001`，包含 `7` 张趋势表和 `diskpulse_schema_migrations`；重复 `upgrade` 返回 `up to date`。
+- QuestDB migration 契约测试验证初始 revision 与当前 `QuestDBBase.metadata` 的 `7` 张表一致、`000000000002` 可从已有 `000000000001` 环境升级、重复升级安全、checksum 漂移会失败。
+- 当前配置指向的 QuestDB 已验证 `current=000000000002`，包含 `7` 张趋势表和 `diskpulse_schema_migrations`；重复 `upgrade` 返回 `up to date`。
 - 尚未在空白 QuestDB 实例执行从 `base` 到 head 的独立录像式验收；当前实例的首次创建可能由运行中的自动重载服务触发。

@@ -44,7 +44,8 @@ curl -X POST "http://localhost:8000/storage-pulse/api/storage-clusters" \
 
 | 文档 | 说明 |
 | --- | --- |
-| [design.md](./design.md) | 多集群设计背景、数据关系、监控任务设计。 |
+| [design.md](./design.md) | 历史多集群设计背景；当前实现以本页和资源映射文档为准。 |
+| [resource-mapping.md](./resource-mapping.md) | NetApp/Isilon 统一术语、采集映射、前端文案和项目组绑定实现。 |
 | [migration.md](./migration.md) | PostgreSQL baseline 与 QuestDB 前向 revision 管理。 |
 | [api-examples.md](./api-examples.md) | 集群 CRUD、实时查询和按集群过滤的 API 示例。 |
 
@@ -52,4 +53,4 @@ curl -X POST "http://localhost:8000/storage-pulse/api/storage-clusters" \
 
 - 当前后端实际字段以 `backend/schemas/storageClusterSchema.py` 和 `backend/models.py` 为准。
 - 新增或删除集群字段时，需要同步 `StoragePulseMonitor`、相关 CRUD、前端表单和本文档。
-- PostgreSQL 从空库执行单一 baseline `000000000001`；不支持从已删除 revision 原地升级。QuestDB 使用独立的同号前向 revision 和 checksum 账本。
+- PostgreSQL 从空库执行单一 baseline `000000000001`；不支持从已删除 revision 原地升级。QuestDB 使用独立前向 revision 和 checksum 账本，当前 head 为 `000000000002`。

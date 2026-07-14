@@ -215,3 +215,12 @@
 - 修复：从 Qtree 请求字段中移除 `oplocks`；下游继续使用既有缺省值 `False`。
 - 验证：逐字段只读探测确认只有 `oplocks` 返回 400；聚焦测试 `13 passed`；修改后的客户端从真实设备成功返回 `82` 条 Qtree。
 - 风险：Celery worker 需要重启后才会加载新代码；关闭 TLS 校验时的 `InsecureRequestWarning` 仍会保留。
+
+### 2026-07-14：前端覆盖率全量测试超过默认 5 秒超时
+
+- 触发：在 `frontend` 目录执行 `npm run test:coverage`。
+- 现象：`147/150` 个用例通过，`3` 个较慢用例因超过默认 `5000ms` 超时失败，命令返回非零。
+- 根因：全量 coverage 插桩增加执行耗时，三个用例超过 Vitest 默认 `5s` 限制，并非功能断言失败。
+- 修复：未修改全局超时配置；最终验证改用 `npx vitest run --coverage --testTimeout=20000`。
+- 验证：替代命令 `150/150` 通过，Statements/Lines `91.88%`、Branches `82.10%`、Functions `69.75%`。
+- 风险：默认 `npm run test:coverage` 仍会返回非零；若 CI 必须直接使用该脚本，需要后续优化慢用例或显式调整测试超时。

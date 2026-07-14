@@ -7,9 +7,16 @@
 - 公共用户类型只允许超级管理员人工修改；LDAP 仅更新其非空姓名、邮箱和部门，缺失的公共用户不受影响。
 - LDAP 空快照、搜索范围不完整或用户名冲突时不写入数据库并回滚；同步不会删除用户，也不增加定时任务、历史表或预演接口。
 
+## 2026-07-14：统一 NetApp/Isilon 存储资源术语与采集
+
+- 页面统一使用“容量池”“存储空间”“Qtree（NetApp）”；现有 `Aggregate`、`Volume`、`Qtree` 模型和 API 路径保持不变。
+- Isilon Storage Pool 进入容量池列表，Directory Quota 进入存储空间列表；Isilon 集群不再请求或展示 Qtree（NetApp）。
+- 项目组支持按存储空间或 Qtree（NetApp）绑定和筛选，`volume_id` 与 `qtree_id` 不能同时过滤。
+- 采集链路不再生成 `isilon_cluster` Aggregate 或 `null` Qtree，新采集按真实资源汇总项目组和趋势数据。
+
 ## 2026-07-14：存储一览按集群查看
 
-- “存储一览”新增可清空的存储集群下拉框，选择后自动刷新该集群的 Volume/Qtree 容量树。
+- “存储一览”新增可清空的存储集群下拉框，选择后自动刷新该集群的存储空间/Qtree（NetApp）容量树。
 - 存储树接口支持 `storage_cluster_id` 数据库过滤，非法非正集群 ID 返回 `422`。
 
 ## 2026-07-14：隐藏离职备份前端入口
@@ -20,10 +27,10 @@
 
 ## 2026-07-14：存储资源按集群筛选
 
-- Volume、聚合和 Qtree 列表筛选栏新增可清空的“存储集群”下拉框，复用现有远程搜索组件。
+- 存储空间、容量池和 Qtree（NetApp）列表筛选栏新增可清空的“存储集群”下拉框，复用现有远程搜索组件。
 - 点击搜索时通过 `storage_cluster_id` 筛选对应资源；点击重置会清空集群条件并恢复全部列表。
 
-## 2026-07-14：集群配置后自动同步卷信息
+## 2026-07-14：集群配置后自动同步存储资源
 
 - 新建或更新启用的存储集群后，自动投递该集群的采集任务，无需等待下一次全量周期采集。
 - NetApp 与 Isilon 共用现有 `StoragePulseMonitor` 链路，只采集本次配置对应的集群。
@@ -61,9 +68,9 @@
 
 ## 2026-06-30：NetApp/Isilon 软限额展示与持久化
 
-- 新增配额链路软限额字段 `soft_limit`、`soft_use_ratio`，覆盖用户用量、Qtree/Isilon 目录、项目组和项目汇总。
+- 新增配额链路软限额字段 `soft_limit`、`soft_use_ratio`，覆盖用户用量、Qtree（NetApp）/Isilon 目录、项目组和项目汇总。
 - NetApp 采集 `space.soft_limit`，Isilon 采集 `thresholds.soft`，linked 用户配额继承 default-user 软限额。
-- 用户用量、项目组、Qtree、Volume 列表新增软限额和软利用率展示；无软限额时显示“无软限额”。
+- 用户用量、项目组、Qtree（NetApp）、存储空间列表新增软限额和软利用率展示；无软限额时显示“无软限额”。
 - 存储使用导出增加“软限额”“软使用率”列；QuestDB 写入同步携带软限额指标。
 - 告警口径保持现有硬利用率 `use_ratio`，不切换到软利用率。
 
