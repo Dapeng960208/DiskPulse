@@ -1,6 +1,6 @@
 # NetApp 与 Isilon 存储资源术语及映射
 
-> 状态：代码已实现，后端与前端完整行为验证已通过；前端默认 `5s` 测试超时仍有限制。Isilon-CR02（OneFS 9.11.0.5）真机响应、权限、分页和容量口径待只读验证。
+> 状态：代码已实现，后端与前端完整行为验证已通过。Isilon-CR02（OneFS 9.11.0.5）已发起只读验收，但当前账号缺少 PAPI `platform` 服务登录权限；真机响应、分页和容量口径待授权后验证。
 
 ## 1. 目标
 
@@ -210,7 +210,7 @@ PostgreSQL 提交成功后写入 QuestDB
 
 ## 10. 风险与待验证项
 
-- 尚未对 Isilon-CR02（OneFS 9.11.0.5）执行 `/platform/latest`、Storage Pool `?describe` 和真实响应只读验证；设备权限、字段、分页和容量单位仍待确认。
+- Isilon-CR02（OneFS 9.11.0.5）只读验收已被账号的 PAPI `platform` 服务登录权限阻塞；授权后仍需验证 `/platform/latest`、Storage Pool `?describe`、实际字段、分页和容量单位。
 - Directory Quota 与 Storage Pool 不一定是一对一关系，当前不会为了填充“所属容量池”而人工指定默认池。
 - 运行时兼容清理已由自动化测试覆盖，但仍需在持有历史占位数据的集成库观察一次完整采集事务。
 

@@ -103,16 +103,17 @@
 
 - 后端聚焦测试：`9 passed`；完整后端：`122 passed`；覆盖率 `84%`。
 - 后端 `compileall`、`pip check`、Alembic `heads` 通过。
-- 前端默认 `npm run test:coverage` 因 `3` 个用例超过 `5s` 超时限制，结果为 `147/150`，命令返回失败；改用 `npx vitest run --coverage --testTimeout=20000` 后 `150/150` 通过。
+- 前端默认 `npm run test:coverage` 已为 `150/150` 通过；全局测试超时统一为 `15s`。
 - 前端覆盖率为 Statements/Lines `91.88%`、Branches `82.10%`、Functions `69.75%`；`npm run lint` 和 `npm run build:prod` 通过。
 - 登录态 Chrome 冒烟通过容量池、存储空间、Qtree（NetApp）、项目组页面和 NetApp 存储目标选项；未发现页面级横向溢出。
 
 ### 风险与后续
 
-- 尚未对 Isilon-CR02（OneFS 9.11.0.5）执行 `/platform/latest`、Storage Pool `?describe` 和真实数据只读验证；权限、字段、分页与容量单位待集成环境确认。
+- 已发起 Isilon-CR02（OneFS 9.11.0.5）只读验收，但已配置账号在 `/session/1/session` 被拒绝登录 `platform` 服务，真实 Storage Pool 与 Quota 请求尚未执行；待补充只读 PAPI 权限后复验。
+- 应用当前 Isilon 连接地址与计划中的验收入口不同；需由存储管理员确认两者是否属于同一集群或统一连接入口。
 - 尚未在持有历史 `isilon_cluster`/`null` Qtree 数据的集成 PostgreSQL 和 QuestDB 环境观察完整采集事务；QuestDB 历史占位指标按设计保留。
 - Directory Quota 与 Storage Pool 不保证一对一；无法确认唯一归属时 `Volume.aggregate` 保持为空。
-- 前端默认覆盖率脚本仍受 `5s` 超时限制并返回非零；本轮未扩大全局超时，最终行为验证使用显式 `20s` 参数完成。
+- 当前配置关闭 TLS 证书校验，真机请求会产生 `InsecureRequestWarning`；生产环境应配置可信 CA 并启用校验。
 
 ## 2026-07-14：存储资源按集群筛选
 

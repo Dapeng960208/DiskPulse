@@ -1,5 +1,13 @@
 # 错误记录
 
+### 2026-07-14：Isilon 真机账号缺少 PAPI 登录权限
+- 触发：使用应用已配置的 Isilon 账号执行 OneFS 9.11 只读验收。
+- 现象：`POST /session/1/session` 返回 `403`，提示账号无权登录请求的 `platform` 服务；随后 `/platform/1/cluster/config` 返回 `401`。
+- 根因：当前账号未获得 OneFS PAPI（`platform` service）登录权限，尚未进入 Storage Pool 或 Quota 数据读取阶段。
+- 处理：停止后续请求，不触发采集、数据库更新或 QuestDB 写入；等待存储管理员补充只读 PAPI 权限后复验。
+- 验证：相同应用配置重复执行结果一致；浏览器直接访问 `/platform/latest` 同样返回 `401`。
+- 风险：设备身份、Storage Pool 字段、容量单位、分页和 Directory Quota 实际结构仍未完成真机确认。
+
 ### 2026-07-14：存储一览加载态引用了不存在的变量
 - 触发：为“存储一览”新增集群切换页面测试并挂载 `DashboardPage.vue`。
 - 现象：Vue 提示 `Property "querying" was accessed during render but is not defined on instance`，页面请求期间不会进入加载态。
