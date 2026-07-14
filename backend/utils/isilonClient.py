@@ -328,6 +328,17 @@ class IsilonClient:
         return result
 
     def close(self):
-        """Close the HTTP session."""
-        if self.session:
+        """Release the uncached OneFS session and close HTTP resources."""
+        if not self.session:
+            return
+
+        try:
+            if not self._session_cache_enabled:
+                self.session.delete(self._session_url, timeout=15)
+        except requests.RequestException as exc:
+            self._log(
+                "warning",
+                f"[IsilonClient] Logout error: {type(exc).__name__}",
+            )
+        finally:
             self.session.close()
