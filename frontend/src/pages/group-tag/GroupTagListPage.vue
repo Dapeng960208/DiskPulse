@@ -45,11 +45,6 @@ query();
           placeholder="根据标签名称搜索" />
       </ElFormItem>
     </QueryForm>
-    <div class="mt-2.5 flex justify-end">
-      <ElButton
-        type="primary"
-        @click="dialogRef.edit()">新增标签</ElButton>
-    </div>
     <DataTable
       :data="result.content"
       :loading="querying"
@@ -61,6 +56,13 @@ query();
       <ElTableColumn
         align="right"
         width="160">
+        <template #header>
+          <ElButton
+            size="small"
+            plain
+            type="primary"
+            @click="dialogRef.edit()">新增标签</ElButton>
+        </template>
         <template #default="{ row }">
           <ElButton
             link

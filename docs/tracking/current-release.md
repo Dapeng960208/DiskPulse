@@ -1,5 +1,24 @@
 # 当前交付记录
 
+## 2026-07-14：项目组标签列表布局对齐存储集群列表
+
+### 已完成
+
+- 将“新增标签”从筛选栏下方的独立按钮行移入表格右侧操作列表头。
+- 复用存储集群列表现有的表头按钮结构，移除独立按钮行造成的额外纵向留白。
+- 新增页面结构回归测试，锁定新增入口位于表头且筛选栏后不再插入独立操作行。
+
+### 验证状态
+
+- RED：`npx vitest run test/unit/group-tag.test.js --coverage.enabled=false`，新增用例按预期失败，`1 failed, 3 passed`。
+- GREEN：同一命令通过，`4 passed`。
+- `npx eslint src/pages/group-tag/GroupTagListPage.vue test/unit/group-tag.test.js`：通过。
+- `npm run build:prod`：通过；保留既有的大于 `500 kB` chunk warning。
+
+### 风险
+
+- 未连接运行中的前后端做浏览器截图复验；本轮通过 Vue 模板结构测试和 lint 验证布局契约。
+
 ## 2026-07-14：登录认证请求去重与 LDAP 连接轻量化
 
 ### 主题
