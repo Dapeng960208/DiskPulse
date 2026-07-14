@@ -1,4 +1,4 @@
-import { shallowMount } from '@vue/test-utils';
+import { mount, shallowMount } from '@vue/test-utils';
 import { defineComponent, h, ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -10,8 +10,19 @@ const configApi = vi.hoisted(() => ({
 vi.mock('@/api/config-api', () => ({ default: configApi }));
 vi.mock('@/router', () => ({ default: { push: vi.fn() } }));
 vi.mock('@/layouts/AppLayout.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('@/pages/common/RealTimePage.vue', () => ({
+  default: defineComponent({
+    name: 'RealTimePage',
+    setup(_, { slots }) {
+      return () => h('div', (slots.extraDescriptions ?? slots['extra-descriptions'])?.({
+        info: { back_path: '/backup' },
+      }));
+    },
+  }),
+}));
 vi.mock('vue-router', async () => ({
   ...(await vi.importActual('vue-router')),
+  useRoute: () => ({ params: { id: '1' } }),
   useRouter: () => ({ push: vi.fn() }),
 }));
 vi.mock('@/stores/current-user', () => ({
@@ -79,6 +90,14 @@ describe('offboarding backup visibility', () => {
     expect(groupForm.findAllComponents({ name: 'ElFormItem' }).map((item) => item.props('label')))
       .not.toContain('是否开启离职数据备份');
   }, 15000);
+
+  it('does not render the backup path on the group detail', async () => {
+    const { default: GroupDetailPage } = await import('@/pages/group/GroupDetailPage.vue');
+    const groupDetail = mount(GroupDetailPage);
+
+    expect(groupDetail.findAllComponents({ name: 'ElDescriptionsItem' }).map((item) => item.props('label')))
+      .not.toContain('备份路径');
+  });
 
   it('does not render the move-to-backup action on usage rows', async () => {
     const { default: UsageListPage } = await import('@/pages/usage/UsageListPage.vue');
