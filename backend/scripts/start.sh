@@ -17,17 +17,17 @@ uvicorn main:app --log-config logging_config.yaml --host 10.102.14.16 &
 app_pid=$!
 
 # 启动 Celery beat
-celery -A celery_worker beat -l info --logfile /srv/prod/lsf/lsf-api/log/celery.beat.log &
+celery -A celery_worker:diskpulse_app beat -l info --logfile /srv/prod/lsf/lsf-api/log/celery.beat.log &
 beat_pid=$!
 
 # 启动 Celery workers
-celery -A celery_worker worker -l info --logfile /srv/prod/lsf/lsf-api/log/celery.worker1.log -n worker1%h  &
+celery -A celery_worker:diskpulse_app worker -l info --logfile /srv/prod/lsf/lsf-api/log/celery.worker1.log -n worker1%h  &
 worker1_pid=$!
-celery -A celery_worker worker -l info --logfile /srv/prod/lsf/lsf-api/log/celery.worker2.log -n worker2%h  &
+celery -A celery_worker:diskpulse_app worker -l info --logfile /srv/prod/lsf/lsf-api/log/celery.worker2.log -n worker2%h  &
 worker2_pid=$!
-celery -A celery_worker worker -l info --logfile /srv/prod/lsf/lsf-api/log/celery.worker3.log -n worker3%h  &
+celery -A celery_worker:diskpulse_app worker -l info --logfile /srv/prod/lsf/lsf-api/log/celery.worker3.log -n worker3%h  &
 worker3_pid=$!
-celery -A celery_worker worker -l info --logfile /srv/prod/lsf/lsf-api/log/celery.worker4.log -n worke4%h  &
+celery -A celery_worker:diskpulse_app worker -l info --logfile /srv/prod/lsf/lsf-api/log/celery.worker4.log -n worke4%h  &
 worker4_pid=$!
 
 # 定义停止所有进程的函数

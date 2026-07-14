@@ -13,6 +13,7 @@
 - Celery 依赖声明改为 `celery[redis]`，补齐现有 Redis broker/lock 代码的 transport 依赖。
 - 存储集群新增/编辑表单新增“是否启用”开关，新建默认启用并提交 `is_active` 布尔值。
 - API 调度使用 Uvicorn logger 记录投递开始、成功和失败；Celery worker 记录任务开始，日志不包含设备凭据。
+- Celery 实例及任务装饰器统一使用 `diskpulse_app`，Windows 和 Linux 启动入口显式指定 `celery_worker:diskpulse_app`。
 
 ### 验证状态
 
@@ -23,6 +24,7 @@
 - `.\node_modules\.bin\vitest.cmd run test/unit/components/dialog-function-coverage.test.js --coverage.enabled=false`：通过，`7 passed`。
 - `.\.venv\Scripts\python.exe -m coverage run -m pytest backend\test\test_storage_collection_trigger.py backend\test\test_core_api.py -q`：通过，`10 passed`；目标模块合计覆盖率 `93%`。
 - `npm run build:prod`：通过；仍有既有的 chunk 大于 `500 kB` warning，本次未处理。
+- RED：Celery 应用命名契约因仍定义 `lsf_app` 失败；GREEN：命名契约与采集调度聚焦测试 `4 passed`，`diskpulse_app` 导入和任务注册检查通过。
 
 ### 风险与后续
 

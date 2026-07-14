@@ -130,6 +130,13 @@ User
 
 ## 7. 后台任务
 
+Celery 实例统一命名为 `diskpulse_app`。Windows 开发环境在 `backend/` 目录分别启动 Worker 和 Beat：
+
+```powershell
+celery -A celery_worker:diskpulse_app worker --loglevel=INFO --pool=solo
+celery -A celery_worker:diskpulse_app beat --loglevel=INFO
+```
+
 | 任务 | 入口 | 说明 |
 | --- | --- | --- |
 | 存储采集 | `storages_schedule_fetching_task` | 遍历启用的 `StorageCluster`，执行 `StoragePulseMonitor`。 |

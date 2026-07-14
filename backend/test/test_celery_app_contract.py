@@ -13,6 +13,6 @@ def test_celery_app_is_named_for_diskpulse():
     ]
     source = "\n".join(path.read_text(encoding="utf-8") for path in sources)
 
-    assert "diskpulse_app = Celery(" in source
+    assert 'diskpulse_app = Celery(\n    "diskpulse_app",' in source
     assert "lsf_app" not in source
     assert "-A celery_worker:diskpulse_app" in source

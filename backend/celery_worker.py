@@ -6,14 +6,14 @@ from celery.schedules import crontab
 from appConfig import base_config
 
 redis_ip = base_config.get('redis.host')
-lsf_app = Celery(
-    "resource_worker",
+diskpulse_app = Celery(
+    "diskpulse_app",
     broker=f"redis://{redis_ip}:6379/5",
     backend=f"redis://{redis_ip}:6379/6",
 )
 
 redis_client = redis.StrictRedis(host=redis_ip, port=6379, db=7)
-lsf_app.conf.update(
+diskpulse_app.conf.update(
     timezone='Asia/Shanghai',
     enable_utc=False,
     broker_connection_retry_on_startup=True,
@@ -22,7 +22,7 @@ lsf_app.conf.update(
     task_default_routing_key='cad_manager_routing_key',
     result_expires=600
 )
-lsf_app.conf.beat_schedule = {
+diskpulse_app.conf.beat_schedule = {
     # "hosts_schedule_fetching_task": {
     #     "task": "celery_tasks.tasks.hosts.hosts_schedule_fetching_task",
     #     "schedule": 60.0,

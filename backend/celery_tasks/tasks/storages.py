@@ -6,7 +6,7 @@ from sqlalchemy import select, update
 
 from dependencies import DBSession
 from database import SessionLocal
-from celery_worker import lsf_app
+from celery_worker import diskpulse_app
 from celery_tasks.manager.storageMonitor import SynchronousPathState
 from celery_tasks.manager.remoteFileManager import RemoteFileManager
 from celery.utils.log import get_task_logger
@@ -207,7 +207,7 @@ def run_collection_round(
     }
 
 
-@lsf_app.task(soft_time_limit=120, time_limit=180, expires=60)
+@diskpulse_app.task(soft_time_limit=120, time_limit=180, expires=60)
 def storages_schedule_fetching_task(storage_cluster_id=None):
     try:
         logger.info(
@@ -242,7 +242,7 @@ def storages_schedule_fetching_task(storage_cluster_id=None):
         raise
 
 
-@lsf_app.task(soft_time_limit=3000, time_limit=3000, expires=600)
+@diskpulse_app.task(soft_time_limit=3000, time_limit=3000, expires=600)
 def check_user_path_status_hourly():
     try:
         with DBSession() as db:
@@ -252,7 +252,7 @@ def check_user_path_status_hourly():
         logger.error(f"Error in Check user path status :{e}")
 
 
-@lsf_app.task(soft_time_limit=120, time_limit=150, expires=1800)
+@diskpulse_app.task(soft_time_limit=120, time_limit=150, expires=1800)
 def user_storage_usage_alert_hourly():
     with DBSession() as db:
         now = datetime.now()
@@ -264,7 +264,7 @@ def user_storage_usage_alert_hourly():
             storage_alert.user_alarm_hourly(threshold=95, end_time=datetime.now() - timedelta(minutes=3))
 
 
-@lsf_app.task(soft_time_limit=300, time_limit=330, expires=1800)
+@diskpulse_app.task(soft_time_limit=300, time_limit=330, expires=1800)
 def group_storage_usage_alert_hourly():
     with DBSession() as db:
         now = datetime.now()
@@ -278,21 +278,21 @@ def group_storage_usage_alert_hourly():
             storage_alert.group_alarm_daily(threshold=95, end_time=datetime.now() - timedelta(minutes=3))
 
 
-@lsf_app.task(soft_time_limit=300, time_limit=330)
+@diskpulse_app.task(soft_time_limit=300, time_limit=330)
 def project_storage_usage_report_weekly():
     with DBSession() as db:
         storage_alert = StorageAlert(db, logger)
         storage_alert.project_alarm_weekly()
 
 
-@lsf_app.task(soft_time_limit=300, time_limit=330)
+@diskpulse_app.task(soft_time_limit=300, time_limit=330)
 def group_quit_user_storage_usage_alert_weekly():
     with DBSession() as db:
         storage_alert = StorageAlert(db, logger)
         storage_alert.group_quit_user_alarm_weekly()
 
 
-@lsf_app.task()
+@diskpulse_app.task()
 def quit_user_back_up_daily():
     with DBSession() as db:
         remote_file_manager = RemoteFileManager(db=db, logger=logger)
