@@ -788,3 +788,19 @@ npm test -- --coverage.enabled=false
 
 - 该历史记录中的全局 `storage.tls_verify` 已被逐集群字段取代；`tls_verify=false` 的 HTTPS 集群仍会输出预期的 `InsecureRequestWarning`。
 - Celery worker 需重启后才能加载本次客户端修改。
+## 2026-07-15：统一存储集群分析页筛选与图表布局
+
+### 已完成
+
+- 将时间范围和导出操作移入分析页签内容区，四个子页签始终保留同一筛选入口。
+- 时间范围字段扩宽并补全日期时间占位文案，避免输入内容被截断。
+- 容量趋势与存储分布主图统一为 `520px`；存储分布复用 Element Plus 全局加载遮罩。
+- 存储分布页签只提供完整报告导出，避免发送后端不支持的当前分布导出类型。
+
+### 验证状态
+
+- `cd frontend && npx vitest run test/unit/pages/storage-cluster-health-analytics.test.js --coverage.enabled=false`：通过，`9 passed`。
+
+### 风险
+
+- 尚未在连接真实后端数据的部署环境复验图表内容和导出下载；本轮聚焦验证页面结构、交互调用和构建结果。

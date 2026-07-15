@@ -216,65 +216,65 @@ onBeforeMount(() => {
 
 <template>
   <div class="storage-health-page flex flex-col flex-1 min-h-0">
-    <FilterForm
-      v-if="clusterId && activeTab !== 'distribution'"
-      @query="loadActiveTab(true)"
-      @reset="resetRange">
-      <ElFormItem
-        label="时间范围"
-        class="analytics-date-range">
-        <ElDatePicker
-          v-model="dateRange"
-          type="datetimerange"
-          range-separator="至"
-          format="YYYY-MM-DD HH:mm:ss"
-          value-format="YYYY-MM-DD HH:mm:ss"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          :shortcuts="shortcuts" />
-      </ElFormItem>
-      <template #actions>
-        <ElDropdown @command="handleExport">
-          <ElButton type="primary">导出报告</ElButton>
-          <template #dropdown>
-            <ElDropdownMenu>
-              <template v-if="activeTab !== 'faults'">
-                <ElDropdownItem command="current:csv">当前页 CSV</ElDropdownItem>
-                <ElDropdownItem command="current:excel">当前页 Excel</ElDropdownItem>
-                <ElDropdownItem command="current:pdf">当前页 PDF</ElDropdownItem>
-              </template>
-              <template v-else>
-                <ElDropdownItem command="severity:csv">错误级别 CSV</ElDropdownItem>
-                <ElDropdownItem command="severity:excel">错误级别 Excel</ElDropdownItem>
-                <ElDropdownItem command="severity:pdf">错误级别 PDF</ElDropdownItem>
-                <ElDropdownItem command="faults:csv">重复故障 CSV</ElDropdownItem>
-                <ElDropdownItem command="faults:excel">重复故障 Excel</ElDropdownItem>
-                <ElDropdownItem command="faults:pdf">重复故障 PDF</ElDropdownItem>
-              </template>
-              <ElDropdownItem
-                divided
-                command="all:csv">完整报告 CSV</ElDropdownItem>
-              <ElDropdownItem command="all:excel">完整报告 Excel</ElDropdownItem>
-              <ElDropdownItem command="all:pdf">完整报告 PDF</ElDropdownItem>
-            </ElDropdownMenu>
-          </template>
-        </ElDropdown>
-      </template>
-    </FilterForm>
-
     <ElCard
       v-if="clusterId"
       class="mt-2.5 flex-auto min-h-0">
       <ElTabs
         v-model="activeTab"
         class="h-full">
+        <FilterForm
+          class="storage-health-filter"
+          @query="loadActiveTab(true)"
+          @reset="resetRange">
+          <ElFormItem
+            label="时间范围"
+            class="analytics-date-range query-form-field--wide">
+            <ElDatePicker
+              v-model="dateRange"
+              type="datetimerange"
+              range-separator="至"
+              format="YYYY-MM-DD HH:mm:ss"
+              value-format="YYYY-MM-DD HH:mm:ss"
+              start-placeholder="开始日期时间"
+              end-placeholder="结束日期时间"
+              :shortcuts="shortcuts" />
+          </ElFormItem>
+          <template #actions>
+            <ElDropdown @command="handleExport">
+              <ElButton type="primary">导出报告</ElButton>
+              <template #dropdown>
+                <ElDropdownMenu>
+                  <template v-if="activeTab === 'capacity' || activeTab === 'performance'">
+                    <ElDropdownItem command="current:csv">当前页 CSV</ElDropdownItem>
+                    <ElDropdownItem command="current:excel">当前页 Excel</ElDropdownItem>
+                    <ElDropdownItem command="current:pdf">当前页 PDF</ElDropdownItem>
+                  </template>
+                  <template v-else-if="activeTab === 'faults'">
+                    <ElDropdownItem command="severity:csv">错误级别 CSV</ElDropdownItem>
+                    <ElDropdownItem command="severity:excel">错误级别 Excel</ElDropdownItem>
+                    <ElDropdownItem command="severity:pdf">错误级别 PDF</ElDropdownItem>
+                    <ElDropdownItem command="faults:csv">重复故障 CSV</ElDropdownItem>
+                    <ElDropdownItem command="faults:excel">重复故障 Excel</ElDropdownItem>
+                    <ElDropdownItem command="faults:pdf">重复故障 PDF</ElDropdownItem>
+                  </template>
+                  <ElDropdownItem
+                    divided
+                    command="all:csv">完整报告 CSV</ElDropdownItem>
+                  <ElDropdownItem command="all:excel">完整报告 Excel</ElDropdownItem>
+                  <ElDropdownItem command="all:pdf">完整报告 PDF</ElDropdownItem>
+                </ElDropdownMenu>
+              </template>
+            </ElDropdown>
+          </template>
+        </FilterForm>
+
         <ElTabPane
           label="容量趋势"
           name="capacity">
           <LoadingCharts
             v-if="loading.capacity"
             width="100%"
-            height="360px" />
+            height="520px" />
           <div
             v-else-if="!capacityData.length"
             class="analytics-empty">暂无容量数据</div>
@@ -291,7 +291,7 @@ onBeforeMount(() => {
               :data="capacityChartData"
               title="已使用容量变化"
               width="100%"
-              height="360px"
+              height="520px"
               :show-stats="true"
               y-axis-unit="G"
               :legend-name="infoResult.name" />
@@ -301,19 +301,20 @@ onBeforeMount(() => {
         <ElTabPane
           label="存储分布"
           name="distribution">
-          <LoadingCharts
-            v-if="distributionLoading"
-            width="100%"
-            height="420px" />
           <div
-            v-else-if="!storageDistribution.data?.length"
-            class="analytics-empty">暂无存储分布数据</div>
-          <DiskUsage
-            v-else
-            :data="storageDistribution.data"
-            title=""
-            width="100%"
-            height="420px" />
+            v-loading="distributionLoading"
+            class="analytics-chart-stage"
+            :aria-busy="distributionLoading">
+            <div
+              v-if="!distributionLoading && !storageDistribution.data?.length"
+              class="analytics-empty">暂无存储分布数据</div>
+            <DiskUsage
+              v-else-if="storageDistribution.data?.length"
+              :data="storageDistribution.data"
+              title=""
+              width="100%"
+              height="520px" />
+          </div>
         </ElTabPane>
 
         <ElTabPane
@@ -449,12 +450,24 @@ onBeforeMount(() => {
   overflow-x: hidden;
 }
 
-.analytics-date-range {
+.storage-health-filter {
+  margin-bottom: var(--spacing-md);
+}
+
+:deep(.analytics-date-range.query-form-field--wide) {
+  flex-basis: 480px;
+  width: 480px;
   min-width: 0;
+  max-width: 100%;
 }
 
 :deep(.analytics-date-range .el-date-editor) {
-  width: min(440px, 100%);
+  width: 100%;
+}
+
+.analytics-chart-stage {
+  min-height: 520px;
+  position: relative;
 }
 
 .analytics-empty {

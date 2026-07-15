@@ -107,6 +107,9 @@ async function mountPage() {
   const wrapper = shallowMount(StorageClusterDetailPage, {
     attachTo: document.body,
     global: {
+      directives: {
+        loading: () => {},
+      },
       stubs: {
         FilterForm,
         StorageClusterSelect: passthrough('StorageClusterSelect'),
