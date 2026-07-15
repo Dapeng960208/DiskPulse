@@ -134,6 +134,93 @@ def test_severity_summary_normalizes_and_merges_alert_sources():
     }
 
 
+def test_alert_crud_converts_aware_utc_bounds_to_system_local_naive():
+    assert storageHealthAnalyticsCrud._naive(
+        datetime(2026, 7, 15, 2, 0, tzinfo=timezone.utc)
+    ) == datetime(2026, 7, 15, 10, 0)
+    assert storageHealthAnalyticsCrud._naive(
+        datetime(2026, 7, 15, 10, 0)
+    ) == datetime(2026, 7, 15, 10, 0)
+
+
+def test_local_alert_window_matches_vendor_and_diskpulse_events(db_session):
+    db_session.add(
+        models.StorageCluster(
+            id=9,
+            name="cluster-nine",
+            storage_type="netapp",
+            storage_host="storage.local",
+            is_active=True,
+        )
+    )
+    db_session.add_all(
+        [
+            models.StorageAlerts(
+                storage_cluster_id=9,
+                source="netapp",
+                external_event_id="vendor-1",
+                severity="error",
+                alert_level="error",
+                updated_at=datetime(2026, 7, 15, 10, 15),
+            ),
+            models.StorageAlerts(
+                storage_cluster_id=9,
+                source="diskpulse",
+                external_event_id="diskpulse-1",
+                severity="warning",
+                alert_level="medium",
+                updated_at=datetime(2026, 7, 15, 10, 30),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    rows = storageHealthAnalyticsCrud.get_alert_severities(
+        db_session,
+        9,
+        datetime(2026, 7, 15, 2, 0, tzinfo=timezone.utc),
+        datetime(2026, 7, 15, 3, 0, tzinfo=timezone.utc),
+    )
+
+    assert {(row["source"], row["severity"]) for row in rows} == {
+        ("netapp", "error"),
+        ("diskpulse", "warning"),
+    }
+
+
+def test_error_severity_crud_allows_only_supported_sources(db_session):
+    db_session.add(
+        models.StorageCluster(
+            id=10,
+            name="cluster-ten",
+            storage_type="isilon",
+            storage_host="storage.local",
+            is_active=True,
+        )
+    )
+    for index, source in enumerate(("diskpulse", "netapp", "isilon", "custom"), start=1):
+        db_session.add(
+            models.StorageAlerts(
+                storage_cluster_id=10,
+                source=source,
+                external_event_id=f"severity-{index}",
+                severity="error",
+                alert_level="error",
+                updated_at=datetime(2026, 7, 15, 10, index),
+            )
+        )
+    db_session.commit()
+
+    rows = storageHealthAnalyticsCrud.get_alert_severities(
+        db_session,
+        10,
+        datetime(2026, 7, 15, 10, 0),
+        datetime(2026, 7, 15, 11, 0),
+    )
+
+    assert {row["source"] for row in rows} == {"diskpulse", "netapp", "isilon"}
+
+
 def test_top_latency_ranks_by_p95_and_applies_limit():
     rows = [
         {
@@ -475,6 +562,38 @@ def test_excel_export_escapes_formula_prefixes(prefix):
     assert workbook["faults"]["A2"].value == f"'{untrusted}"
 
 
+@pytest.mark.parametrize(
+    "untrusted",
+    ["  =malicious", "\t+malicious", "\r-malicious", "\n@malicious"],
+)
+def test_csv_export_escapes_formula_after_leading_whitespace(untrusted):
+    rows = list(
+        csv.DictReader(
+            io.StringIO(
+                _analytics()._csv_bytes([{"object_name": untrusted}]).decode("utf-8-sig")
+            )
+        )
+    )
+
+    assert rows[0]["object_name"] == f"'{untrusted}"
+
+
+@pytest.mark.parametrize(
+    "untrusted",
+    ["  =malicious", "\t+malicious", "\r-malicious", "\n@malicious"],
+)
+def test_excel_export_escapes_formula_after_leading_whitespace(untrusted):
+    content = _analytics()._excel_bytes(
+        ["faults"],
+        {"faults": {"data": [{"object_name": untrusted}]}},
+    )
+
+    workbook = load_workbook(io.BytesIO(content), data_only=False)
+
+    expected = ("'" + untrusted).replace("\r", "\n")
+    assert workbook["faults"]["A2"].value == expected
+
+
 def test_netapp_client_exposes_ems_and_volume_metrics_contracts():
     client = object.__new__(NetAppClient)
     client._get_all_records = Mock(side_effect=[[{"index": 7}], [{"uuid": "volume-1"}]])
@@ -547,6 +666,33 @@ def test_isilon_statistics_discovery_falls_back_to_node_latency_key():
     assert client._get.call_args_list[1].kwargs["params"]["keys"] == "ifs.node.latency"
 
 
+def test_isilon_statistics_passes_key_unit_metadata_to_current_rows():
+    client = object.__new__(IsilonClient)
+    client.api_version = "16"
+    client._get = Mock(
+        side_effect=[
+            {
+                "keys": [
+                    {"key": "ifs.workload.latency", "units": "microseconds"}
+                ]
+            },
+            {
+                "stats": [
+                    {
+                        "key": "ifs.workload.latency",
+                        "workload": "workload-1",
+                        "value": 2500,
+                    }
+                ]
+            },
+        ]
+    )
+
+    rows = client.get_performance_statistics()
+
+    assert rows[0]["unit"] == "microseconds"
+
+
 def test_isilon_latency_rows_use_returned_workload_dimension_not_key_guessing():
     storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
 
@@ -557,12 +703,14 @@ def test_isilon_latency_rows_use_returned_workload_dimension_not_key_guessing():
                 "key": "ifs.ops.latency",
                 "workload": "workload-1",
                 "value": 3.5,
+                "unit": "milliseconds",
                 "timestamp": "2026-07-15T10:00:00Z",
             },
             {
                 "key": "ifs.node.latency",
                 "devid": 2,
                 "value": 2.5,
+                "unit": "milliseconds",
                 "timestamp": "2026-07-15T10:00:00Z",
             },
         ],
@@ -572,6 +720,58 @@ def test_isilon_latency_rows_use_returned_workload_dimension_not_key_guessing():
     assert [(row["object_type"], row["object_id"]) for row in rows] == [
         ("workload", "workload-1")
     ]
+
+
+@pytest.mark.parametrize(
+    ("unit", "expected"),
+    [
+        ("microseconds", 2.5),
+        ("us", 2.5),
+        ("usec", 2.5),
+        ("milliseconds", 2500.0),
+        ("ms", 2500.0),
+    ],
+)
+def test_isilon_latency_rows_convert_only_known_units(unit, expected):
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+
+    rows = storage_health._isilon_performance_rows(
+        7,
+        [
+            {
+                "key": "ifs.workload.latency",
+                "workload": "workload-1",
+                "value": 2500,
+                "unit": unit,
+                "timestamp": "2026-07-15T10:00:00Z",
+            }
+        ],
+        datetime(2026, 7, 15, 10, 0),
+    )
+
+    assert rows[0]["latency_total"] == expected
+    assert rows[0]["object_type"] == "workload"
+
+
+@pytest.mark.parametrize("unit", [None, "", "seconds"])
+def test_isilon_latency_rows_skip_missing_or_unknown_units(unit):
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+
+    rows = storage_health._isilon_performance_rows(
+        7,
+        [
+            {
+                "key": "ifs.node.latency",
+                "devid": 2,
+                "value": 2.5,
+                "unit": unit,
+                "timestamp": "2026-07-15T10:00:00Z",
+            }
+        ],
+        datetime(2026, 7, 15, 10, 0),
+    )
+
+    assert rows == []
 
 
 def test_storage_alert_model_and_postgres_migration_contract():
@@ -755,6 +955,12 @@ def test_storage_event_window_uses_24_hours_then_five_minute_overlap():
     ) == datetime(2026, 7, 15, 11, 25, 0)
 
 
+def test_netapp_since_converts_system_local_naive_to_utc_z():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+
+    assert storage_health._utc_z(datetime(2026, 7, 15, 10, 0)) == "2026-07-15T02:00:00Z"
+
+
 def test_netapp_first_event_collection_converts_local_now_to_utc_z(monkeypatch):
     storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
     client = Mock()
@@ -815,7 +1021,7 @@ def test_netapp_first_event_collection_converts_local_now_to_utc_z(monkeypatch):
     client.get_ems_events.assert_called_once_with("2026-07-14T02:00:00Z")
 
 
-def test_vendor_event_offset_timestamp_is_converted_to_utc_naive():
+def test_vendor_event_offset_timestamp_is_converted_to_system_local_naive():
     storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
     rows = storage_health.normalize_vendor_events(
         7,
@@ -830,7 +1036,7 @@ def test_vendor_event_offset_timestamp_is_converted_to_utc_naive():
         ],
     )
 
-    assert rows[0]["updated_at"] == datetime(2026, 7, 15, 2, 0, 0)
+    assert rows[0]["updated_at"] == datetime(2026, 7, 15, 10, 0, 0)
 
 
 def test_vendor_event_parser_normalizes_identity_severity_and_fingerprint():
