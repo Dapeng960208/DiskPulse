@@ -109,10 +109,11 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
 
 .query-form__fields,
 .query-form__advanced {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(220px, calc((100% - 4 * var(--spacing-md)) / 5))), 1fr));
   align-items: flex-end;
   gap: var(--spacing-md);
-  flex-wrap: wrap;
+  width: 100%;
 }
 
 .query-form__fields {
@@ -152,26 +153,24 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
 
 :deep(.el-form-item) {
   display: flex;
-  flex: 0 1 232px;
   flex-direction: column;
   align-items: stretch;
-  width: 232px;
-  min-width: 220px;
+  width: 100%;
+  min-width: 0;
   margin: 0;
 
-  &.query-form-field--wide {
-    flex-basis: 340px;
-    width: 340px;
-    max-width: 420px;
-  }
-
   .el-form-item__label {
+    justify-content: flex-start;
+    text-align: left;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
     width: auto !important;
     height: 22px;
     padding: 0;
-    color: var(--text-secondary);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
     line-height: 22px;
     white-space: nowrap;
   }
@@ -245,13 +244,6 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
   .query-form__advanced {
     flex: 1 1 100%;
   }
-
-  :deep(.el-form-item),
-  :deep(.el-form-item.query-form-field--wide) {
-    flex: 1 1 calc(50% - var(--spacing-md));
-    width: auto;
-    max-width: none;
-  }
 }
 
 @include mobile {
@@ -270,12 +262,9 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
     flex-basis: 100%;
   }
 
-  :deep(.el-form-item),
-  :deep(.el-form-item.query-form-field--wide) {
-    flex: 1 1 100%;
+  :deep(.el-form-item) {
     width: 100%;
     min-width: 0;
-    max-width: none;
   }
 
   .query-form__actions {
@@ -284,7 +273,7 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
     flex-wrap: wrap;
 
     :deep(.el-button) {
-      flex: 1 1 calc(50% - var(--spacing-sm));
+      flex: 1 1 100%;
       min-width: 0;
     }
   }
