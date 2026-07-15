@@ -100,11 +100,14 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
   box-shadow: var(--shadow-sm);
 }
 
+.query-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  column-gap: var(--spacing-lg);
+}
+
 .query-form__toolbar {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--spacing-md) var(--spacing-lg);
-  flex-wrap: wrap;
+  display: contents;
 }
 
 .query-form__fields,
@@ -117,11 +120,12 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
 }
 
 .query-form__fields {
-  flex: 1 1 620px;
+  grid-column: 1;
   min-width: 0;
 }
 
 .query-form__advanced {
+  grid-column: 1;
   margin-top: var(--spacing-md);
   padding-top: var(--spacing-md);
   border-top: 1px solid var(--border-light);
@@ -129,7 +133,9 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
 
 .query-form__actions {
   display: flex;
+  grid-column: 2;
   align-items: center;
+  align-self: end;
   justify-content: flex-end;
   gap: var(--spacing-sm);
   flex: 0 0 auto;
@@ -138,6 +144,7 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
 
 .query-form__active-filters {
   display: flex;
+  grid-column: 1 / -1;
   align-items: center;
   gap: var(--spacing-sm);
   flex-wrap: wrap;
@@ -240,9 +247,13 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {
-  .query-form__fields,
-  .query-form__advanced {
-    flex: 1 1 100%;
+  .query-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .query-form__actions {
+    grid-column: 1;
+    margin-top: var(--spacing-md);
   }
 }
 
@@ -251,15 +262,8 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
     padding: var(--spacing-md);
   }
 
-  .query-form__toolbar,
-  .query-form__fields,
-  .query-form__advanced {
-    width: 100%;
-  }
-
-  .query-form__fields,
-  .query-form__advanced {
-    flex-basis: 100%;
+  .query-form {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   :deep(.el-form-item) {
@@ -268,7 +272,9 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
   }
 
   .query-form__actions {
+    grid-column: 1;
     width: 100%;
+    margin-top: var(--spacing-md);
     margin-left: 0;
     flex-wrap: wrap;
 
