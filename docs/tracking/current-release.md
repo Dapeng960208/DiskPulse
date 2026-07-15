@@ -1,5 +1,31 @@
 # 当前交付记录
 
+## 2026-07-15：存储集群健康分析与报表导出
+
+### 已完成
+
+- 已扩展 NetApp/Isilon 客户端与独立 Celery 采集任务，按分钟采集设备事件、每 5 分钟采集性能指标；现有容量采集链路保持不变。
+- `storage_alerts` 已补充集群、来源、厂商事件 ID、故障指纹和标准严重级别；QuestDB 已增加保留 180 天的 `storage_performance_metrics`。
+- 已增加容量变化、严重级别统计、Top 10 高延迟、重复故障和统一导出接口，并接入存储集群详情页的“容量趋势”“性能分析”“故障分析”页签。
+- 页面共用时间范围并按页签懒加载；当前板块和完整报告支持 CSV、Excel、PDF，完整 CSV 以 ZIP 返回。
+- 报告按需生成，不新增报告归档、定时邮件或权限体系。
+
+### 验证状态
+
+- TDD RED checkpoints：`e465ab9`、`4c7b7bc`、`188e5c9`、`d8c011f`、`d4c88ad`，依次锁定基础分析契约、采集器、事件去重与延迟单位、验证缺口和导出边界。
+- GREEN：存储健康聚焦测试为 `79 passed`；后端完整回归为 `253 passed`，`compileall` 和 `pip check` 通过。
+- 前端完整回归为 `37` 个测试文件、`177 passed`；`npm run build:prod` 通过，存储健康相关 targeted ESLint 为 `0 errors`。
+- Alembic 唯一 head 为 `000000000004`，history 为 `000000000004 -> 000000000003 -> 000000000002 -> 000000000001`；MySQL、PostgreSQL offline SQL 生成通过。
+- PDF 无 logo 冒烟通过，验证报告生成不依赖 logo 文件。
+- 未连接真实 NetApp、PowerScale、PostgreSQL、MySQL、QuestDB 或登录浏览器；自动化测试、offline SQL 和本地 PDF 冒烟不能替代部署环境验证。
+
+### 风险与边界
+
+- PowerScale 需通过 `/platform/latest` 发现资源版本；workload 延迟不可用时降级到节点，完全没有延迟指标时返回不支持且不写入虚构零值。
+- 性能历史从功能启用后开始累计，不回灌设备历史；查询和导出最多 180 天。
+- 无法唯一归属存储集群的既有项目级容量告警不进入集群错误统计；重复故障仅统计 NetApp/Isilon 设备事件。
+- 真实环境仍需确认设备权限、统计键及单位、事件字段、QuestDB TTL、数据库迁移和浏览器下载行为。
+
 ## 2026-07-15：AI 助手与 AI 中心
 
 ### 已完成

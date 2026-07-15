@@ -52,10 +52,12 @@ curl -X POST "http://localhost:8000/storage-pulse/api/storage-clusters" \
 | [resource-mapping.md](./resource-mapping.md) | NetApp/Isilon 统一术语、采集映射、前端文案和项目组绑定实现。 |
 | [migration.md](./migration.md) | PostgreSQL baseline 与 QuestDB 前向 revision 管理。 |
 | [api-examples.md](./api-examples.md) | 集群 CRUD、实时查询和按集群过滤的 API 示例。 |
+| [health-analytics.md](./health-analytics.md) | 容量变化、错误级别、高延迟、重复故障和报表导出。 |
 
 ## 维护边界
 
 - 当前后端实际字段以 `backend/schemas/storageClusterSchema.py` 和 `backend/models.py` 为准。
 - 新增或删除集群字段时，需要同步 `StoragePulseMonitor`、相关 CRUD、前端表单和本文档。
 - `protocol` 只允许 `http` 或 `https`；`tls_verify` 仅对 HTTPS 生效。新建集群默认 `https/true`，已有集群由迁移回填为 `https/false`。
-- PostgreSQL 从空库依次执行 root baseline `000000000001` 和当前 head `000000000002`；使用已删除旧 revision 链的数据库不支持伪造版本接续。QuestDB 使用独立前向 revision 和 checksum 账本，当前 head 为 `000000000002`。
+- PostgreSQL 从空库依次执行 root baseline `000000000001`、集群传输配置 `000000000002`、AI 中心 `000000000003` 和存储健康分析 `000000000004`；当前 head 为 `000000000004`，AI `000000000003` 后必须继续执行存储健康 `000000000004`。使用已删除旧 revision 链的数据库不支持伪造版本接续。
+- QuestDB 使用独立前向 revision 和 checksum 账本，存储性能表由 `000000000003_storage_performance_metrics.sql` 创建，当前 head 为 `000000000003`。
