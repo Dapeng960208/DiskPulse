@@ -1,5 +1,14 @@
 # 当前交付记录
 
+## 2026-07-15：认证 token 接入 Redis 会话缓存
+
+- JWT 默认有效期从 60 分钟调整为 `10080` 分钟（7 天），Redis token key 使用相同 TTL。
+- 登录写入 `diskpulse:auth:token:<jti>`，value 为 JWT SHA-256 摘要；鉴权要求签名、到期时间和 Redis 白名单同时有效，登出删除对应 key。
+- Redis 连接失败时登录/鉴权 fail-closed 返回 `503`；当前配置的 Redis DB 7 已通过 `PING` 检查。
+- TDD RED：`4 failed, 6 passed`；GREEN：同一聚焦认证测试 `10 passed`，认证/安全/核心接口组合测试 `53 passed`，后端全量 `262 passed`。
+- `backend/utils/security.py` 分支覆盖率 `84%`；`compileall`、`pip check` 通过。真实 Redis 临时 token TTL 为 `604800` 秒，删除会话后同一 token 返回 `401`。
+- 本地 `backend/config.yml` 已调整为 7 天；部署后需重启后端并重新登录一次，旧 token 因没有 Redis 白名单记录不会自动迁移。
+
 ## 2026-07-15：存储健康独立入口与系统事件分流
 
 - 新增一级菜单“存储健康”，复用既有分析页面并增加集群选择；系统管理中的集群详情入口保持不变。

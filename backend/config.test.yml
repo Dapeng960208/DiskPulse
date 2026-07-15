@@ -37,7 +37,7 @@ ai:
 
 jwt:
   secret_key: test-secret
-  access_ttl_minutes: 60
+  access_ttl_minutes: 10080
 
 ldap:
   uri: ldap://dc.example.com

@@ -62,11 +62,11 @@ FastAPI: backend/main.py
 | `application` | 运行模式、公司名称和 CORS 来源 |
 | `database.postgres` | PostgreSQL 连接和连接池 |
 | `database.questdb` | QuestDB 连接和连接池 |
-| `redis` | Celery broker/backend 地址 |
+| `redis` | Celery broker/backend、认证会话、AI 限流和任务锁 |
 | `jwt`、`ldap`、`super_admin_usernames` | 登录、令牌和超级管理员 |
 | `storage` | Isilon 会话缓存等存储客户端运行开关；不保存设备协议或 TLS 校验配置 |
 
-真实 `backend/config.yml` 和 LDAP 密码文件不得提交；仓库只保留 `backend/config.example.yml` 与无敏感值的 `backend/config.test.yml`。相对密码文件路径以 YAML 所在目录为基准，PostgreSQL 和 QuestDB URL 由加载器集中生成并转义凭据。AI Provider Key 由独立的 `ai.config_secret_key` 加密，聊天限流复用 `redis.host` 和 `redis.port` 并固定使用 DB 7。
+真实 `backend/config.yml` 和 LDAP 密码文件不得提交；仓库只保留 `backend/config.example.yml` 与无敏感值的 `backend/config.test.yml`。相对密码文件路径以 YAML 所在目录为基准，PostgreSQL 和 QuestDB URL 由加载器集中生成并转义凭据。AI Provider Key 由独立的 `ai.config_secret_key` 加密；聊天限流和认证会话复用 `redis.host`、`redis.port` 并固定使用 DB 7，认证会话 key 使用 `diskpulse:auth:*` 命名空间。
 
 设备访问协议和 TLS 证书校验分别保存在 `storage_clusters.protocol`、`storage_clusters.tls_verify`，由每个集群独立配置。新建集群默认 `https/true`；迁移前已有集群回填为 `https/false`，保持原连接行为。HTTP 下 TLS 校验不适用，设备凭据会以明文传输，只应在可信隔离网络中使用。存储 API 连接或请求失败会中止并回滚当前集群采集，避免将失败误判为空数据。
 

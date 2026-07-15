@@ -53,9 +53,7 @@ def token_redis(monkeypatch):
 @pytest.fixture(autouse=True)
 def reset_runtime_config():
     base_config.load(TEST_CONFIG_PATH)
-    security._REVOKED_TOKEN_IDS.clear()
     yield
-    security._REVOKED_TOKEN_IDS.clear()
 
 
 @pytest.fixture

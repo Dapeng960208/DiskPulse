@@ -40,7 +40,7 @@ ai:
 
 jwt:
   secret_key: change-me-with-a-random-secret
-  access_ttl_minutes: 60
+  access_ttl_minutes: 10080
 
 ldap:
   uri: ldap://dc.example.com
