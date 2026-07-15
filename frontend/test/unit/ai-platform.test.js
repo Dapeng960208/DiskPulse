@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import routes from '@/router/routes';
+import { describe, expect, it, vi } from 'vitest';
 import { parseSseBlock } from '@/api/ai-api';
 import { renderAiMarkdown } from '@/services/ai-markdown';
 
+vi.mock('@/layouts/AppLayout.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('@/utils/authorization', () => ({
+  getToken: () => 'token',
+  hasRole: () => false,
+}));
+
+const { default: routes } = await import('@/router/routes');
 
 describe('AI platform contracts', () => {
   it('exposes AI chat to authenticated users and AI center to super admins', () => {

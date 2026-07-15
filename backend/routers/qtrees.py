@@ -25,7 +25,7 @@ def create_qtree(
     return qtreeCrud.create_qtree(db=db, qtree=qtree)
 
 
-@router.get("/", response_model=commonSchema.ResponseModel)
+@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_qtrees", "ai_description": "分页查询 Qtree"})
 def read_qtrees(page: int, size: int, nameLike: str | None = None, prop: str | None = None,
                 order: str | None = None, volume_id: int | None = None, storage_cluster_id: int | None = None,
                 db: Session = Depends(get_db)):
@@ -34,7 +34,7 @@ def read_qtrees(page: int, size: int, nameLike: str | None = None, prop: str | N
     return commonSchema.ResponseModel[qtreeSchema.Qtree](content=qtrees, total=total)
 
 
-@router.get("/{qtree_id}", response_model=qtreeSchema.Qtree)
+@router.get("/{qtree_id}", response_model=qtreeSchema.Qtree, openapi_extra={"ai_exposed": True, "ai_name": "get_qtree", "ai_description": "查询指定 Qtree"})
 def read_qtree(qtree_id: int, db: Session = Depends(get_db)):
     db_qtree = qtreeCrud.get_qtree_by_id(db, qtree_id=qtree_id)
     if db_qtree is None:
@@ -42,7 +42,7 @@ def read_qtree(qtree_id: int, db: Session = Depends(get_db)):
     return db_qtree
 
 
-@router.get("/{qtree_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel)
+@router.get("/{qtree_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_qtree_realtime", "ai_description": "查询 Qtree 实时容量趋势"})
 def read_qtree_realtime_data(qtree_id: int, start_time: datetime | None = None,
                              end_time: datetime | None = None,
                              indicator: str = 'used', db: Session = Depends(get_db)):

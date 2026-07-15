@@ -23,7 +23,7 @@ def create_aggregate(
     return aggregateCrud.create_aggregate(db=db, aggregate=aggregate)
 
 
-@router.get("/", response_model=commonSchema.ResponseModel)
+@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_aggregates", "ai_description": "分页查询容量池"})
 def read_aggregates(page: int | None = 1, size: int | None = 20, nameLike: str | None = None, prop: str | None = None,
                     order: str | None = None, storage_cluster_id: int | None = None, db: Session = Depends(get_db)):
     aggregates, total = aggregateCrud.get_aggregates(db=db, page=page, size=size, nameLike=nameLike, prop=prop,
@@ -31,7 +31,7 @@ def read_aggregates(page: int | None = 1, size: int | None = 20, nameLike: str |
     return commonSchema.ResponseModel[aggregateSchema.Aggregate](content=aggregates, total=total)
 
 
-@router.get("/{aggregate_id}", response_model=aggregateSchema.Aggregate)
+@router.get("/{aggregate_id}", response_model=aggregateSchema.Aggregate, openapi_extra={"ai_exposed": True, "ai_name": "get_aggregate", "ai_description": "查询指定容量池"})
 def read_aggregate(aggregate_id: int, db: Session = Depends(get_db)):
     db_aggregate = aggregateCrud.get_aggregate_by_id(db, aggregate_id=aggregate_id)
     if db_aggregate is None:
@@ -39,7 +39,7 @@ def read_aggregate(aggregate_id: int, db: Session = Depends(get_db)):
     return db_aggregate
 
 
-@router.get("/{aggregate_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel)
+@router.get("/{aggregate_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_aggregate_realtime", "ai_description": "查询容量池实时容量趋势"})
 def read_aggregate_realtime_data(aggregate_id: int, start_time: datetime | None = None,
                                  end_time: datetime | None = None,
                                  indicator: str = 'used', db: Session = Depends(get_db)):
@@ -79,7 +79,7 @@ def delete_aggregate(
     return aggregateCrud.delete_aggregate(db=db, aggregate_id=aggregate_id)
 
 
-@router.get('/storage-trees/', response_model=commonSchema.ResponseResourceModel)
+@router.get('/storage-trees/', response_model=commonSchema.ResponseResourceModel, openapi_extra={"ai_exposed": True, "ai_name": "list_aggregate_storage_trees", "ai_description": "查询容量池存储树"})
 def get_aggregate_storage_trees(
     value_type: str = 'limit',
     storage_cluster_id: Annotated[int | None, Query(ge=1)] = None,
@@ -93,7 +93,7 @@ def get_aggregate_storage_trees(
     return commonSchema.ResponseResourceModel(data=tree)
 
 
-@router.get('/{aggregate_id}/storage-tree', response_model=commonSchema.ResponseResourceModel)
+@router.get('/{aggregate_id}/storage-tree', response_model=commonSchema.ResponseResourceModel, openapi_extra={"ai_exposed": True, "ai_name": "get_aggregate_storage_tree", "ai_description": "查询指定容量池存储树"})
 def get_aggregate_storage_tree_by_id(aggregate_id: int, value_type: str = 'used', db: Session = Depends(get_db)):
     db_aggregate = aggregateCrud.get_aggregate_by_id(db, aggregate_id=aggregate_id)
     if db_aggregate is None:

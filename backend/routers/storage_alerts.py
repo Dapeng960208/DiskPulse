@@ -20,7 +20,7 @@ router = APIRouter(
 )
 
 
-@router.get("/", response_model=commonSchema.ResponseModel)
+@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_storage_alerts", "ai_description": "分页查询存储告警"})
 @handle_exceptions
 async def read_storage_alerts(page: int | None = 1, size: int | None = 20, nameLike: str | None = None,
                               prop: str | None = None, alert_type: str | None = None,

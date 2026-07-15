@@ -28,7 +28,7 @@ def create_group(
     return groupCrud.serialize_group(groupCrud.create_group(db=db, group=group))
 
 
-@router.get("/", response_model=commonSchema.ResponseModel)
+@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_groups", "ai_description": "分页查询项目组"})
 def read_groups(page: int | None = 1, size: int | None = 20, nameLike: str | None = None, prop: str | None = None,
                 order: str | None = None, qtree_id: int | None = None,
                 volume_id: int | None = None, project_id: int | None = None,
@@ -45,7 +45,7 @@ def read_groups(page: int | None = 1, size: int | None = 20, nameLike: str | Non
     )
 
 
-@router.get("/{group_id}", response_model=groupSchema.Group)
+@router.get("/{group_id}", response_model=groupSchema.Group, openapi_extra={"ai_exposed": True, "ai_name": "get_group", "ai_description": "查询指定项目组"})
 def read_group(group_id: int, db: Session = Depends(get_db)):
     db_group = groupCrud.get_group_by_id(db, group_id=group_id)
     if db_group is None:
@@ -54,7 +54,7 @@ def read_group(group_id: int, db: Session = Depends(get_db)):
     return groupCrud.serialize_group(db_group)
 
 
-@router.get("/{group_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel)
+@router.get("/{group_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_group_realtime", "ai_description": "查询项目组实时容量趋势"})
 def read_group_realtime_data(group_id: int, start_time: datetime | None = None, end_time: datetime | None = None,
                              indicator: str = 'used', db: Session = Depends(get_db)):
     db_group = groupCrud.get_group_by_id(db, group_id=group_id)

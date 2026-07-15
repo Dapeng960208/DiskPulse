@@ -117,6 +117,16 @@ export default [
           icon: 'i-ri-alarm-warning-line',
         },
       },
+      {
+        path: 'ai/chat',
+        name: 'AIChat',
+        component: () => import('@/pages/ai/AiChatPage.vue'),
+        meta: {
+          title: 'AI 助手',
+          isRoot: true,
+          icon: 'i-ri-sparkling-2-line',
+        },
+      },
     ],
   },
   {
@@ -237,6 +247,25 @@ export default [
         component: () => import('@/pages/admin/settings/SettingsPage.vue'),
         meta: {
           title: '系统设置',
+        },
+      },
+      {
+        path: 'ai-center',
+        name: 'AICenter',
+        component: () => import('@/pages/admin/ai/AiCenterPage.vue'),
+        meta: {
+          title: 'AI 中心',
+          isAccessible: () => hasRole('superadmin') ? 200 : 403,
+        },
+      },
+      {
+        path: 'ai-center/audits/:id',
+        name: 'AIAuditDetail',
+        component: () => import('@/pages/admin/ai/AiAuditDetailPage.vue'),
+        meta: {
+          title: 'AI 审计详情',
+          isHidden: true,
+          isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },
     ],

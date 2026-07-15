@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
+import importlib.util
+import io
 from pathlib import Path
 
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -9,6 +13,8 @@ from appConfig import base_config
 from models import AIConfig, AIConversation, AIAuditLog, AIMessage, User
 from routers import ai, ai_admin
 from services import ai_chat_service
+from services import ai_config_service
+from services.ai_client import AIClientError, AICompletionResult
 from services.ai_client import AICompletionStreamEvent
 from services.ai_rate_limit import enforce_ai_rate_limit
 from services.ai_security import decrypt_secret, encrypt_secret, mask_secret
@@ -119,6 +125,12 @@ def test_dynamic_tool_registry_only_exposes_marked_get_routes():
         "data": {"items": [{"id": 3}], "total": 1, "limit": 20},
     }
     assert execute_tool(app=app, registry=registry, tool_name="hidden", arguments={})["ok"] is False
+    assert execute_tool(
+        app=app,
+        registry=registry,
+        tool_name="get_visible",
+        arguments={"item_id": "not-an-integer"},
+    )["error"] == "工具参数无效"
 
 
 def test_non_super_admin_cannot_manage_ai_models(api_client_factory, db_session):
@@ -162,6 +174,8 @@ def test_chat_stream_persists_messages_and_isolates_conversations(
     assert "event: accepted" in streamed.text
     assert "event: delta" in streamed.text
     assert "event: completed" in streamed.text
+    assert streamed.text.index("event: accepted") < streamed.text.index("event: user_message")
+    assert streamed.text.index("event: user_message") < streamed.text.index("event: delta")
 
     roles = list(
         db_session.scalars(
@@ -173,6 +187,116 @@ def test_chat_stream_persists_messages_and_isolates_conversations(
 
     other_client = api_client_factory([ai.router], headers={"Authorization": f"Bearer {issue_token(2)}"})
     assert other_client.get(f"/storage-pulse/api/ai/conversations/{conversation_id}").status_code == 404
+
+
+def test_super_admin_model_crud_masks_key_and_runs_real_connection_test(
+    api_client_factory,
+    db_session,
+    monkeypatch,
+):
+    base_config.set("ai.config_secret_key", "test-ai-config-secret-key")
+    admin = _seed_user(db_session, rd_username="alice")
+    monkeypatch.setattr(
+        ai_config_service,
+        "chat_completion",
+        lambda *_args, **_kwargs: AICompletionResult(text="OK", tool_calls=[], stop_reason="final"),
+    )
+    client = api_client_factory([ai_admin.router], headers={"Authorization": f"Bearer {issue_token(admin.id)}"})
+
+    created = client.post(
+        "/storage-pulse/api/admin/ai-models",
+        json={
+            "name": "Claude Primary",
+            "provider": "claude",
+            "base_url": "https://ai.example.com",
+            "api_key": "secret-key-1234",
+            "model": "claude-test",
+            "enabled": True,
+            "enable_chat": True,
+        },
+    )
+    assert created.status_code == 201
+    body = created.json()
+    assert body["api_key_masked"] == "secr****1234"
+    assert "api_key" not in body
+
+    updated = client.patch(
+        f"/storage-pulse/api/admin/ai-models/{body['id']}",
+        json={"description": "updated"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["api_key_masked"] == "secr****1234"
+    assert client.post(f"/storage-pulse/api/admin/ai-models/{body['id']}/test").json()["reply"] == "OK"
+    assert client.delete(f"/storage-pulse/api/admin/ai-models/{body['id']}").status_code == 204
+
+
+def test_provider_failure_is_audited_without_assistant_message(
+    api_client_factory,
+    db_session,
+    monkeypatch,
+):
+    base_config.set("ai.config_secret_key", "test-ai-config-secret-key")
+    _seed_user(db_session)
+    model = _seed_model(db_session)
+
+    def failed_stream(*_args, **_kwargs):
+        raise AIClientError("AI 服务返回 HTTP 502")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", failed_stream)
+    monkeypatch.setattr(ai, "enforce_ai_rate_limit", lambda _user_id: None)
+    client = api_client_factory([ai.router], headers={"Authorization": f"Bearer {issue_token(1)}"})
+    conversation_id = client.post(
+        "/storage-pulse/api/ai/conversations",
+        json={"title": "失败对话", "model_id": model.id},
+    ).json()["id"]
+
+    response = client.post(
+        f"/storage-pulse/api/ai/conversations/{conversation_id}/messages/stream",
+        json={"content": "查询容量"},
+    )
+    assert "event: error" in response.text
+    assert "HTTP 502" in response.text
+    db_session.expire_all()
+    assert list(db_session.scalars(select(AIMessage).where(AIMessage.conversation_id == conversation_id)))[0].role == "user"
+    assert db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation_id)).status == "failed"
+
+
+def test_closing_stream_marks_audit_cancelled(db_session):
+    base_config.set("ai.config_secret_key", "test-ai-config-secret-key")
+    _seed_user(db_session)
+    model = _seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=model.id, title="取消测试")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    stream = ai_chat_service.stream_message(
+        app=FastAPI(),
+        db=db_session,
+        conversation_id=conversation.id,
+        user_id=1,
+        content="停止这个请求",
+    )
+    assert next(stream)[0] == "accepted"
+    stream.close()
+    db_session.expire_all()
+    assert db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation.id)).status == "cancelled"
+
+
+def test_rate_limit_returns_503_when_redis_is_unavailable():
+    import redis
+
+    class FailedRedis:
+        def incr(self, _key):
+            raise redis.RedisError("offline")
+
+    try:
+        enforce_ai_rate_limit(9, client=FailedRedis())
+    except Exception as error:
+        assert getattr(error, "status_code", None) == 503
+    else:  # pragma: no cover - assertion guard
+        raise AssertionError("expected Redis availability rejection")
 
 
 def test_ai_migration_creates_expected_tables_without_project_binding():
@@ -187,3 +311,27 @@ def test_ai_migration_creates_expected_tables_without_project_binding():
         assert f'"{table_name}"' in source
     assert 'down_revision: str = "000000000002"' in source
     assert '"project_id"' not in source
+
+
+def _ai_migration():
+    path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000003_ai_chat.py"
+    spec = importlib.util.spec_from_file_location("ai_chat_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_ai_migration_compiles_for_supported_dialects():
+    for dialect_name in ("sqlite", "postgresql", "mysql"):
+        migration = _ai_migration()
+        output = io.StringIO()
+        migration.op = Operations(
+            MigrationContext.configure(
+                dialect_name=dialect_name,
+                opts={"as_sql": True, "output_buffer": output},
+            )
+        )
+        migration.upgrade()
+        sql = output.getvalue().lower()
+        assert all(table in sql for table in ("ai_configs", "ai_conversations", "ai_messages", "ai_audit_logs"))

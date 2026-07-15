@@ -14,7 +14,7 @@ DBDep = Annotated[Session, Depends(get_db)]
 AdminDep = Annotated[None, Depends(require_super_admin)]
 
 
-@router.get("", response_model=groupTagSchema.GroupTagPage)
+@router.get("", response_model=groupTagSchema.GroupTagPage, openapi_extra={"ai_exposed": True, "ai_name": "list_group_tags", "ai_description": "分页查询项目组标签"})
 def list_group_tags(
     _current_user: CurrentUserDep,
     db: DBDep,
@@ -29,7 +29,7 @@ def create_group_tag(data: groupTagSchema.GroupTagWrite, _admin: AdminDep, db: D
     return groupTagService.create_group_tag(db, data=data)
 
 
-@router.get("/{group_tag_id}", response_model=groupTagSchema.GroupTag)
+@router.get("/{group_tag_id}", response_model=groupTagSchema.GroupTag, openapi_extra={"ai_exposed": True, "ai_name": "get_group_tag", "ai_description": "查询指定项目组标签"})
 def get_group_tag(group_tag_id: int, _current_user: CurrentUserDep, db: DBDep):
     return groupTagService.get_group_tag(db, group_tag_id=group_tag_id)
 

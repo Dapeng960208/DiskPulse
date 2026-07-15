@@ -15,7 +15,7 @@ router = APIRouter(
 )
 
 
-@router.get("/", response_model=commonSchema.ResponseModel)
+@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_projects", "ai_description": "分页查询项目"})
 def read_projects(
     page: int = 1,
     size: int = 20,
@@ -51,20 +51,20 @@ def create_project(
     return projectsCrud.create_project(db=db, project=project)
 
 
-@router.get("/storage/summary", response_model=commonSchema.ResponseResourceModel)
+@router.get("/storage/summary", response_model=commonSchema.ResponseResourceModel, openapi_extra={"ai_exposed": True, "ai_name": "get_project_storage_summary", "ai_description": "查询项目存储汇总"})
 def get_project_storage_summary(db: Session = Depends(get_db)):
     summary = projectsCrud.get_project_storage_summary(db=db)
     tree = projectsCrud.get_project_tree_summary(db=db)
     return commonSchema.ResponseResourceModel(data=summary, tree=tree)
 
 
-@router.get("/storage/groups", response_model=commonSchema.ResponseResourceModel)
+@router.get("/storage/groups", response_model=commonSchema.ResponseResourceModel, openapi_extra={"ai_exposed": True, "ai_name": "list_project_storage_groups", "ai_description": "查询项目存储组"})
 def get_project_groups_storage_usage(db: Session = Depends(get_db)):
     groups = projectsCrud.get_project_groups_storage_usage(db=db)
     return commonSchema.ResponseResourceModel(data=groups)
 
 
-@router.get("/{project_id}/storage", response_model=commonSchema.ResponseStorageUsageModel)
+@router.get("/{project_id}/storage", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_project_storage", "ai_description": "查询指定项目存储使用情况"})
 def read_project_storage_usage_by_id(
     project_id: int,
     start_time: datetime | None = None,
@@ -85,7 +85,7 @@ def read_project_storage_usage_by_id(
     return commonSchema.ResponseStorageUsageModel[projectsSchema.ProjectBaseInfo](data=real_time_data, info=project_db)
 
 
-@router.get("/{project_id}", response_model=projectsSchema.Project)
+@router.get("/{project_id}", response_model=projectsSchema.Project, openapi_extra={"ai_exposed": True, "ai_name": "get_project", "ai_description": "查询指定项目"})
 def read_project_by_id(project_id: int, db: Session = Depends(get_db)):
     project_db = projectsCrud.get_project_by_id(db=db, id=project_id)
     if project_db is None:
@@ -106,7 +106,7 @@ def update_project_by_id(
     return projectsCrud.update_project(db=db, project_id=project_id, project=project)
 
 
-@router.get("/{project_id}/storage-tree", response_model=commonSchema.ResponseResourceModel)
+@router.get("/{project_id}/storage-tree", response_model=commonSchema.ResponseResourceModel, openapi_extra={"ai_exposed": True, "ai_name": "get_project_storage_tree", "ai_description": "查询项目存储树"})
 def get_project_storage_tree_by_id(project_id: int, value_type: str = "limit", db: Session = Depends(get_db)):
     tree = projectsCrud.get_project_tree_summary_by_id(db=db, project_id=project_id, value_type=value_type)
     return commonSchema.ResponseResourceModel(data=tree)

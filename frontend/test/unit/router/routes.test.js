@@ -29,6 +29,8 @@ describe('router/routes and app shell', () => {
         'UsersManagement',
         'BackUp',
         'Settings',
+        'AICenter',
+        'AIAuditDetail',
       ]),
     );
 
