@@ -1,5 +1,12 @@
 # 当前交付记录
 
+## 2026-07-15：修复项目组监控配置无法保存
+
+- 根因是编辑表单复用详情响应后，PUT payload 仍包含只读 `qtree`、`in_charge_user`，与后端 `extra="forbid"` 写入契约冲突并返回 `422`。
+- 表单提交前沿用现有字段清理逻辑，剔除这两个只读字段；未修改后端 API、数据库或公共请求层。
+- TDD RED：聚焦测试 `1 failed, 11 passed`；GREEN：同一测试文件 `12 passed`。
+- 未连接运行中的前后端执行浏览器保存冒烟；风险限于真实部署状态和数据环境，静态提交契约已由回归测试覆盖。
+
 ## 2026-07-15：过滤关闭 TLS 校验后的重复告警
 
 - HTTPS 存储集群显式设置 `tls_verify=false` 时，保留一次 DiskPulse 风险告警，并过滤 urllib3 每次请求重复产生的 `InsecureRequestWarning`。

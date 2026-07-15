@@ -51,6 +51,8 @@ const { formRef, mode, model, modelRules, submitting, edit: editForm, submit } =
     delete payload.storage_cluster;
     delete payload.group_tag;
     delete payload.storage_target;
+    delete payload.qtree;
+    delete payload.in_charge_user;
     if (payload.target_type === 'volume') delete payload.qtree_id;
     if (payload.target_type === 'qtree') delete payload.volume_id;
     delete payload.target_type;
