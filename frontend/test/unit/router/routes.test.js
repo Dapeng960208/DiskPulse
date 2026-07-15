@@ -24,9 +24,12 @@ describe('router/routes and app shell', () => {
       .find((route) => route.name === 'StorageHealth');
     const storageClusterDetailRoute = adminRoute.children
       .find((route) => route.name === 'StorageClusterDetail');
+    const adminDashboardRoute = adminRoute.children
+      .find((route) => route.name === 'AdminDashboard');
 
     expect(loginRoute.meta.isPublic).toBe(true);
     expect(storageHealthRoute).toBeUndefined();
+    expect(adminDashboardRoute).toBeUndefined();
     expect(storageClusterDetailRoute).toEqual(expect.objectContaining({
       path: 'storage-cluster/:id',
       meta: expect.objectContaining({
@@ -38,7 +41,6 @@ describe('router/routes and app shell', () => {
       expect.arrayContaining([
         'StorageClusters',
         'GroupTags',
-        'AdminDashboard',
         'Aggregates',
         'Volumes',
         'Qtrees',

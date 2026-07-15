@@ -14,8 +14,12 @@ const storageClusterApi = vi.hoisted(() => ({
   fetchSystemEvents: vi.fn(),
   exportAnalytics: vi.fn(),
 }));
+const aggregateApi = vi.hoisted(() => ({
+  fetchAggregateTrees: vi.fn(),
+}));
 
 vi.mock('@/api/storage-cluster-api', () => ({ default: storageClusterApi }));
+vi.mock('@/api/aggregate-api.js', () => ({ default: aggregateApi }));
 const route = vi.hoisted(() => ({ name: 'StorageClusterDetail', params: { id: '42' } }));
 vi.mock('vue-router', () => ({ useRoute: () => route }));
 vi.mock('@/composables/common', () => ({ getDefaultTime: () => [...initialRange] }));
@@ -115,6 +119,7 @@ async function mountPage() {
         LineCharts: passthrough('LineCharts'),
         PieCharts: passthrough('PieCharts'),
         BarStackChart: passthrough('BarStackChart'),
+        DiskUsage: passthrough('DiskUsage'),
         LoadingCharts: passthrough('LoadingCharts'),
         AnimatedTextChart: passthrough('AnimatedTextChart'),
       },
@@ -141,16 +146,18 @@ describe('storage cluster health analytics page', () => {
     storageClusterApi.fetchTopLatency.mockResolvedValue({ supported: true, data: [] });
     storageClusterApi.fetchRepeatedFaults.mockResolvedValue({ data: [] });
     storageClusterApi.fetchSystemEvents.mockResolvedValue({ data: [] });
+    aggregateApi.fetchAggregateTrees.mockResolvedValue({ data: [{ name: 'volume-a' }] });
     storageClusterApi.exportAnalytics.mockResolvedValue({
       data: new Blob(['report']),
       headers: { 'content-disposition': 'attachment; filename="storage-health.xlsx"' },
     });
   });
 
-  it('shows three analytics tabs with one shared date range and loads capacity first', async () => {
+  it('shows storage distribution beside capacity and loads capacity first', async () => {
     const wrapper = await mountPage();
 
     expect(wrapper.text()).toContain('容量趋势');
+    expect(wrapper.text()).toContain('存储分布');
     expect(wrapper.text()).toContain('性能分析');
     expect(wrapper.text()).toContain('故障分析');
     expect(wrapper.findAllComponents({ name: 'ElDatePicker' })).toHaveLength(1);
@@ -163,6 +170,24 @@ describe('storage cluster health analytics page', () => {
     expect(storageClusterApi.fetchErrorSeverity).not.toHaveBeenCalled();
     expect(storageClusterApi.fetchRepeatedFaults).not.toHaveBeenCalled();
     expect(storageClusterApi.fetchSystemEvents).not.toHaveBeenCalled();
+    expect(aggregateApi.fetchAggregateTrees).not.toHaveBeenCalled();
+  });
+
+  it('loads the current cluster storage distribution once when its tab opens', async () => {
+    const wrapper = await mountPage();
+
+    await selectTab(wrapper, 'distribution');
+
+    expect(aggregateApi.fetchAggregateTrees).toHaveBeenCalledWith({
+      storage_cluster_id: 42,
+    });
+    expect(wrapper.findComponent({ name: 'DiskUsage' }).props('data')).toEqual([
+      { name: 'volume-a' },
+    ]);
+
+    await selectTab(wrapper, 'capacity');
+    await selectTab(wrapper, 'distribution');
+    expect(aggregateApi.fetchAggregateTrees).toHaveBeenCalledTimes(1);
   });
 
   it('loads performance and fault data lazily and refreshes only the active tab for a new range', async () => {
