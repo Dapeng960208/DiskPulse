@@ -69,3 +69,4 @@ log/
 Thumbs.db
 .idea/
 .vscode/
+backend/celerybeat-schedule
