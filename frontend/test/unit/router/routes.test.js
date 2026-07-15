@@ -19,8 +19,19 @@ describe('router/routes and app shell', () => {
   it('defines active public and admin routes', () => {
     const loginRoute = routes.find((route) => route.name === 'Login');
     const adminRoute = routes.find((route) => route.path === '/admin');
+    const storageHealthRoute = routes
+      .flatMap((route) => route.children || [])
+      .find((route) => route.name === 'StorageHealth');
 
     expect(loginRoute.meta.isPublic).toBe(true);
+    expect(storageHealthRoute).toEqual(expect.objectContaining({
+      path: 'storage-health',
+      meta: expect.objectContaining({
+        title: '存储健康',
+        isRoot: true,
+        menuOrder: 55,
+      }),
+    }));
     expect(adminRoute.children.map((route) => route.name)).toEqual(
       expect.arrayContaining([
         'StorageClusters',

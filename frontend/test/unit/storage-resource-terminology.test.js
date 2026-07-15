@@ -53,6 +53,8 @@ describe('cross-vendor storage resource terminology', () => {
     expect(alert).toContain("'容量池': 'Aggregate'");
     expect(alert).toContain("'存储空间': 'Volume'");
     expect(alert).toContain("'Qtree（NetApp）': 'Qtree'");
+    expect(alert).toContain("case 'vendor_event':");
+    expect(alert).toContain("return '系统事件';");
     expect(realtime).toMatch(/validator:[\s\S]*'group'/);
     expect(realtime).toContain("'暂无趋势数据'");
     expect(realtime).not.toContain("'NO DATA'");

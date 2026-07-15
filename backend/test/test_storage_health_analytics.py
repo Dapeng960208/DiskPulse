@@ -17,7 +17,7 @@ from openpyxl import load_workbook
 import models
 import questdb.models  # noqa: F401
 from appConfig import Config
-from crud import storageHealthAnalyticsCrud
+from crud import storageAlertCrud, storageHealthAnalyticsCrud
 from questdb.database import QuestDBBase
 from routers import storage_cluster
 from utils.isilonClient import IsilonClient
@@ -221,6 +221,72 @@ def test_error_severity_crud_allows_only_supported_sources(db_session):
     assert {row["source"] for row in rows} == {"diskpulse", "netapp", "isilon"}
 
 
+def test_general_alert_query_excludes_vendor_system_events(db_session):
+    for index, source in enumerate(("diskpulse", "netapp", "isilon"), start=1):
+        db_session.add(
+            models.StorageAlerts(
+                source=source,
+                external_event_id=f"event-{index}",
+                severity="warning",
+                alert_level="warning",
+                alert_type="vendor_event" if source != "diskpulse" else "alert",
+                description=source,
+                updated_at=datetime(2026, 7, 15, 10, index),
+            )
+        )
+    db_session.commit()
+
+    rows, total = storageAlertCrud.get_storage_alerts(db_session, page=1, size=20)
+
+    assert total == 1
+    assert [row.source for row in rows] == ["diskpulse"]
+
+
+def test_system_events_return_only_vendor_rows_for_the_selected_cluster(db_session):
+    db_session.add_all(
+        [
+            models.StorageCluster(id=7, name="cluster-seven", storage_type="netapp"),
+            models.StorageCluster(id=8, name="cluster-eight", storage_type="isilon"),
+        ]
+    )
+    for index, (cluster_id, source) in enumerate(
+        ((7, "netapp"), (7, "diskpulse"), (8, "isilon")),
+        start=1,
+    ):
+        db_session.add(
+            models.StorageAlerts(
+                storage_cluster_id=cluster_id,
+                source=source,
+                external_event_id=f"system-event-{index}",
+                severity="error",
+                alert_level="error",
+                alert_type="vendor_event",
+                description=f"{source}-message",
+                related_info={"event_code": f"code-{index}", "object_id": f"object-{index}"},
+                updated_at=datetime(2026, 7, 15, 10, index),
+            )
+        )
+    db_session.commit()
+
+    rows = storageHealthAnalyticsCrud.get_system_event_rows(
+        db_session,
+        7,
+        datetime(2026, 7, 15, 10, 0),
+        datetime(2026, 7, 15, 11, 0),
+    )
+
+    assert rows == [
+        {
+            "source": "netapp",
+            "severity": "error",
+            "event_code": "code-1",
+            "object_id": "object-1",
+            "description": "netapp-message",
+            "occurred_at": datetime(2026, 7, 15, 10, 1),
+        }
+    ]
+
+
 def test_top_latency_ranks_by_p95_and_applies_limit():
     rows = [
         {
@@ -377,6 +443,7 @@ def analytics_client(api_client_factory, db_session):
         ("error-severity", "get_error_severity", {"counts": {}, "total": 0}),
         ("top-latency", "get_top_latency", []),
         ("repeated-faults", "get_repeated_faults", []),
+        ("system-events", "get_system_events", {"data": []}),
     ],
 )
 def test_storage_health_read_endpoints_return_service_results(

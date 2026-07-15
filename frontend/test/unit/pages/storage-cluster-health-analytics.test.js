@@ -11,11 +11,13 @@ const storageClusterApi = vi.hoisted(() => ({
   fetchErrorSeverity: vi.fn(),
   fetchTopLatency: vi.fn(),
   fetchRepeatedFaults: vi.fn(),
+  fetchSystemEvents: vi.fn(),
   exportAnalytics: vi.fn(),
 }));
 
 vi.mock('@/api/storage-cluster-api', () => ({ default: storageClusterApi }));
-vi.mock('vue-router', () => ({ useRoute: () => ({ params: { id: '42' } }) }));
+const route = vi.hoisted(() => ({ name: 'StorageClusterDetail', params: { id: '42' } }));
+vi.mock('vue-router', () => ({ useRoute: () => route }));
 vi.mock('@/composables/common', () => ({ getDefaultTime: () => [...initialRange] }));
 
 let mountedWrapper;
@@ -76,6 +78,7 @@ async function mountPage() {
     global: {
       stubs: {
         FilterForm: passthrough('FilterForm', 'form'),
+        StorageClusterSelect: passthrough('StorageClusterSelect'),
         ElCard: passthrough('ElCard'),
         ElDescriptions: passthrough('ElDescriptions'),
         ElDescriptionsItem: passthrough('ElDescriptionsItem'),
@@ -109,12 +112,15 @@ async function selectTab(wrapper, name) {
 
 describe('storage cluster health analytics page', () => {
   beforeEach(() => {
+    route.name = 'StorageClusterDetail';
+    route.params = { id: '42' };
     storageClusterApi.fetchById.mockResolvedValue({ id: 42, name: 'cluster-a', storage_type: 'netapp' });
     storageClusterApi.fetchStorageRealTimeDataById.mockResolvedValue({ data: [] });
     storageClusterApi.fetchCapacityChange.mockResolvedValue({ data: [] });
     storageClusterApi.fetchErrorSeverity.mockResolvedValue({ total: 0, counts: {} });
     storageClusterApi.fetchTopLatency.mockResolvedValue({ supported: true, data: [] });
     storageClusterApi.fetchRepeatedFaults.mockResolvedValue({ data: [] });
+    storageClusterApi.fetchSystemEvents.mockResolvedValue({ data: [] });
     storageClusterApi.exportAnalytics.mockResolvedValue({
       data: new Blob(['report']),
       headers: { 'content-disposition': 'attachment; filename="storage-health.xlsx"' },
@@ -135,6 +141,7 @@ describe('storage cluster health analytics page', () => {
     expect(storageClusterApi.fetchTopLatency).not.toHaveBeenCalled();
     expect(storageClusterApi.fetchErrorSeverity).not.toHaveBeenCalled();
     expect(storageClusterApi.fetchRepeatedFaults).not.toHaveBeenCalled();
+    expect(storageClusterApi.fetchSystemEvents).not.toHaveBeenCalled();
   });
 
   it('loads performance and fault data lazily and refreshes only the active tab for a new range', async () => {
@@ -156,11 +163,33 @@ describe('storage cluster health analytics page', () => {
     await selectTab(wrapper, 'faults');
     expect(storageClusterApi.fetchErrorSeverity).toHaveBeenCalledTimes(1);
     expect(storageClusterApi.fetchRepeatedFaults).toHaveBeenCalledTimes(1);
+    expect(storageClusterApi.fetchSystemEvents).toHaveBeenCalledTimes(1);
 
     await selectTab(wrapper, 'capacity');
     await selectTab(wrapper, 'faults');
     expect(storageClusterApi.fetchErrorSeverity).toHaveBeenCalledTimes(1);
     expect(storageClusterApi.fetchRepeatedFaults).toHaveBeenCalledTimes(1);
+    expect(storageClusterApi.fetchSystemEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows vendor events as system events inside fault analysis', async () => {
+    storageClusterApi.fetchSystemEvents.mockResolvedValue({
+      data: [{
+        source: 'netapp',
+        severity: 'error',
+        event_code: 'sec.authsys.lookup.failed',
+        object_id: 'SVM_nas',
+        description: 'Unable to retrieve credentials',
+        occurred_at: '2026-07-14 18:54:00',
+      }],
+    });
+    const wrapper = await mountPage();
+
+    await selectTab(wrapper, 'faults');
+
+    expect(wrapper.text()).toContain('系统事件');
+    expect(wrapper.text()).toContain('Unable to retrieve credentials');
+    expect(wrapper.text()).not.toContain('扩容');
   });
 
   it('shows unsupported performance and empty fault states', async () => {
@@ -220,5 +249,24 @@ describe('storage cluster health analytics page', () => {
     });
     expect(clickSpy).toHaveBeenCalledTimes(4);
     clickSpy.mockRestore();
+  });
+
+  it('offers cluster selection from the standalone storage health entry', async () => {
+    route.name = 'StorageHealth';
+    route.params = {};
+    const wrapper = await mountPage();
+    const selector = wrapper.findComponent({ name: 'StorageClusterSelect' });
+
+    expect(selector.exists()).toBe(true);
+    expect(storageClusterApi.fetchCapacityChange).not.toHaveBeenCalled();
+
+    await selector.vm.$emit('update:modelValue', 7);
+    await flushPromises();
+
+    expect(storageClusterApi.fetchById).toHaveBeenCalledWith(7);
+    expect(storageClusterApi.fetchCapacityChange).toHaveBeenCalledWith(7, {
+      start_time: initialRange[0],
+      end_time: initialRange[1],
+    });
   });
 });
