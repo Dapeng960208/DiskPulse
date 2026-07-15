@@ -1,14 +1,21 @@
 # -*- coding: utf-8 -*-
 import json
+import importlib.util
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 
 from appConfig import base_config
 from models import StorageCluster
 from schemas.storageClusterSchema import StorageClusterCreate
 from utils.isilonClient import IsilonClient
+
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _client(mode, *, path=None, redis_client=None):
@@ -58,6 +65,55 @@ def test_storage_cluster_schema_rejects_unknown_isilon_cache_mode():
             storage_type="isilon",
             isilon_session_cache_mode="memory",
         )
+
+
+def test_session_cache_migration_backfills_existing_clusters_and_downgrades():
+    path = (
+        BACKEND_ROOT
+        / "migrate"
+        / "versions"
+        / "000000000005_storage_cluster_session_cache.py"
+    )
+    assert path.exists()
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    assert migration.down_revision == "000000000004"
+
+    with sa.create_engine("sqlite://").begin() as connection:
+        connection.execute(
+            sa.text(
+                "CREATE TABLE storage_clusters ("
+                "id INTEGER PRIMARY KEY, name VARCHAR, storage_type VARCHAR)"
+            )
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO storage_clusters (name, storage_type) "
+                "VALUES ('existing', 'isilon')"
+            )
+        )
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+
+        row = connection.execute(
+            sa.text(
+                "SELECT isilon_session_cache_mode, isilon_session_cache_path "
+                "FROM storage_clusters WHERE name = 'existing'"
+            )
+        ).mappings().one()
+        assert row == {
+            "isilon_session_cache_mode": "none",
+            "isilon_session_cache_path": None,
+        }
+
+        migration.downgrade()
+        columns = {
+            column["name"]
+            for column in sa.inspect(connection).get_columns("storage_clusters")
+        }
+        assert "isilon_session_cache_mode" not in columns
+        assert "isilon_session_cache_path" not in columns
 
 
 def test_file_cache_uses_configured_path_and_persists_session(tmp_path):
@@ -118,4 +174,3 @@ def test_failed_cache_write_logs_out_instead_of_leaking_session():
     client.close()
 
     client.session.delete.assert_called_once_with(client._session_url, timeout=15)
-
