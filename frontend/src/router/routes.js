@@ -23,6 +23,7 @@ export default [
         meta: {
           title: '概览',
           isRoot: true,
+          menuOrder: 10,
           icon: 'i-ri-dashboard-2-line',
         },
       },
@@ -39,6 +40,7 @@ export default [
         meta: {
           title: '用户',
           isRoot: true,
+          menuOrder: 20,
           icon: 'i-ri-user-line',
         },
       },
@@ -64,6 +66,7 @@ export default [
         meta: {
           title: '项目',
           isRoot: true,
+          menuOrder: 30,
           icon: 'i-ri-projector-2-line',
         },
       },
@@ -89,6 +92,7 @@ export default [
         meta: {
           title: '项目组',
           isRoot: true,
+          menuOrder: 40,
           icon: 'i-ri-group-2-line',
         },
       },
@@ -114,6 +118,7 @@ export default [
         meta: {
           title: '告警',
           isRoot: true,
+          menuOrder: 60,
           icon: 'i-ri-alarm-warning-line',
         },
       },
@@ -124,6 +129,7 @@ export default [
         meta: {
           title: 'AI 助手',
           isRoot: true,
+          menuOrder: 50,
           icon: 'i-ri-sparkling-2-line',
         },
       },
@@ -136,6 +142,7 @@ export default [
       title: '系统管理',
       icon: 'i-ri-settings-line',
       isRoot: true,
+      menuOrder: 70,
       // isAccessible: () => hasRole('diskpulse:admin') ? 200 : 403,
     },
     children: [

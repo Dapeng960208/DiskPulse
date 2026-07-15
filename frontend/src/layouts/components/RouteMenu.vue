@@ -15,6 +15,7 @@ const router = useRouter();
 const menuOptions = router
   .getRoutes()
   .filter((route) => route.meta.isRoot)
+  .sort((left, right) => left.meta.menuOrder - right.meta.menuOrder)
   .map((route) => mapRouteToMenuOption(route))
   .filter((option) => option.isVisible());
 const appSettings = useAppSettings();
