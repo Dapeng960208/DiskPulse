@@ -62,7 +62,7 @@ def test_isilon_storage_pools_use_onefs_9_11_endpoint():
     )
 
 
-def test_isilon_quota_requests_disable_name_resolution_by_default():
+def test_isilon_quota_requests_enable_name_resolution_for_local_service_account():
     client = object.__new__(IsilonClient)
     client._get = Mock(return_value={"quotas": []})
 
@@ -71,7 +71,7 @@ def test_isilon_quota_requests_disable_name_resolution_by_default():
         "/1/quota/quotas",
         params={
             "limit": 1000,
-            "resolve_names": "false",
+            "resolve_names": "true",
             "recurse_path_children": "false",
         },
     )
