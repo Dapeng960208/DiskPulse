@@ -380,6 +380,16 @@
 
 - 触发：使用两个独立 `StoragePulseMonitor` 对 Redis Session 缓存做真实 OneFS 复用验证。
 - 现象：Redis `PING/set/get/delete` 正常，但 OneFS `/session/1/session` 返回 `403`，提示账号没有请求服务的登录权限；因此没有生成可复用的 Session，性能接口随后返回 `401`。
-- 边界：同一账号在添加 `DiskPulseMonitor` 角色后曾成功登录并读取性能/事件；当前账号来自 `lsa-nis-provider:znis`，角色按短用户名添加。代码测试和 PostgreSQL 迁移均正常，问题位于 OneFS 当前身份/角色解析状态。
-- 后续：在 OneFS 中按稳定 UID `104407` 补充角色成员并执行 `isi auth user flush` 后，再做 Redis Session 真机复用验证。
+- 边界：同一账号在添加 `DiskPulseMonitor` 角色后曾成功登录并读取性能/事件；后续确认稳定 UID 已经是该角色成员，并发 Session 限制为 `0`，二者均不是根因。
+- 后续：完整根因和修复见下方“Isilon 批量解析配额用户名导致后续 PAPI 登录 403”。
 - 清理：诊断产生的 Redis 缓存项已删除，失败登录对应客户端已执行安全 logout/close。
+
+### 2026-07-15：Isilon 批量解析配额用户名导致后续 PAPI 登录 403
+
+- 触发：安全注销模式下先执行 Isilon 容量采集，再由独立性能任务创建新的 OneFS Session；容量采集会获取 2270 条配额并默认发送 `resolve_names=true`。
+- 现象：容量 Session 登录 `201`、注销 `204`，紧接着性能 Session 登录 `403`，提示账号没有 `platform` 服务登录权限；执行 OneFS 身份缓存刷新后只能暂时恢复。
+- 排除：角色已包含该 NIS 用户 UID；`Concurrent Session Limit` 为 `0`；不发送 logout 仍会复现；Storage Pool 查询和 `resolve_names=false` 的同量配额查询后，下一次登录均保持 `201`。
+- 根因：`IsilonClient.get_quotas()` 默认启用名称解析。真实 OneFS 9.11 对 2270 条配额执行批量身份解析后，后续登录生成的权限 token 异常并返回 `403`；安全路径返回 2166 个仅含 `persona.id=UID:<数字>` 的用户配额，原解析器又只读取 `persona.name`。
+- 修复：配额客户端默认发送 `resolve_names=false`；用户配额从受支持的 `UID:` persona 提取数字 UID，并复用 DiskPulse 已有 `users_uid_map`，未知 persona 不创建用户。
+- 验证：隔离测试证明 `resolve_names=false` 后“配额查询 → logout → 性能重新登录”为 `201/204/201/204`；新增请求参数和 UID persona 回归测试。
+- 风险：需重启 Celery worker 才能加载修复；其他 OneFS 版本或非 UID persona 尚未做真机覆盖，未知身份会安全跳过并保留日志排查边界。

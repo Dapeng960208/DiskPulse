@@ -216,6 +216,7 @@ def test_isilon_directory_quota_is_a_storage_space(db_session):
 def test_isilon_user_quota_uses_uid_persona_without_name_resolution(db_session):
     _seed_cluster(db_session, "isilon")
     monitor = _monitor(db_session, "isilon")
+    monitor.client = Mock()
     monitor._process_quota_user_isilon = Mock(return_value=None)
 
     monitor._fetch_user_quotas_isilon(
@@ -231,10 +232,18 @@ def test_isilon_user_quota_uses_uid_persona_without_name_resolution(db_session):
                 "persona": {"id": "UID:12345"},
                 "thresholds": {"hard": 100 * GB},
                 "usage": {"logical": 25 * GB},
-            }
+            },
+            {
+                "type": "user",
+                "path": "/ifs/team",
+                "persona": {"id": "SID:S-1-5-21-1000"},
+                "thresholds": {"hard": 100 * GB},
+                "usage": {"logical": 25 * GB},
+            },
         ],
     )
 
+    monitor._process_quota_user_isilon.assert_called_once()
     record = monitor._process_quota_user_isilon.call_args.args[0]
     assert record["rd_username"] == "12345"
 

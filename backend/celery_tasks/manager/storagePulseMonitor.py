@@ -893,7 +893,13 @@ class StoragePulseMonitor:
             if quota_type == 'default-user':
                 default_user_quotas_map[path] = (hard_limit, soft_limit)
             elif quota_type == 'user':
-                rd_username = (quota.get('persona') or {}).get('name', '').strip()
+                persona = quota.get('persona') or {}
+                persona_name = str(persona.get('name') or '').strip()
+                persona_id = str(persona.get('id') or '')
+                rd_username = (
+                    persona_name
+                    or (persona_id[4:] if persona_id.startswith('UID:') else '')
+                )
                 if rd_username in ('*', 'root', ''):
                     continue
                 user_quotas.append({

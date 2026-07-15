@@ -56,6 +56,8 @@ Isilon 集群在新增/编辑表单中按集群选择 Session 缓存模式：
 
 数据库只保存 `isilon_session_cache_mode` 和 `isilon_session_cache_path`，不保存 Cookie。缓存读取或写入失败时退回安全注销，避免遗留未管理的设备 Session。本地缓存文件和 Redis 都包含有效认证材料，部署时必须限制文件 ACL 和 Redis 网络访问。
 
+Isilon 配额采集固定使用 `resolve_names=false`。OneFS 返回的用户配额 `persona.id` 形如 `UID:<数字>`，DiskPulse 去掉 `UID:` 后复用已有 UID 映射；不支持的 persona 类型会被跳过，不会按未经验证的标识创建用户。这样既保留用户用量关联，也避免 OneFS 9.11 在批量解析大量配额身份后使后续 PAPI 登录返回 `403`。
+
 ## 文档索引
 
 | 文档 | 说明 |

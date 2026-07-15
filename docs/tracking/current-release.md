@@ -835,4 +835,23 @@ npm test -- --coverage.enabled=false
 
 - 本地测试环境 PostgreSQL 已执行 `alembic upgrade head` 到 `000000000005`；其他环境升级后需重启后端与 Celery worker。
 - 本地文件和 Redis 中保存的是有效 OneFS 认证材料，部署环境必须限制缓存文件 ACL 与 Redis 网络访问。
-- OneFS 真机 Redis Session 复用尚未验收：NIS 账号当前再次返回 PAPI 登录 `403`，需按 UID 修复角色成员后复测。
+- OneFS 真机 Redis Session 复用尚未验收；当时出现的 PAPI 登录 `403` 后续已定位为配额 `resolve_names=true` 触发，见下一节。
+
+## 2026-07-15：修复 Isilon 配额解析导致后续登录 403
+
+### 已完成
+
+- 将 `IsilonClient.get_quotas()` 的默认身份解析改为 `resolve_names=false`，避免 OneFS 9.11 批量解析 2270 条配额身份后使下一次 PAPI 登录丢失有效权限。
+- 用户配额在没有 `persona.name` 时读取 `persona.id=UID:<数字>`，复用现有 UID 用户映射；未知 persona 类型继续跳过。
+- 修正先前“角色未按 UID 绑定”的临时判断：设备已确认 UID 是角色成员，并发 Session 限制为 `0`。
+
+### 验证状态
+
+- RED：请求仍发送 `resolve_names=true`，UID-only persona 被跳过，新增 2 个用例均失败。
+- GREEN：请求参数和 UID persona 两个聚焦用例均通过；资源映射、软限额、Session 生命周期、采集触发和安全回归合计 `55 passed`，`compileall` 与 `pip check` 通过。
+- 真机隔离验证：Storage Pool、`resolve_names=false` 的 2270 条配额查询后，新 Session 登录均为 `201`；`resolve_names=true` 后稳定为 `403`。修复安全路径完成 `201 → 2270 条配额 → 204 → 201 → 1 条性能数据 → 204`。
+
+### 部署动作与风险
+
+- Celery worker 必须重启才能加载新默认参数；重启前旧任务仍可能再次触发 OneFS `403`。
+- 当前真实数据中 2166 个用户配额 persona 均为 `UID:<数字>`；其他 persona 类型尚未做真机覆盖，会被安全跳过。
