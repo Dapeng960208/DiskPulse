@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
+from urllib3 import disable_warnings
+from urllib3.exceptions import InsecureRequestWarning
 
 from schemas.storageUsageSchema import StorageUsageBase
 from schemas.volumeSchema import VolumeBase
@@ -127,6 +129,7 @@ class StoragePulseMonitor:
             self.logger.warning(f"{self._log_prefix} storage API uses unencrypted HTTP")
         elif not tls_verify:
             self.logger.warning(f"{self._log_prefix} TLS certificate verification is disabled")
+            disable_warnings(InsecureRequestWarning)
         if self.storage_type == 'netapp':
             self.client = NetAppClient(
                 hostname=hostname,

@@ -1,5 +1,12 @@
 # 当前交付记录
 
+## 2026-07-15：过滤关闭 TLS 校验后的重复告警
+
+- HTTPS 存储集群显式设置 `tls_verify=false` 时，保留一次 DiskPulse 风险告警，并过滤 urllib3 每次请求重复产生的 `InsecureRequestWarning`。
+- HTTP 未加密告警及连接、认证、HTTP 状态错误不受影响。
+- `cd backend && ..\.venv\Scripts\python.exe -m pytest test/test_storage_collection_trigger.py -q`：`7 passed`。
+- Celery worker 需重启后加载修改。
+
 ## 2026-07-15：修复 AI 预建表迁移冲突
 
 - 移除应用启动时绕过 Alembic 的 PostgreSQL `create_all()`；`database.create_tables` 仅保留 QuestDB 前向升级。
