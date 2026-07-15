@@ -2,16 +2,19 @@
 import importlib
 import importlib.util
 import io
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
 import models
 import questdb.models  # noqa: F401
+from appConfig import Config
 from questdb.database import QuestDBBase
 from routers import storage_cluster
 from utils.isilonClient import IsilonClient
@@ -84,6 +87,25 @@ def test_capacity_change_uses_chronological_first_and_last_samples():
 )
 def test_capacity_change_handles_zero_baseline_and_empty_data(points, expected):
     assert _analytics().summarize_capacity(points) == expected
+
+
+def test_capacity_summary_uses_real_boundaries_instead_of_bucket_maxima():
+    points = [
+        {"updated_at": START, "used": 150.0},
+        {"updated_at": END, "used": 200.0},
+    ]
+
+    result = _analytics().summarize_capacity(
+        points,
+        start_used=100.0,
+        end_used=175.0,
+    )
+
+    assert result["start_used"] == 100.0
+    assert result["end_used"] == 175.0
+    assert result["change"] == 75.0
+    assert result["change_percent"] == 75.0
+    assert result["points"] == points
 
 
 def test_severity_summary_normalizes_and_merges_alert_sources():
@@ -248,6 +270,43 @@ def test_storage_health_export_media_contract(
     assert filename in response.headers["content-disposition"]
 
 
+def test_pdf_export_succeeds_when_backend_logo_is_missing(monkeypatch, tmp_path):
+    analytics = _analytics()
+    missing_logo = tmp_path / "missing-logo.png"
+
+    class OptionalLogoPDF:
+        def __init__(self, *, logo_path, **_kwargs):
+            if logo_path is not None and not Path(logo_path).exists():
+                raise FileNotFoundError(logo_path)
+
+        def create_cover_page(self):
+            return None
+
+        def add_table(self, *_args):
+            return None
+
+        def generate_pdf(self):
+            return io.BytesIO(b"%PDF-1.4\n")
+
+    monkeypatch.setattr(Config, "app_logo_path", property(lambda _self: missing_logo))
+    monkeypatch.setattr(analytics, "PDFReportGenerator", OptionalLogoPDF)
+
+    content = analytics._pdf_bytes(
+        ["capacity"],
+        {
+            "capacity": {
+                "start_used": None,
+                "end_used": None,
+                "change": None,
+                "change_percent": None,
+                "data": [],
+            }
+        },
+    )
+
+    assert content.startswith(b"%PDF")
+
+
 def test_netapp_client_exposes_ems_and_volume_metrics_contracts():
     client = object.__new__(NetAppClient)
     client._get_all_records = Mock(side_effect=[[{"index": 7}], [{"uuid": "volume-1"}]])
@@ -313,7 +372,7 @@ def test_storage_alert_model_and_postgres_migration_contract():
     migration = importlib.util.module_from_spec(spec)
     assert spec is not None and spec.loader is not None
     spec.loader.exec_module(migration)
-    assert migration.down_revision == "000000000002"
+    assert migration.down_revision == "000000000003"
 
     output = io.StringIO()
     migration.op = Operations(
@@ -328,6 +387,100 @@ def test_storage_alert_model_and_postgres_migration_contract():
         assert token in sql
     assert "unique" in sql
     assert sql.count("create index") >= 3
+
+
+def test_storage_health_migration_compiles_offline_for_mysql():
+    migration_path = next(
+        (BACKEND_ROOT / "migrate" / "versions").glob("*storage_health*.py")
+    )
+    spec = importlib.util.spec_from_file_location(migration_path.stem, migration_path)
+    migration = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(migration)
+
+    output = io.StringIO()
+    migration.op = Operations(
+        MigrationContext.configure(
+            dialect_name="mysql",
+            opts={"as_sql": True, "output_buffer": output},
+        )
+    )
+
+    migration.upgrade()
+
+    assert "alter table storage_alerts" in output.getvalue().lower()
+
+
+def test_storage_health_string_lengths_are_explicit_and_match_mysql_migration():
+    migration_path = next(
+        (BACKEND_ROOT / "migrate" / "versions").glob("*storage_health*.py")
+    )
+    spec = importlib.util.spec_from_file_location(migration_path.stem, migration_path)
+    migration = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(migration)
+
+    output = io.StringIO()
+    migration.op = Operations(
+        MigrationContext.configure(
+            dialect_name="mysql",
+            opts={"as_sql": True, "output_buffer": output},
+        )
+    )
+    migration.upgrade()
+    sql = " ".join(output.getvalue().lower().split())
+
+    for column_name in ("source", "external_event_id", "fingerprint", "severity"):
+        length = models.StorageAlerts.__table__.c[column_name].type.length
+        assert isinstance(length, int) and length > 0
+        assert re.search(
+            rf"add column [`\"]?{column_name}[`\"]? varchar\({length}\)",
+            sql,
+        )
+
+
+def test_storage_health_migration_backfills_attributable_alerts_on_sqlite():
+    migration_paths = sorted((BACKEND_ROOT / "migrate" / "versions").glob("*.py"))
+    migrations = []
+    for path in migration_paths:
+        spec = importlib.util.spec_from_file_location(path.stem, path)
+        migration = importlib.util.module_from_spec(spec)
+        assert spec is not None and spec.loader is not None
+        spec.loader.exec_module(migration)
+        migrations.append(migration)
+
+    with sa.create_engine("sqlite://").begin() as connection:
+        for migration in migrations[:-1]:
+            migration.op = Operations(MigrationContext.configure(connection))
+            migration.upgrade()
+        connection.execute(
+            sa.text(
+                "INSERT INTO storage_clusters (id, name, storage_type) "
+                "VALUES (1, 'cluster-a', 'netapp')"
+            )
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO storage_usages (id, storage_cluster_id) VALUES (1, 1)"
+            )
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO storage_alerts "
+                "(id, alert_level, related_id, related_type) "
+                "VALUES (1, 'high', 1, 'StorageUsage')"
+            )
+        )
+
+        migrations[-1].op = Operations(MigrationContext.configure(connection))
+        migrations[-1].upgrade()
+
+        row = connection.execute(
+            sa.text(
+                "SELECT storage_cluster_id, source, severity FROM storage_alerts WHERE id = 1"
+            )
+        ).one()
+        assert tuple(row) == (1, "diskpulse", "critical")
 
 
 def test_questdb_performance_model_and_migration_contract():
@@ -375,6 +528,84 @@ def test_storage_event_window_uses_24_hours_then_five_minute_overlap():
     assert storage_health.event_window_start(
         datetime(2026, 7, 15, 11, 30, 0), now
     ) == datetime(2026, 7, 15, 11, 25, 0)
+
+
+def test_netapp_first_event_collection_converts_local_now_to_utc_z(monkeypatch):
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+    client = Mock()
+    client.get_ems_events.return_value = []
+
+    class LocalDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = datetime(
+                2026,
+                7,
+                15,
+                10,
+                0,
+                0,
+                tzinfo=timezone(timedelta(hours=8)),
+            )
+            return value.astimezone(tz) if tz is not None else value
+
+    class Result:
+        def scalar_one_or_none(self):
+            return None
+
+    class Database:
+        def execute(self, _statement):
+            return Result()
+
+        def commit(self):
+            return None
+
+        def rollback(self):
+            return None
+
+    class SessionContext:
+        def __enter__(self):
+            return Database()
+
+        def __exit__(self, *_args):
+            return False
+
+    class Monitor:
+        def __init__(self, *_args):
+            self.storage_type = "netapp"
+            self.client = client
+
+        def setup(self):
+            return None
+
+        def cleanup(self):
+            return None
+
+    monkeypatch.setattr(storage_health, "SessionLocal", SessionContext)
+    monkeypatch.setattr(storage_health, "StoragePulseMonitor", Monitor)
+    monkeypatch.setattr(storage_health, "_persist_vendor_events", Mock(return_value=0))
+    monkeypatch.setattr(storage_health, "datetime", LocalDatetime)
+
+    assert storage_health._collect_events(7) == 0
+    client.get_ems_events.assert_called_once_with("2026-07-14T02:00:00Z")
+
+
+def test_vendor_event_offset_timestamp_is_converted_to_utc_naive():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+    rows = storage_health.normalize_vendor_events(
+        7,
+        "netapp",
+        [
+            {
+                "index": 42,
+                "time": "2026-07-15T10:00:00+08:00",
+                "message": {"name": "disk.offline", "severity": "error"},
+                "node": {"uuid": "node-1"},
+            }
+        ],
+    )
+
+    assert rows[0]["updated_at"] == datetime(2026, 7, 15, 2, 0, 0)
 
 
 def test_vendor_event_parser_normalizes_identity_severity_and_fingerprint():

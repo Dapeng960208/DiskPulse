@@ -86,6 +86,7 @@ def test_questdb_migrations_add_soft_quota_metric_columns():
     assert tuple(migration.version for migration in migrations) == (
         "000000000001",
         "000000000002",
+        "000000000003",
     )
     soft_quota_tables = {
         "volume_storage_usages",
@@ -117,9 +118,17 @@ def test_questdb_upgrade_records_revision_and_is_repeatable():
     runner = _load_runner()
     engine = _Engine()
 
-    assert runner.upgrade(engine) == ("000000000001", "000000000002")
+    assert runner.upgrade(engine) == (
+        "000000000001",
+        "000000000002",
+        "000000000003",
+    )
     assert runner.upgrade(engine) == ()
-    assert engine.applied.keys() == {"000000000001", "000000000002"}
+    assert engine.applied.keys() == {
+        "000000000001",
+        "000000000002",
+        "000000000003",
+    }
     assert engine.commits == 2
 
 
@@ -131,8 +140,12 @@ def test_questdb_upgrade_applies_soft_quota_revision_after_initial_schema():
         tables={"diskpulse_schema_migrations"},
     )
 
-    assert runner.upgrade(engine) == ("000000000002",)
-    assert engine.applied.keys() == {"000000000001", "000000000002"}
+    assert runner.upgrade(engine) == ("000000000002", "000000000003")
+    assert engine.applied.keys() == {
+        "000000000001",
+        "000000000002",
+        "000000000003",
+    }
 
 
 def test_questdb_upgrade_rejects_changed_applied_revision():
@@ -191,7 +204,9 @@ def test_questdb_current_reports_base_and_applied_revisions():
             "history",
             (),
             (),
-            "000000000001 initial_schema\n000000000002 add_soft_quota_metrics",
+            "000000000001 initial_schema\n"
+            "000000000002 add_soft_quota_metrics\n"
+            "000000000003 storage_performance_metrics",
         ),
         ("current", ("000000000002",), (), "000000000002"),
         ("current", (), (), "base"),
