@@ -296,7 +296,7 @@ def test_repeated_fault_crud_allows_only_netapp_and_isilon(db_session):
                     fingerprint=f"{source}:disk.offline:node:node-1",
                     severity="error",
                     alert_level="error",
-                    updated_at=occurred_at.replace(tzinfo=None),
+                    updated_at=occurred_at.astimezone().replace(tzinfo=None),
                 )
             )
     db_session.commit()

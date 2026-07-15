@@ -229,7 +229,7 @@ class IsilonClient:
                 return False
             data = resp.json()
             onefs_ver = data.get('onefs_version', {}).get('release', 'unknown')
-            self.api_version = onefs_ver.split('.')[0] if onefs_ver != 'unknown' else '1'
+            self.discover_api_version()
             self._log('info',
                       f"[IsilonClient] Connected to {self.hostname}:{self.port} "
                       f"— OneFS {onefs_ver}")
@@ -275,6 +275,69 @@ class IsilonClient:
     def get_cluster_stats(self) -> Optional[Dict]:
         """Return cluster filesystem statistics (POSIX statfs fields)."""
         return self._get('/1/cluster/statfs')
+
+    def discover_api_version(self) -> str:
+        """Discover the OneFS platform API version independently of OneFS release."""
+        data = self._get('/latest')
+        value = data.get('latest') if isinstance(data, dict) else None
+        if isinstance(value, dict):
+            value = value.get('version')
+        if value is None:
+            raise ValueError("Invalid OneFS platform latest response")
+        self.api_version = str(value)
+        return self.api_version
+
+    def get_performance_statistics(self) -> List[Dict]:
+        metadata = self._get(f'/{self.api_version}/statistics/keys')
+        keys = metadata.get('keys') if isinstance(metadata, dict) else None
+        if not isinstance(keys, list):
+            raise ValueError("Invalid OneFS statistics keys response")
+        latency_keys = [
+            item
+            for item in keys
+            if isinstance(item, dict)
+            and isinstance(item.get('key'), str)
+            and 'latency' in item['key'].lower()
+        ]
+        selected_metadata = next(
+            (item for item in latency_keys if 'workload' in item['key'].lower()),
+            None,
+        ) or next(
+            (item for item in latency_keys if 'node' in item['key'].lower()),
+            None,
+        )
+        if selected_metadata is None:
+            raise ValueError("OneFS does not expose workload or node latency statistics")
+        selected = selected_metadata['key']
+
+        data = self._get(
+            f'/{self.api_version}/statistics/current',
+            params={'keys': selected},
+        )
+        stats = data.get('stats') if isinstance(data, dict) else None
+        if not isinstance(stats, list):
+            raise ValueError("Invalid OneFS statistics response")
+        unit = selected_metadata.get('units') or selected_metadata.get('unit')
+        if unit is None:
+            return stats
+        return [
+            row if row.get('unit') is not None else {**row, 'unit': unit}
+            for row in stats
+        ]
+
+    def get_event_group_occurrences(self) -> List[Dict]:
+        data = self._get(f'/{self.api_version}/event/eventgroup-occurrences')
+        events = data.get('eventgroups') if isinstance(data, dict) else None
+        if not isinstance(events, list):
+            raise ValueError("Invalid OneFS eventgroups response")
+        return events
+
+    def get_event_lists(self) -> List[Dict]:
+        data = self._get(f'/{self.api_version}/event/eventlists')
+        events = data.get('eventlists') if isinstance(data, dict) else None
+        if not isinstance(events, list):
+            raise ValueError("Invalid OneFS eventlists response")
+        return events
 
     def get_storage_pools(self) -> List[Dict]:
         """Return OneFS 9.11 top-level storage pools."""

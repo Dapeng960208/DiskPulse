@@ -646,7 +646,18 @@ class StorageManagement:
 
     def _create_alert(self, related_id: int, related_type: str, limit: float, size: float,
                       info: str | None = None) -> None:
+        related_models = {
+            StorageUsage.__name__: StorageUsage,
+            Group.__name__: Group,
+            Qtree.__name__: Qtree,
+            Volume.__name__: Volume,
+        }
+        related_db = self.db.get(related_models[related_type], related_id)
         alert = StorageAlerts(
+            storage_cluster_id=getattr(related_db, "storage_cluster_id", None),
+            source="diskpulse",
+            fingerprint=f"diskpulse:expand:{related_type}:{related_id}",
+            severity="info",
             alert_level='low',
             alert_type='expand',
             description=f"{info}从{limit}T扩容至{size}T",

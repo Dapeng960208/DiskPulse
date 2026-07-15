@@ -62,7 +62,7 @@ class PageCountCanvas(canvas.Canvas):
 
 
 class PDFReportGenerator:
-    def __init__(self, company_name: str, logo_path: str, title: str, sub_title: str | None = None, app: str = "ICRDB"):
+    def __init__(self, company_name: str, logo_path: str | None, title: str, sub_title: str | None = None, app: str = "ICRDB"):
         self._register_font()
 
         self.images = []
@@ -76,9 +76,10 @@ class PDFReportGenerator:
         self.styles = getSampleStyleSheet()
         self.styles.add(
             ParagraphStyle(name='Chinese', fontName='SimSun', fontSize=6, alignment=1, leading=12, spaceAfter=0))
-        self._validate_logo_path()
+        if self.logo_path:
+            self._validate_logo_path()
         self._register_font()
-        self.logo_rate = self._get_logo_rate()
+        self.logo_rate = self._get_logo_rate() if self.logo_path else None
         self.inch = inch * 0.75
         self.inner_width = A4[0] - inch
         # 设置ECharts默认配色
@@ -143,10 +144,11 @@ class PDFReportGenerator:
         self.elements.append(Spacer(1, 1.8 * inch))
 
         # 添加公司Logo
-        logo = Image(self.logo_path, width=350, height=int(350 * self.logo_rate))
-        logo.hAlign = 'CENTER'
-        self.elements.append(logo)
-        self.elements.append(Spacer(1, 1.8 * inch))
+        if self.logo_path:
+            logo = Image(self.logo_path, width=350, height=int(350 * self.logo_rate))
+            logo.hAlign = 'CENTER'
+            self.elements.append(logo)
+            self.elements.append(Spacer(1, 1.8 * inch))
 
         # 添加公司名称
         self.elements.append(Paragraph(self.company_name, company_style))
@@ -158,8 +160,9 @@ class PDFReportGenerator:
         canvas.setFont('SimSun', 8)
         canvas.drawString(self.inch, A4[1] - self.inch + 2, "内参")  # 页眉距离顶部留有20的空白
         canvas.drawCentredString(A4[0] / 2.0, A4[1] - self.inch + 2, self.title)
-        logo = Image(self.logo_path, 120, int(120 * self.logo_rate))
-        logo.drawOn(canvas, A4[0] - 122 - self.inch, A4[1] - self.inch + 2)
+        if self.logo_path:
+            logo = Image(self.logo_path, 120, int(120 * self.logo_rate))
+            logo.drawOn(canvas, A4[0] - 122 - self.inch, A4[1] - self.inch + 2)
         canvas.setStrokeColor(colors.black)
         canvas.setLineWidth(1)
         canvas.line(self.inch - 1, A4[1] - self.inch, A4[0] - self.inch - 1, A4[1] - self.inch)

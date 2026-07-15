@@ -135,3 +135,27 @@ class StorageUsage(QuestDBBase):
     soft_limit = Column(Double)
     soft_use_ratio = Column(Double)
     updated_at = Column(Timestamp, primary_key=True)
+
+
+class StoragePerformanceMetric(QuestDBBase):
+    __tablename__ = "storage_performance_metrics"
+    __table_args__ = (
+        QDBTableEngine(
+            table_name="storage_performance_metrics",
+            ts_col_name="collected_at",
+            partition_by=PartitionBy.DAY,
+            is_wal=True,
+        ),
+    )
+
+    storage_cluster_id = Column(Symbol, primary_key=True)
+    vendor = Column(Symbol)
+    object_type = Column(Symbol)
+    object_id = Column(Symbol, primary_key=True)
+    object_name = Column(Symbol)
+    latency_read = Column(Double)
+    latency_write = Column(Double)
+    latency_total = Column(Double)
+    iops_total = Column(Double)
+    throughput_total = Column(Double)
+    collected_at = Column(Timestamp, primary_key=True)

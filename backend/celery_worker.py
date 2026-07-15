@@ -38,6 +38,16 @@ diskpulse_app.conf.beat_schedule = {
         "schedule": 60.0,
         "options": {"expires": 120},
     },
+    "storage_events_schedule_fetching_task": {
+        "task": "celery_tasks.tasks.storage_health.storage_events_schedule_fetching_task",
+        "schedule": 60.0,
+        "options": {"expires": 60},
+    },
+    "storage_performance_schedule_fetching_task": {
+        "task": "celery_tasks.tasks.storage_health.storage_performance_schedule_fetching_task",
+        "schedule": 300.0,
+        "options": {"expires": 300},
+    },
 
     # "configs_schedule_fetching_task": {
     #     "task": "celery_tasks.tasks.configs.configs_schedule_fetching_task",
@@ -115,6 +125,7 @@ diskpulse_app.conf.beat_schedule = {
 # import celery_tasks.tasks.configs
 import celery_tasks.tasks.storages
 import celery_tasks.tasks.large_files
+import celery_tasks.tasks.storage_health
 # import celery_tasks.tasks.iam
 # import celery_tasks.tasks.check_quest_db
 # import celery_tasks.tasks.large_files

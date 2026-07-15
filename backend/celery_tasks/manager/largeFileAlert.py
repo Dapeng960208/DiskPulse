@@ -68,6 +68,12 @@ class LargeFileAlert:
 
             alerts = [
                 StorageAlerts(
+                    storage_cluster_id=(
+                        file.group.storage_cluster_id if file.group is not None else None
+                    ),
+                    source="diskpulse",
+                    fingerprint=f"diskpulse:large_file:{file.id}",
+                    severity="critical",
                     alert_level='high',
                     alert_type='alert',
                     description=description,

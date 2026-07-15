@@ -1,19 +1,49 @@
 # -*- coding: utf-8 -*-
-from fastapi import APIRouter, Depends, HTTPException
+import io
+from typing import Annotated, Literal, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
-from typing import List, Optional
 from schemas import storageClusterSchema, commonSchema
 from crud import storageClusterCrud
 from crud.questDbCrud import get_storage_cluster_real_time
 from dependencies import get_db, require_super_admin
 from services.storageClusterService import schedule_storage_collection as _schedule_storage_collection
+from services.storageHealthAnalyticsService import (
+    export_storage_health,
+    get_capacity_change,
+    get_error_severity,
+    get_repeated_faults,
+    get_top_latency,
+    validate_time_range,
+)
 
 router = APIRouter(
     prefix="/storage-clusters",
     tags=["storage-clusters"],
     responses={404: {"description": "Not found"}},
 )
+
+
+def _analytics_time_range(
+    start_time: Annotated[datetime, Query()],
+    end_time: Annotated[datetime, Query()],
+) -> tuple[datetime, datetime]:
+    try:
+        validate_time_range(start_time, end_time)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return start_time, end_time
+
+
+AnalyticsTimeRange = Annotated[tuple[datetime, datetime], Depends(_analytics_time_range)]
+
+
+def _require_storage_cluster(db: Session, storage_cluster_id: int) -> None:
+    if storageClusterCrud.get_storage_cluster(db, storage_cluster_id) is None:
+        raise HTTPException(status_code=404, detail="StorageCluster not found")
 
 
 @router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_storage_clusters", "ai_description": "分页查询存储集群"})
@@ -101,4 +131,84 @@ def read_storage_cluster_realtime(
     return commonSchema.ResponseStorageUsageModel[storageClusterSchema.StorageCluster](
         data=real_time_data,
         info=db_cluster
+    )
+
+
+@router.get("/{storage_cluster_id}/analytics/capacity-change", response_model=dict)
+def read_capacity_change(
+    storage_cluster_id: int,
+    time_range: AnalyticsTimeRange,
+    db: Session = Depends(get_db),
+) -> dict:
+    _require_storage_cluster(db, storage_cluster_id)
+    return get_capacity_change(db, storage_cluster_id, *time_range)
+
+
+@router.get("/{storage_cluster_id}/analytics/error-severity", response_model=dict)
+def read_error_severity(
+    storage_cluster_id: int,
+    time_range: AnalyticsTimeRange,
+    db: Session = Depends(get_db),
+) -> dict:
+    _require_storage_cluster(db, storage_cluster_id)
+    return get_error_severity(db, storage_cluster_id, *time_range)
+
+
+@router.get("/{storage_cluster_id}/analytics/top-latency", response_model=dict | list)
+def read_top_latency(
+    storage_cluster_id: int,
+    time_range: AnalyticsTimeRange,
+    limit: Annotated[int, Query(ge=1, le=10)] = 10,
+    object_type: Annotated[
+        Literal["volume", "workload", "node"] | None,
+        Query(),
+    ] = None,
+    db: Session = Depends(get_db),
+) -> dict | list:
+    _require_storage_cluster(db, storage_cluster_id)
+    return get_top_latency(
+        db,
+        storage_cluster_id,
+        *time_range,
+        limit=limit,
+        object_type=object_type,
+    )
+
+
+@router.get("/{storage_cluster_id}/analytics/repeated-faults", response_model=dict | list)
+def read_repeated_faults(
+    storage_cluster_id: int,
+    time_range: AnalyticsTimeRange,
+    db: Session = Depends(get_db),
+) -> dict | list:
+    _require_storage_cluster(db, storage_cluster_id)
+    return get_repeated_faults(db, storage_cluster_id, *time_range)
+
+
+@router.get("/{storage_cluster_id}/analytics/export")
+def export_analytics(
+    storage_cluster_id: int,
+    time_range: AnalyticsTimeRange,
+    export_format: Annotated[
+        Literal["csv", "excel", "pdf"],
+        Query(alias="format"),
+    ],
+    section: Annotated[
+        Literal["capacity", "severity", "latency", "faults", "all"],
+        Query(),
+    ] = "all",
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    _require_storage_cluster(db, storage_cluster_id)
+    content, media_type, filename = export_storage_health(
+        db,
+        storage_cluster_id,
+        *time_range,
+        export_format=export_format,
+        section=section,
+    )
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

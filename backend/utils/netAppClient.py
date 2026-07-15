@@ -69,6 +69,21 @@ class NetAppClient:
     def get_quota_reports(self) -> List[Dict]:
         return self._get_all_records('storage/quota/reports', params={'fields': 'volume,qtree,type,users,group,space,files,svm'})
 
+    def get_ems_events(self, since: str) -> List[Dict]:
+        return self._get_all_records(
+            'support/ems/events',
+            params={
+                'time': f'>={since}',
+                'fields': 'time,index,message,node,log_message',
+            },
+        )
+
+    def get_volume_metrics(self) -> List[Dict]:
+        return self._get_all_records(
+            'storage/volumes',
+            params={'fields': 'uuid,name,metrics'},
+        )
+
     def close(self):
         if self.session:
             self.session.close()

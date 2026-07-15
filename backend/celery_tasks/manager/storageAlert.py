@@ -419,6 +419,10 @@ class StorageAlert:
                 }
             related_id = related_db.id
             alert = StorageAlerts(
+                storage_cluster_id=getattr(related_db, "storage_cluster_id", None),
+                source="diskpulse",
+                fingerprint=f"diskpulse:{alert_type}:{model.__name__}:{related_id}",
+                severity={"high": "critical", "medium": "warning", "low": "info"}[alert_level],
                 alert_level=alert_level,
                 alert_type=alert_type,
                 description=description,

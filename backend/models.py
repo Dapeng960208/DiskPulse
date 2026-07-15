@@ -313,8 +313,32 @@ class StorageUsage(Base):
 
 class StorageAlerts(Base):
     __tablename__ = "storage_alerts"
+    __table_args__ = (
+        UniqueConstraint(
+            "storage_cluster_id",
+            "source",
+            "external_event_id",
+            name="uq_storage_alert_vendor_event",
+        ),
+        Index(
+            "ix_storage_alert_cluster_updated",
+            "storage_cluster_id",
+            "updated_at",
+        ),
+        Index("ix_storage_alert_severity_updated", "severity", "updated_at"),
+        Index("ix_storage_alert_fingerprint_updated", "fingerprint", "updated_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
+    storage_cluster_id = Column(
+        Integer,
+        ForeignKey("storage_clusters.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    source = Column(String(32), nullable=False, default="diskpulse")
+    external_event_id = Column(String(255), nullable=True)
+    fingerprint = Column(String(512), nullable=True)
+    severity = Column(String(16), nullable=False, default="info")
     alert_level = Column(String)
     alert_type = Column(String)
     description = Column(Text)
@@ -324,6 +348,8 @@ class StorageAlerts(Base):
     related_type = Column(String, index=True)
     related_info = Column(JSON)
     updated_at = Column(DateTime, default=datetime.now)
+
+    storage_cluster = relationship("StorageCluster", lazy=True)
 
 
 class StorageBackUpRecord(Base):
