@@ -11,6 +11,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
 import models
+import questdb.models  # noqa: F401
 from questdb.database import QuestDBBase
 from routers import storage_cluster
 from utils.isilonClient import IsilonClient
@@ -364,3 +365,50 @@ def test_celery_schedules_event_and_performance_collection():
     assert '"storage_performance_schedule_fetching_task"' in source
     assert '"task": "celery_tasks.tasks.storage_health.storage_performance_schedule_fetching_task"' in source
     assert '"schedule": 300.0' in source
+
+
+def test_storage_event_window_uses_24_hours_then_five_minute_overlap():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+    now = datetime(2026, 7, 15, 12, 0, 0)
+
+    assert storage_health.event_window_start(None, now) == now - timedelta(hours=24)
+    assert storage_health.event_window_start(
+        datetime(2026, 7, 15, 11, 30, 0), now
+    ) == datetime(2026, 7, 15, 11, 25, 0)
+
+
+def test_vendor_event_parser_normalizes_identity_severity_and_fingerprint():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+    rows = storage_health.normalize_vendor_events(
+        storage_cluster_id=7,
+        vendor="netapp",
+        records=[
+            {
+                "index": 42,
+                "time": "2026-07-15T10:00:00Z",
+                "message": {"name": "disk.offline", "severity": "EMERGENCY"},
+                "node": {"uuid": "node-1", "name": "node-a"},
+                "log_message": "Disk offline",
+            }
+        ],
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["external_event_id"] == "node-1:42"
+    assert rows[0]["severity"] == "critical"
+    assert rows[0]["fingerprint"] == "netapp:disk.offline:node:node-1"
+    assert rows[0]["storage_cluster_id"] == 7
+
+
+def test_cluster_collection_isolates_failures():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+
+    def collect(cluster_id):
+        if cluster_id == 2:
+            raise RuntimeError("offline")
+        return cluster_id
+
+    assert storage_health.run_isolated([1, 2, 3], collect, Mock()) == {
+        "succeeded_clusters": (1, 3),
+        "failed_clusters": (2,),
+    }
