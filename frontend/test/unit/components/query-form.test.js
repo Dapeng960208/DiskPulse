@@ -46,7 +46,7 @@ describe('QueryForm progressive filter toolbar', () => {
   it('uses one-to-five equal-width filter columns with left-aligned labels', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/components/form/QueryForm.vue'), 'utf8');
 
-    expect(source).toContain('grid-template-columns: repeat(auto-fill, minmax(max(220px, calc((100% - 4 * var(--spacing-md)) / 5)), 1fr));');
+    expect(source).toContain('grid-template-columns: repeat(auto-fill, minmax(min(100%, max(220px, calc((100% - 4 * var(--spacing-md)) / 5))), 1fr));');
     expect(source).toMatch(/\.el-form-item__label \{[\s\S]*justify-content: flex-start;[\s\S]*text-align: left;[\s\S]*color: var\(--text-primary\);[\s\S]*font-size: var\(--font-size-base\);/);
     expect(source).not.toMatch(/&\.query-form-field--wide \{[\s\S]*?(?:width|flex-basis):/);
   });
