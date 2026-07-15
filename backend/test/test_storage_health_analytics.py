@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import csv
 import importlib
 import importlib.util
 import io
@@ -11,10 +12,12 @@ import pytest
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from openpyxl import load_workbook
 
 import models
 import questdb.models  # noqa: F401
 from appConfig import Config
+from crud import storageHealthAnalyticsCrud
 from questdb.database import QuestDBBase
 from routers import storage_cluster
 from utils.isilonClient import IsilonClient
@@ -173,6 +176,81 @@ def test_repeated_faults_group_vendor_events_only():
     ]
 
 
+def test_repeated_faults_group_excludes_unknown_sources():
+    result = _analytics().group_repeated_faults(
+        [
+            {"source": "custom", "fingerprint": "disk.offline:disk-1", "occurred_at": START},
+            {"source": "custom", "fingerprint": "disk.offline:disk-1", "occurred_at": END},
+            {"source": "isilon", "fingerprint": "node.down:node-1", "occurred_at": START},
+            {"source": "isilon", "fingerprint": "node.down:node-1", "occurred_at": END},
+        ]
+    )
+
+    assert {row["source"] for row in result} == {"isilon"}
+
+
+def test_repeated_fault_crud_allows_only_netapp_and_isilon(db_session):
+    db_session.add(
+        models.StorageCluster(
+            id=7,
+            name="cluster-seven",
+            storage_type="netapp",
+            storage_host="storage.local",
+            is_active=True,
+        )
+    )
+    for source in ("netapp", "custom"):
+        for index, occurred_at in enumerate((START, END), start=1):
+            db_session.add(
+                models.StorageAlerts(
+                    storage_cluster_id=7,
+                    source=source,
+                    external_event_id=f"{source}-{index}",
+                    fingerprint=f"{source}:disk.offline:node:node-1",
+                    severity="error",
+                    alert_level="error",
+                    updated_at=occurred_at.replace(tzinfo=None),
+                )
+            )
+    db_session.commit()
+
+    rows = storageHealthAnalyticsCrud.get_repeated_fault_rows(
+        db_session,
+        7,
+        START,
+        END,
+    )
+
+    assert {row["source"] for row in rows} == {"netapp"}
+
+
+def test_top_latency_empty_range_distinguishes_supported_from_never_collected():
+    analytics = _analytics()
+    db = Mock()
+    with (
+        patch.object(
+            analytics.storageHealthAnalyticsCrud,
+            "get_top_latency_rows",
+            return_value=[],
+        ),
+        patch.object(
+            analytics.storageHealthAnalyticsCrud,
+            "has_performance_metrics",
+            side_effect=[True, False],
+            create=True,
+        ) as has_performance_metrics,
+    ):
+        supported = analytics.get_top_latency(db, 7, START, END)
+        unsupported = analytics.get_top_latency(db, 8, START, END)
+
+    assert [item.args for item in has_performance_metrics.call_args_list] == [
+        (db, 7),
+        (db, 8),
+    ]
+    assert supported == {"supported": True, "data": []}
+    assert unsupported == {"supported": False, "data": []}
+
+
 @pytest.mark.parametrize(
     ("start_time", "end_time", "message"),
     [
@@ -183,6 +261,11 @@ def test_repeated_faults_group_vendor_events_only():
 def test_analytics_time_range_validation(start_time, end_time, message):
     with pytest.raises(ValueError, match=message):
         _analytics().validate_time_range(start_time, end_time)
+
+
+def test_analytics_time_range_rejects_mixed_timezone_awareness_as_value_error():
+    with pytest.raises(ValueError, match="timezone"):
+        _analytics().validate_time_range(START, END.replace(tzinfo=None))
 
 
 @pytest.fixture
@@ -237,6 +320,29 @@ def test_storage_health_endpoint_rejects_invalid_time_ranges(analytics_client, p
     )
 
     assert response.status_code == 422
+
+
+def test_storage_health_endpoint_returns_422_for_mixed_timezone_awareness(analytics_client):
+    response = analytics_client.get(
+        "/storage-pulse/api/storage-clusters/1/analytics/capacity-change",
+        params={
+            "start_time": START.isoformat(),
+            "end_time": END.replace(tzinfo=None).isoformat(),
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_top_latency_endpoint_rejects_limit_above_ten(analytics_client):
+    with patch("routers.storage_cluster.get_top_latency", return_value={"data": []}) as service:
+        response = analytics_client.get(
+            "/storage-pulse/api/storage-clusters/1/analytics/top-latency",
+            params=_query_params(limit=11),
+        )
+
+    assert response.status_code == 422
+    service.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -307,6 +413,68 @@ def test_pdf_export_succeeds_when_backend_logo_is_missing(monkeypatch, tmp_path)
     assert content.startswith(b"%PDF")
 
 
+def test_capacity_and_severity_section_rows_include_export_summaries():
+    analytics = _analytics()
+    sources = {
+        "netapp": {"critical": 1, "error": 0, "warning": 0, "info": 0}
+    }
+    report = {
+        "capacity": {
+            "start_used": 100.0,
+            "end_used": 125.0,
+            "change": 25.0,
+            "change_percent": 25.0,
+            "data": [{"updated_at": START, "used": 100.0}],
+        },
+        "severity": {
+            "counts": {"critical": 1, "error": 0, "warning": 0, "info": 0},
+            "total": 1,
+            "sources": sources,
+        },
+    }
+
+    capacity_rows = analytics._section_rows("capacity", report)
+    severity_rows = analytics._section_rows("severity", report)
+
+    assert {
+        "start_used": 100.0,
+        "end_used": 125.0,
+        "change": 25.0,
+        "change_percent": 25.0,
+    }.items() <= capacity_rows[0].items()
+    assert {"updated_at": START, "used": 100.0}.items() <= capacity_rows[0].items()
+    assert severity_rows[0]["total"] == 1
+    assert severity_rows[0]["sources"] == sources
+
+
+@pytest.mark.parametrize("prefix", ["=", "+", "-", "@"])
+def test_csv_export_escapes_formula_prefixes(prefix):
+    untrusted = f"{prefix}malicious"
+
+    rows = list(
+        csv.DictReader(
+            io.StringIO(
+                _analytics()._csv_bytes([{"object_name": untrusted}]).decode("utf-8-sig")
+            )
+        )
+    )
+
+    assert rows[0]["object_name"] == f"'{untrusted}"
+
+
+@pytest.mark.parametrize("prefix", ["=", "+", "-", "@"])
+def test_excel_export_escapes_formula_prefixes(prefix):
+    untrusted = f"{prefix}malicious"
+    content = _analytics()._excel_bytes(
+        ["faults"],
+        {"faults": {"data": [{"object_name": untrusted}]}},
+    )
+
+    workbook = load_workbook(io.BytesIO(content), data_only=False)
+
+    assert workbook["faults"]["A2"].value == f"'{untrusted}"
+
+
 def test_netapp_client_exposes_ems_and_volume_metrics_contracts():
     client = object.__new__(NetAppClient)
     client._get_all_records = Mock(side_effect=[[{"index": 7}], [{"uuid": "volume-1"}]])
@@ -331,21 +499,78 @@ def test_isilon_client_discovers_platform_version_before_statistics_and_events()
     client._get = Mock(
         side_effect=[
             {"latest": 16},
-            {"stats": [{"key": "ifs.ops.latency"}]},
+            {
+                "keys": [
+                    {"key": "ifs.workload.latency"},
+                    {"key": "ifs.node.latency"},
+                ]
+            },
+            {"stats": [{"key": "ifs.workload.latency", "workload": "workload-1"}]},
             {"eventgroups": [{"id": "event-1"}]},
             {"eventlists": [{"id": "event-list-1"}]},
         ]
     )
 
     assert client.discover_api_version() == "16"
-    assert client.get_performance_statistics() == [{"key": "ifs.ops.latency"}]
+    assert client.get_performance_statistics() == [
+        {"key": "ifs.workload.latency", "workload": "workload-1"}
+    ]
     assert client.get_event_group_occurrences() == [{"id": "event-1"}]
     assert client.get_event_lists() == [{"id": "event-list-1"}]
     assert [call.args[0] for call in client._get.call_args_list] == [
         "/latest",
+        "/16/statistics/keys",
         "/16/statistics/current",
         "/16/event/eventgroup-occurrences",
         "/16/event/eventlists",
+    ]
+    assert client._get.call_args_list[2].kwargs["params"]["keys"] == "ifs.workload.latency"
+
+
+def test_isilon_statistics_discovery_falls_back_to_node_latency_key():
+    client = object.__new__(IsilonClient)
+    client.api_version = "16"
+    client._get = Mock(
+        side_effect=[
+            {"keys": [{"key": "ifs.node.latency"}]},
+            {"stats": [{"key": "ifs.node.latency", "devid": 2}]},
+        ]
+    )
+
+    assert client.get_performance_statistics() == [
+        {"key": "ifs.node.latency", "devid": 2}
+    ]
+    assert [call.args[0] for call in client._get.call_args_list] == [
+        "/16/statistics/keys",
+        "/16/statistics/current",
+    ]
+    assert client._get.call_args_list[1].kwargs["params"]["keys"] == "ifs.node.latency"
+
+
+def test_isilon_latency_rows_use_returned_workload_dimension_not_key_guessing():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+
+    rows = storage_health._isilon_performance_rows(
+        7,
+        [
+            {
+                "key": "ifs.ops.latency",
+                "workload": "workload-1",
+                "value": 3.5,
+                "timestamp": "2026-07-15T10:00:00Z",
+            },
+            {
+                "key": "ifs.node.latency",
+                "devid": 2,
+                "value": 2.5,
+                "timestamp": "2026-07-15T10:00:00Z",
+            },
+        ],
+        datetime(2026, 7, 15, 10, 0, 0),
+    )
+
+    assert [(row["object_type"], row["object_id"]) for row in rows] == [
+        ("workload", "workload-1")
     ]
 
 
@@ -629,6 +854,67 @@ def test_vendor_event_parser_normalizes_identity_severity_and_fingerprint():
     assert rows[0]["severity"] == "critical"
     assert rows[0]["fingerprint"] == "netapp:disk.offline:node:node-1"
     assert rows[0]["storage_cluster_id"] == 7
+
+
+@pytest.mark.parametrize(
+    ("vendor", "record"),
+    [
+        (
+            "netapp",
+            {
+                "time": "2026-07-15T10:00:00Z",
+                "message": {"name": "disk.offline", "severity": "error"},
+            },
+        ),
+        (
+            "netapp",
+            {
+                "index": 42,
+                "message": {"name": "disk.offline", "severity": "error"},
+            },
+        ),
+        (
+            "netapp",
+            {
+                "index": 42,
+                "time": "2026-07-15T10:00:00Z",
+                "message": {"name": "disk.offline"},
+            },
+        ),
+        (
+            "isilon",
+            {
+                "start_time": "2026-07-15T10:00:00Z",
+                "severity": "error",
+                "event_type": "node.down",
+            },
+        ),
+        (
+            "isilon",
+            {"id": "event-1", "severity": "error", "event_type": "node.down"},
+        ),
+        (
+            "isilon",
+            {
+                "id": "event-1",
+                "start_time": "2026-07-15T10:00:00Z",
+                "event_type": "node.down",
+            },
+        ),
+    ],
+    ids=[
+        "netapp-missing-id",
+        "netapp-missing-time",
+        "netapp-missing-severity",
+        "isilon-missing-id",
+        "isilon-missing-time",
+        "isilon-missing-severity",
+    ],
+)
+def test_vendor_events_missing_identity_time_or_severity_are_skipped(vendor, record):
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+
+    assert storage_health.normalize_vendor_events(7, vendor, [record]) == []
 
 
 def test_cluster_collection_isolates_failures():
