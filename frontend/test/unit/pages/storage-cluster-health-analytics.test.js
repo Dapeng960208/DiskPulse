@@ -198,6 +198,42 @@ describe('storage cluster health analytics page', () => {
     expect(aggregateApi.fetchAggregateTrees).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the time filter inside the tabs and gives the primary charts enough room', async () => {
+    storageClusterApi.fetchCapacityChange.mockResolvedValue({
+      data: [{ updated_at: initialRange[0], used: 100 }],
+    });
+    const wrapper = await mountPage();
+    const tabs = wrapper.get('[data-testid="analytics-tabs"]');
+    const datePicker = tabs.findComponent({ name: 'ElDatePicker' });
+
+    expect(tabs.findComponent({ name: 'FilterForm' }).exists()).toBe(true);
+    expect(datePicker.attributes('format')).toBe('YYYY-MM-DD HH:mm:ss');
+    expect(datePicker.attributes('start-placeholder')).toBe('开始日期时间');
+    expect(datePicker.attributes('end-placeholder')).toBe('结束日期时间');
+    expect(wrapper.findComponent({ name: 'LineCharts' }).attributes('height')).toBe('520px');
+
+    await selectTab(wrapper, 'distribution');
+
+    expect(tabs.findComponent({ name: 'FilterForm' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'DiskUsage' }).attributes('height')).toBe('520px');
+  });
+
+  it('uses the standard centered loading state for storage distribution', async () => {
+    let resolveDistribution;
+    aggregateApi.fetchAggregateTrees.mockReturnValue(new Promise((resolve) => {
+      resolveDistribution = resolve;
+    }));
+    const wrapper = await mountPage();
+
+    await selectTab(wrapper, 'distribution');
+
+    expect(wrapper.get('.analytics-chart-stage').attributes('aria-busy')).toBe('true');
+    expect(wrapper.findComponent({ name: 'LoadingCharts' }).exists()).toBe(false);
+
+    resolveDistribution({ data: [{ name: 'volume-a' }] });
+    await flushPromises();
+  });
+
   it('loads performance and fault data lazily and refreshes only the active tab for a new range', async () => {
     const wrapper = await mountPage();
 
