@@ -1,0 +1,8 @@
+{
+  "date": "2026-07-15",
+  "framework": "Vue 3 + Vite",
+  "font_stack": "frontend/src/styles/style.scss system sans stack",
+  "palette": "frontend/src/styles/variables.scss CSS custom properties",
+  "motion": "CSS-only",
+  "spacing": "frontend/src/styles/variables.scss 4px-based scale"
+}
