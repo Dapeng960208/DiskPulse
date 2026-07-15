@@ -50,11 +50,25 @@ const groupApi = {
   fetchById: vi.fn((id) => Promise.resolve({ id, name: `Group-${id}` })),
 };
 
+const volumeApi = {
+  fetch: vi.fn(() => Promise.resolve({ content: [{ id: 41, name: 'Volume-41' }] })),
+  fetchById: vi.fn((id) => Promise.resolve({ id, name: `Volume-${id}` })),
+};
+
+const qtreeApi = {
+  fetch: vi.fn(() => Promise.resolve({
+    content: [{ id: 51, name: 'Qtree-51', volume: { name: 'Volume-A' } }],
+  })),
+  fetchById: vi.fn((id) => Promise.resolve({ id, name: `Qtree-${id}` })),
+};
+
 vi.mock('@/api/account-api', () => ({ default: accountApi }));
 vi.mock('@/api/domain-group-api', () => ({ default: domainGroupApi }));
 vi.mock('@/api/project-api', () => ({ default: projectApi }));
 vi.mock('@/api/group-tag-api', () => ({ default: groupTagApi }));
 vi.mock('@/api/group-api', () => ({ default: groupApi }));
+vi.mock('@/api/volume-api', () => ({ default: volumeApi }));
+vi.mock('@/api/qtree-api', () => ({ default: qtreeApi }));
 vi.mock('@/components/data/UserAvatar.vue', () => ({
   default: defineComponent({
     name: 'UserAvatar',
@@ -79,7 +93,7 @@ const globalStubs = {
       loading: Boolean,
       disabled: Boolean,
     },
-    emits: ['update:modelValue'],
+    emits: ['update:modelValue', 'change'],
     setup(props, { emit, slots }) {
       return () => h('div', [
         slots.default?.(),
@@ -295,5 +309,40 @@ describe('form select function coverage', () => {
       nameLike: 'ops',
     });
     expect(wrapper.emitted('update:modelValue')).toContainEqual([12]);
+  });
+
+  it.each([
+    ['GroupTagSelect', 7, 'Tag-7', groupTagApi],
+    ['GroupSelect', 9, 'Project-31 - Group-9', groupApi],
+    ['VolumeSelect', 41, 'Volume-41', volumeApi],
+    ['QtreeSelect', 51, 'Volume-A/Qtree-51', qtreeApi],
+  ])('emits the loaded display label from %s without another request', async (
+    componentName,
+    selectedId,
+    expectedLabel,
+    api,
+  ) => {
+    if (componentName === 'GroupTagSelect') {
+      groupTagApi.fetch.mockResolvedValueOnce({ content: [{ id: 7, name: 'Tag-7' }] });
+    }
+    if (componentName === 'GroupSelect') {
+      groupApi.fetch.mockResolvedValueOnce({
+        content: [{ id: 9, name: 'Group-9', project: { name: 'Project-31' } }],
+      });
+    }
+
+    const { default: SelectComponent } = await import(`@/components/form/${componentName}.vue`);
+    const wrapper = shallowMount(SelectComponent, {
+      props: { modelValue: null },
+      global: { stubs: globalStubs },
+    });
+    await flushPromises();
+
+    const requestCount = api.fetch.mock.calls.length + api.fetchById.mock.calls.length;
+    wrapper.findComponent({ name: 'ElSelect' }).vm.$emit('change', selectedId);
+    await flushPromises();
+
+    expect(wrapper.emitted('selected-label-change')).toEqual([[expectedLabel]]);
+    expect(api.fetch.mock.calls.length + api.fetchById.mock.calls.length).toBe(requestCount);
   });
 });
