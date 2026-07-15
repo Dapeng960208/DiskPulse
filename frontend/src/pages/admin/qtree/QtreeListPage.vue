@@ -167,6 +167,7 @@ query();
           <span v-if="row.soft_limit">{{ formatQuotaLimit(row.soft_limit, { emptyText: '无软限额' }) }}</span>
           <ElTag
             v-else
+            class="storage-info-tag"
             type="info">无软限额</ElTag>
         </template>
       </ElTableColumn>
@@ -211,6 +212,7 @@ query();
             :show-numbers="false" />
           <ElTag
             v-else
+            class="storage-info-tag"
             type="info">无软限额</ElTag>
         </template>
       </ElTableColumn>

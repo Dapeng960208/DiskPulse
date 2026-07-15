@@ -75,7 +75,7 @@ query();
           <ElTag
             v-for="storageType in row.storage_cluster_types"
             :key="storageType"
-            class="mr-1"
+            class="mr-1 storage-info-tag"
             type="info">
             {{ storageType }}
           </ElTag>

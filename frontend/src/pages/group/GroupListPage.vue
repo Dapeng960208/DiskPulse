@@ -188,7 +188,7 @@ function confirmDelete(row) {
           <span>{{ row.storage_cluster?.name || '-' }}</span>
           <ElTag
             type="info"
-            class="group-list__info-tag">
+            class="storage-info-tag">
             {{ row.storage_cluster?.storage_type || '-' }}
           </ElTag>
         </template>
@@ -263,7 +263,7 @@ function confirmDelete(row) {
           <span v-if="row.soft_limit">{{ formatQuotaLimit(row.soft_limit, { emptyText: '无软限额' }) }}</span>
           <ElTag
             v-else
-            class="group-list__info-tag"
+            class="storage-info-tag"
             type="info">无软限额</ElTag>
         </template>
       </ElTableColumn>
@@ -308,7 +308,7 @@ function confirmDelete(row) {
             :show-numbers="false" />
           <ElTag
             v-else
-            class="group-list__info-tag"
+            class="storage-info-tag"
             type="info">无软限额</ElTag>
         </template>
       </ElTableColumn>
@@ -374,9 +374,4 @@ function confirmDelete(row) {
   @include page-container;
 }
 
-.group-list__info-tag {
-  --el-tag-bg-color: var(--tag-info-bg);
-  --el-tag-border-color: var(--tag-info-border);
-  --el-tag-text-color: var(--tag-info-color);
-}
 </style>

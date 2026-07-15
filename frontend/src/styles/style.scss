@@ -211,6 +211,12 @@ a {
 
 .transition { transition: var(--transition-all); }
 
+.storage-info-tag {
+  --el-tag-bg-color: var(--tag-info-bg);
+  --el-tag-border-color: var(--tag-info-border);
+  --el-tag-text-color: var(--tag-info-color);
+}
+
 // ==================== 响应式工具 ====================
 @include mobile {
   .mobile-hidden { display: none !important; }

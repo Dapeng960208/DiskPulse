@@ -265,7 +265,11 @@ query();
         align="center"
         min-width="70">
         <template #default="{ row }">
-          <span>{{ row.storage_cluster?.storage_type || '-' }}</span>
+          <ElTag
+            v-if="row.storage_cluster?.storage_type"
+            type="info"
+            class="storage-info-tag">{{ row.storage_cluster.storage_type }}</ElTag>
+          <span v-else>-</span>
         </template>
       </ElTableColumn>
       <ElTableColumn
@@ -330,6 +334,7 @@ query();
           <span v-if="row.soft_limit">{{ formatQuotaLimit(row.soft_limit, { emptyText: '无软限额' }) }}</span>
           <ElTag
             v-else
+            class="storage-info-tag"
             type="info">无软限额</ElTag>
         </template>
       </ElTableColumn>
@@ -374,6 +379,7 @@ query();
             :show-numbers="false" />
           <ElTag
             v-else
+            class="storage-info-tag"
             type="info">无软限额</ElTag>
         </template>
       </ElTableColumn>
