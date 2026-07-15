@@ -556,6 +556,33 @@ describe('dialog component function coverage', () => {
     expect(wrapper.find('[data-test="isilon-session-cache-path"]').exists()).toBe(false);
   }, 15000);
 
+  it('shows complete local service account help only for Isilon clusters', async () => {
+    const { default: StorageClusterFormDialog } = await import('@/pages/admin/storage-cluster/components/StorageClusterFormDialog.vue');
+    const wrapper = shallowMount(StorageClusterFormDialog, {
+      global: { stubs: globalStubs },
+    });
+
+    getExposed(wrapper).edit();
+    expect(wrapper.find('[data-test="isilon-account-help-trigger"]').exists()).toBe(false);
+
+    const storageType = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((select) => select.props('modelValue') === null);
+    storageType.vm.$emit('update:modelValue', 'isilon');
+    await flushPromises();
+
+    const trigger = wrapper.find('[data-test="isilon-account-help-trigger"]');
+    expect(trigger.exists()).toBe(true);
+    expect(wrapper.findAllComponents({ name: 'ElDialog' })).toHaveLength(2);
+    await trigger.trigger('click');
+
+    const helpDialog = wrapper.findAllComponents({ name: 'ElDialog' }).at(1);
+    expect(helpDialog.props('modelValue')).toBe(true);
+    expect(wrapper.text()).toContain('isi auth users create');
+    expect(wrapper.text()).toContain('ISI_PRIV_LOGIN_PAPI');
+    expect(wrapper.text()).toContain('ISI_PRIV_SYS_TIME');
+    expect(wrapper.text()).toContain('diskpulse_monitor');
+  }, 15000);
+
   it('executes usage form dialog handlers', async () => {
     const { default: UsageFormDialog } = await import('@/pages/usage/components/UsageFormDialog.vue');
     const wrapper = shallowMount(UsageFormDialog, {
