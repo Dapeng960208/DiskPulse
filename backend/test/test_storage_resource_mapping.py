@@ -62,6 +62,21 @@ def test_isilon_storage_pools_use_onefs_9_11_endpoint():
     )
 
 
+def test_isilon_quota_requests_disable_name_resolution_by_default():
+    client = object.__new__(IsilonClient)
+    client._get = Mock(return_value={"quotas": []})
+
+    assert client.get_quotas() == []
+    client._get.assert_called_once_with(
+        "/1/quota/quotas",
+        params={
+            "limit": 1000,
+            "resolve_names": "false",
+            "recurse_path_children": "false",
+        },
+    )
+
+
 @pytest.mark.parametrize("payload", [{}, {"storagepools": {}}, {"storagepools": None}])
 def test_isilon_storage_pools_reject_invalid_envelopes(payload):
     client = object.__new__(IsilonClient)
@@ -196,6 +211,32 @@ def test_isilon_directory_quota_is_a_storage_space(db_session):
     assert spaces[0].name == "/ifs/team"
     assert spaces[0].type == "directory_quota"
     assert spaces[0].aggregate == ""
+
+
+def test_isilon_user_quota_uses_uid_persona_without_name_resolution(db_session):
+    _seed_cluster(db_session, "isilon")
+    monitor = _monitor(db_session, "isilon")
+    monitor._process_quota_user_isilon = Mock(return_value=None)
+
+    monitor._fetch_user_quotas_isilon(
+        {},
+        {},
+        {},
+        {},
+        {},
+        raw_quotas=[
+            {
+                "type": "user",
+                "path": "/ifs/team",
+                "persona": {"id": "UID:12345"},
+                "thresholds": {"hard": 100 * GB},
+                "usage": {"logical": 25 * GB},
+            }
+        ],
+    )
+
+    record = monitor._process_quota_user_isilon.call_args.args[0]
+    assert record["rd_username"] == "12345"
 
 
 def test_empty_successful_sync_preserves_existing_resources(db_session):
