@@ -1,6 +1,9 @@
 import { shallowMount } from '@vue/test-utils';
+import { createPinia } from 'pinia';
+import { createMemoryHistory, createRouter } from 'vue-router';
 import { vi } from 'vitest';
 import App from '@/App.vue';
+import RouteMenu from '@/layouts/components/RouteMenu.vue';
 import { commonStubs } from '../../helpers/mount';
 
 vi.mock('@/layouts/AppLayout.vue', () => ({
@@ -67,5 +70,27 @@ describe('router/routes and app shell', () => {
 
     expect(wrapper.exists()).toBe(true);
     expect(wrapper.findComponent({ name: 'ElConfigProvider' }).exists()).toBe(true);
+  });
+
+  it('places AI assistant immediately after project groups', () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes,
+    });
+    const wrapper = shallowMount(RouteMenu, {
+      global: {
+        plugins: [createPinia(), router],
+        stubs: {
+          ElMenu: { template: '<div><slot /></div>' },
+          RouteMenuItem: {
+            props: ['option'],
+            template: '<span class="menu-item">{{ option.label }}</span>',
+          },
+        },
+      },
+    });
+    const labels = wrapper.findAll('.menu-item').map((item) => item.text());
+
+    expect(labels[labels.indexOf('项目组') + 1]).toBe('AI 助手');
   });
 });
