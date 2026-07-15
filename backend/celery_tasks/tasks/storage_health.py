@@ -252,7 +252,7 @@ def _isilon_latency_milliseconds(value, unit):
 def _netapp_performance_rows(cluster_id: int, records: list[dict], now: datetime) -> list[dict]:
     rows = []
     for record in records:
-        metrics = record.get("metrics") or {}
+        metrics = record.get("metric") or {}
         latency_total = _microseconds_to_milliseconds(metrics.get("latency"))
         if latency_total is None:
             continue

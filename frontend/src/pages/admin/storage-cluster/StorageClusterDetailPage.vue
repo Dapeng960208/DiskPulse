@@ -22,14 +22,12 @@ import LineCharts from '@/common/charts/LineCharts.vue';
 import PieCharts from '@/common/charts/PieCharts.vue';
 import BarStackChart from '@/common/charts/BarStackChart.vue';
 import LoadingCharts from '@/common/charts/LoadingCharts.vue';
-import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import storageClusterApi from '@/api/storage-cluster-api';
 import { useQuery } from '@/composables/query';
 import { getDefaultTime } from '@/composables/common';
 
 const route = useRoute();
 const clusterId = ref(null);
-const standalone = computed(() => route.name === 'StorageHealth');
 const dateRange = ref(getDefaultTime(8));
 const activeTab = ref('capacity');
 const capacity = ref({ data: [] });
@@ -196,21 +194,13 @@ onBeforeMount(() => {
 
 <template>
   <div class="storage-health-page flex flex-col flex-1 min-h-0">
-    <ElCard
-      v-if="standalone"
-      class="mb-2.5">
-      <ElFormItem label="存储集群">
-        <StorageClusterSelect v-model="clusterId" />
-      </ElFormItem>
-    </ElCard>
-
     <FilterForm
       v-if="clusterId"
       @query="loadActiveTab(true)"
       @reset="resetRange">
       <ElFormItem
         label="时间范围"
-        class="w-120">
+        class="analytics-date-range">
         <ElDatePicker
           v-model="dateRange"
           type="datetimerange"
@@ -221,54 +211,34 @@ onBeforeMount(() => {
           end-placeholder="结束日期"
           :shortcuts="shortcuts" />
       </ElFormItem>
-      <ElDropdown @command="handleExport">
-        <ElButton type="primary">导出报告</ElButton>
-        <template #dropdown>
-          <ElDropdownMenu>
-            <template v-if="activeTab !== 'faults'">
-              <ElDropdownItem command="current:csv">当前页 CSV</ElDropdownItem>
-              <ElDropdownItem command="current:excel">当前页 Excel</ElDropdownItem>
-              <ElDropdownItem command="current:pdf">当前页 PDF</ElDropdownItem>
-            </template>
-            <template v-else>
-              <ElDropdownItem command="severity:csv">错误级别 CSV</ElDropdownItem>
-              <ElDropdownItem command="severity:excel">错误级别 Excel</ElDropdownItem>
-              <ElDropdownItem command="severity:pdf">错误级别 PDF</ElDropdownItem>
-              <ElDropdownItem command="faults:csv">重复故障 CSV</ElDropdownItem>
-              <ElDropdownItem command="faults:excel">重复故障 Excel</ElDropdownItem>
-              <ElDropdownItem command="faults:pdf">重复故障 PDF</ElDropdownItem>
-            </template>
-            <ElDropdownItem
-              divided
-              command="all:csv">完整报告 CSV</ElDropdownItem>
-            <ElDropdownItem command="all:excel">完整报告 Excel</ElDropdownItem>
-            <ElDropdownItem command="all:pdf">完整报告 PDF</ElDropdownItem>
-          </ElDropdownMenu>
-        </template>
-      </ElDropdown>
+      <template #actions>
+        <ElDropdown @command="handleExport">
+          <ElButton type="primary">导出报告</ElButton>
+          <template #dropdown>
+            <ElDropdownMenu>
+              <template v-if="activeTab !== 'faults'">
+                <ElDropdownItem command="current:csv">当前页 CSV</ElDropdownItem>
+                <ElDropdownItem command="current:excel">当前页 Excel</ElDropdownItem>
+                <ElDropdownItem command="current:pdf">当前页 PDF</ElDropdownItem>
+              </template>
+              <template v-else>
+                <ElDropdownItem command="severity:csv">错误级别 CSV</ElDropdownItem>
+                <ElDropdownItem command="severity:excel">错误级别 Excel</ElDropdownItem>
+                <ElDropdownItem command="severity:pdf">错误级别 PDF</ElDropdownItem>
+                <ElDropdownItem command="faults:csv">重复故障 CSV</ElDropdownItem>
+                <ElDropdownItem command="faults:excel">重复故障 Excel</ElDropdownItem>
+                <ElDropdownItem command="faults:pdf">重复故障 PDF</ElDropdownItem>
+              </template>
+              <ElDropdownItem
+                divided
+                command="all:csv">完整报告 CSV</ElDropdownItem>
+              <ElDropdownItem command="all:excel">完整报告 Excel</ElDropdownItem>
+              <ElDropdownItem command="all:pdf">完整报告 PDF</ElDropdownItem>
+            </ElDropdownMenu>
+          </template>
+        </ElDropdown>
+      </template>
     </FilterForm>
-
-    <ElCard
-      v-if="clusterId"
-      class="mt-2.5">
-      <ElDescriptions
-        :column="4"
-        size="large"
-        border>
-        <ElDescriptionsItem label="集群名称">{{ infoResult.name }}</ElDescriptionsItem>
-        <ElDescriptionsItem label="描述">{{ infoResult.description }}</ElDescriptionsItem>
-        <template v-if="!standalone">
-          <ElDescriptionsItem label="访问协议">{{ infoResult.protocol?.toUpperCase() }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="TLS 证书校验">
-            {{ infoResult.protocol === 'https' ? (infoResult.tls_verify ? '开启' : '关闭') : '不适用' }}
-          </ElDescriptionsItem>
-          <ElDescriptionsItem label="API 端口">{{ infoResult.storage_port }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="API 用户名">{{ infoResult.storage_user }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="创建时间">{{ infoResult.created_at }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="更新时间">{{ infoResult.updated_at }}</ElDescriptionsItem>
-        </template>
-      </ElDescriptions>
-    </ElCard>
 
     <ElCard
       v-if="clusterId"
@@ -315,10 +285,10 @@ onBeforeMount(() => {
             height="360px" />
           <div
             v-else-if="latency.supported === false"
-            class="analytics-empty">不支持性能分析</div>
+            class="analytics-empty">尚未采集到性能数据，请检查采集任务和设备 API 权限</div>
           <div
             v-else-if="!latencyData.length"
-            class="analytics-empty">暂无性能数据</div>
+            class="analytics-empty">当前时间范围内暂无性能数据</div>
           <div v-else>
             <BarStackChart
               :data="latencySeries"
@@ -364,7 +334,7 @@ onBeforeMount(() => {
             height="360px" />
           <div
             v-else-if="!severity.total && !faultData.length && !systemEventData.length"
-            class="analytics-empty">暂无故障数据</div>
+            class="analytics-empty">当前时间范围内暂无故障数据；如设备已有告警，请检查厂商事件采集权限</div>
           <div v-else>
             <div class="fault-grid">
               <PieCharts
@@ -434,8 +404,17 @@ onBeforeMount(() => {
 </template>
 
 <style lang="scss" scoped>
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4 · genre: modern-minimal · macrostructure: Workbench · tone: technical · anchor hue: existing blue */
 .storage-health-page {
   overflow-x: hidden;
+}
+
+.analytics-date-range {
+  min-width: 0;
+}
+
+:deep(.analytics-date-range .el-date-editor) {
+  width: min(440px, 100%);
 }
 
 .analytics-empty {

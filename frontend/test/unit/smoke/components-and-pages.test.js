@@ -120,7 +120,14 @@ describe('lightweight component and page smoke tests', () => {
         advanced: '<div>Advanced</div>',
         exportExcel: '<div>Export</div>',
       },
-      global: { stubs: commonStubs },
+      global: {
+        stubs: {
+          ...commonStubs,
+          GridContainer: {
+            template: '<div><slot /><div><slot name="tail" /></div></div>',
+          },
+        },
+      },
     });
     expect(queryForm.text()).toContain('Filters');
     expect(queryForm.text()).toContain('Actions');

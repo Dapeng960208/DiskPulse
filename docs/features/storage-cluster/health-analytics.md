@@ -4,7 +4,7 @@
 
 存储集群健康分析用于在一个时间范围内查看已用容量变化、按严重级别汇总的错误、Top 10 高延迟对象和重复设备故障，并按需导出结果。
 
-所有登录用户可从一级菜单“存储健康”选择集群查看；管理员仍可从“系统管理 → 存储集群 → 存储集群详情”进入同一分析页。容量、性能和故障分析共用页面时间范围；性能和故障数据在相应页签首次打开时加载。业务入口不展示 API 用户名、端口和 TLS 等管理字段。
+分析入口只保留在“系统管理 → 存储集群”列表最后一列的“详情”按钮，不再提供独立“存储健康”一级菜单和集群选择器。容量、性能和故障分析共用页面时间范围；性能和故障数据在相应页签首次打开时加载。页面不重复展示集群名称、描述、API 用户名、端口和 TLS 等集群配置字段。
 
 ## 数据来源与统计口径
 
@@ -18,7 +18,7 @@
 
 DiskPulse 既有容量告警使用 `source=diskpulse`，严重级别映射为 `high→critical`、`medium→warning`、`low→info`。原“告警”页面只查询 `source=diskpulse`，NetApp/Isilon 原生事件归类为“系统事件”并仅在存储健康中展示，不再与容量、周报或扩容记录混排。严重级别统计只接受 `diskpulse`、`netapp`、`isilon` 来源，重复故障和系统事件只接受 `netapp`、`isilon`；其他来源即使写入 `storage_alerts` 也不进入对应分析。无法唯一归属到存储集群的项目级容量告警保留在原告警范围内，不进入集群健康分析。设备故障指纹由厂商、事件代码、对象类型和对象 ID 组成，不使用可能包含动态内容的完整消息。
 
-NetApp 事件来自 ONTAP EMS，性能来自集群和 Volume metrics。ONTAP 返回的 Volume 总、读、写延迟以微秒为单位，采集器统一除以 `1000` 转为毫秒后写入 QuestDB，Top 10、页面和导出均使用毫秒口径。
+NetApp 事件来自 ONTAP EMS，性能来自 Volume `metric`。ONTAP 返回的 Volume 总、读、写延迟以微秒为单位，采集器统一除以 `1000` 转为毫秒后写入 QuestDB，Top 10、页面和导出均使用毫秒口径。字段名必须使用 ONTAP REST 返回的单数 `metric`，请求不存在的 `metrics` 会返回 `400`。
 
 PowerScale 事件来自 event group/list，性能来自 statistics API。客户端先通过 `/platform/latest` 发现资源版本，再读取 `/{version}/statistics/keys`：优先选择包含 workload 的延迟键，没有时选择节点延迟键，最后使用所选键请求 `/{version}/statistics/current`。统计键的 `units`/`unit` 元数据会传递给采集器；微秒转换为毫秒，毫秒原样保留，单位缺失或无法识别时跳过该指标。不能把 OneFS 主版本直接作为 API 资源版本，也不能根据键名臆造返回对象维度。
 
@@ -65,9 +65,10 @@ section=capacity|severity|latency|faults|all
 ## 降级与不支持状态
 
 - PowerScale 没有 workload 延迟指标时自动尝试节点延迟指标。
-- NetApp 或 PowerScale 完全没有可用延迟指标时，性能接口返回 `supported=false` 和空数据，页面显示“不支持性能分析”，不得展示零延迟。
+- NetApp 或 PowerScale 从未成功写入性能指标时，性能接口返回 `supported=false` 和空数据；页面提示检查采集任务和设备 API 权限，不把“未采集”误写为“设备不支持”或零延迟。
+- PowerScale 采集账号必须能够登录 OneFS `platform` 服务，并对 event group/list 与 statistics API 具备只读权限；登录或接口返回 `401/403` 时不会生成虚构的空告警或零指标。
 - 设备响应缺少可识别事件 ID、时间或严重级别时，不将该响应计入健康分析，并在服务端保留不含凭据的诊断日志。
-- 时间范围内没有容量采样、告警或事件时，相应板块显示空态，其他板块仍可正常使用。
+- 时间范围内没有容量采样、告警或事件时，相应板块显示带时间范围和采集权限提示的空态，其他板块仍可正常使用。
 
 ## 测试与验证边界
 

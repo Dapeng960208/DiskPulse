@@ -9,14 +9,17 @@
 - `backend/utils/security.py` 分支覆盖率 `84%`；`compileall`、`pip check` 通过。真实 Redis 临时 token TTL 为 `604800` 秒，删除会话后同一 token 返回 `401`。
 - 本地 `backend/config.yml` 已调整为 7 天；部署后需重启后端并重新登录一次，旧 token 因没有 Redis 白名单记录不会自动迁移。
 
-## 2026-07-15：存储健康独立入口与系统事件分流
+## 2026-07-15：存储健康入口收敛与真机采集定位
 
-- 新增一级菜单“存储健康”，复用既有分析页面并增加集群选择；系统管理中的集群详情入口保持不变。
+- 删除一级菜单“存储健康”和集群选择器，只保留“系统管理 → 存储集群”列表最后一列的既有“详情”入口。
+- 详情页移除重复的集群配置摘要；导出下拉移入查询栏动作插槽，与日期范围分列布局；性能和故障空态补充采集任务与设备权限提示。
+- 真机确认 NetApp `storage/volumes` 请求 `fields=uuid,name,metrics` 返回 `400/262197`，改为单数 `metric` 后返回 `200`；采集解析同步读取 `record.metric`。
+- 当前数据库中 NetApp 有 `4197` 条厂商事件、Isilon 厂商事件为 `0`，两套集群的 `storage_performance_metrics` 均为 `0`。当前 Isilon 账号登录 OneFS `platform` 服务返回 `403`，三个事件/性能只读接口返回 `401`。
 - 普通告警查询固定为 `source=diskpulse`；NetApp/Isilon 原生事件通过新增 `system-events` 分析接口进入故障页，不再与容量告警混排或显示为“扩容”。
-- 普通业务入口不渲染 API 用户名、端口和 TLS 等管理字段；系统事件查询按集群、时间范围和最多 200 条进行约束。
-- TDD RED：后端 `3 failed, 79 passed`，前端 `5 failed, 8 passed`；安全补充 RED：`1 failed, 5 skipped`。
-- GREEN 聚焦验证：后端 `82 passed`，前端 `13 passed`；改动文件 ESLint、Python `compileall` 和 `npm run build:prod` 通过。
-- 本次不新增数据库迁移；尚未连接运行中的登录浏览器执行菜单和真实事件表冒烟。
+- 本轮 TDD RED：前端 `5 failed, 6 passed`，后端 `2 failed, 80 passed`；GREEN 聚焦验证：前端 `11 passed`，后端 `82 passed`。
+- 前端 targeted ESLint、生产构建和后端 `compileall` 通过；未登录浏览器在 `1280×720`、`768×1024`、`414×896` 下确认日期与导出不重叠，且详情页不再展示集群配置摘要。
+- 外部阻塞：需为 Isilon 采集账号恢复 OneFS Platform API 登录及 event/statistics 只读权限；部署后需重启 Celery worker。当前 `celery inspect registered` 没有 worker 节点响应，尚未执行写入式采集复验。
+- 既有应用壳在 `320/375px` 宽度仍因固定侧栏产生横向溢出；本轮未扩大为全局导航响应式重构，桌面与平板布局不受影响。
 
 ## 2026-07-15：修复项目组监控配置无法保存
 

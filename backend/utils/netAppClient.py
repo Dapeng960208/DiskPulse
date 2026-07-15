@@ -81,7 +81,7 @@ class NetAppClient:
     def get_volume_metrics(self) -> List[Dict]:
         return self._get_all_records(
             'storage/volumes',
-            params={'fields': 'uuid,name,metrics'},
+            params={'fields': 'uuid,name,metric'},
         )
 
     def close(self):

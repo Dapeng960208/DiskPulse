@@ -26,6 +26,7 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
             name="advanced"></slot>
         </TransitionGroup>
         <template #tail>
+          <slot name="actions"></slot>
           <ElButton
             v-if="hasAdvancedSlot"
             type="primary"

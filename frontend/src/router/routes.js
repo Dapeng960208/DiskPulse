@@ -112,17 +112,6 @@ export default [
     component: AppLayout,
     children: [
       {
-        path: 'storage-health',
-        name: 'StorageHealth',
-        component: () => import('@/pages/admin/storage-cluster/StorageClusterDetailPage.vue'),
-        meta: {
-          title: '存储健康',
-          isRoot: true,
-          menuOrder: 55,
-          icon: 'i-ri-pulse-line',
-        },
-      },
-      {
         path: 'alerts',
         name: 'Alerts',
         component: () => import('@/pages/alert/AlertListPage.vue'),
