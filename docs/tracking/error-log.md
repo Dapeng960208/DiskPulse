@@ -381,15 +381,15 @@
 - 触发：使用两个独立 `StoragePulseMonitor` 对 Redis Session 缓存做真实 OneFS 复用验证。
 - 现象：Redis `PING/set/get/delete` 正常，但 OneFS `/session/1/session` 返回 `403`，提示账号没有请求服务的登录权限；因此没有生成可复用的 Session，性能接口随后返回 `401`。
 - 边界：同一账号在添加 `DiskPulseMonitor` 角色后曾成功登录并读取性能/事件；后续确认稳定 UID 已经是该角色成员，并发 Session 限制为 `0`，二者均不是根因。
-- 后续：完整根因和修复见下方“Isilon 批量解析配额用户名导致后续 PAPI 登录 403”。
+- 后续：完整根因和修复见下方“NIS 人员账号执行 Isilon 身份解析后续 PAPI 登录 403”。
 - 清理：诊断产生的 Redis 缓存项已删除，失败登录对应客户端已执行安全 logout/close。
 
-### 2026-07-15：Isilon 批量解析配额用户名导致后续 PAPI 登录 403
+### 2026-07-15：NIS 人员账号执行 Isilon 身份解析后续 PAPI 登录 403
 
-- 触发：安全注销模式下先执行 Isilon 容量采集，再由独立性能任务创建新的 OneFS Session；容量采集会获取 2270 条配额并默认发送 `resolve_names=true`。
+- 触发：使用 NIS 人员账号执行 Isilon 配额 `resolve_names=true`、单 UID identity mapping 或 `auth/users/UID:<数字>` 任一身份解析请求，再创建新的 OneFS Session。
 - 现象：容量 Session 登录 `201`、注销 `204`，紧接着性能 Session 登录 `403`，提示账号没有 `platform` 服务登录权限；执行 OneFS 身份缓存刷新后只能暂时恢复。
-- 排除：角色已包含该 NIS 用户 UID；`Concurrent Session Limit` 为 `0`；不发送 logout 仍会复现；Storage Pool 查询和 `resolve_names=false` 的同量配额查询后，下一次登录均保持 `201`。
-- 根因：`IsilonClient.get_quotas()` 默认启用名称解析。真实 OneFS 9.11 对 2270 条配额执行批量身份解析后，后续登录生成的权限 token 异常并返回 `403`；安全路径返回 2166 个仅含 `persona.id=UID:<数字>` 的用户配额，原解析器又只读取 `persona.name`。
-- 修复：配额客户端默认发送 `resolve_names=false`；用户配额从受支持的 `UID:` persona 提取数字 UID，并复用 DiskPulse 已有 `users_uid_map`，未知 persona 不创建用户。
-- 验证：隔离测试证明 `resolve_names=false` 后“配额查询 → logout → 性能重新登录”为 `201/204/201/204`；新增请求参数和 UID persona 回归测试。
-- 风险：需重启 Celery worker 才能加载修复；其他 OneFS 版本或非 UID persona 尚未做真机覆盖，未知身份会安全跳过并保留日志排查边界。
+- 排除：角色已包含该 NIS 用户 UID；`Concurrent Session Limit` 为 `0`；不发送 logout 仍会复现；Storage Pool 查询和 `resolve_names=false` 的同量配额查询后，下一次登录均保持 `201`。域控 LDAP 单用户查询正常，但该目录没有 `uidNumber` 等 UNIX UID 属性，数据库内 522 个 LDAP 用户也均无 UID，因此不能用纯 LDAP 把配额 UID 关联到用户名。
+- 根因：目标 OneFS 9.11.0.5 在 NIS 人员账号触发任何用户身份解析后，会改变后续登录使用的有效身份映射，使新 token 不再获得该账号原有的 PAPI 角色；安全注销不是根因。仅关闭名称解析虽然避免 403，却丢失 `UID → 用户名` 关联，不能满足用户配额与 LDAP 资料关联需求。
+- 修复：创建专用 OneFS 本地服务账号并加入 `DiskPulseMonitor` 只读角色；DiskPulse 改用该账号采集，配额恢复 `resolve_names=true`，再用解析出的用户名关联现有 LDAP 用户。UID-only 和未知 persona 的安全回退仍保留。
+- 验证：本地服务账号完成 `201 → 2270 条 resolve_names=true 配额 → logout → 201`，第二个 Session 状态查询为 `200`、性能接口返回 1 条记录；`UID:104407` 正确解析为目录用户名，LDAP 精确查询返回姓名和邮箱。
+- 风险：需重启 Celery worker 才能加载配额默认参数；其他 Isilon 集群也应使用 OneFS 本地服务账号，避免外部身份提供者映射影响采集角色。

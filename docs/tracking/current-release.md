@@ -835,23 +835,24 @@ npm test -- --coverage.enabled=false
 
 - 本地测试环境 PostgreSQL 已执行 `alembic upgrade head` 到 `000000000005`；其他环境升级后需重启后端与 Celery worker。
 - 本地文件和 Redis 中保存的是有效 OneFS 认证材料，部署环境必须限制缓存文件 ACL 与 Redis 网络访问。
-- OneFS 真机 Redis Session 复用尚未验收；当时出现的 PAPI 登录 `403` 后续已定位为配额 `resolve_names=true` 触发，见下一节。
+- OneFS 真机 Redis Session 复用尚未验收；当时出现的 PAPI 登录 `403` 后续已定位为 NIS 人员账号触发身份解析后有效角色丢失，见下一节。
 
-## 2026-07-15：修复 Isilon 配额解析导致后续登录 403
+## 2026-07-15：隔离 Isilon 采集账号身份并恢复 LDAP 用户关联
 
 ### 已完成
 
-- 将 `IsilonClient.get_quotas()` 的默认身份解析改为 `resolve_names=false`，避免 OneFS 9.11 批量解析 2270 条配额身份后使下一次 PAPI 登录丢失有效权限。
-- 用户配额在没有 `persona.name` 时读取 `persona.id=UID:<数字>`，复用现有 UID 用户映射；未知 persona 类型继续跳过。
-- 修正先前“角色未按 UID 绑定”的临时判断：设备已确认 UID 是角色成员，并发 Session 限制为 `0`。
+- 确认 403 只在 NIS 人员账号触发身份解析后出现，安全注销、角色 UID 绑定和并发 Session 数均不是根因。
+- 改用加入 `DiskPulseMonitor` 只读角色的 OneFS 本地服务账号，配额恢复 `resolve_names=true`，用解析出的用户名关联已同步的 LDAP 用户。
+- 保留 `persona.id=UID:<数字>` 回退和未知 persona 跳过逻辑；不新增第二套 LDAP 同步实现。
 
 ### 验证状态
 
-- RED：请求仍发送 `resolve_names=true`，UID-only persona 被跳过，新增 2 个用例均失败。
-- GREEN：请求参数和 UID persona 两个聚焦用例均通过；资源映射、软限额、Session 生命周期、采集触发和安全回归合计 `55 passed`，`compileall` 与 `pip check` 通过。
-- 真机隔离验证：Storage Pool、`resolve_names=false` 的 2270 条配额查询后，新 Session 登录均为 `201`；`resolve_names=true` 后稳定为 `403`。修复安全路径完成 `201 → 2270 条配额 → 204 → 201 → 1 条性能数据 → 204`。
+- RED：本地服务账号验收通过后，请求测试仍观察到默认 `resolve_names=false`，用例失败。
+- GREEN：默认请求恢复 `resolve_names=true`；资源映射、软限额、Session 生命周期、采集触发和安全回归合计 `55 passed`，`compileall` 与 `pip check` 通过。
+- 真机验证：本地服务账号完成 `201 → 2270 条 resolve_names=true 配额 → 安全注销 → 201`；第二个 Session 状态为 `200`，性能接口返回 1 条记录。
+- 用户关联验证：`UID:104407` 解析到目录用户名，LDAP 精确查询返回 1 条记录并包含姓名、邮箱；目标目录未提供 department 属性。
 
 ### 部署动作与风险
 
-- Celery worker 必须重启才能加载新默认参数；重启前旧任务仍可能再次触发 OneFS `403`。
-- 当前真实数据中 2166 个用户配额 persona 均为 `UID:<数字>`；其他 persona 类型尚未做真机覆盖，会被安全跳过。
+- Celery worker 必须重启才能加载新默认参数。
+- 其他 Isilon 集群若仍使用 NIS/LDAP 人员账号，应先切换为 OneFS 本地只读服务账号；未知 persona 类型继续安全跳过。

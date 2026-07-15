@@ -411,7 +411,7 @@ class IsilonClient:
             raise ValueError("Invalid OneFS storagepools response")
         return pools
 
-    def get_quotas(self, resolve_names: bool = False,
+    def get_quotas(self, resolve_names: bool = True,
                    quota_type: Optional[str] = None,
                    recurse_path_children: bool = False) -> List[Dict]:
         """Return all quotas, following resume-based pagination."""
