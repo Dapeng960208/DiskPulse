@@ -11,6 +11,7 @@ from sqlalchemy import (
     Index,
     Integer,
     JSON,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -354,3 +355,90 @@ class LargeFiles(Base):
 
     user = relationship("User")
     group = relationship("Group")
+
+
+class AIConfig(Base):
+    __tablename__ = "ai_configs"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    description = Column(String(500), nullable=True)
+    provider = Column(String(50), nullable=False, default="openai")
+    base_url = Column(String(500), nullable=False, default="")
+    api_key_encrypted = Column(Text, nullable=False, default="")
+    model = Column(String(200), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=False)
+    enable_chat = Column(Boolean, nullable=False, default=True)
+    temperature = Column(Numeric(3, 2), nullable=False, default=0.3)
+    max_tokens = Column(Integer, nullable=False, default=2048)
+    system_prompt = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+
+class AIConversation(Base):
+    __tablename__ = "ai_conversations"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    model_id = Column(Integer, ForeignKey("ai_configs.id"), nullable=False, index=True)
+    title = Column(String(255), nullable=False, default="新对话")
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+    messages = relationship(
+        "AIMessage",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="AIMessage.id",
+        passive_deletes=True,
+    )
+
+
+class AIMessage(Base):
+    __tablename__ = "ai_messages"
+
+    id = Column(Integer, primary_key=True)
+    conversation_id = Column(
+        Integer,
+        ForeignKey("ai_conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role = Column(String(20), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+    conversation = relationship("AIConversation", back_populates="messages")
+
+
+class AIAuditLog(Base):
+    __tablename__ = "ai_audit_logs"
+    __table_args__ = (Index("ix_ai_audit_started_id", "started_at", "id"),)
+
+    id = Column(Integer, primary_key=True)
+    model_id = Column(Integer, ForeignKey("ai_configs.id", ondelete="SET NULL"), nullable=True, index=True)
+    conversation_id = Column(
+        Integer,
+        ForeignKey("ai_conversations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    source = Column(String(50), nullable=False, index=True)
+    source_ref = Column(String(200), nullable=True)
+    request_payload = Column(Text, nullable=False, default="")
+    response_payload = Column(Text, nullable=False, default="")
+    tool_call_count = Column(Integer, nullable=False, default=0)
+    tool_failed_count = Column(Integer, nullable=False, default=0)
+    detail_payload = Column(Text, nullable=True)
+    status = Column(String(50), nullable=False, index=True)
+    error_message = Column(Text, nullable=True)
+    trace_id = Column(String(64), nullable=True, index=True)
+    started_at = Column(DateTime, nullable=False, default=datetime.now)
+    finished_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)

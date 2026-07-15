@@ -72,7 +72,7 @@ describe('router lazy route components', () => {
   it('invokes every lazy route component loader', async () => {
     const lazyComponents = collectLazyComponents(routes);
 
-    expect(lazyComponents).toHaveLength(24);
+    expect(lazyComponents).toHaveLength(27);
 
     await Promise.all(lazyComponents.map((loadComponent) => loadComponent().catch(() => null)));
   });

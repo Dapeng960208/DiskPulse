@@ -1,0 +1,97 @@
+# AI 后端实现细节
+
+## 1. 模块职责
+
+| 模块 | 职责 |
+| --- | --- |
+| `models.py`、`alembic/versions/000000000003_ai_platform.py` | 模型配置、会话、消息和审计四类持久化对象。 |
+| `schemas/aiSchema.py` | 用户会话、管理配置和审计查询的输入输出约束。 |
+| `crud/aiCrud.py` | AI 表的最小查询与写入封装。 |
+| `services/ai_security.py` | API Key 加密、解密和掩码。 |
+| `services/ai_rate_limit.py` | Redis DB 7 固定分钟窗口限流。 |
+| `services/ai_client.py` | OpenAI 兼容接口与 Claude 接口的请求、流式响应和工具调用归一化。 |
+| `services/ai_tool_service.py` | 从 FastAPI 路由生成工具定义，并以当前用户身份执行只读工具。 |
+| `services/ai_chat_service.py` | 会话隔离、消息持久化、Provider 调用、工具循环和审计状态机。 |
+| `routers/ai.py`、`routers/ai_admin.py` | 登录用户对话 API、SSE 输出和超级管理员 API。 |
+
+## 2. 流式对话主链路
+
+`POST /storage-pulse/api/ai/conversations/{id}/messages/stream` 按以下顺序执行：
+
+1. JWT 依赖解析当前用户，Redis 以 `user_id` 执行固定窗口限流。
+2. 使用 `conversation_id + user_id` 查询会话。查不到一律返回 `404`，不向调用方暴露其他用户是否拥有该会话。
+3. 校验会话绑定模型仍处于启用且允许对话状态。
+4. 保存用户消息、首条消息标题和 `running` 审计，再开始输出 SSE。这样即使 Provider 失败或客户端断开，用户输入和审计仍可恢复。
+5. 按消息 ID 倒序取最近 20 条，再反转为时间正序发送给 Provider。
+6. 从当前 FastAPI 应用路由构建工具注册表，并转换为当前 Provider 的工具格式。
+7. 流式读取模型输出；普通文本产生 `delta`，工具请求进入最多 4 轮的执行循环。
+8. 工具通过内部 ASGI 请求调用原业务 GET API，并把结果按 Provider 协议追加到上下文。
+9. 得到最终文本后保存助手消息，将审计改为 `succeeded`，最后发送 `completed`。
+10. Provider 或格式错误将审计改为 `failed`；生成器关闭或任务取消将审计改为 `cancelled`。
+
+同步接口复用同一生成器，只消费到 `completed`；因此同步与 SSE 的模型、工具和审计行为一致。
+
+## 3. SSE 事件与持久化边界
+
+| 事件 | 关键数据 | 服务端状态 |
+| --- | --- | --- |
+| `accepted` | `conversation_id`、`audit_id`、`trace_id` | 用户消息和运行中审计已提交。 |
+| `user_message` | 完整用户消息、更新后的会话 | 前端可安全加入消息列表并更新自动标题。 |
+| `status` | `thinking` | 仅表示当前生成状态，不落库。 |
+| `tool_call_started` | 工具名、轮次、序号 | 审计中的工具调用计数已增加。 |
+| `tool_call_finished` | 工具名、轮次、成功或失败 | 仅返回状态，不返回工具参数或结果。 |
+| `delta` | 文本分片 | 分片不逐条落库，避免高频写入。 |
+| `completed` | 完整助手消息、会话、审计 ID | 助手消息和成功审计已提交。 |
+| `error` | 可展示错误 | 审计已标记失败；非预期异常统一返回友好文案。 |
+| `cancelled` | 会话 ID、审计 ID | 异步取消时审计已标记取消。客户端断开时连接可能无法再接收该事件。 |
+
+## 4. Provider 适配
+
+- `openai`、`openrouter`、`ollama` 共用 OpenAI Chat Completions 协议；`claude` 使用 Messages API。
+- Provider 客户端把文本和工具调用统一为 `AICompletionStreamEvent`，对话服务不解析厂商原始响应。
+- OpenAI 工具名称和 JSON 参数可能分多个 delta 到达，按工具索引拼接后再校验 JSON。
+- Claude 的 `tool_use` 和 `input_json_delta` 分开到达；空的初始 `input` 不提前写成 `{}`，避免与后续参数片段拼成无效 JSON。
+- 工具结果按厂商要求回填：OpenAI 使用 `assistant.tool_calls + tool`，Claude 使用 `assistant.tool_use + user.tool_result`。
+- 管理端连接测试真实发送最小消息，不把 URL、密钥格式校验当作连接成功。
+
+## 5. 动态只读工具
+
+工具注册以业务路由为唯一参数契约，只有 `GET` 且显式设置 `openapi_extra.ai_exposed=true` 的路由进入注册表。Path 和 Query 参数直接生成 Pydantic 模型，并使用 `extra="forbid"` 拒绝模型擅自增加的参数；字段别名在内部请求时保持不变。
+
+执行阶段使用 `httpx.ASGITransport` 调用当前应用，不经过外部网络。请求携带为当前 `user_id` 签发的 Bearer Token，因此继续执行原 API 的认证、权限和数据范围逻辑。业务响应会做有限归一化：
+
+- `{content, total, ...}` 转为 `{items, total, ...}`；
+- `{data: [...], meta: {...}}` 转为 `{items, ...meta}`；
+- 其他 `{data: value}` 返回 `value`，普通 JSON 原样返回。
+
+新增工具时：
+
+1. 只选择无副作用、返回 JSON 的查询路由。
+2. 设置唯一 `ai_name` 和面向模型的 `ai_description`。
+3. 确认原接口已经落实用户权限和全局数据范围。
+4. 补充注册、参数校验、权限继承和响应归一化测试。
+5. 不开放配置、用户管理、离职备份、导出、文件或图片接口。
+
+## 6. 安全、限流与审计
+
+- API Key 使用 `ai.config_secret_key` 经 SHA-256 派生 Fernet 密钥后加密；`fernet::` 前缀用于识别当前密文格式。配置密钥必须独立且不得使用占位值。
+- 管理响应只包含密钥掩码和是否已配置；空更新不会覆盖已有密钥。
+- 审计请求只保存 `[REDACTED]` 和长度，响应只保存消息 ID 与长度，工具明细只保存工具名和结果状态。
+- 限流键为 `diskpulse:ai:rate:{user_id}:{UTC分钟}`。首次计数设置 60 秒过期；超限返回 `429 + Retry-After`。
+- Redis 是聊天入口的安全依赖，连接或命令失败时采用关闭式失败并返回 `503`，不绕过限流。
+- 工具循环受 `ai.max_tool_iterations` 限制，避免模型递归调用工具造成不可控资源消耗。
+
+## 7. 事务与失败恢复
+
+- SSE 开始前提交用户消息和运行中审计，后续失败不会丢失用户提问。
+- 最终文本只在完整生成后一次性保存；半截 `delta` 不进入历史上下文。
+- 异常处理中先 `rollback` 清理 SQLAlchemy 会话，再重新加载审计记录并提交失败状态。
+- 客户端主动关闭同步生成器触发 `GeneratorExit`；异步任务取消触发 `CancelledError`。两者均记录取消审计。
+- 前端重试会作为一条新用户消息再次发送，不修改或覆盖原消息。
+
+## 8. 验证入口
+
+- 后端 AI 聚焦测试：`.\.venv\Scripts\python.exe -m pytest backend\test\test_ai_platform.py backend\test\test_ai_services.py`
+- 动态工具的注册、参数和权限契约包含在上述两个测试文件中。
+- 迁移检查：`alembic heads`、`alembic history`、`alembic upgrade head --sql`
+- 部署环境仍需验证真实 Provider、Redis DB 7、数据库迁移和不同权限用户的完整 SSE 对话。

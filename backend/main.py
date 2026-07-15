@@ -10,6 +10,8 @@ from dependencies import require_authenticated_request
 from questdb.migrate import upgrade as upgrade_questdb
 from routers import (
     aggregate,
+    ai,
+    ai_admin,
     config,
     group,
     group_tag,
@@ -38,6 +40,8 @@ app = FastAPI(
 
 storage_router = APIRouter(prefix="/storage-pulse/api", dependencies=[Depends(require_authenticated_request)])
 storage_router.include_router(users.router)
+storage_router.include_router(ai.router)
+storage_router.include_router(ai_admin.router)
 storage_router.include_router(projects.router)
 storage_router.include_router(group_tag.router)
 storage_router.include_router(config.router)

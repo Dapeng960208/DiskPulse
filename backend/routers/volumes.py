@@ -23,7 +23,7 @@ def create_volume(
     return volumeCrud.create_volume(db=db, volume=volume)
 
 
-@router.get("/", response_model=commonSchema.ResponseModel)
+@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_volumes", "ai_description": "分页查询存储空间"})
 def read_volumes(page: int | None = 1, size: int | None = 20, nameLike: str | None = None, prop: str | None = None,
                  order: str | None = None, storage_cluster_id: int | None = None, db: Session = Depends(get_db)):
     volumes, total = volumeCrud.get_volumes(db=db, page=page, size=size, nameLike=nameLike, prop=prop, order=order,
@@ -31,7 +31,7 @@ def read_volumes(page: int | None = 1, size: int | None = 20, nameLike: str | No
     return commonSchema.ResponseModel[volumeSchema.Volume](content=volumes, total=total)
 
 
-@router.get("/{volume_id}", response_model=volumeSchema.Volume)
+@router.get("/{volume_id}", response_model=volumeSchema.Volume, openapi_extra={"ai_exposed": True, "ai_name": "get_volume", "ai_description": "查询指定存储空间"})
 def read_volume(volume_id: int, db: Session = Depends(get_db)):
     db_volume = volumeCrud.get_volume_by_id(db, volume_id=volume_id)
     if db_volume is None:
@@ -39,7 +39,7 @@ def read_volume(volume_id: int, db: Session = Depends(get_db)):
     return db_volume
 
 
-@router.get("/{volume_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel)
+@router.get("/{volume_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_volume_realtime", "ai_description": "查询存储空间实时容量趋势"})
 def read_volume_realtime_data(volume_id: int, start_time: datetime | None = None,
                               end_time: datetime | None = None,
                               indicator: str = 'used', db: Session = Depends(get_db)):

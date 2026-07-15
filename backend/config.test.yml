@@ -27,6 +27,13 @@ database:
 
 redis:
   host: localhost
+  port: 6379
+
+ai:
+  config_secret_key: test-ai-config-secret-key
+  request_timeout_seconds: 60
+  chat_tool_max_iterations: 4
+  chat_rate_limit_per_minute: 10
 
 jwt:
   secret_key: test-secret

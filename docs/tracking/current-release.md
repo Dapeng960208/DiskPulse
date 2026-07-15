@@ -1,5 +1,33 @@
 # 当前交付记录
 
+## 2026-07-15：AI 助手与 AI 中心
+
+### 已完成
+
+- 新增 `ai_configs`、`ai_conversations`、`ai_messages`、`ai_audit_logs` 及 Alembic `000000000003`；会话仅按用户隔离，不保留项目绑定。
+- 支持 OpenAI、OpenRouter、Ollama、Claude，API Key 使用独立 Fernet 密钥加密，管理接口只返回掩码。
+- 新增同步和 SSE 对话、最近 20 条历史、首条消息命名、4 轮工具循环、成功/失败/取消审计和敏感摘要脱敏。
+- 通过 `openapi_extra.ai_exposed` 注册 30 个只读 JSON 工具，内部 ASGI 调用携带当前用户 Bearer Token；写接口、配置、用户管理、备份、导出和图片均排除。
+- Redis DB 7 提供每用户每分钟 10 次固定窗口限流；Redis 不可用返回 `503`，超限返回 `429 + Retry-After`。
+- 前端新增根菜单“AI 助手”和超级管理员“AI 中心”，支持会话恢复、模型选择、消息流、停止生成、失败重试、工具状态、安全 Markdown、模型管理和审计详情。
+- 新增 `markdown-it`、`dompurify` 并更新 npm 锁文件；同步功能专题、运行配置、文档索引和最新功能。
+- 补充 AI 后端与前端实现细节文档，明确 SSE 持久化边界、Provider 适配、动态工具鉴权、会话状态和 Markdown 安全约束；核心代码同步增加非显然设计注释。
+
+### 验证状态
+
+- RED checkpoint：后端因缺失 `AIConfig` 无法收集，前端因缺失 `@/api/ai-api` 无法编译；已单独提交 `a3e66ac`。
+- GREEN 聚焦：后端 AI 测试为 `20 passed`，AI 新增模块 statements/branches 综合覆盖率 `91%`；前端 AI 交互与契约为 `9 passed`。
+- 后端完整回归为 `174 passed`；`compileall` 与 `pip check` 通过。
+- 前端覆盖率回归为 `168 passed`，全局 statements/lines `92.55%`；新增 `ai-api.js` 为 `95.6%`、`AiChatPage.vue` 为 `97.36%`、AI 管理页面为 `100%` 行覆盖。全量 lint 和生产构建通过。
+- Alembic 唯一 head 为 `000000000003`，history 为 `000000000003 -> 000000000002 -> 000000000001`；PostgreSQL offline SQL 生成成功，并包含 4 张 AI 表。SQLite、PostgreSQL、MySQL 三方言 AI migration 编译测试通过。
+- 实现文档与核心注释复验：后端 AI 测试 `20 passed`，前端 AI 测试 `9 passed`，AI 前端文件 lint 和 `git diff --check` 通过。
+- 生产构建保留既有 `%VITE_APP_TITLE%` 未定义和大于 `500 kB` chunk warning；测试保留既有 Sass legacy API warning。
+
+### 风险与后续
+
+- 未使用真实 Provider Key、Redis 服务或登录浏览器执行集成冒烟；配置、迁移和自动化测试通过不能替代部署环境连通性验证。
+- 审计首版不自动清理；上线后应结合数据保留要求评估周期清理。
+
 ## 2026-07-14：项目组标签列表布局对齐存储集群列表
 
 ### 已完成

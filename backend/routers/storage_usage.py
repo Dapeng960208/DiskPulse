@@ -50,7 +50,7 @@ def create_storage_usage(storage_usage: storageUsageSchema.StorageUsageCreate, b
     return storageUsageCrud.serialize_storage_usage(storage_usage_db)
 
 
-@router.get("/", response_model=commonSchema.ResponseModel)
+@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_storage_usages", "ai_description": "分页查询用户目录和存储使用情况"})
 @handle_exceptions
 def read_storage_usages(page: int | None = 1, size: int | None = 20, nameLike: str | None = None,
                          prop: str | None = None,
@@ -102,7 +102,7 @@ def export_storage_usages(export_type: str = 'pdf', nameLike: str | None = None,
     return StreamingResponse(content, media_type=media_type, headers=headers)
 
 
-@router.get("/{storage_usage_id}", response_model=storageUsageSchema.StorageUsage)
+@router.get("/{storage_usage_id}", response_model=storageUsageSchema.StorageUsage, openapi_extra={"ai_exposed": True, "ai_name": "get_storage_usage", "ai_description": "查询指定用户目录或存储使用记录"})
 def read_storage_usage(storage_usage_id: int, db: Session = Depends(get_db)):
     db_storage_usage = storageUsageCrud.get_storage_usage_by_id(db, storage_usage_id=storage_usage_id)
     if db_storage_usage is None:
@@ -129,7 +129,7 @@ def back_up_storage_usage(storage_usage_id: int, background_tasks: BackgroundTas
     return Response(status_code=status.HTTP_200_OK)
 
 
-@router.get("/{storage_usage_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel)
+@router.get("/{storage_usage_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_storage_usage_realtime", "ai_description": "查询用户目录实时容量趋势"})
 def read_storage_usage_realtime_data(storage_usage_id: int, start_time: datetime | None = None,
                                      end_time: datetime | None = None,
                                      indicator: str = 'used', db: Session = Depends(get_db)):
