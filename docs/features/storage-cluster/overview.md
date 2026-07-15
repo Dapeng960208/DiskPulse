@@ -44,6 +44,18 @@ curl -X POST "http://localhost:8000/storage-pulse/api/storage-clusters" \
 
 示例中的 `http://localhost:8000` 是 DiskPulse API 地址，不代表存储设备协议；设备协议由请求体中的 `protocol` 决定。HTTP 下 TLS 校验不适用，设备凭据会以明文传输。
 
+## Isilon Session 缓存
+
+Isilon 集群在新增/编辑表单中按集群选择 Session 缓存模式：
+
+| 模式 | 数据库值 | 行为 |
+| --- | --- | --- |
+| 不缓存 | `none` | 每轮采集重新登录，并在结束时调用 OneFS logout 安全释放 Session。 |
+| 本地文件 | `file` | Cookie 与 CSRF Token 保存到 `isilon_session_cache_path`；相对路径以 `backend` 为基准，默认 `.isilon_cache/cache.json`。 |
+| Redis | `redis` | 使用全局 `redis.host`、`redis.port` 和独立的 `redis.session_db`，按 OneFS Session 绝对超时时间设置 TTL。 |
+
+数据库只保存 `isilon_session_cache_mode` 和 `isilon_session_cache_path`，不保存 Cookie。缓存读取或写入失败时退回安全注销，避免遗留未管理的设备 Session。本地缓存文件和 Redis 都包含有效认证材料，部署时必须限制文件 ACL 和 Redis 网络访问。
+
 ## 文档索引
 
 | 文档 | 说明 |
@@ -59,5 +71,5 @@ curl -X POST "http://localhost:8000/storage-pulse/api/storage-clusters" \
 - 当前后端实际字段以 `backend/schemas/storageClusterSchema.py` 和 `backend/models.py` 为准。
 - 新增或删除集群字段时，需要同步 `StoragePulseMonitor`、相关 CRUD、前端表单和本文档。
 - `protocol` 只允许 `http` 或 `https`；`tls_verify` 仅对 HTTPS 生效。新建集群默认 `https/true`，已有集群由迁移回填为 `https/false`。
-- PostgreSQL 从空库依次执行 root baseline `000000000001`、集群传输配置 `000000000002`、AI 中心 `000000000003` 和存储健康分析 `000000000004`；当前 head 为 `000000000004`，AI `000000000003` 后必须继续执行存储健康 `000000000004`。使用已删除旧 revision 链的数据库不支持伪造版本接续。
+- PostgreSQL 从空库依次执行 root baseline `000000000001`、集群传输配置 `000000000002`、AI 中心 `000000000003`、存储健康分析 `000000000004` 和 Isilon Session 缓存配置 `000000000005`；当前 head 为 `000000000005`。已有集群升级后默认使用 `none`，需要在管理表单中明确选择文件或 Redis。使用已删除旧 revision 链的数据库不支持伪造版本接续。
 - QuestDB 使用独立前向 revision 和 checksum 账本，存储性能表由 `000000000003_storage_performance_metrics.sql` 创建，当前 head 为 `000000000003`。

@@ -128,11 +128,12 @@ def test_file_cache_uses_configured_path_and_persists_session(tmp_path):
     assert payload[client._cache_key]["csrf"] == "csrf-value"
 
 
-def test_redis_cache_uses_existing_redis_config_and_ttl():
+def test_redis_cache_uses_existing_redis_config_and_ttl(monkeypatch):
     redis_client = Mock()
-    base_config.set("redis.host", "redis.local")
-    base_config.set("redis.port", 6380)
-    base_config.set("redis.session_db", 8)
+    redis_client.get.return_value = None
+    monkeypatch.setitem(base_config.config["redis"], "host", "redis.local")
+    monkeypatch.setitem(base_config.config["redis"], "port", 6380)
+    monkeypatch.setitem(base_config.config["redis"], "session_db", 8)
     client = _client("redis", redis_client=redis_client)
     client.session.cookies.set("isisessid", "cookie-value")
 
@@ -164,6 +165,7 @@ def test_no_cache_logs_out_and_releases_session():
 
 def test_failed_cache_write_logs_out_instead_of_leaking_session():
     redis_client = Mock()
+    redis_client.get.return_value = None
     redis_client.setex.side_effect = RuntimeError("redis unavailable")
     client = _client("redis", redis_client=redis_client)
     client.session.cookies.set("isisessid", "cookie-value")

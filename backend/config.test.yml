@@ -28,6 +28,7 @@ database:
 redis:
   host: localhost
   port: 6379
+  session_db: 8
 
 ai:
   config_secret_key: test-ai-config-secret-key
@@ -58,9 +59,6 @@ ldap:
     - (!(objectClass=group))
   lookup_user_dn: true
   lookup_as_user: false
-
-storage:
-  isilon_session_cache: false
 
 super_admin_usernames:
   - alice

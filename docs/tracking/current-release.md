@@ -816,3 +816,23 @@ npm test -- --coverage.enabled=false
 ### 风险
 
 - 本地浏览器未登录，后端请求返回预期的 `401`；尚未使用真实数据复验图表内容和导出下载。
+
+## 2026-07-15：Isilon Session 缓存改为集群级配置
+
+### 已完成
+
+- `storage_clusters` 新增 Session 缓存模式与本地文件路径，支持 `none`、`file`、`redis`；已有集群迁移后默认 `none`。
+- Isilon 管理表单按缓存模式条件展示本地文件路径；NetApp 不展示并清空 Isilon 专属字段。
+- 文件缓存使用可配置路径和原子替换，Redis 复用全局连接配置并使用独立 DB/OneFS Session TTL。
+- 未配置缓存或缓存写入失败时，采集结束调用 OneFS logout 安全释放 Session；日志不输出 Cookie、CSRF Token 或密码。
+
+### 验证状态
+
+- RED：后端 `8 failed, 6 passed`，前端 `1 failed, 12 passed`，失败均由缺少缓存配置契约引起。
+- GREEN：后端聚焦测试扩展后 `66 passed`；前端表单测试 `13 passed`；生产构建、Python compileall、依赖检查和 Redis 测试库真实读写通过。
+
+### 部署动作与风险
+
+- 本地测试环境 PostgreSQL 已执行 `alembic upgrade head` 到 `000000000005`；其他环境升级后需重启后端与 Celery worker。
+- 本地文件和 Redis 中保存的是有效 OneFS 认证材料，部署环境必须限制缓存文件 ACL 与 Redis 网络访问。
+- OneFS 真机 Redis Session 复用尚未验收：NIS 账号当前再次返回 PAPI 登录 `403`，需按 UID 修复角色成员后复测。

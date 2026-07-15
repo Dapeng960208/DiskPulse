@@ -375,3 +375,11 @@
 - 修复：视觉验证改用 `npx vite --host 127.0.0.1 --port 5173`，显式提供主机和端口。
 - 验证：本地页面返回 `200`，Playwright 成功打开存储集群详情并完成截图和尺寸检查。
 - 风险：不影响生产构建；后续如继续通过 `npm run dev` 传参，应同时显式传入 `--host` 值。
+
+### 2026-07-15：NIS Isilon 账号的 PAPI 登录权限再次返回 403
+
+- 触发：使用两个独立 `StoragePulseMonitor` 对 Redis Session 缓存做真实 OneFS 复用验证。
+- 现象：Redis `PING/set/get/delete` 正常，但 OneFS `/session/1/session` 返回 `403`，提示账号没有请求服务的登录权限；因此没有生成可复用的 Session，性能接口随后返回 `401`。
+- 边界：同一账号在添加 `DiskPulseMonitor` 角色后曾成功登录并读取性能/事件；当前账号来自 `lsa-nis-provider:znis`，角色按短用户名添加。代码测试和 PostgreSQL 迁移均正常，问题位于 OneFS 当前身份/角色解析状态。
+- 后续：在 OneFS 中按稳定 UID `104407` 补充角色成员并执行 `isi auth user flush` 后，再做 Redis Session 真机复用验证。
+- 清理：诊断产生的 Redis 缓存项已删除，失败登录对应客户端已执行安全 logout/close。

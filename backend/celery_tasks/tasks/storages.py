@@ -35,6 +35,12 @@ def load_collection_snapshot(db, storage_cluster_id=None):
             StorageCluster.tls_verify.label("tls_verify"),
             StorageCluster.storage_user.label("storage_user"),
             StorageCluster.storage_password.label("storage_password"),
+            StorageCluster.isilon_session_cache_mode.label(
+                "isilon_session_cache_mode"
+            ),
+            StorageCluster.isilon_session_cache_path.label(
+                "isilon_session_cache_path"
+            ),
             StorageCluster.is_active.label("cluster_active"),
             Group.project_id.label("project_id"),
             Group.group_tag_id.label("group_tag_id"),

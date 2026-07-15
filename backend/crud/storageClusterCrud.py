@@ -53,6 +53,22 @@ def update_storage_cluster(db: Session, storage_cluster_id: int, storage_cluster
         update_data = storage_cluster.model_dump(exclude_unset=True)
         if update_data.get("protocol", db_storage_cluster.protocol) == "http":
             update_data["tls_verify"] = False
+        storage_type = update_data.get("storage_type", db_storage_cluster.storage_type)
+        cache_mode = update_data.get(
+            "isilon_session_cache_mode",
+            db_storage_cluster.isilon_session_cache_mode,
+        )
+        if storage_type != "isilon":
+            update_data["isilon_session_cache_mode"] = "none"
+            update_data["isilon_session_cache_path"] = None
+        elif cache_mode == "file":
+            update_data["isilon_session_cache_path"] = (
+                update_data.get("isilon_session_cache_path")
+                or db_storage_cluster.isilon_session_cache_path
+                or ".isilon_cache/cache.json"
+            )
+        else:
+            update_data["isilon_session_cache_path"] = None
         for key, value in update_data.items():
             setattr(db_storage_cluster, key, value)
         db.commit()

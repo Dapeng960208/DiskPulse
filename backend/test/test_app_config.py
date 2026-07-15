@@ -42,6 +42,8 @@ database:
     pool_recycle: 300
 redis:
   host: redis.example.com
+  port: 6379
+  session_db: 8
 jwt:
   secret_key: yaml-secret
   access_ttl_minutes: 60
@@ -62,8 +64,6 @@ ldap:
     - (!(objectClass=computer))
     - (!(objectClass=group))
   {ldap_flags}
-storage:
-  isilon_session_cache: false
 super_admin_usernames:
   - guojianpeng
 """.strip(),
@@ -126,4 +126,5 @@ def test_example_storage_config_does_not_define_global_tls_verification():
     config = Config(BACKEND_ROOT / "config.example.yml")
 
     assert config.get("storage.tls_verify") is None
-    assert config.get("storage.isilon_session_cache") is False
+    assert config.get("storage.isilon_session_cache") is None
+    assert config.get("redis.session_db") == 8

@@ -2,7 +2,7 @@
 """Isilon OneFS REST API client — pure requests, no SDK dependency.
 
 Auth     : Session-based (POST /session/1/session).
-           Session cookies are cached only when storage.isilon_session_cache is true.
+           Session cookies can be cached per cluster in a file or Redis.
            On startup, GET /session/1/session is used to verify the cached
            session; if expired (401/403) a fresh login is performed.
 
@@ -13,8 +13,12 @@ Endpoints:
   - NFS exports    : GET /platform/2/protocols/nfs/exports (paginated via resume)
 """
 import json
+import hashlib
 import os
+import tempfile
 import requests
+import redis
+from pathlib import Path
 from typing import List, Dict, Optional
 from appConfig import base_config
 
@@ -22,12 +26,13 @@ from appConfig import base_config
 _PROJECT_ROOT = str(base_config.app_root_path)
 _CACHE_DIR = os.path.join(_PROJECT_ROOT, ".isilon_cache")
 _CACHE_FILE = os.path.join(_CACHE_DIR, "cache.json")
+_CACHE_MODES = {"none", "file", "redis"}
 
 
 class IsilonClient:
     """Thin REST client for Isilon OneFS PAPI.
 
-    Session cookies are persisted only when storage.isilon_session_cache is true.
+    Session cookies are persisted only when the cluster selects file or Redis cache.
 
     Startup logic:
       1. Load cached cookies for this host/user.
@@ -41,9 +46,12 @@ class IsilonClient:
 
     def __init__(self, hostname: str, username: str, password: str,
                  port: int = 8080, logger=None, protocol: str = "https",
-                 tls_verify=True):
+                 tls_verify=True, session_cache_mode: str = "none",
+                 session_cache_path: str | None = None):
         if protocol not in ("http", "https"):
             raise ValueError(f"Unsupported storage protocol: {protocol}")
+        if session_cache_mode not in _CACHE_MODES:
+            raise ValueError(f"Unsupported Isilon session cache mode: {session_cache_mode}")
         self.hostname = hostname
         self.port = port
         self.username = username
@@ -53,10 +61,29 @@ class IsilonClient:
         self.base_url = f"{self.origin}/platform"
         self._session_url = f"{self.origin}/session/1/session"
         self.api_version: str = "1"  # updated by _probe()
-        self._session_cache_enabled = base_config.get("storage.isilon_session_cache", False)
+        self._session_cache_mode = session_cache_mode
+        self._session_cache_enabled = session_cache_mode != "none"
+        self._cache_persisted = False
+
+        cache_path = Path(session_cache_path or _CACHE_FILE)
+        if not cache_path.is_absolute():
+            cache_path = base_config.app_root_path / cache_path
+        self._cache_file = cache_path.resolve()
 
         # Cache key unique per protocol/host/port/user
         self._cache_key = f"{protocol}:{hostname}:{port}:{username}"
+        self._redis_key = (
+            "diskpulse:isilon-session:"
+            + hashlib.sha256(self._cache_key.encode("utf-8")).hexdigest()
+        )
+        self._redis_client = None
+        if session_cache_mode == "redis":
+            self._redis_client = redis.StrictRedis(
+                host=base_config.get("redis.host"),
+                port=base_config.get("redis.port", 6379),
+                db=base_config.get("redis.session_db", 8),
+                decode_responses=True,
+            )
 
         self.session = requests.Session()
         self.session.verify = tls_verify if protocol == "https" else False
@@ -86,37 +113,69 @@ class IsilonClient:
     # ------------------------------------------------------------------
 
     def _read_cache(self) -> Dict:
-        """Read the full cache file; return empty dict on any error."""
+        """Read the configured session cache; return empty dict on errors."""
         if not self._session_cache_enabled:
             return {}
         try:
-            with open(_CACHE_FILE, 'r', encoding='utf-8') as f:
+            if self._session_cache_mode == "redis":
+                value = self._redis_client.get(self._redis_key)
+                return {self._cache_key: json.loads(value)} if value else {}
+            with self._cache_file.open('r', encoding='utf-8') as f:
                 return json.load(f)
-        except (OSError, json.JSONDecodeError):
+        except (OSError, TypeError, json.JSONDecodeError, redis.RedisError) as exc:
+            self._log('warning', f"[IsilonClient] Session cache read failed: {type(exc).__name__}")
             return {}
 
-    def _write_cache(self, data: Dict):
-        """Write the full cache dict to disk."""
+    def _write_cache(self, data: Dict, ttl: int = 14400) -> bool:
+        """Persist the session cache using the configured backend."""
         if not self._session_cache_enabled:
-            return
+            return False
+        temporary_path = None
         try:
-            os.makedirs(_CACHE_DIR, exist_ok=True)
-            with open(_CACHE_FILE, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
-        except OSError as exc:
-            self._log('warning', f"[IsilonClient] Could not write cache: {exc}")
+            if self._session_cache_mode == "redis":
+                entry = data.get(self._cache_key)
+                if entry is None:
+                    self._redis_client.delete(self._redis_key)
+                else:
+                    self._redis_client.setex(
+                        self._redis_key,
+                        max(int(ttl), 1),
+                        json.dumps(entry),
+                    )
+                return True
 
-    def _save_session_cache(self):
+            self._cache_file.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self._cache_file.parent,
+                delete=False,
+            ) as file:
+                json.dump(data, file, indent=2)
+                temporary_path = Path(file.name)
+            os.chmod(temporary_path, 0o600)
+            os.replace(temporary_path, self._cache_file)
+            return True
+        except Exception as exc:
+            self._log('warning', f"[IsilonClient] Session cache write failed: {type(exc).__name__}")
+            return False
+        finally:
+            if temporary_path is not None and temporary_path.exists():
+                temporary_path.unlink(missing_ok=True)
+
+    def _save_session_cache(self, ttl: int = 14400) -> bool:
         """Persist current session cookies + CSRF token for this host/user."""
         if not self._session_cache_enabled:
-            return
+            return False
         cache = self._read_cache()
         cache[self._cache_key] = {
             'cookies': dict(self.session.cookies),
             'csrf': self.session.headers.get('X-CSRF-Token', ''),
         }
-        self._write_cache(cache)
-        self._log('info', f"[IsilonClient] Session cached → {_CACHE_FILE} [{self._cache_key}]")
+        self._cache_persisted = self._write_cache(cache, ttl)
+        if self._cache_persisted:
+            self._log('info', f"[IsilonClient] Session cached ({self._session_cache_mode})")
+        return self._cache_persisted
 
     def _clear_cache_entry(self):
         """Remove the cache entry for this host/user."""
@@ -126,6 +185,7 @@ class IsilonClient:
         if self._cache_key in cache:
             del cache[self._cache_key]
             self._write_cache(cache)
+        self._cache_persisted = False
 
     # ------------------------------------------------------------------
     # Session management
@@ -159,6 +219,7 @@ class IsilonClient:
             resp = self.session.get(self._session_url, timeout=15)
             if resp.status_code == 200:
                 info = resp.json()
+                self._cache_persisted = True
                 self._log('info',
                           f"[IsilonClient] Reused cached session ✓ "
                           f"(services={info.get('services')}, "
@@ -209,7 +270,7 @@ class IsilonClient:
             self._log('info',
                       f"[IsilonClient] Login OK — services={data.get('services')}, "
                       f"timeout_absolute={data.get('timeout_absolute')}s")
-            self._save_session_cache()
+            self._save_session_cache(data.get('timeout_absolute') or 14400)
             return True
         except Exception as exc:
             self._log('error', f"[IsilonClient] Login error: {exc}")
@@ -400,7 +461,12 @@ class IsilonClient:
             return
 
         try:
-            if not self._session_cache_enabled:
+            cache_persisted = getattr(
+                self,
+                "_cache_persisted",
+                getattr(self, "_session_cache_enabled", False),
+            )
+            if not cache_persisted:
                 self.session.delete(self._session_url, timeout=15)
         except requests.RequestException as exc:
             self._log(

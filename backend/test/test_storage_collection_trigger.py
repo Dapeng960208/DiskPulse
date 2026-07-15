@@ -126,7 +126,7 @@ def test_storage_monitor_uses_snapshot_transport_settings(
             },
         ).setup()
 
-    client_class.assert_called_once_with(
+    expected = dict(
         hostname="snapshot.local",
         username="snapshot-user",
         password="snapshot-secret",
@@ -135,6 +135,12 @@ def test_storage_monitor_uses_snapshot_transport_settings(
         protocol=protocol,
         tls_verify=tls_verify,
     )
+    if storage_type == "isilon":
+        expected.update(
+            session_cache_mode="none",
+            session_cache_path=None,
+        )
+    client_class.assert_called_once_with(**expected)
     if expected_warning is None:
         logger.warning.assert_not_called()
     else:

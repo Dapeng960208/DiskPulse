@@ -16,6 +16,7 @@
 | --- | --- | --- |
 | 存储集群 | NetApp 或 Isilon 等后端存储系统实例。 | `StorageCluster` |
 | 存储访问协议 | 每个存储集群访问设备 API 使用的 `http` 或 `https`；不由 YAML 全局控制。 | `StorageCluster.protocol` |
+| Isilon Session 缓存 | 每个 Isilon 集群独立选择不缓存、本地文件或 Redis；不缓存及缓存写入失败时注销 OneFS session。 | `StorageCluster.isilon_session_cache_mode` |
 | TLS 证书校验 | HTTPS 集群是否校验证书；HTTP 下不适用，新建集群默认开启。 | `StorageCluster.tls_verify` |
 | 容量池 | 厂商提供的物理容量池；NetApp 对应 Aggregate / Local Tier，Isilon 对应 Storage Pool / Node Pool。 | `Aggregate` |
 | 存储空间 | 可分配给项目组的逻辑存储目标；NetApp 对应 Volume，Isilon 对应 Directory Quota。 | `Volume` |

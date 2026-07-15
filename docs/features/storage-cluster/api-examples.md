@@ -28,6 +28,8 @@ curl -X POST "http://localhost:8000/storage-pulse/api/storage-clusters" \
     "storage_type": "isilon",
     "protocol": "https",
     "tls_verify": true,
+    "isilon_session_cache_mode": "file",
+    "isilon_session_cache_path": ".isilon_cache/cache.json",
     "description": "备份环境 Isilon 存储",
     "limit": 200000,
     "is_active": true
@@ -35,6 +37,8 @@ curl -X POST "http://localhost:8000/storage-pulse/api/storage-clusters" \
 ```
 
 上述 `http://localhost:8000` 是 DiskPulse API 地址，不代表存储设备协议；设备协议由请求体中的 `protocol` 决定。`tls_verify` 仅对 HTTPS 生效，HTTP 下设备凭据会以明文传输。
+
+Isilon 的 `isilon_session_cache_mode` 可选 `none`、`file`、`redis`。只有 `file` 使用 `isilon_session_cache_path`；Redis 连接复用后端 YAML 的 `redis.host`、`redis.port`、`redis.session_db`。NetApp 请求会把这两个 Isilon 专属字段归一化为 `none/null`。
 
 ### 2. 获取所有集群
 

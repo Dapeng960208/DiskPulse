@@ -124,6 +124,14 @@ class StoragePulseMonitor:
         configured_port = cluster.get("storage_port", self.storage_cluster.storage_port)
         protocol = cluster.get("protocol", self.storage_cluster.protocol)
         tls_verify = cluster.get("tls_verify", self.storage_cluster.tls_verify)
+        session_cache_mode = cluster.get(
+            "isilon_session_cache_mode",
+            self.storage_cluster.isilon_session_cache_mode,
+        )
+        session_cache_path = cluster.get(
+            "isilon_session_cache_path",
+            self.storage_cluster.isilon_session_cache_path,
+        )
         if protocol == "http":
             tls_verify = False
             self.logger.warning(f"{self._log_prefix} storage API uses unencrypted HTTP")
@@ -149,6 +157,8 @@ class StoragePulseMonitor:
                 logger=self.logger,
                 protocol=protocol,
                 tls_verify=tls_verify,
+                session_cache_mode=session_cache_mode,
+                session_cache_path=session_cache_path,
             )
 
         port = configured_port or (443 if self.storage_type == 'netapp' else 8080)

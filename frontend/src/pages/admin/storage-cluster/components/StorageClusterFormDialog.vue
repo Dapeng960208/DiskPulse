@@ -24,6 +24,8 @@ const {
   storage_port: 22,
   storage_user: '',
   storage_password: '',
+  isilon_session_cache_mode: 'none',
+  isilon_session_cache_path: null,
   protocol: 'https',
   tls_verify: true,
   is_active: true,
@@ -49,6 +51,13 @@ const {
     const modelValue = {
       ...model.value,
       tls_verify: model.value.protocol === 'https' && model.value.tls_verify,
+      isilon_session_cache_mode: model.value.storage_type === 'isilon'
+        ? model.value.isilon_session_cache_mode
+        : 'none',
+      isilon_session_cache_path: model.value.storage_type === 'isilon'
+        && model.value.isilon_session_cache_mode === 'file'
+        ? model.value.isilon_session_cache_path || '.isilon_cache/cache.json'
+        : null,
     };
     return mode === 'create'
       ? storageClusterApi.create(modelValue)
@@ -63,6 +72,19 @@ const {
 
 watch(() => model.value.protocol, (protocol) => {
   if (protocol === 'http') model.value.tls_verify = false;
+});
+
+watch(() => model.value.storage_type, (storageType) => {
+  if (storageType !== 'isilon') {
+    model.value.isilon_session_cache_mode = 'none';
+    model.value.isilon_session_cache_path = null;
+  }
+});
+
+watch(() => model.value.isilon_session_cache_mode, (cacheMode) => {
+  model.value.isilon_session_cache_path = cacheMode === 'file'
+    ? model.value.isilon_session_cache_path || '.isilon_cache/cache.json'
+    : null;
 });
 
 defineExpose({
@@ -176,6 +198,33 @@ defineExpose({
           show-password
           clearable
           placeholder="请输入 API 密码" />
+      </ElFormItem>
+      <ElFormItem
+        v-if="model.storage_type === 'isilon'"
+        data-test="isilon-session-cache-mode"
+        label="Session 缓存"
+        prop="isilon_session_cache_mode">
+        <ElSelect v-model="model.isilon_session_cache_mode">
+          <ElOption
+            label="不缓存（每次安全注销）"
+            value="none" />
+          <ElOption
+            label="本地文件"
+            value="file" />
+          <ElOption
+            label="Redis"
+            value="redis" />
+        </ElSelect>
+      </ElFormItem>
+      <ElFormItem
+        v-if="model.storage_type === 'isilon' && model.isilon_session_cache_mode === 'file'"
+        data-test="isilon-session-cache-path"
+        label="缓存文件"
+        prop="isilon_session_cache_path">
+        <ElInput
+          v-model="model.isilon_session_cache_path"
+          clearable
+          placeholder="请输入服务端缓存文件路径" />
       </ElFormItem>
       <ElFormItem
         label="是否启用"

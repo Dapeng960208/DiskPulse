@@ -119,6 +119,8 @@ class StorageCluster(Base):
     tls_verify = Column(Boolean, default=True, nullable=False)
     storage_user = Column(String)
     storage_password = Column(String)
+    isilon_session_cache_mode = Column(String(16), nullable=False, default="none")
+    isilon_session_cache_path = Column(String(1024), nullable=True)
     description = Column(Text)
     is_active = Column(Boolean, default=True)
     limit = Column(Float)
