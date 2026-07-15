@@ -16,6 +16,7 @@ from services.storageHealthAnalyticsService import (
     get_capacity_change,
     get_error_severity,
     get_repeated_faults,
+    get_system_events,
     get_top_latency,
     validate_time_range,
 )
@@ -183,6 +184,17 @@ def read_repeated_faults(
 ) -> dict | list:
     _require_storage_cluster(db, storage_cluster_id)
     return get_repeated_faults(db, storage_cluster_id, *time_range)
+
+
+@router.get("/{storage_cluster_id}/analytics/system-events", response_model=dict)
+def read_system_events(
+    storage_cluster_id: int,
+    time_range: AnalyticsTimeRange,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    db: Session = Depends(get_db),
+) -> dict:
+    _require_storage_cluster(db, storage_cluster_id)
+    return get_system_events(db, storage_cluster_id, *time_range, limit=limit)
 
 
 @router.get("/{storage_cluster_id}/analytics/export")

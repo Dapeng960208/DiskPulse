@@ -153,6 +153,22 @@ def get_top_latency(
     return {"supported": supported, "data": rank_top_latency(rows, limit)}
 
 
+def get_system_events(
+    db: Session,
+    storage_cluster_id: int,
+    start_time: datetime,
+    end_time: datetime,
+    limit: int = 100,
+) -> dict:
+    return {
+        "data": storageHealthAnalyticsCrud.get_system_event_rows(
+            db,
+            storage_cluster_id,
+            start_time,
+            end_time,
+            limit,
+        )
+    }
 def get_repeated_faults(
     db: Session, storage_cluster_id: int, start_time: datetime, end_time: datetime
 ) -> dict:

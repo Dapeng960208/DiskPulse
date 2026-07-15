@@ -86,6 +86,42 @@ def get_alert_severities(
     return [{"source": row.source, "severity": row.severity} for row in rows]
 
 
+def get_system_event_rows(
+    db: Session,
+    storage_cluster_id: int,
+    start_time: datetime,
+    end_time: datetime,
+    limit: int = 100,
+) -> list[dict]:
+    rows = db.execute(
+        select(
+            StorageAlerts.source,
+            StorageAlerts.severity,
+            StorageAlerts.description,
+            StorageAlerts.related_info,
+            StorageAlerts.updated_at,
+        )
+        .where(
+            StorageAlerts.storage_cluster_id == storage_cluster_id,
+            StorageAlerts.source.in_(("netapp", "isilon")),
+            StorageAlerts.updated_at.between(_naive(start_time), _naive(end_time)),
+        )
+        .order_by(StorageAlerts.updated_at.desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "source": row.source,
+            "severity": row.severity,
+            "event_code": (row.related_info or {}).get("event_code"),
+            "object_id": (row.related_info or {}).get("object_id"),
+            "description": row.description,
+            "occurred_at": row.updated_at,
+        }
+        for row in rows
+    ]
+
+
 def get_top_latency_rows(
     db: Session,
     storage_cluster_id: int,

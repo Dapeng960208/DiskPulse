@@ -1,5 +1,14 @@
 # 当前交付记录
 
+## 2026-07-15：存储健康独立入口与系统事件分流
+
+- 新增一级菜单“存储健康”，复用既有分析页面并增加集群选择；系统管理中的集群详情入口保持不变。
+- 普通告警查询固定为 `source=diskpulse`；NetApp/Isilon 原生事件通过新增 `system-events` 分析接口进入故障页，不再与容量告警混排或显示为“扩容”。
+- 普通业务入口不渲染 API 用户名、端口和 TLS 等管理字段；系统事件查询按集群、时间范围和最多 200 条进行约束。
+- TDD RED：后端 `3 failed, 79 passed`，前端 `5 failed, 8 passed`；安全补充 RED：`1 failed, 5 skipped`。
+- GREEN 聚焦验证：后端 `82 passed`，前端 `13 passed`；改动文件 ESLint、Python `compileall` 和 `npm run build:prod` 通过。
+- 本次不新增数据库迁移；尚未连接运行中的登录浏览器执行菜单和真实事件表冒烟。
+
 ## 2026-07-15：修复项目组监控配置无法保存
 
 - 根因是编辑表单复用详情响应后，PUT payload 仍包含只读 `qtree`、`in_charge_user`，与后端 `extra="forbid"` 写入契约冲突并返回 `422`。

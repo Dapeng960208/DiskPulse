@@ -9,7 +9,7 @@ from utils.query import get_sort_column
 def get_storage_alerts(db: Session, page: int, size: int, nameLike: str | None = None, prop: str | None = None,
                        order: str | None = None, related_type: str | None = None, related_id: int | None = None,
                        alert_type: str | None = None):
-    query = db.query(StorageAlerts)
+    query = db.query(StorageAlerts).filter(StorageAlerts.source == "diskpulse")
     conditions = []
     if nameLike and len(nameLike.strip()) > 0:
         conditions.append(

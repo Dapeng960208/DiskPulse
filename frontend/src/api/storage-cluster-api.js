@@ -21,6 +21,10 @@ class StorageClusterApi extends CrudApi {
     return super.get(`/${id}/analytics/repeated-faults`, queryParams);
   }
 
+  fetchSystemEvents(id, queryParams) {
+    return super.get(`/${id}/analytics/system-events`, queryParams);
+  }
+
   exportAnalytics(id, queryParams) {
     return super.export(`/${id}/analytics/export`, queryParams);
   }

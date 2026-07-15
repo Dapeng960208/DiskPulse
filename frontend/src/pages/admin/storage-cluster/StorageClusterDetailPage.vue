@@ -22,18 +22,21 @@ import LineCharts from '@/common/charts/LineCharts.vue';
 import PieCharts from '@/common/charts/PieCharts.vue';
 import BarStackChart from '@/common/charts/BarStackChart.vue';
 import LoadingCharts from '@/common/charts/LoadingCharts.vue';
+import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import storageClusterApi from '@/api/storage-cluster-api';
 import { useQuery } from '@/composables/query';
 import { getDefaultTime } from '@/composables/common';
 
 const route = useRoute();
 const clusterId = ref(null);
+const standalone = computed(() => route.name === 'StorageHealth');
 const dateRange = ref(getDefaultTime(8));
 const activeTab = ref('capacity');
 const capacity = ref({ data: [] });
 const latency = ref({ supported: true, data: [] });
 const severity = ref({ counts: {}, total: 0, sources: {} });
 const faults = ref({ data: [] });
+const systemEvents = ref({ data: [] });
 const loaded = reactive({ capacity: false, performance: false, faults: false });
 const loading = reactive({ capacity: false, performance: false, faults: false });
 
@@ -55,6 +58,7 @@ const latencyData = computed(() => latency.value?.data || []);
 const latencyCategories = computed(() => latencyData.value.map((item) => item.object_name || item.object_id || '-'));
 const latencySeries = computed(() => [latencyData.value.map((item) => Number(item.p95_latency) || 0)]);
 const faultData = computed(() => faults.value?.data || []);
+const systemEventData = computed(() => systemEvents.value?.data || []);
 const severityChartData = computed(() => [
   ['严重', Number(severity.value?.counts?.critical) || 0],
   ['错误', Number(severity.value?.counts?.error) || 0],
@@ -100,14 +104,16 @@ async function loadFaults(force = false) {
   if (!clusterId.value || (loaded.faults && !force)) return;
   loading.faults = true;
   try {
-    [severity.value, faults.value] = await Promise.all([
+    [severity.value, faults.value, systemEvents.value] = await Promise.all([
       storageClusterApi.fetchErrorSeverity(clusterId.value, queryParams()),
       storageClusterApi.fetchRepeatedFaults(clusterId.value, queryParams()),
+      storageClusterApi.fetchSystemEvents(clusterId.value, queryParams()),
     ]);
     loaded.faults = true;
   } catch {
     severity.value = { counts: {}, total: 0, sources: {} };
     faults.value = { data: [] };
+    systemEvents.value = { data: [] };
     ElMessage.error('加载故障数据失败，请稍后重试');
   } finally {
     loading.faults = false;
@@ -174,16 +180,32 @@ watch(dateRange, () => {
   loadActiveTab(true);
 });
 
-onBeforeMount(() => {
-  clusterId.value = Number.parseInt(route.params?.id, 10);
+watch(clusterId, () => {
+  loaded.capacity = false;
+  loaded.performance = false;
+  loaded.faults = false;
   queryInfo();
-  loadCapacity();
+  loadActiveTab(true);
+});
+
+onBeforeMount(() => {
+  const routeClusterId = Number.parseInt(route.params?.id, 10);
+  if (Number.isInteger(routeClusterId)) clusterId.value = routeClusterId;
 });
 </script>
 
 <template>
   <div class="storage-health-page flex flex-col flex-1 min-h-0">
+    <ElCard
+      v-if="standalone"
+      class="mb-2.5">
+      <ElFormItem label="存储集群">
+        <StorageClusterSelect v-model="clusterId" />
+      </ElFormItem>
+    </ElCard>
+
     <FilterForm
+      v-if="clusterId"
       @query="loadActiveTab(true)"
       @reset="resetRange">
       <ElFormItem
@@ -226,25 +248,31 @@ onBeforeMount(() => {
       </ElDropdown>
     </FilterForm>
 
-    <ElCard class="mt-2.5">
+    <ElCard
+      v-if="clusterId"
+      class="mt-2.5">
       <ElDescriptions
         :column="4"
         size="large"
         border>
         <ElDescriptionsItem label="集群名称">{{ infoResult.name }}</ElDescriptionsItem>
         <ElDescriptionsItem label="描述">{{ infoResult.description }}</ElDescriptionsItem>
-        <ElDescriptionsItem label="访问协议">{{ infoResult.protocol?.toUpperCase() }}</ElDescriptionsItem>
-        <ElDescriptionsItem label="TLS 证书校验">
-          {{ infoResult.protocol === 'https' ? (infoResult.tls_verify ? '开启' : '关闭') : '不适用' }}
-        </ElDescriptionsItem>
-        <ElDescriptionsItem label="API 端口">{{ infoResult.storage_port }}</ElDescriptionsItem>
-        <ElDescriptionsItem label="API 用户名">{{ infoResult.storage_user }}</ElDescriptionsItem>
-        <ElDescriptionsItem label="创建时间">{{ infoResult.created_at }}</ElDescriptionsItem>
-        <ElDescriptionsItem label="更新时间">{{ infoResult.updated_at }}</ElDescriptionsItem>
+        <template v-if="!standalone">
+          <ElDescriptionsItem label="访问协议">{{ infoResult.protocol?.toUpperCase() }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="TLS 证书校验">
+            {{ infoResult.protocol === 'https' ? (infoResult.tls_verify ? '开启' : '关闭') : '不适用' }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="API 端口">{{ infoResult.storage_port }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="API 用户名">{{ infoResult.storage_user }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="创建时间">{{ infoResult.created_at }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="更新时间">{{ infoResult.updated_at }}</ElDescriptionsItem>
+        </template>
       </ElDescriptions>
     </ElCard>
 
-    <ElCard class="mt-2.5 flex-auto min-h-0">
+    <ElCard
+      v-if="clusterId"
+      class="mt-2.5 flex-auto min-h-0">
       <ElTabs
         v-model="activeTab"
         class="h-full">
@@ -335,37 +363,66 @@ onBeforeMount(() => {
             width="100%"
             height="360px" />
           <div
-            v-else-if="!severity.total && !faultData.length"
+            v-else-if="!severity.total && !faultData.length && !systemEventData.length"
             class="analytics-empty">暂无故障数据</div>
-          <div
-            v-else
-            class="fault-grid">
-            <PieCharts
-              :data="severityChartData"
-              title="错误严重级别"
-              width="100%"
-              height="360px" />
-            <div class="table-wrap">
+          <div v-else>
+            <div class="fault-grid">
+              <PieCharts
+                :data="severityChartData"
+                title="错误严重级别"
+                width="100%"
+                height="360px" />
+              <div class="table-wrap">
+                <ElTable
+                  :data="faultData"
+                  empty-text="暂无重复故障">
+                  <ElTableColumn
+                    label="来源"
+                    prop="source" />
+                  <ElTableColumn
+                    label="故障指纹"
+                    prop="fingerprint"
+                    min-width="220" />
+                  <ElTableColumn
+                    label="次数"
+                    prop="count" />
+                  <ElTableColumn
+                    label="首次发生"
+                    prop="first_occurred_at"
+                    min-width="170" />
+                  <ElTableColumn
+                    label="最近发生"
+                    prop="last_occurred_at"
+                    min-width="170" />
+                </ElTable>
+              </div>
+            </div>
+            <div class="system-events">
+              <h3>系统事件</h3>
               <ElTable
-                :data="faultData"
-                empty-text="暂无重复故障">
+                :data="systemEventData"
+                empty-text="暂无系统事件">
                 <ElTableColumn
                   label="来源"
                   prop="source" />
                 <ElTableColumn
-                  label="故障指纹"
-                  prop="fingerprint"
-                  min-width="220" />
+                  label="级别"
+                  prop="severity" />
                 <ElTableColumn
-                  label="次数"
-                  prop="count" />
+                  label="事件代码"
+                  prop="event_code"
+                  min-width="180" />
                 <ElTableColumn
-                  label="首次发生"
-                  prop="first_occurred_at"
-                  min-width="170" />
+                  label="对象"
+                  prop="object_id"
+                  min-width="140" />
                 <ElTableColumn
-                  label="最近发生"
-                  prop="last_occurred_at"
+                  label="内容"
+                  prop="description"
+                  min-width="320" />
+                <ElTableColumn
+                  label="发生时间"
+                  prop="occurred_at"
                   min-width="170" />
               </ElTable>
             </div>
@@ -397,6 +454,10 @@ onBeforeMount(() => {
 .table-wrap {
   max-width: 100%;
   overflow-x: auto;
+}
+
+.system-events {
+  margin-top: 20px;
 }
 
 :deep(.el-card__body) {

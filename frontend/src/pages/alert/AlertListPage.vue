@@ -46,8 +46,12 @@ const alertTypeDisplay = (alertType) => {
       return '告警';
     case 'report':
       return '周报';
-    default:
+    case 'expand':
       return '扩容';
+    case 'vendor_event':
+      return '系统事件';
+    default:
+      return '-';
   }
 };
 
