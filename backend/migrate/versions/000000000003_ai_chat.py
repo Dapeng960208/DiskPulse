@@ -13,8 +13,46 @@ down_revision: str = "000000000002"
 branch_labels: None = None
 depends_on: None = None
 
+_AI_COLUMNS = {
+    "ai_configs": {
+        "id", "name", "description", "provider", "base_url", "api_key_encrypted",
+        "model", "enabled", "enable_chat", "temperature", "max_tokens",
+        "system_prompt", "created_by", "updated_by", "created_at", "updated_at",
+    },
+    "ai_conversations": {"id", "user_id", "model_id", "title", "created_at", "updated_at"},
+    "ai_messages": {"id", "conversation_id", "role", "content", "created_at", "updated_at"},
+    "ai_audit_logs": {
+        "id", "model_id", "conversation_id", "user_id", "source", "source_ref",
+        "request_payload", "response_payload", "tool_call_count", "tool_failed_count",
+        "detail_payload", "status", "error_message", "trace_id", "started_at",
+        "finished_at", "created_at", "updated_at",
+    },
+}
+
+
+def _adopt_precreated_schema() -> bool:
+    try:
+        inspector = sa.inspect(op.get_bind())
+    except sa.exc.NoInspectionAvailable:
+        return False
+
+    present = set(inspector.get_table_names()) & set(_AI_COLUMNS)
+    if not present:
+        return False
+    if present != set(_AI_COLUMNS):
+        raise RuntimeError("partial AI schema exists; restore or remove it before upgrading")
+
+    for table_name, expected in _AI_COLUMNS.items():
+        actual = {column["name"] for column in inspector.get_columns(table_name)}
+        if actual != expected:
+            raise RuntimeError(f"existing {table_name} schema does not match migration 000000000003")
+    return True
+
 
 def upgrade() -> None:
+    if _adopt_precreated_schema():
+        return
+
     op.create_table(
         "ai_configs",
         sa.Column("id", sa.Integer(), nullable=False),

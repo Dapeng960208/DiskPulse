@@ -266,3 +266,12 @@
 - 修复：将“新增标签”移入最右侧 `ElTableColumn` 的 `#header` 插槽，删除独立按钮行。
 - 验证：聚焦回归测试 `4 passed`，页面和测试文件 ESLint 通过。
 - 风险：未连接运行中的前后端做浏览器截图复验。
+
+### 2026-07-15：PostgreSQL AI 表预建导致 Alembic DuplicateTable
+
+- 触发：数据库 revision 为 `000000000002` 时执行 `alembic upgrade head`。
+- 现象：`000000000003` 创建 `ai_configs` 时报 `psycopg2.errors.DuplicateTable`。
+- 根因：应用启动时的 `Base.metadata.create_all()` 已创建 AI 四表，但不会推进 Alembic 版本账本。
+- 修复：移除 PostgreSQL 启动期 `create_all()`；`000000000003` 仅在四表及字段完整匹配时接管既有结构，部分或不匹配结构明确拒绝升级。
+- 验证：复现测试先为 `3 failed`、修复后 `4 passed`；真实 PostgreSQL 已从 `000000000002` 升至唯一 head `000000000004`。
+- 风险：其他环境若存在手工创建的半套 AI 表，需先核对并修复结构，不能直接 stamp revision。

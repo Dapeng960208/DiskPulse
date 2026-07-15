@@ -3,9 +3,8 @@ from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import DisconnectionError
 
-import models
 from appConfig import base_config
-from database import Base, SessionLocal, engine
+from database import SessionLocal
 from dependencies import require_authenticated_request
 from questdb.migrate import upgrade as upgrade_questdb
 from routers import (
@@ -27,7 +26,6 @@ from routers import (
 )
 
 if base_config.get("database.create_tables", False):
-    Base.metadata.create_all(bind=engine)
     upgrade_questdb()
 
 app = FastAPI(
