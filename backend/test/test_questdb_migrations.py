@@ -242,4 +242,5 @@ def test_startup_uses_versioned_questdb_migrations():
 
     assert "upgrade_questdb" in imported_aliases
     assert "upgrade_questdb" in called_names
+    assert "Base.metadata.create_all" not in source
     assert "QuestDBBase.metadata.create_all" not in source

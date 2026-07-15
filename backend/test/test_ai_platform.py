@@ -3,6 +3,8 @@ import importlib.util
 import io
 from pathlib import Path
 
+import pytest
+import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from fastapi import APIRouter, FastAPI
@@ -335,3 +337,28 @@ def test_ai_migration_compiles_for_supported_dialects():
         migration.upgrade()
         sql = output.getvalue().lower()
         assert all(table in sql for table in ("ai_configs", "ai_conversations", "ai_messages", "ai_audit_logs"))
+
+
+def test_ai_migration_adopts_complete_create_all_schema():
+    migration = _ai_migration()
+    tables = (AIConfig.__table__, AIConversation.__table__, AIMessage.__table__, AIAuditLog.__table__)
+
+    with sa.create_engine("sqlite://").begin() as connection:
+        for table in tables:
+            table.create(connection)
+        migration.op = Operations(MigrationContext.configure(connection))
+
+        migration.upgrade()
+
+        assert set(sa.inspect(connection).get_table_names()) == {table.name for table in tables}
+
+
+def test_ai_migration_rejects_partial_create_all_schema():
+    migration = _ai_migration()
+
+    with sa.create_engine("sqlite://").begin() as connection:
+        AIConfig.__table__.create(connection)
+        migration.op = Operations(MigrationContext.configure(connection))
+
+        with pytest.raises(RuntimeError, match="partial AI schema"):
+            migration.upgrade()
