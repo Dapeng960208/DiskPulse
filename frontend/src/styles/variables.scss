@@ -43,6 +43,10 @@
   --info-light: #22D3EE;
   --info-bg: #CFFAFE;
 
+  --tag-info-color: #7C3AED;
+  --tag-info-border: #C4B5FD;
+  --tag-info-bg: #F5F3FF;
+
   // ==================== 阴影系统 ====================
   --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
   --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
@@ -118,6 +122,10 @@ html.dark {
   --text-secondary: #CBD5E1;
   --text-tertiary: #94A3B8;
   --text-disabled: #64748B;
+
+  --tag-info-color: #DDD6FE;
+  --tag-info-border: #7C3AED;
+  --tag-info-bg: #2E1065;
 
   --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
   --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4);

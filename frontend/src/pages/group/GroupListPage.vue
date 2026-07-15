@@ -375,8 +375,8 @@ function confirmDelete(row) {
 }
 
 .group-list__info-tag {
-  --el-tag-bg-color: var(--bg-tertiary);
-  --el-tag-border-color: var(--border-dark);
-  --el-tag-text-color: var(--text-secondary);
+  --el-tag-bg-color: var(--tag-info-bg);
+  --el-tag-border-color: var(--tag-info-border);
+  --el-tag-text-color: var(--tag-info-color);
 }
 </style>
