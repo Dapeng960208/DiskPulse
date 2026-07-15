@@ -61,6 +61,14 @@ const TabPane = defineComponent({
   },
 });
 
+const Table = defineComponent({
+  name: 'ElTable',
+  props: { data: { type: Array, default: () => [] } },
+  setup(props, { slots }) {
+    return () => h('div', [JSON.stringify(props.data), ...(slots.default?.() || [])]);
+  },
+});
+
 const Dropdown = defineComponent({
   name: 'ElDropdown',
   emits: ['command'],
@@ -86,6 +94,7 @@ async function mountPage() {
         ElDatePicker: DatePicker,
         ElSelect: passthrough('ElSelect', 'select'),
         ElOption: passthrough('ElOption', 'option'),
+        ElTable: Table,
         ElTabs: Tabs,
         ElTabPane: TabPane,
         ElDropdown: Dropdown,
@@ -254,6 +263,12 @@ describe('storage cluster health analytics page', () => {
   it('offers cluster selection from the standalone storage health entry', async () => {
     route.name = 'StorageHealth';
     route.params = {};
+    storageClusterApi.fetchById.mockResolvedValue({
+      id: 7,
+      name: 'cluster-seven',
+      storage_type: 'netapp',
+      storage_user: 'svc-storage-admin',
+    });
     const wrapper = await mountPage();
     const selector = wrapper.findComponent({ name: 'StorageClusterSelect' });
 
@@ -268,5 +283,6 @@ describe('storage cluster health analytics page', () => {
       start_time: initialRange[0],
       end_time: initialRange[1],
     });
+    expect(wrapper.text()).not.toContain('svc-storage-admin');
   });
 });
