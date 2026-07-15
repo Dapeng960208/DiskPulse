@@ -21,7 +21,9 @@ import FilterForm from '@/components/form/QueryForm.vue';
 import LineCharts from '@/common/charts/LineCharts.vue';
 import PieCharts from '@/common/charts/PieCharts.vue';
 import BarStackChart from '@/common/charts/BarStackChart.vue';
+import DiskUsage from '@/common/charts/DiskUsage.vue';
 import LoadingCharts from '@/common/charts/LoadingCharts.vue';
+import aggregateApi from '@/api/aggregate-api.js';
 import storageClusterApi from '@/api/storage-cluster-api';
 import { useQuery } from '@/composables/query';
 import { getDefaultTime } from '@/composables/common';
@@ -35,7 +37,7 @@ const latency = ref({ supported: true, data: [] });
 const severity = ref({ counts: {}, total: 0, sources: {} });
 const faults = ref({ data: [] });
 const systemEvents = ref({ data: [] });
-const loaded = reactive({ capacity: false, performance: false, faults: false });
+const loaded = reactive({ capacity: false, distribution: false, performance: false, faults: false });
 const loading = reactive({ capacity: false, performance: false, faults: false });
 
 const shortcuts = [
@@ -69,6 +71,13 @@ const fetchClusterInfo = async () => {
   return storageClusterApi.fetchById(clusterId.value);
 };
 const { result: infoResult, query: queryInfo } = useQuery(fetchClusterInfo, {});
+const {
+  result: storageDistribution,
+  querying: distributionLoading,
+  query: queryStorageDistribution,
+} = useQuery(() => aggregateApi.fetchAggregateTrees({
+  storage_cluster_id: clusterId.value,
+}), { data: [] });
 
 async function loadCapacity(force = false) {
   if (!clusterId.value || (loaded.capacity && !force)) return;
@@ -81,6 +90,17 @@ async function loadCapacity(force = false) {
     ElMessage.error('加载容量趋势失败，请稍后重试');
   } finally {
     loading.capacity = false;
+  }
+}
+
+async function loadDistribution(force = false) {
+  if (!clusterId.value || (loaded.distribution && !force)) return;
+  try {
+    await queryStorageDistribution();
+    loaded.distribution = true;
+  } catch {
+    storageDistribution.value = { data: [] };
+    ElMessage.error('加载存储分布失败，请稍后重试');
   }
 }
 
@@ -119,6 +139,7 @@ async function loadFaults(force = false) {
 }
 
 function loadActiveTab(force = false) {
+  if (activeTab.value === 'distribution') return loadDistribution(force);
   if (activeTab.value === 'performance') return loadPerformance(force);
   if (activeTab.value === 'faults') return loadFaults(force);
   return loadCapacity(force);
@@ -180,6 +201,7 @@ watch(dateRange, () => {
 
 watch(clusterId, () => {
   loaded.capacity = false;
+  loaded.distribution = false;
   loaded.performance = false;
   loaded.faults = false;
   queryInfo();
@@ -195,7 +217,7 @@ onBeforeMount(() => {
 <template>
   <div class="storage-health-page flex flex-col flex-1 min-h-0">
     <FilterForm
-      v-if="clusterId"
+      v-if="clusterId && activeTab !== 'distribution'"
       @query="loadActiveTab(true)"
       @reset="resetRange">
       <ElFormItem
@@ -274,6 +296,24 @@ onBeforeMount(() => {
               y-axis-unit="G"
               :legend-name="infoResult.name" />
           </div>
+        </ElTabPane>
+
+        <ElTabPane
+          label="存储分布"
+          name="distribution">
+          <LoadingCharts
+            v-if="distributionLoading"
+            width="100%"
+            height="420px" />
+          <div
+            v-else-if="!storageDistribution.data?.length"
+            class="analytics-empty">暂无存储分布数据</div>
+          <DiskUsage
+            v-else
+            :data="storageDistribution.data"
+            title=""
+            width="100%"
+            height="420px" />
         </ElTabPane>
 
         <ElTabPane

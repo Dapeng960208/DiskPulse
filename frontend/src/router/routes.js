@@ -172,14 +172,6 @@ export default [
         },
       },
       {
-        path: 'dashboard',
-        name: 'AdminDashboard',
-        component: () => import('@/pages/admin/dashboard/DashboardPage.vue'),
-        meta: {
-          title: '存储一览',
-        },
-      },
-      {
         path: 'aggregates',
         name: 'Aggregates',
         component: () => import('@/pages/admin/aggregate/AggregateListPage.vue'),

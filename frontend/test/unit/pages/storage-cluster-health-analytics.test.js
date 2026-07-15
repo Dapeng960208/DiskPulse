@@ -73,6 +73,14 @@ const Table = defineComponent({
   },
 });
 
+const DiskUsage = defineComponent({
+  name: 'DiskUsage',
+  props: { data: { type: Array, default: () => [] } },
+  setup() {
+    return () => h('div');
+  },
+});
+
 const Dropdown = defineComponent({
   name: 'ElDropdown',
   emits: ['command'],
@@ -119,7 +127,7 @@ async function mountPage() {
         LineCharts: passthrough('LineCharts'),
         PieCharts: passthrough('PieCharts'),
         BarStackChart: passthrough('BarStackChart'),
-        DiskUsage: passthrough('DiskUsage'),
+        DiskUsage,
         LoadingCharts: passthrough('LoadingCharts'),
         AnimatedTextChart: passthrough('AnimatedTextChart'),
       },
