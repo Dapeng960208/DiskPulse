@@ -336,6 +336,35 @@ describe('dialog component function coverage', () => {
     expect(wrapper.findComponent({ name: 'GroupTagSelect' }).exists()).toBe(true);
   }, 15000);
 
+  it('does not submit read-only group response fields when editing', async () => {
+    const { default: GroupFormDialog } = await import('@/pages/group/components/GroupFormDialog.vue');
+    const wrapper = shallowMount(GroupFormDialog, {
+      global: { stubs: globalStubs },
+    });
+
+    await getExposed(wrapper).edit({
+      id: 2,
+      name: 'group-name',
+      project_id: 1,
+      storage_cluster_id: 3,
+      group_tag_id: 11,
+      volume_id: 42,
+      linux_path: '/group-name',
+      project: { id: 1, name: 'Project-1' },
+      group_tag: { id: 11, name: 'production' },
+      storage_cluster: { id: 3, name: 'netapp-1', storage_type: 'netapp' },
+      storage_target: { id: 42, name: 'volume-42', type: 'volume' },
+      qtree: null,
+      in_charge_user: null,
+    });
+    await findSubmitButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(Object.keys(groupApi.replace.mock.lastCall[1])).not.toEqual(
+      expect.arrayContaining(['qtree', 'in_charge_user']),
+    );
+  }, 15000);
+
   it('clears stale project-group target ids when the target type changes', async () => {
     const { default: GroupFormDialog } = await import('@/pages/group/components/GroupFormDialog.vue');
     const wrapper = shallowMount(GroupFormDialog, {
