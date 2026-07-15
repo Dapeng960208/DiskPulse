@@ -1,5 +1,12 @@
 # 当前交付记录
 
+## 2026-07-15：存储一览并入存储集群详情
+
+- 删除系统管理中的独立“存储一览”路由和页面，在存储集群详情“容量趋势”旁新增“存储分布”页签。
+- 存储分布复用既有 `fetchAggregateTrees` 接口，按详情页当前 `clusterId` 首次打开时懒加载，普通页签往返不重复请求；该页签隐藏无关的时间筛选和报告导出工具栏。
+- TDD RED：聚焦测试 `3 failed, 7 passed`；GREEN：详情页和路由聚焦测试 `11 passed`，targeted ESLint `0 errors`（保留测试文件既有 `vue/one-component-per-file` warning）。
+- 未执行登录浏览器、真实后端接口或全量前端回归；容量树接口和图表沿用既有实现，本轮未修改后端。
+
 ## 2026-07-15：认证 token 接入 Redis 会话缓存
 
 - JWT 默认有效期从 60 分钟调整为 `10080` 分钟（7 天），Redis token key 使用相同 TTL。
