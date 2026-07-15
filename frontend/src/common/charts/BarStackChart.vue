@@ -30,6 +30,10 @@ const props = defineProps({
   title: {
     type: String,
     default: 'Chart Title',
+  },
+  unit: {
+    type: String,
+    default: 'T',
   }
 });
 
@@ -60,7 +64,7 @@ function createSeries(rawData, totalData, seriesNames) {
       barMaxWidth: 100,
       label: {
         show: true,
-        formatter: (params) => Math.round(params.value) + 'T'
+        formatter: (params) => `${Math.round(params.value)}${props.unit}`
       },
       data: rawData[sid].map((d, did) =>
         totalData[did] <= 0 ? 0 : d
@@ -130,7 +134,7 @@ function renderChart() {
       formatter: function (params) {
         let tooltipText = `${params[0].axisValue}<br/>`;
         params.forEach(param => {
-          tooltipText += `${param.marker} ${param.seriesName}: ${param.value}T<br/>`;
+          tooltipText += `${param.marker} ${param.seriesName}: ${param.value}${props.unit}<br/>`;
         });
         return tooltipText;
       }

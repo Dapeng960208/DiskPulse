@@ -1,6 +1,7 @@
 import { defineComponent, h } from 'vue';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { vi } from 'vitest';
+import StorageClusterDetailPage from '@/pages/admin/storage-cluster/StorageClusterDetailPage.vue';
 
 const initialRange = ['2026-07-01 00:00:00', '2026-07-02 00:00:00'];
 const storageClusterApi = vi.hoisted(() => ({
@@ -16,6 +17,13 @@ const storageClusterApi = vi.hoisted(() => ({
 vi.mock('@/api/storage-cluster-api', () => ({ default: storageClusterApi }));
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { id: '42' } }) }));
 vi.mock('@/composables/common', () => ({ getDefaultTime: () => [...initialRange] }));
+
+let mountedWrapper;
+
+afterEach(() => {
+  mountedWrapper?.unmount();
+  mountedWrapper = null;
+});
 
 const passthrough = (name, tag = 'div') => defineComponent({
   name,
@@ -63,8 +71,7 @@ const Dropdown = defineComponent({
 });
 
 async function mountPage() {
-  const { default: Page } = await import('@/pages/admin/storage-cluster/StorageClusterDetailPage.vue');
-  const wrapper = shallowMount(Page, {
+  const wrapper = shallowMount(StorageClusterDetailPage, {
     attachTo: document.body,
     global: {
       stubs: {
@@ -91,6 +98,7 @@ async function mountPage() {
     },
   });
   await flushPromises();
+  mountedWrapper = wrapper;
   return wrapper;
 }
 
@@ -127,7 +135,6 @@ describe('storage cluster health analytics page', () => {
     expect(storageClusterApi.fetchTopLatency).not.toHaveBeenCalled();
     expect(storageClusterApi.fetchErrorSeverity).not.toHaveBeenCalled();
     expect(storageClusterApi.fetchRepeatedFaults).not.toHaveBeenCalled();
-    wrapper.unmount();
   });
 
   it('loads performance and fault data lazily and refreshes only the active tab for a new range', async () => {
@@ -154,7 +161,6 @@ describe('storage cluster health analytics page', () => {
     await selectTab(wrapper, 'faults');
     expect(storageClusterApi.fetchErrorSeverity).toHaveBeenCalledTimes(1);
     expect(storageClusterApi.fetchRepeatedFaults).toHaveBeenCalledTimes(1);
-    wrapper.unmount();
   });
 
   it('shows unsupported performance and empty fault states', async () => {
@@ -166,7 +172,6 @@ describe('storage cluster health analytics page', () => {
 
     await selectTab(wrapper, 'faults');
     expect(wrapper.text()).toContain('暂无故障');
-    wrapper.unmount();
   });
 
   it('exports the current section or the complete report and downloads the returned blob', async () => {
@@ -185,16 +190,35 @@ describe('storage cluster health analytics page', () => {
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(clickSpy).toHaveBeenCalledTimes(1);
 
-    await dropdown.vm.$emit('command', 'all:excel');
+    await selectTab(wrapper, 'performance');
+    await dropdown.vm.$emit('command', 'current:pdf');
     await flushPromises();
     expect(storageClusterApi.exportAnalytics).toHaveBeenNthCalledWith(2, 42, {
+      start_time: initialRange[0],
+      end_time: initialRange[1],
+      section: 'latency',
+      format: 'pdf',
+    });
+
+    await selectTab(wrapper, 'faults');
+    await dropdown.vm.$emit('command', 'severity:csv');
+    await flushPromises();
+    expect(storageClusterApi.exportAnalytics).toHaveBeenNthCalledWith(3, 42, {
+      start_time: initialRange[0],
+      end_time: initialRange[1],
+      section: 'severity',
+      format: 'csv',
+    });
+
+    await dropdown.vm.$emit('command', 'all:excel');
+    await flushPromises();
+    expect(storageClusterApi.exportAnalytics).toHaveBeenNthCalledWith(4, 42, {
       start_time: initialRange[0],
       end_time: initialRange[1],
       section: 'all',
       format: 'excel',
     });
-    expect(clickSpy).toHaveBeenCalledTimes(2);
+    expect(clickSpy).toHaveBeenCalledTimes(4);
     clickSpy.mockRestore();
-    wrapper.unmount();
   });
 });
