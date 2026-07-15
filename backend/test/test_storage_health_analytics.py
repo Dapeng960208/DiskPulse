@@ -412,3 +412,48 @@ def test_cluster_collection_isolates_failures():
         "succeeded_clusters": (1, 3),
         "failed_clusters": (2,),
     }
+
+
+def test_vendor_event_batch_deduplicates_external_event_id_before_insert(db_session):
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+    event = {
+        "index": 42,
+        "time": "2026-07-15T10:00:00Z",
+        "message": {"name": "disk.offline", "severity": "error"},
+        "node": {"uuid": "node-1", "name": "node-a"},
+        "log_message": "Disk offline",
+    }
+    rows = storage_health.normalize_vendor_events(7, "netapp", [event, event])
+
+    inserted = storage_health._persist_vendor_events(
+        db_session,
+        rows,
+        datetime(2026, 7, 15, 9, 55, 0),
+    )
+    db_session.commit()
+
+    assert inserted == 1
+    assert db_session.query(models.StorageAlerts).count() == 1
+
+
+def test_netapp_latency_metrics_are_converted_from_microseconds_to_milliseconds():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+
+    rows = storage_health._netapp_performance_rows(
+        7,
+        [
+            {
+                "uuid": "volume-1",
+                "name": "vol-a",
+                "metrics": {
+                    "latency": {"total": 2500, "read": 1500, "write": 3500},
+                    "timestamp": "2026-07-15T10:00:00Z",
+                },
+            }
+        ],
+        datetime(2026, 7, 15, 10, 0, 0),
+    )
+
+    assert rows[0]["latency_total"] == 2.5
+    assert rows[0]["latency_read"] == 1.5
+    assert rows[0]["latency_write"] == 3.5
