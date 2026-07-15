@@ -47,8 +47,9 @@ describe('QueryForm progressive filter toolbar', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/components/form/QueryForm.vue'), 'utf8');
 
     expect(source).toContain('grid-template-columns: repeat(auto-fill, minmax(min(100%, max(220px, calc((100% - 4 * var(--spacing-md)) / 5))), 1fr));');
-    expect(source).toMatch(/\.el-form-item__label \{[\s\S]*justify-content: flex-start;[\s\S]*text-align: left;[\s\S]*color: var\(--text-primary\);[\s\S]*font-size: var\(--font-size-base\);/);
+    expect(source).toMatch(/\.el-form-item__label \{[\s\S]*justify-content: flex-start;[\s\S]*text-align: left;[\s\S]*max-width: 100%;[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*color: var\(--text-primary\);[\s\S]*font-size: var\(--font-size-base\);/);
     expect(source).not.toMatch(/&\.query-form-field--wide \{[\s\S]*?(?:width|flex-basis):/);
+    expect(source).toMatch(/@include mobile \{[\s\S]*\.query-form__actions \{[\s\S]*:deep\(\.el-button\) \{[\s\S]*flex: 1 1 100%;/);
   });
 
   it('keeps primary fields visible and toggles advanced fields against active chips', async () => {
