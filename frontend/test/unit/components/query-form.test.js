@@ -46,9 +46,14 @@ describe('QueryForm progressive filter toolbar', () => {
   it('uses one-to-five equal-width filter columns with left-aligned labels', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/components/form/QueryForm.vue'), 'utf8');
 
+    expect(source).toMatch(/\.query-form \{[\s\S]*display: grid;[\s\S]*grid-template-columns: minmax\(0, 1fr\) max-content;/);
+    expect(source).toMatch(/\.query-form__toolbar \{[\s\S]*display: contents;/);
     expect(source).toContain('grid-template-columns: repeat(auto-fill, minmax(min(100%, max(220px, calc((100% - 4 * var(--spacing-md)) / 5))), 1fr));');
+    expect(source).toMatch(/\.query-form__advanced \{[\s\S]*grid-column: 1;/);
+    expect(source).toMatch(/\.query-form__actions \{[\s\S]*grid-column: 2;/);
     expect(source).toMatch(/\.el-form-item__label \{[\s\S]*justify-content: flex-start;[\s\S]*text-align: left;[\s\S]*max-width: 100%;[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*color: var\(--text-primary\);[\s\S]*font-size: var\(--font-size-base\);/);
     expect(source).not.toMatch(/&\.query-form-field--wide \{[\s\S]*?(?:width|flex-basis):/);
+    expect(source).not.toContain('query-form__action-spacer');
     expect(source).toMatch(/@include mobile \{[\s\S]*\.query-form__actions \{[\s\S]*:deep\(\.el-button\) \{[\s\S]*flex: 1 1 100%;/);
   });
 
