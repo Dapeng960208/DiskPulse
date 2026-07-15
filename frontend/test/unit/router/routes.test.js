@@ -22,14 +22,16 @@ describe('router/routes and app shell', () => {
     const storageHealthRoute = routes
       .flatMap((route) => route.children || [])
       .find((route) => route.name === 'StorageHealth');
+    const storageClusterDetailRoute = adminRoute.children
+      .find((route) => route.name === 'StorageClusterDetail');
 
     expect(loginRoute.meta.isPublic).toBe(true);
-    expect(storageHealthRoute).toEqual(expect.objectContaining({
-      path: 'storage-health',
+    expect(storageHealthRoute).toBeUndefined();
+    expect(storageClusterDetailRoute).toEqual(expect.objectContaining({
+      path: 'storage-cluster/:id',
       meta: expect.objectContaining({
-        title: '存储健康',
-        isRoot: true,
-        menuOrder: 55,
+        title: '存储集群详情',
+        isHidden: true,
       }),
     }));
     expect(adminRoute.children.map((route) => route.name)).toEqual(

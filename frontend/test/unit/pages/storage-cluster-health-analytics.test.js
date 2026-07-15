@@ -80,12 +80,23 @@ const Dropdown = defineComponent({
   },
 });
 
+const FilterForm = defineComponent({
+  name: 'FilterForm',
+  emits: ['query', 'reset'],
+  setup(_, { slots }) {
+    return () => h('form', [
+      ...(slots.default?.() || []),
+      h('div', { 'data-testid': 'filter-actions' }, slots.actions?.()),
+    ]);
+  },
+});
+
 async function mountPage() {
   const wrapper = shallowMount(StorageClusterDetailPage, {
     attachTo: document.body,
     global: {
       stubs: {
-        FilterForm: passthrough('FilterForm', 'form'),
+        FilterForm,
         StorageClusterSelect: passthrough('StorageClusterSelect'),
         ElCard: passthrough('ElCard'),
         ElDescriptions: passthrough('ElDescriptions'),
@@ -143,6 +154,7 @@ describe('storage cluster health analytics page', () => {
     expect(wrapper.text()).toContain('性能分析');
     expect(wrapper.text()).toContain('故障分析');
     expect(wrapper.findAllComponents({ name: 'ElDatePicker' })).toHaveLength(1);
+    expect(wrapper.get('[data-testid="filter-actions"] [data-testid="analytics-export"]').exists()).toBe(true);
     expect(storageClusterApi.fetchCapacityChange).toHaveBeenCalledWith(42, {
       start_time: initialRange[0],
       end_time: initialRange[1],
@@ -201,15 +213,17 @@ describe('storage cluster health analytics page', () => {
     expect(wrapper.text()).not.toContain('扩容');
   });
 
-  it('shows unsupported performance and empty fault states', async () => {
+  it('explains never-collected performance and empty fault states', async () => {
     storageClusterApi.fetchTopLatency.mockResolvedValue({ supported: false, data: [] });
     const wrapper = await mountPage();
 
     await selectTab(wrapper, 'performance');
-    expect(wrapper.text()).toContain('不支持性能分析');
+    expect(wrapper.text()).toContain('尚未采集到性能数据');
+    expect(wrapper.text()).toContain('设备 API 权限');
 
     await selectTab(wrapper, 'faults');
-    expect(wrapper.text()).toContain('暂无故障');
+    expect(wrapper.text()).toContain('当前时间范围内暂无故障数据');
+    expect(wrapper.text()).toContain('厂商事件采集权限');
   });
 
   it('exports the current section or the complete report and downloads the returned blob', async () => {
@@ -260,29 +274,11 @@ describe('storage cluster health analytics page', () => {
     clickSpy.mockRestore();
   });
 
-  it('offers cluster selection from the standalone storage health entry', async () => {
-    route.name = 'StorageHealth';
-    route.params = {};
-    storageClusterApi.fetchById.mockResolvedValue({
-      id: 7,
-      name: 'cluster-seven',
-      storage_type: 'netapp',
-      storage_user: 'svc-storage-admin',
-    });
+  it('keeps analytics inside the storage cluster detail without a selector or config summary', async () => {
     const wrapper = await mountPage();
-    const selector = wrapper.findComponent({ name: 'StorageClusterSelect' });
 
-    expect(selector.exists()).toBe(true);
-    expect(storageClusterApi.fetchCapacityChange).not.toHaveBeenCalled();
-
-    await selector.vm.$emit('update:modelValue', 7);
-    await flushPromises();
-
-    expect(storageClusterApi.fetchById).toHaveBeenCalledWith(7);
-    expect(storageClusterApi.fetchCapacityChange).toHaveBeenCalledWith(7, {
-      start_time: initialRange[0],
-      end_time: initialRange[1],
-    });
-    expect(wrapper.text()).not.toContain('svc-storage-admin');
+    expect(wrapper.findComponent({ name: 'StorageClusterSelect' }).exists()).toBe(false);
+    expect(wrapper.findComponent({ name: 'ElDescriptions' }).exists()).toBe(false);
+    expect(storageClusterApi.fetchById).toHaveBeenCalledWith(42);
   });
 });

@@ -116,12 +116,14 @@ describe('lightweight component and page smoke tests', () => {
     const queryForm = shallowMount(QueryForm, {
       slots: {
         default: '<div>Filters</div>',
+        actions: '<div>Actions</div>',
         advanced: '<div>Advanced</div>',
         exportExcel: '<div>Export</div>',
       },
       global: { stubs: commonStubs },
     });
     expect(queryForm.text()).toContain('Filters');
+    expect(queryForm.text()).toContain('Actions');
   });
 
   it('mounts active error pages and detail wrappers', async () => {

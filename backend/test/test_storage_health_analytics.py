@@ -676,7 +676,8 @@ def test_netapp_client_exposes_ems_and_volume_metrics_contracts():
         event_call.kwargs["params"]["fields"].split(",")
     )
     assert metrics_call.args[0] == "storage/volumes"
-    assert {"uuid", "name", "metrics"} <= set(metrics_call.kwargs["params"]["fields"].split(","))
+    assert {"uuid", "name", "metric"} <= set(metrics_call.kwargs["params"]["fields"].split(","))
+    assert "metrics" not in metrics_call.kwargs["params"]["fields"].split(",")
 
 
 def test_isilon_client_discovers_platform_version_before_statistics_and_events():
@@ -1235,7 +1236,7 @@ def test_netapp_latency_metrics_are_converted_from_microseconds_to_milliseconds(
             {
                 "uuid": "volume-1",
                 "name": "vol-a",
-                "metrics": {
+                "metric": {
                     "latency": {"total": 2500, "read": 1500, "write": 3500},
                     "timestamp": "2026-07-15T10:00:00Z",
                 },
