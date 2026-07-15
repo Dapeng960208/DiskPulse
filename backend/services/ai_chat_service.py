@@ -87,6 +87,7 @@ def _conversation_or_404(db: Session, conversation_id: int, user_id: int) -> AIC
 
 
 def _history(db: Session, conversation_id: int) -> list[dict]:
+    # Fetch the newest bounded window cheaply, then restore provider-facing chronology.
     rows = list(
         db.scalars(
             select(AIMessage)
@@ -99,6 +100,7 @@ def _history(db: Session, conversation_id: int) -> list[dict]:
 
 
 def _provider_tool_messages(provider: str, call: AIClientToolCall, result: dict) -> list[dict]:
+    # Tool continuation roles differ by provider even though execution is provider-neutral.
     content = json.dumps(result, ensure_ascii=False, default=str)
     if provider == "claude":
         return [
@@ -183,11 +185,13 @@ def stream_message(
             trace_id=uuid4().hex,
         ),
     )
+    # Persist the recoverable user turn and audit before any SSE bytes leave the process.
     db.commit()
     db.refresh(user_message)
     db.refresh(conversation)
     db.refresh(audit)
 
+    # Build from the live FastAPI routes so tool schemas cannot drift from business APIs.
     registry = build_tool_registry(app)
     tools = tool_definitions(registry, model.provider)
     messages = [{"role": "system", "content": model.system_prompt or SYSTEM_PROMPT}, *_history(db, conversation.id)]
@@ -197,6 +201,7 @@ def stream_message(
         yield "accepted", {"conversation_id": conversation.id, "audit_id": audit.id, "trace_id": audit.trace_id}
         yield "user_message", {"message": serialize_message(user_message), "conversation": serialize_conversation(conversation)}
         yield "status", {"status": "thinking"}
+        # Bound recursive model/tool turns independently of the number of tools per turn.
         max_iterations = int(base_config.get("ai.max_tool_iterations", 4))
         for iteration in range(1, max_iterations + 1):
             completion = None
@@ -270,6 +275,7 @@ def stream_message(
         _finish_audit(db, audit, status_value="cancelled", detail=tool_trace, error_message="用户取消生成")
         yield "cancelled", {"conversation_id": conversation.id, "audit_id": audit.id}
     except Exception as error:
+        # A failed flush poisons the Session; reload the durable audit after rollback.
         db.rollback()
         audit = aiCrud.get_audit(db, audit.id)
         if audit is not None:

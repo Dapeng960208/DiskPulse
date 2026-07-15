@@ -36,7 +36,7 @@ docs/
 | 项目组标签 | [features/group-tag/design.md](./features/group-tag/design.md) |
 | 存储集群 | [features/storage-cluster/overview.md](./features/storage-cluster/overview.md) |
 | 存储配额软限额 | [features/storage-quota/overview.md](./features/storage-quota/overview.md) |
-| AI 对话与管理中心 | [features/ai-chat/overview.md](./features/ai-chat/overview.md) |
+| AI 对话与管理中心 | [总览](./features/ai-chat/overview.md) · [后端实现](./features/ai-chat/backend.md) · [前端实现](./features/ai-chat/frontend.md) |
 
 ## 规范
 

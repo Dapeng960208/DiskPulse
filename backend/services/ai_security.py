@@ -18,6 +18,7 @@ def _secret() -> str:
 
 
 def _fernet() -> Fernet:
+    # Fernet requires 32 bytes; deriving them keeps the runtime config human-manageable.
     digest = hashlib.sha256(_secret().encode("utf-8")).digest()
     return Fernet(base64.urlsafe_b64encode(digest))
 

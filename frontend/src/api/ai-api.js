@@ -1,6 +1,7 @@
 import { getToken } from '@/utils/authorization';
 
 async function request(method, url, { data, params } = {}) {
+  // Lazy loading breaks the router/request initialization cycle while preserving the shared client.
   const { default: baseRequest } = await import('./support/base-request');
   const response = method === 'get' || method === 'delete'
     ? await baseRequest[method](url, { params })
@@ -42,6 +43,7 @@ async function responseError(response) {
 }
 
 export async function streamConversationMessage(conversationId, content, { signal, onEvent }) {
+  // Native fetch exposes the response body stream; the shared Axios wrapper buffers browser responses.
   const response = await fetch(apiUrl(`/ai/conversations/${conversationId}/messages/stream`), {
     method: 'POST',
     headers: {
@@ -61,6 +63,7 @@ export async function streamConversationMessage(conversationId, content, { signa
   while (true) {
     const { done, value } = await reader.read();
     buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    // Transport chunks can split one SSE event, so retain the trailing incomplete block.
     const blocks = buffer.split(/\r?\n\r?\n/);
     buffer = blocks.pop() || '';
     for (const block of blocks) {

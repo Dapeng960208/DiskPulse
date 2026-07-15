@@ -1,0 +1,75 @@
+# AI 前端实现细节
+
+## 1. 模块职责
+
+| 模块 | 职责 |
+| --- | --- |
+| `src/api/ai-api.js` | AI CRUD 请求、原生 Fetch SSE 请求和分块解析。 |
+| `src/pages/ai/AiChatPage.vue` | 会话列表、模型选择、流式消息、停止、失败恢复和工具状态。 |
+| `src/services/ai-markdown.js` | Markdown 渲染、链接协议限制和 HTML 净化。 |
+| `src/pages/admin/ai/AiCenterPage.vue` | 超级管理员模型配置、连接测试和审计分页筛选。 |
+| `src/pages/admin/ai/AiAuditDetailPage.vue` | 隐藏路由中的单次审计详情。 |
+| `src/router/routes.js` | 根菜单“AI 助手”、AI 中心权限和隐藏详情路由。 |
+
+## 2. SSE 请求与分块解析
+
+普通 CRUD 继续复用项目 Axios 请求封装；流式消息使用原生 `fetch`，因为浏览器端需要直接读取 `ReadableStream`。请求显式携带当前 Bearer Token、JSON 请求体和 `Accept: text/event-stream`。
+
+网络分块不保证与 SSE 事件边界对齐，因此解析器维护跨分块 `buffer`：
+
+1. `TextDecoder` 以流模式解码当前字节块。
+2. 按空行切分完整 SSE block，最后一个不完整 block 留到下一次读取。
+3. 每个 block 提取 `event:` 和允许多行的 `data:`。
+4. `data` 优先解析为 JSON，无法解析时保留原始文本。
+5. 流结束后再处理 buffer 中剩余的最后一个事件。
+
+非 `2xx` 响应优先读取后端 `detail` 或 `message`；非 JSON 响应回退为包含 HTTP 状态码的错误。
+
+## 3. 会话与消息状态
+
+发送前会固定本次 `requestConversationId`。所有 SSE 事件进入页面状态前都验证它仍等于当前会话 ID，因此用户切换会话后，旧请求的迟到分片不会污染新会话。
+
+| 事件 | 页面行为 |
+| --- | --- |
+| `user_message` | 加入服务端已保存的用户消息，并同步自动生成的会话标题。 |
+| `delta` | 创建或复用带 `streaming` 标记的临时助手消息，追加文本。 |
+| `status` | 更新“正在连接/正在分析”提示。 |
+| `tool_call_started` | 增加运行中的工具状态项。 |
+| `tool_call_finished` | 更新最近一个同名运行项，避免同一工具重复调用时改错记录。 |
+| `completed` | 用服务端正式消息替换临时消息，并同步会话时间和标题。 |
+| `error` | 抛给发送流程，保留原输入并标记临时消息失败。 |
+
+停止生成由当前请求的 `AbortController` 完成。`AbortError` 不弹出失败提示；其他错误会把原输入写入 `failedContent`，用户点击“重试”后重新发送。流结束时统一清理连接状态和控制器。
+
+## 4. Markdown 与 XSS 边界
+
+助手消息允许 Markdown，用户消息始终使用 Vue 文本插值。助手渲染采用三层约束：
+
+1. `markdown-it` 关闭原始 HTML。
+2. 渲染前移除 `javascript:`、`vbscript:`、`data:` 等危险协议，链接渲染器只允许 HTTP、HTTPS、邮件和站内绝对路径。
+3. 最终 HTML 再经 DOMPurify 净化；新窗口链接强制添加 `noopener noreferrer`。
+
+不要在页面中绕过 `renderAiMarkdown` 直接把模型输出传给 `v-html`。若以后允许更多标签或协议，必须同步增加 XSS 回归测试。
+
+## 5. 路由与权限
+
+- `/ai/chat` 是登录后的根菜单，对所有登录用户可见。
+- `/admin/ai-center?tab=models|audit` 复用现有超级管理员路由元数据和后端 `403` 校验。
+- `/admin/ai-center/audits/:id` 作为隐藏详情路由，不出现在菜单中，但执行相同超级管理员校验。
+- 前端菜单隐藏只改善交互，不能替代后端授权。
+
+## 6. 管理页面交互
+
+- 模型表单支持 `openai`、`openrouter`、`ollama`、`claude`；编辑时 API Key 留空表示保留原密钥。
+- “连接测试”调用真实后端测试接口，并展示 Provider 返回结果，不在浏览器中直接访问模型服务。
+- 审计页按状态、Provider、用户和时间分页筛选；列表不展示原始消息或工具参数。
+- 审计详情按审计 ID 独立加载，页面刷新后仍可恢复。
+
+## 7. 扩展与验证
+
+新增 SSE 事件时，应同时更新 `parseSseBlock` 的契约测试、`applyEvent` 状态映射和本专题文档。新增 Markdown 能力时先确认 DOMPurify 允许范围，不直接开启 `markdown-it` 的原始 HTML。
+
+- AI 前端聚焦测试：`npx vitest run test/unit/ai-api-stream.test.js test/unit/ai-pages.test.js test/unit/ai-platform.test.js`
+- 静态检查：`npx eslint src/api/ai-api.js src/pages/ai src/pages/admin/ai src/services/ai-markdown.js`
+- 生产构建：`npm run build:prod`
+- 部署环境仍需在登录浏览器验证断流、会话切换、超级管理员菜单和真实长响应滚动体验。

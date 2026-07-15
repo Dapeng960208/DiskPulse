@@ -11,6 +11,7 @@
 - Redis DB 7 提供每用户每分钟 10 次固定窗口限流；Redis 不可用返回 `503`，超限返回 `429 + Retry-After`。
 - 前端新增根菜单“AI 助手”和超级管理员“AI 中心”，支持会话恢复、模型选择、消息流、停止生成、失败重试、工具状态、安全 Markdown、模型管理和审计详情。
 - 新增 `markdown-it`、`dompurify` 并更新 npm 锁文件；同步功能专题、运行配置、文档索引和最新功能。
+- 补充 AI 后端与前端实现细节文档，明确 SSE 持久化边界、Provider 适配、动态工具鉴权、会话状态和 Markdown 安全约束；核心代码同步增加非显然设计注释。
 
 ### 验证状态
 
@@ -19,6 +20,7 @@
 - 后端完整回归为 `174 passed`；`compileall` 与 `pip check` 通过。
 - 前端覆盖率回归为 `168 passed`，全局 statements/lines `92.55%`；新增 `ai-api.js` 为 `95.6%`、`AiChatPage.vue` 为 `97.36%`、AI 管理页面为 `100%` 行覆盖。全量 lint 和生产构建通过。
 - Alembic 唯一 head 为 `000000000003`，history 为 `000000000003 -> 000000000002 -> 000000000001`；PostgreSQL offline SQL 生成成功，并包含 4 张 AI 表。SQLite、PostgreSQL、MySQL 三方言 AI migration 编译测试通过。
+- 实现文档与核心注释复验：后端 AI 测试 `20 passed`，前端 AI 测试 `9 passed`，AI 前端文件 lint 和 `git diff --check` 通过。
 - 生产构建保留既有 `%VITE_APP_TITLE%` 未定义和大于 `500 kB` chunk warning；测试保留既有 Sass legacy API warning。
 
 ### 风险与后续

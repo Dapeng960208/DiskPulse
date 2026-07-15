@@ -37,6 +37,7 @@ def _field_alias(field) -> str:
 
 
 def _input_model(name: str, route: APIRoute) -> tuple[type[_ToolInput], tuple[ToolParameter, ...]]:
+    # The route remains the single source of truth for aliases, defaults and validation.
     fields: dict[str, tuple[Any, Any]] = {}
     parameters: list[ToolParameter] = []
     for field in [*route.dependant.path_params, *route.dependant.query_params]:
@@ -58,6 +59,7 @@ def _input_model(name: str, route: APIRoute) -> tuple[type[_ToolInput], tuple[To
 def build_tool_registry(app: FastAPI) -> dict[str, AIToolDefinition]:
     registry: dict[str, AIToolDefinition] = {}
     for route in app.routes:
+        # Explicit opt-in plus GET-only is the safety boundary; naming conventions are insufficient.
         if not isinstance(route, APIRoute) or "GET" not in route.methods:
             continue
         meta = route.openapi_extra if isinstance(route.openapi_extra, dict) else {}
@@ -110,6 +112,7 @@ def _request_parts(definition: AIToolDefinition, payload: _ToolInput) -> tuple[s
 
 
 def _unwrap(body: object) -> object:
+    # Give providers one compact list envelope while preserving DiskPulse pagination fields.
     if not isinstance(body, dict):
         return body
     if "content" in body:
@@ -129,6 +132,7 @@ async def _execute(
 ) -> dict[str, Any]:
     path, query = _request_parts(definition, payload)
     headers = {"Authorization": f"Bearer {issue_token(user_id)}"} if user_id is not None else {}
+    # In-process ASGI avoids network trust changes; the token preserves normal API authorization.
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://diskpulse-ai.internal",

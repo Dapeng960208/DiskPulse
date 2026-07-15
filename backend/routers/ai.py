@@ -84,6 +84,7 @@ def stream_message(
             for event, data in stream:
                 yield _sse(event, data)
         finally:
+            # Client disconnects close the generator so the audit can record cancellation.
             stream.close()
 
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})

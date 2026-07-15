@@ -79,6 +79,7 @@ async function scrollToBottom() {
 }
 
 function applyEvent(requestConversationId, { event, data }) {
+  // Ignore late chunks from a request whose conversation is no longer displayed.
   if (activeConversationId.value !== requestConversationId) return;
   if (event === 'user_message') {
     messages.value.push(data.message);
@@ -86,6 +87,7 @@ function applyEvent(requestConversationId, { event, data }) {
     if (index >= 0) conversations.value[index] = data.conversation;
   } else if (event === 'delta') {
     let assistant = messages.value.at(-1);
+    // Stream into one transient message; completed replaces it with the persisted server record.
     if (!assistant || assistant.role !== 'assistant' || !assistant.streaming) {
       assistant = { id: `stream-${Date.now()}`, role: 'assistant', content: '', streaming: true };
       messages.value.push(assistant);
@@ -117,6 +119,7 @@ async function send() {
   try {
     if (!conversation) conversation = await createConversation();
     if (!conversation) return;
+    // Capture the target before awaiting the stream so later navigation cannot retarget events.
     const requestConversationId = conversation.id;
     content.value = '';
     failedContent.value = '';

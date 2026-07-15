@@ -195,6 +195,7 @@ def _openai_stream(
     tools: list[dict[str, Any]],
 ) -> Iterator[AICompletionStreamEvent]:
     text_parts: list[str] = []
+    # OpenAI-compatible providers split and interleave tool fields; index is the stable join key.
     calls: dict[int, dict[str, str]] = {}
     with httpx.stream(
         "POST",
@@ -264,6 +265,7 @@ def _claude_stream(
                 block = data.get("content_block") or {}
                 if block.get("type") == "tool_use":
                     initial_input = block.get("input")
+                    # Empty input must stay empty or later input_json_delta fragments would follow "{}".
                     calls[int(data.get("index", 0))] = {
                         "id": str(block.get("id") or ""),
                         "name": str(block.get("name") or ""),
@@ -305,6 +307,7 @@ def chat_completion_stream(
     if not _base_url(config):
         raise AIClientError("AI base_url 未配置")
     try:
+        # Normalize provider-specific streams before the chat orchestration layer sees them.
         if config.provider == "claude":
             yield from _claude_stream(config, messages, tools or [])
         else:

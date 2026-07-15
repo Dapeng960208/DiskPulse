@@ -19,6 +19,7 @@ def _redis_client():
 
 def enforce_ai_rate_limit(user_id: int, *, client=None) -> None:
     limit = int(base_config.get("ai.chat_rate_limit_per_minute", 10))
+    # UTC minute keys implement a shared fixed window without per-process state.
     window = datetime.now(UTC).strftime("%Y%m%d%H%M")
     key = f"diskpulse:ai:rate:{user_id}:{window}"
     redis_client = client or _redis_client()
@@ -37,6 +38,7 @@ def enforce_ai_rate_limit(user_id: int, *, client=None) -> None:
     except HTTPException:
         raise
     except redis.RedisError as error:
+        # Fail closed: chatting must not silently bypass the shared abuse control.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI 限流服务暂不可用",

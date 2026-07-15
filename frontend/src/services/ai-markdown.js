@@ -19,6 +19,7 @@ markdown.renderer.rules.link_open = (tokens, index, options, env, self) => {
 };
 
 export function renderAiMarkdown(source) {
+  // Protocol filtering and DOM sanitizing are separate defenses against model-generated markup.
   const safeSource = String(source || '').replace(/\b(?:javascript|vbscript|data):/gi, '');
   return DOMPurify.sanitize(markdown.render(safeSource), {
     USE_PROFILES: { html: true },
