@@ -25,6 +25,31 @@ from utils import security
 from utils.security import issue_token
 
 
+class FakeTokenRedis:
+    def __init__(self):
+        self.values = {}
+        self.expirations = {}
+
+    def set(self, key, value, ex=None):
+        self.values[key] = value
+        self.expirations[key] = ex
+        return True
+
+    def get(self, key):
+        return self.values.get(key)
+
+    def delete(self, key):
+        self.expirations.pop(key, None)
+        return int(self.values.pop(key, None) is not None)
+
+
+@pytest.fixture(autouse=True)
+def token_redis(monkeypatch):
+    client = FakeTokenRedis()
+    monkeypatch.setattr(security, "_redis_client", lambda: client, raising=False)
+    return client
+
+
 @pytest.fixture(autouse=True)
 def reset_runtime_config():
     base_config.load(TEST_CONFIG_PATH)

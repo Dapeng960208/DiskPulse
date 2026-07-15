@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
 from unittest.mock import patch
 
+import redis
+import pytest
+from fastapi import HTTPException
+
 from appConfig import base_config
 import models  # noqa: F401
 from routers import projects, users
+from utils import security
 from utils.security import decode_token, issue_token
 
 
@@ -44,6 +49,51 @@ def test_login_issues_frontend_compatible_token_and_upserts_user(api_client_fact
     assert account["roleCodes"] == ["superadmin"]
     assert account["permissionCodes"] == [["*", "*", "*"]]
     assert account["extensionAttributes"]["rdUsername"] == "alice"
+
+
+def test_access_token_defaults_to_seven_days(token_redis):
+    base_config.config["jwt"].pop("access_ttl_minutes")
+
+    payload = decode_token(issue_token(7))
+
+    assert payload["exp"] - payload["iat"] == 7 * 24 * 60 * 60
+
+
+def test_access_token_is_hashed_in_redis_with_matching_ttl(token_redis):
+    base_config.set("jwt.access_ttl_minutes", 7 * 24 * 60)
+
+    token = issue_token(7)
+
+    assert (
+        len(token_redis.values),
+        list(token_redis.expirations.values()),
+        token in token_redis.values.values(),
+    ) == (1, [7 * 24 * 60 * 60], False)
+
+
+def test_valid_signed_token_must_exist_in_redis(token_redis):
+    token = issue_token(7)
+    token_redis.values.clear()
+
+    with pytest.raises(HTTPException) as error:
+        decode_token(token)
+
+    assert error.value.status_code == 401
+
+
+def test_authentication_fails_closed_when_redis_is_unavailable(token_redis, monkeypatch):
+    token = issue_token(7)
+
+    class FailedRedis:
+        def get(self, _key):
+            raise redis.RedisError("offline")
+
+    monkeypatch.setattr(security, "_redis_client", lambda: FailedRedis())
+
+    with pytest.raises(HTTPException) as error:
+        decode_token(token)
+
+    assert error.value.status_code == 503
 
 
 def test_login_rejects_invalid_credentials_without_echoing_password(api_client_factory):
