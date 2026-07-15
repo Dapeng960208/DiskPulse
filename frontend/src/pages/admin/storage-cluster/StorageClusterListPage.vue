@@ -60,7 +60,9 @@ query();
         query();
       }"
     >
-      <ElFormItem label="集群名称">
+      <ElFormItem
+        label="集群名称"
+        class="query-form-field--wide">
         <ElInput
           v-model="queryParams.nameLike"
           :clearable="true"

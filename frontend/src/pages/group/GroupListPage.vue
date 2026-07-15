@@ -1,6 +1,6 @@
 <script setup>
 import { ElButton, ElFormItem, ElInput, ElLink, ElTableColumn, ElTag, ElCard, ElSelect, ElDescriptions, ElDescriptionsItem,ElMessageBox,ElMessage,ElDatePicker, ElSwitch } from 'element-plus';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import groupApi from '@/api/group-api.js';
 import FilterForm from '@/components/form/QueryForm.vue';
@@ -30,6 +30,14 @@ const { result, querying, query } = useQuery(() => groupApi.fetch(queryParams.va
   content: [],
   totalElements: 0,
 });
+const selectedGroupTagLabel = ref(null);
+const selectedVolumeLabel = ref(null);
+const selectedQtreeLabel = ref(null);
+const activeAdvancedCount = computed(() => [
+  queryParams.value.group_tag_id,
+  queryParams.value.volume_id,
+  queryParams.value.qtree_id,
+].filter(Boolean).length);
 
 function changeProjectFilter(projectId) {
   queryParams.value.project_id = projectId;
@@ -39,16 +47,51 @@ function changeClusterFilter(clusterId) {
   queryParams.value.storage_cluster_id = clusterId;
   queryParams.value.volume_id = null;
   queryParams.value.qtree_id = null;
+  selectedVolumeLabel.value = null;
+  selectedQtreeLabel.value = null;
 }
 
 function changeVolumeFilter(volumeId) {
   queryParams.value.volume_id = volumeId;
   queryParams.value.qtree_id = null;
+  selectedQtreeLabel.value = null;
 }
 
 function changeQtreeFilter(qtreeId) {
   queryParams.value.qtree_id = qtreeId;
   queryParams.value.volume_id = null;
+  selectedVolumeLabel.value = null;
+}
+
+function resetFilters() {
+  reset();
+  selectedGroupTagLabel.value = null;
+  selectedVolumeLabel.value = null;
+  selectedQtreeLabel.value = null;
+  query();
+}
+
+function refreshAfterFilterRemoval() {
+  queryParams.value.page = 1;
+  query();
+}
+
+function removeGroupTagFilter() {
+  queryParams.value.group_tag_id = null;
+  selectedGroupTagLabel.value = null;
+  refreshAfterFilterRemoval();
+}
+
+function removeVolumeFilter() {
+  queryParams.value.volume_id = null;
+  selectedVolumeLabel.value = null;
+  refreshAfterFilterRemoval();
+}
+
+function removeQtreeFilter() {
+  queryParams.value.qtree_id = null;
+  selectedQtreeLabel.value = null;
+  refreshAfterFilterRemoval();
 }
 
 query();
@@ -79,15 +122,19 @@ function confirmDelete(row) {
 <template>
   <div class="group-list-page">
     <FilterForm
+      :advanced-count="activeAdvancedCount"
       @query="{
         queryParams.page = 1;
         query();
       }"
-      @reset="{
-        reset();
-        query();
-      }"
-    >
+      @reset="resetFilters">
+      <ElFormItem
+        label="项目组名"
+        class="form-item-center query-form-field--wide">
+        <ElInput
+          v-model="queryParams.nameLike"
+          placeholder="根据项目组名模糊搜索" />
+      </ElFormItem>
       <ElFormItem
         label="关联项目"
         class="form-item-center">
@@ -98,13 +145,6 @@ function confirmDelete(row) {
           @update:model-value="changeProjectFilter" />
       </ElFormItem>
       <ElFormItem
-        label="项目组标签"
-        class="form-item-center">
-        <GroupTagSelect
-          v-model="queryParams.group_tag_id"
-          :clearable="true" />
-      </ElFormItem>
-      <ElFormItem
         label="存储集群"
         class="form-item-center">
         <StorageClusterSelect
@@ -112,33 +152,54 @@ function confirmDelete(row) {
           :clearable="true"
           @update:model-value="changeClusterFilter" />
       </ElFormItem>
-      <ElFormItem
-        label="关联存储空间"
-        class="form-item-center">
-        <VolumeSelect
-          :model-value="queryParams.volume_id"
-          :storage-cluster-id="queryParams.storage_cluster_id"
-          :multiple="false"
-          :clearable="true"
-          @update:model-value="changeVolumeFilter" />
-      </ElFormItem>
-      <ElFormItem
-        label="关联Qtree（NetApp）"
-        class="form-item-center">
-        <QtreeSelect
-          :model-value="queryParams.qtree_id"
-          :storage-cluster-id="queryParams.storage_cluster_id"
-          :multiple="false"
-          :clearable="true"
-          @update:model-value="changeQtreeFilter" />
-      </ElFormItem>
-      <ElFormItem
-        label="项目组名"
-        class="form-item-center">
-        <ElInput
-          v-model="queryParams.nameLike"
-          placeholder="根据项目组名模糊搜索" />
-      </ElFormItem>
+
+      <template #advanced>
+        <ElFormItem
+          label="项目组标签"
+          class="form-item-center">
+          <GroupTagSelect
+            v-model="queryParams.group_tag_id"
+            :clearable="true"
+            @selected-label-change="selectedGroupTagLabel = $event" />
+        </ElFormItem>
+        <ElFormItem
+          label="关联存储空间"
+          class="form-item-center">
+          <VolumeSelect
+            :model-value="queryParams.volume_id"
+            :storage-cluster-id="queryParams.storage_cluster_id"
+            :multiple="false"
+            :clearable="true"
+            @update:model-value="changeVolumeFilter"
+            @selected-label-change="selectedVolumeLabel = $event" />
+        </ElFormItem>
+        <ElFormItem
+          label="关联Qtree（NetApp）"
+          class="form-item-center">
+          <QtreeSelect
+            :model-value="queryParams.qtree_id"
+            :storage-cluster-id="queryParams.storage_cluster_id"
+            :multiple="false"
+            :clearable="true"
+            @update:model-value="changeQtreeFilter"
+            @selected-label-change="selectedQtreeLabel = $event" />
+        </ElFormItem>
+      </template>
+
+      <template #active-filters>
+        <ElTag
+          v-if="queryParams.group_tag_id"
+          closable
+          @close="removeGroupTagFilter">项目组标签：{{ selectedGroupTagLabel }}</ElTag>
+        <ElTag
+          v-if="queryParams.volume_id"
+          closable
+          @close="removeVolumeFilter">关联存储空间：{{ selectedVolumeLabel }}</ElTag>
+        <ElTag
+          v-if="queryParams.qtree_id"
+          closable
+          @close="removeQtreeFilter">关联 Qtree：{{ selectedQtreeLabel }}</ElTag>
+      </template>
     </FilterForm>
 
     <DataTable

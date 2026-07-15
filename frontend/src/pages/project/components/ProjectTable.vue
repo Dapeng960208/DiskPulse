@@ -37,7 +37,9 @@ query();
         query();
       }"
     >
-      <ElFormItem label="项目名">
+      <ElFormItem
+        label="项目名"
+        class="query-form-field--wide">
         <ElInput
           v-model="queryParams.nameLike"
           placeholder="根据项目名搜索" />

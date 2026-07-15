@@ -45,7 +45,9 @@ query();
           v-model="queryParams.storage_cluster_id"
           :clearable="true" />
       </ElFormItem>
-      <ElFormItem label="存储空间名">
+      <ElFormItem
+        label="存储空间名"
+        class="query-form-field--wide">
         <ElInput
           v-model="queryParams.nameLike"
           placeholder="根据名称或路径模糊搜索" />

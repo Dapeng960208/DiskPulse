@@ -78,7 +78,9 @@ query();
       }"
       @export="exportRef.open()"
     >
-      <ElFormItem label="Linux目录">
+      <ElFormItem
+        label="Linux目录"
+        class="query-form-field--wide">
         <ElInput
           v-model="queryParams.nameLike"
           placeholder="根据关键字模糊搜素" />
@@ -248,4 +250,3 @@ query();
     </DataTable>
   </div>
 </template>
-

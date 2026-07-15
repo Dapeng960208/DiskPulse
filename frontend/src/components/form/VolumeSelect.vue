@@ -26,7 +26,7 @@ const props = defineProps({
     default: null,
   },
 });
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'selected-label-change']);
 const { model, normalizedModelValue } = useSelectModel(props, emit);
 
 const volumeOptions = ref([]);
@@ -71,6 +71,13 @@ function searchUserGroups(queryString) {
     }).finally(() => (searchingUserGroups.value = false));
   }
 }
+
+function emitSelectedLabel(value) {
+  const labels = toSelectValues(value, props.multiple)
+    .map((id) => volumeOptions.value.find((option) => option.id === id)?.name)
+    .filter(Boolean);
+  emit('selected-label-change', labels.length ? labels.join('、') : null);
+}
 </script>
 
 <template>
@@ -91,6 +98,7 @@ function searchUserGroups(queryString) {
     remote-show-suffix
     collapse-tags
     collapse-tags-tooltip
+    @change="emitSelectedLabel"
   >
     <ElOption
       v-for="volumeOption of volumeOptions"

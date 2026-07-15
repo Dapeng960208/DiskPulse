@@ -30,7 +30,7 @@ const props = defineProps({
     default: null,
   },
 });
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'selected-label-change']);
 const { model, normalizedModelValue } = useSelectModel(props, emit);
 
 const qtreeOptions = ref([]);
@@ -76,6 +76,14 @@ function searchQtree(queryString) {
     }).finally(() => (searchingQtree.value = false));
   }
 }
+
+function emitSelectedLabel(value) {
+  const labels = toSelectValues(value, props.multiple).map((id) => {
+    const option = qtreeOptions.value.find((item) => item.id === id);
+    return option?.volume ? `${option.volume.name}/${option.name}` : option?.name;
+  }).filter(Boolean);
+  emit('selected-label-change', labels.length ? labels.join('、') : null);
+}
 </script>
 
 <template>
@@ -96,6 +104,7 @@ function searchQtree(queryString) {
     remote-show-suffix
     collapse-tags
     collapse-tags-tooltip
+    @change="emitSelectedLabel"
   >
     <ElOption
       v-for="qtreeOption of qtreeOptions"

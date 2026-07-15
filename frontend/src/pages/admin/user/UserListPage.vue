@@ -98,7 +98,9 @@ onBeforeMount(() => {
         query();
       }"
     >
-      <ElFormItem label="用户名">
+      <ElFormItem
+        label="用户名"
+        class="query-form-field--wide">
         <ElInput
           v-model="queryParams.nameLike"
           :clearable="true"

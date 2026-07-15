@@ -30,7 +30,7 @@ const props = defineProps({
     default: null,
   }
 });
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'selected-label-change']);
 const { model, normalizedModelValue } = useSelectModel(props, emit);
 
 const groupOptions = ref([]);
@@ -90,6 +90,14 @@ function searchUserGroups(queryString) {
     }).finally(() => (searchingUserGroups.value = false));
   }
 }
+
+function emitSelectedLabel(value) {
+  const labels = toSelectValues(value, props.multiple).map((id) => {
+    const option = groupOptions.value.find((item) => item.id === id);
+    return option?.project ? `${option.project.name} - ${option.name}` : option?.name;
+  }).filter(Boolean);
+  emit('selected-label-change', labels.length ? labels.join('、') : null);
+}
 </script>
 
 <template>
@@ -110,6 +118,7 @@ function searchUserGroups(queryString) {
     remote-show-suffix
     collapse-tags
     collapse-tags-tooltip
+    @change="emitSelectedLabel"
   >
     <ElOption
       v-for="groupOption of groupOptions"

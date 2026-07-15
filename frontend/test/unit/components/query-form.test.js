@@ -13,8 +13,11 @@ const ElForm = defineComponent({
 const ElButton = defineComponent({
   name: 'ElButton',
   inheritAttrs: false,
-  setup(_, { attrs, slots }) {
-    return () => h('button', attrs, slots.default?.());
+  props: {
+    type: { type: String, default: undefined },
+  },
+  setup(props, { attrs, slots }) {
+    return () => h('button', { ...attrs, 'data-type': props.type }, slots.default?.());
   },
 });
 
@@ -64,14 +67,15 @@ describe('QueryForm progressive filter toolbar', () => {
 
     expect(buttons.map((button) => button.text().trim())).toEqual([
       '辅助操作',
-      '导出',
       '更多筛选 · 2',
       '重置',
+      '导出',
       '搜索',
     ]);
+    expect(buttons[3].attributes('data-type')).toBe('success');
 
-    await buttons[1].trigger('click');
     await buttons[3].trigger('click');
+    await buttons[2].trigger('click');
     await buttons[4].trigger('click');
 
     expect(wrapper.emitted('export')).toHaveLength(1);

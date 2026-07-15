@@ -38,7 +38,9 @@ query();
     <QueryForm
       @query="queryParams.page = 1; query()"
       @reset="reset(); query()">
-      <ElFormItem label="标签名称">
+      <ElFormItem
+        label="标签名称"
+        class="query-form-field--wide">
         <ElInput
           v-model="queryParams.nameLike"
           clearable

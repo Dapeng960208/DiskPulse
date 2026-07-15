@@ -66,7 +66,9 @@ query();
           :clearable="true"
           @update:model-value="changeCluster" />
       </ElFormItem>
-      <ElFormItem label="Qtree（NetApp）">
+      <ElFormItem
+        label="Qtree（NetApp）"
+        class="query-form-field--wide">
         <ElInput
           v-model="queryParams.nameLike"
           placeholder="根据 Qtree（NetApp）搜索" />

@@ -83,7 +83,9 @@ query();
       }"
       @reset="handleReset"
     >
-      <ElFormItem label="关键词">
+      <ElFormItem
+        label="关键词"
+        class="query-form-field--wide">
         <ElInput
           v-model="queryParams.nameLike"
           placeholder="根据关键词模糊搜索" />

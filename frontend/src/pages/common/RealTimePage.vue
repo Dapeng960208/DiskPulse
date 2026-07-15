@@ -169,8 +169,7 @@ const yAxisUnit = computed(() => {
       @reset="reset(); query();alertQuery();">
       <ElFormItem
         v-if="selectedSelect"
-        :label="props.label"
-        class="w-120">
+        :label="props.label">
         <component
           :is="selectedSelect"
           v-model="attributeId"
@@ -178,7 +177,7 @@ const yAxisUnit = computed(() => {
       </ElFormItem>
       <ElFormItem
         label="时间范围"
-        class="w-120 ml-40">
+        class="query-form-field--wide">
         <ElDatePicker
           v-model="dateRange"
           type="datetimerange"
@@ -190,9 +189,7 @@ const yAxisUnit = computed(() => {
           :shortcuts="shortcuts"
         />
       </ElFormItem>
-      <ElFormItem
-        label="指标"
-        class="ml-80 w-100">
+      <ElFormItem label="指标">
         <ElSelect
           v-model="queryParams.indicator"
           collapse-tags

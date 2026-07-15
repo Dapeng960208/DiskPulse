@@ -49,9 +49,7 @@ onBeforeMount(() => {
         v-model="queryParams.project_id"
         placeholder="根据项目名搜索" />
     </ElFormItem>
-    <ElFormItem
-      label="指标"
-      class="ml-80 w-100">
+    <ElFormItem label="指标">
       <ElSelect
         v-model="queryParams.value_type"
         collapse-tags

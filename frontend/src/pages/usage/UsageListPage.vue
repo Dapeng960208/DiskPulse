@@ -39,6 +39,13 @@ const { result, querying, query } = useQuery(() => storageUsageApi.fetch(queryPa
   content: [],
   totalElements: 0,
 });
+const selectedGroupTagLabel = ref(null);
+const selectedGroupLabel = ref(null);
+const activeAdvancedCount = computed(() => [
+  queryParams.value.group_tag_id,
+  queryParams.value.nameLike?.trim(),
+  queryParams.value.group_id,
+].filter(Boolean).length);
 const handleExport = (exportType) => {
   queryParams.value.export_type = exportType;
   exportReport(storageUsageApi.exportStorageUsages(queryParams.value));
@@ -48,11 +55,41 @@ const handleProjectChange = (projectId) => {
   queryParams.value.group_tag_id = null;
   queryParams.value.group_id = null;
   queryParams.value.storage_cluster_id = null;
+  selectedGroupTagLabel.value = null;
+  selectedGroupLabel.value = null;
 };
 const handleGroupTagChange = (groupTagId) => {
   queryParams.value.group_tag_id = groupTagId;
   queryParams.value.group_id = null;
   queryParams.value.storage_cluster_id = null;
+  selectedGroupLabel.value = null;
+};
+const resetFilters = () => {
+  reset();
+  selectedGroupTagLabel.value = null;
+  selectedGroupLabel.value = null;
+  query();
+};
+const refreshAfterFilterRemoval = () => {
+  queryParams.value.page = 1;
+  query();
+};
+const removeGroupTagFilter = () => {
+  queryParams.value.group_tag_id = null;
+  queryParams.value.group_id = null;
+  queryParams.value.storage_cluster_id = null;
+  selectedGroupTagLabel.value = null;
+  selectedGroupLabel.value = null;
+  refreshAfterFilterRemoval();
+};
+const removeLinuxPathFilter = () => {
+  queryParams.value.nameLike = null;
+  refreshAfterFilterRemoval();
+};
+const removeGroupFilter = () => {
+  queryParams.value.group_id = null;
+  selectedGroupLabel.value = null;
+  refreshAfterFilterRemoval();
 };
 const openExport = () => exportRef.value?.open?.();
 function confirmBackUp(row) {
@@ -80,16 +117,19 @@ query();
 <template>
   <div class="usage-list-page">
     <FilterForm
+      :advanced-count="activeAdvancedCount"
       @query="{
         queryParams.page = 1;
         query();
       }"
-      @reset="{
-        reset();
-        query();
-      }"
-      @export="openExport"
-    >
+      @reset="resetFilters"
+      @export="openExport">
+      <ElFormItem label="研发用户名">
+        <RdUserSelect
+          v-model="queryParams.user_id"
+          :multiple="false"
+          :clearable="true" />
+      </ElFormItem>
       <ElFormItem label="项目">
         <ProjectSelect
           :model-value="queryParams.project_id"
@@ -97,37 +137,53 @@ query();
           :clearable="true"
           @update:model-value="handleProjectChange" />
       </ElFormItem>
-      <ElFormItem label="项目组标签">
-        <GroupTagSelect
-          :model-value="queryParams.group_tag_id"
-          :clearable="true"
-          @update:model-value="handleGroupTagChange" />
-      </ElFormItem>
-      <ElFormItem label="Linux目录">
-        <ElInput
-          v-model="queryParams.nameLike"
-          placeholder="根据关键字模糊搜素" />
-      </ElFormItem>
-      <ElFormItem label="项目组">
-        <GroupSelect
-          v-model="queryParams.group_id"
-          :project-id="queryParams.project_id"
-          :group-tag-id="queryParams.group_tag_id"
-          :multiple="false"
-          :clearable="true" />
-      </ElFormItem>
       <ElFormItem label="存储集群">
         <StorageClusterSelect
           v-model="queryParams.storage_cluster_id"
           :multiple="false"
           :clearable="true" />
       </ElFormItem>
-      <ElFormItem label="研发用户名">
-        <RdUserSelect
-          v-model="queryParams.user_id"
-          :multiple="false"
-          :clearable="true" />
-      </ElFormItem>
+
+      <template #advanced>
+        <ElFormItem label="项目组标签">
+          <GroupTagSelect
+            :model-value="queryParams.group_tag_id"
+            :clearable="true"
+            @update:model-value="handleGroupTagChange"
+            @selected-label-change="selectedGroupTagLabel = $event" />
+        </ElFormItem>
+        <ElFormItem
+          label="Linux目录"
+          class="query-form-field--wide">
+          <ElInput
+            v-model="queryParams.nameLike"
+            placeholder="根据关键字模糊搜索" />
+        </ElFormItem>
+        <ElFormItem label="项目组">
+          <GroupSelect
+            v-model="queryParams.group_id"
+            :project-id="queryParams.project_id"
+            :group-tag-id="queryParams.group_tag_id"
+            :multiple="false"
+            :clearable="true"
+            @selected-label-change="selectedGroupLabel = $event" />
+        </ElFormItem>
+      </template>
+
+      <template #active-filters>
+        <ElTag
+          v-if="queryParams.group_tag_id"
+          closable
+          @close="removeGroupTagFilter">项目组标签：{{ selectedGroupTagLabel }}</ElTag>
+        <ElTag
+          v-if="queryParams.nameLike"
+          closable
+          @close="removeLinuxPathFilter">Linux 目录：{{ queryParams.nameLike }}</ElTag>
+        <ElTag
+          v-if="queryParams.group_id"
+          closable
+          @close="removeGroupFilter">项目组：{{ selectedGroupLabel }}</ElTag>
+      </template>
       <template #exportExcel></template>
     </FilterForm>
     <DataTable

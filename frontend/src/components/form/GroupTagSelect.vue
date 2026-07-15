@@ -9,7 +9,7 @@ const props = defineProps({
   multiple: { type: Boolean, default: false },
   clearable: { type: Boolean, default: false },
 });
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'selected-label-change']);
 const { model, normalizedModelValue } = useSelectModel(props, emit);
 const options = ref([]);
 const loading = ref(false);
@@ -34,6 +34,13 @@ async function search(query) {
     loading.value = false;
   }
 }
+
+function emitSelectedLabel(value) {
+  const labels = toSelectValues(value, props.multiple)
+    .map((id) => options.value.find((option) => option.id === id)?.name)
+    .filter(Boolean);
+  emit('selected-label-change', labels.length ? labels.join('、') : null);
+}
 </script>
 
 <template>
@@ -46,7 +53,8 @@ async function search(query) {
     :remote-method="search"
     placeholder="请选择项目组标签"
     filterable
-    remote>
+    remote
+    @change="emitSelectedLabel">
     <ElOption
       v-for="option in options"
       :key="option.id"
