@@ -856,3 +856,16 @@ npm test -- --coverage.enabled=false
 
 - Celery worker 必须重启才能加载新默认参数。
 - 其他 Isilon 集群若仍使用 NIS/LDAP 人员账号，应先切换为 OneFS 本地只读服务账号；未知 persona 类型继续安全跳过。
+
+## 2026-07-15：补充 Isilon 采集账号帮助
+
+### 已完成
+
+- 存储集群表单仅在选择 Isilon 时显示“查看账号创建与最小权限配置”入口。
+- 帮助弹窗说明必须使用 System Zone 的 OneFS 本地服务账号，并列出登录、集群、SmartPools、Quota、Statistics、Event 和系统时间只读权限。
+- 弹窗和存储集群文档提供同一套 root 创建用户、创建角色、授权及验证命令，并提示 HTTPS、安全注销和 Celery Worker 重启要求。
+
+### 验证状态
+
+- RED：选择 Isilon 后帮助入口不存在，新增组件用例失败。
+- GREEN：存储集群表单组件 `14 passed`；目标组件覆盖率 statements/lines `100%`、branches `98.43%`、functions `80%`。帮助入口仅对 Isilon 显示，弹窗包含账号名、创建命令和关键权限；改动文件 ESLint `0 errors`，生产构建通过。

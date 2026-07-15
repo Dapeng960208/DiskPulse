@@ -3,9 +3,30 @@ import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElInputNumber, ElMessa
 import { useDialog } from '@/composables/dialog';
 import { useForm } from '@/composables/form';
 import storageClusterApi from '@/api/storage-cluster-api';
-import { watch } from 'vue';
+import { ref, watch } from 'vue';
 
 const emit = defineEmits(['submitted']);
+const isilonAccountHelpVisible = ref(false);
+const isilonAccountCommands = `ROLE='DiskPulseMonitor'
+SVC_USER='diskpulse_monitor'
+
+isi auth roles view "$ROLE" --zone System >/dev/null 2>&1 ||
+isi auth roles create "$ROLE" --zone System --description "DiskPulse read-only monitoring"
+
+isi auth users create "$SVC_USER" --zone System --enabled yes --password-expires no --set-password
+isi auth roles modify "$ROLE" --zone System --add-user "$SVC_USER"
+
+isi auth roles modify "$ROLE" --zone System \\
+  --add-priv-read ISI_PRIV_LOGIN_PAPI \\
+  --add-priv-read ISI_PRIV_CLUSTER \\
+  --add-priv-read ISI_PRIV_SMARTPOOLS \\
+  --add-priv-read ISI_PRIV_QUOTA \\
+  --add-priv-read ISI_PRIV_STATISTICS \\
+  --add-priv-read ISI_PRIV_EVENT \\
+  --add-priv-read ISI_PRIV_SYS_TIME
+
+isi auth users view "$SVC_USER" --zone System
+isi auth roles view "$ROLE" --zone System`;
 
 const { visible, open, close } = useDialog();
 const {
@@ -76,6 +97,7 @@ watch(() => model.value.protocol, (protocol) => {
 
 watch(() => model.value.storage_type, (storageType) => {
   if (storageType !== 'isilon') {
+    isilonAccountHelpVisible.value = false;
     model.value.isilon_session_cache_mode = 'none';
     model.value.isilon_session_cache_path = null;
   }
@@ -201,6 +223,20 @@ defineExpose({
       </ElFormItem>
       <ElFormItem
         v-if="model.storage_type === 'isilon'"
+        label="账号要求">
+        <div class="account-help-trigger">
+          <ElButton
+            data-test="isilon-account-help-trigger"
+            link
+            type="primary"
+            @click="isilonAccountHelpVisible = true">
+            查看账号创建与最小权限配置
+          </ElButton>
+          <span>必须使用 OneFS 本地服务账号</span>
+        </div>
+      </ElFormItem>
+      <ElFormItem
+        v-if="model.storage_type === 'isilon'"
         data-test="isilon-session-cache-mode"
         label="Session 缓存"
         prop="isilon_session_cache_mode">
@@ -249,10 +285,91 @@ defineExpose({
       </ElButton>
     </template>
   </ElDialog>
+  <ElDialog
+    v-if="model.storage_type === 'isilon'"
+    v-model="isilonAccountHelpVisible"
+    data-test="isilon-account-help-dialog"
+    title="Isilon 采集账号与权限要求"
+    width="min(720px, 92vw)"
+    append-to-body>
+    <div class="account-help">
+      <h3>账号要求</h3>
+      <ul>
+        <li>使用 System Zone 的 OneFS 本地服务账号，不使用 NIS、LDAP 或 AD 人员账号。</li>
+        <li>账号只加入 <code>DiskPulseMonitor</code> 只读角色，不授予系统管理权限。</li>
+        <li>推荐使用 HTTPS，并将 Session 缓存选择为“不缓存（每次安全注销）”。</li>
+      </ul>
+
+      <h3>root 创建与授权命令</h3>
+      <p>在任一 Isilon 节点使用 root 执行；创建用户时按提示输入密码。</p>
+      <pre>{{ isilonAccountCommands }}</pre>
+
+      <h3>DiskPulse 配置</h3>
+      <ol>
+        <li>API 用户名填写 <code>diskpulse_monitor</code>，密码填写创建时设置的密码。</li>
+        <li>API 端口通常为 <code>8080</code>，协议选择 HTTPS。</li>
+        <li>保存后重启 Celery Worker，使采集任务加载新账号。</li>
+      </ol>
+    </div>
+    <template #footer>
+      <ElButton @click="isilonAccountHelpVisible = false">
+        关闭
+      </ElButton>
+    </template>
+  </ElDialog>
 </template>
 
 <style scoped>
 :deep(.el-form-item) {
   margin-bottom: 20px;
+}
+
+.account-help-trigger {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.account-help {
+  color: var(--el-text-color-regular);
+  line-height: 1.65;
+}
+
+.account-help h3 {
+  margin: 18px 0 8px;
+  color: var(--el-text-color-primary);
+  font-size: 14px;
+}
+
+.account-help h3:first-child {
+  margin-top: 0;
+}
+
+.account-help ul,
+.account-help ol {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.account-help p {
+  margin: 0 0 10px;
+}
+
+.account-help pre {
+  max-height: 340px;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 4px;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
+  font: 12px/1.65 monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
 }
 </style>
