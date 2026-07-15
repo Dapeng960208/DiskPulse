@@ -800,16 +800,16 @@ npm test -- --coverage.enabled=false
 
 ### 已完成
 
-- 将时间范围和导出操作移入分析页签内容区，四个子页签始终保留同一筛选入口。
+- 将时间范围和导出操作移入分析页签内容区；容量趋势、性能分析和故障分析保留筛选入口，存储分布不展示时间筛选栏。
 - 时间范围字段扩宽并补全日期时间占位文案，避免输入内容被截断。
 - 容量趋势与存储分布主图统一为 `520px`；存储分布复用 Element Plus 全局加载遮罩。
-- 存储分布页签只提供完整报告导出，避免发送后端不支持的当前分布导出类型。
+- 存储分布不展示筛选和导出栏，避免时间范围造成错误的数据范围暗示。
 
 ### 验证状态
 
 - `cd frontend && npx vitest run test/unit/pages/storage-cluster-health-analytics.test.js --coverage.enabled=false`：通过，`9 passed`。
 - `cd frontend && npm run build:prod`：通过。
-- Playwright `1440×900` 浏览器检查：筛选栏位于 `.el-tabs__content` 内，存储分布绘图区最小高度为 `520px`；延迟请求期间标准加载遮罩完整覆盖 `1097.6×520px` 绘图区且 `aria-busy=true`。
+- Playwright `1440×900` 浏览器检查：筛选栏位于 `.el-tabs__content` 内，存储分布绘图区最小高度为 `520px`；延迟请求期间标准加载遮罩完整覆盖 `1097.6×520px` 绘图区且 `aria-busy=true`。后续回归测试确认切换到存储分布时筛选栏隐藏。
 
 ### 风险
 

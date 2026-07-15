@@ -223,6 +223,7 @@ onBeforeMount(() => {
         v-model="activeTab"
         class="h-full">
         <FilterForm
+          v-if="activeTab !== 'distribution'"
           class="storage-health-filter"
           @query="loadActiveTab(true)"
           @reset="resetRange">
