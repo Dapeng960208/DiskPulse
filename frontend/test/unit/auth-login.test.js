@@ -89,6 +89,16 @@ describe('LoginPage LDAP flow', () => {
     pushMock.mockReset();
   });
 
+  it('presents storage cluster context in a split login layout', async () => {
+    const { default: LoginPage } = await import('@/pages/auth/LoginPage.vue');
+    const wrapper = mount(LoginPage);
+
+    expect(wrapper.find('.login-visual').exists()).toBe(true);
+    expect(wrapper.find('.login-panel').exists()).toBe(true);
+    expect(wrapper.get('h1').text()).toBe('存储集群，一处掌控');
+    expect(wrapper.get('.login-visual img').attributes('alt')).toBe('数据中心内的高性能存储服务器集群');
+  });
+
   it('sends superadmin through backend login instead of local bypass', async () => {
     loginMock.mockResolvedValue({ result: { token: 'jwt-token' } });
     fetchProfileMock.mockResolvedValue({
