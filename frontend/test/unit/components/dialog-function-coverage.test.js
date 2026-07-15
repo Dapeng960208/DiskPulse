@@ -523,6 +523,39 @@ describe('dialog component function coverage', () => {
     }));
   }, 15000);
 
+  it('shows and persists session cache settings only for Isilon clusters', async () => {
+    const { default: StorageClusterFormDialog } = await import('@/pages/admin/storage-cluster/components/StorageClusterFormDialog.vue');
+    const wrapper = shallowMount(StorageClusterFormDialog, {
+      global: { stubs: globalStubs },
+    });
+
+    getExposed(wrapper).edit();
+    expect(wrapper.find('[data-test="isilon-session-cache-mode"]').exists()).toBe(false);
+
+    const storageType = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((select) => select.props('modelValue') === null);
+    storageType.vm.$emit('update:modelValue', 'isilon');
+    await flushPromises();
+
+    const cacheMode = wrapper.find('[data-test="isilon-session-cache-mode"]');
+    expect(cacheMode.exists()).toBe(true);
+    cacheMode.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'file');
+    await flushPromises();
+    expect(wrapper.find('[data-test="isilon-session-cache-path"]').exists()).toBe(true);
+
+    await findSubmitButton(wrapper).trigger('click');
+    await flushPromises();
+    expect(storageClusterApi.create).toHaveBeenLastCalledWith(expect.objectContaining({
+      storage_type: 'isilon',
+      isilon_session_cache_mode: 'file',
+      isilon_session_cache_path: '.isilon_cache/cache.json',
+    }));
+
+    cacheMode.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'redis');
+    await flushPromises();
+    expect(wrapper.find('[data-test="isilon-session-cache-path"]').exists()).toBe(false);
+  }, 15000);
+
   it('executes usage form dialog handlers', async () => {
     const { default: UsageFormDialog } = await import('@/pages/usage/components/UsageFormDialog.vue');
     const wrapper = shallowMount(UsageFormDialog, {

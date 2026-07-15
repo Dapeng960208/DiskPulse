@@ -20,6 +20,8 @@ def test_load_collection_snapshot_targets_one_cluster(db_session):
                 storage_type="isilon",
                 protocol="http",
                 tls_verify=False,
+                isilon_session_cache_mode="file",
+                isilon_session_cache_path=".isilon_cache/isilon-b.json",
                 is_active=True,
             ),
         ]
@@ -31,6 +33,8 @@ def test_load_collection_snapshot_targets_one_cluster(db_session):
     assert [row["storage_cluster_id"] for row in snapshot] == [2]
     assert snapshot[0]["protocol"] == "http"
     assert snapshot[0]["tls_verify"] is False
+    assert snapshot[0]["isilon_session_cache_mode"] == "file"
+    assert snapshot[0]["isilon_session_cache_path"] == ".isilon_cache/isilon-b.json"
 
 
 def test_schedule_storage_collection_dispatches_target_cluster(caplog):
@@ -139,6 +143,46 @@ def test_storage_monitor_uses_snapshot_transport_settings(
         disable_warnings.assert_called_once_with(InsecureRequestWarning)
     else:
         disable_warnings.assert_not_called()
+
+
+def test_isilon_monitor_passes_session_cache_settings(db_session):
+    db_session.add(
+        StorageCluster(
+            id=1,
+            name="isilon-a",
+            storage_type="isilon",
+            storage_host="storage.local",
+            storage_port=8080,
+            storage_user="svc",
+            storage_password="secret",
+            isilon_session_cache_mode="redis",
+            is_active=True,
+        )
+    )
+    db_session.commit()
+
+    with patch("celery_tasks.manager.storagePulseMonitor.IsilonClient") as client_class:
+        StoragePulseMonitor(
+            db_session,
+            Mock(),
+            storage_cluster_id=1,
+            snapshot={
+                "storage_type": "isilon",
+                "storage_cluster_name": "isilon-a",
+                "storage_host": "snapshot.local",
+                "storage_port": 8080,
+                "storage_user": "snapshot-user",
+                "storage_password": "snapshot-secret",
+                "protocol": "https",
+                "tls_verify": True,
+                "isilon_session_cache_mode": "redis",
+                "isilon_session_cache_path": None,
+                "rows": (),
+            },
+        ).setup()
+
+    assert client_class.call_args.kwargs["session_cache_mode"] == "redis"
+    assert client_class.call_args.kwargs["session_cache_path"] is None
 
 
 def test_failed_collection_rolls_back_resource_changes(session_factory):
