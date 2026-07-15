@@ -800,7 +800,9 @@ npm test -- --coverage.enabled=false
 ### 验证状态
 
 - `cd frontend && npx vitest run test/unit/pages/storage-cluster-health-analytics.test.js --coverage.enabled=false`：通过，`9 passed`。
+- `cd frontend && npm run build:prod`：通过。
+- Playwright `1440×900` 浏览器检查：筛选栏位于 `.el-tabs__content` 内，存储分布绘图区最小高度为 `520px`；延迟请求期间标准加载遮罩完整覆盖 `1097.6×520px` 绘图区且 `aria-busy=true`。
 
 ### 风险
 
-- 尚未在连接真实后端数据的部署环境复验图表内容和导出下载；本轮聚焦验证页面结构、交互调用和构建结果。
+- 本地浏览器未登录，后端请求返回预期的 `401`；尚未使用真实数据复验图表内容和导出下载。
