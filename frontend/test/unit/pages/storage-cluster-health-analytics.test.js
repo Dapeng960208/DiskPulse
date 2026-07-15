@@ -201,7 +201,7 @@ describe('storage cluster health analytics page', () => {
     expect(aggregateApi.fetchAggregateTrees).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the time filter inside the tabs and gives the primary charts enough room', async () => {
+  it('keeps the time filter inside supported tabs and gives the primary charts enough room', async () => {
     storageClusterApi.fetchCapacityChange.mockResolvedValue({
       data: [{ updated_at: initialRange[0], used: 100 }],
     });
@@ -217,7 +217,7 @@ describe('storage cluster health analytics page', () => {
 
     await selectTab(wrapper, 'distribution');
 
-    expect(tabs.findComponent({ name: 'FilterForm' }).exists()).toBe(true);
+    expect(tabs.findComponent({ name: 'FilterForm' }).exists()).toBe(false);
     expect(wrapper.findComponent({ name: 'DiskUsage' }).attributes('height')).toBe('520px');
   });
 
