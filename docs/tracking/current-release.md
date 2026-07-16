@@ -2,6 +2,7 @@
 
 ## 2026-07-16：项目组与用户目录配额调整
 
+- 配额弹窗已复用全局 `write-form` 标题、分组、顶部标签、紧凑宽度和底部操作区；软限额单位由灰色静态文本改为可选下拉，切换 GiB/TiB 时同步换算硬、软限额数值。
 - 修复前端权限角色不一致：后端 profile 返回的 `superadmin` 现在被前端识别为全局角色，超级管理员可看到项目组和用户目录的“调整配额”入口。
 - 已新增 `PATCH /groups/{id}/quota` 和 `PATCH /storage-usages/{id}/quota`，仅超级管理员可调用；请求禁止额外字段，硬限额必填，软限额可选且必须严格小于硬限额。
 - 统一 quota service 根据集群类型调用现有 NetApp/Isilon 客户端：NetApp 支持 Qtree/用户 quota rule 和 Volume 容量，Isilon 支持 Directory/User quota 与宽限期；linked default-user 会创建显式用户配额。
@@ -37,6 +38,7 @@
 
 ## 2026-07-16：存储告警规则与飞书通知
 
+- 告警记录新增“集群”列；列表接口按当前资源关系批量补全 `cluster_name` 和 `project_name`，历史用户目录告警即使上下文未保存项目也可正确显示。TDD RED 为 `74c9780`，GREEN 为 `c936de3`；后端聚焦 `30 passed`、前端聚焦 `8 passed`，目标 lint 与 `npm run build:test` 通过。
 - 已从本地 `main` HEAD `ffe5d15` 创建独立分支 `codex/storage-alert-rules` 和 Worktree `D:\dev\worktrees\DiskPulse\storage-alert-rules`；主工作区 `frontend/src/pages/usage/UsageListPage.vue` 的既有修改未复制、未回退、未暂存。
 - 已复制 `.codegraph`，仅清理目标副本中的 daemon/WAL 运行文件并完整重建索引；`codegraph status` 显示新 Worktree 路径、286 个文件、3,866 个节点、9,936 条边和 `[OK] Index is up to date`。
 - `npm ci` 成功；Alembic 唯一 head 为 `000000000005`，history 连续。
