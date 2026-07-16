@@ -9,6 +9,8 @@
 - 修复 Isilon 已有 Directory quota 更新 payload：PUT 仅提交 OneFS 允许修改的 `thresholds`，不再携带只用于创建的 `type/path`。TDD RED `fb3d0af`、GREEN `e4b6453`，聚焦测试 `9 passed`。真实设备等值 PUT 返回 `403 AEC_FORBIDDEN`；OneFS 要求父权限不能低于子权限，因此 `ISI_PRIV_QUOTA` 与 `ISI_PRIV_QUOTA_QUOTAMANAGEMENT` 必须同时配置为写权限。
 - 配额弹窗已复用全局 `write-form` 标题、分组、顶部标签、紧凑宽度和底部操作区；软限额单位由灰色静态文本改为可选下拉，切换 GiB/TiB 时同步换算硬、软限额数值。
 - 修复前端权限角色不一致：后端 profile 返回的 `superadmin` 现在被前端识别为全局角色，超级管理员可看到项目组和用户目录的“调整配额”入口。
+- 项目组和用户目录操作列统一为固定宽度的“详情 + 更多”：普通用户只显示详情，管理员菜单按页面现有能力提供调整配额、编辑和删除；添加项目组与新增用户目录也统一仅管理员可见。
+- 操作列样式按 TDD 完成：RED `23fd3ce` 为 `5 failed, 1 passed`，GREEN 聚焦测试为 `6 passed`；定向 ESLint 和 `npm run build:test` 通过，构建仅保留既有大 chunk 警告。未使用真实普通用户与超级管理员账号执行登录浏览器验收。
 - 已新增 `PATCH /groups/{id}/quota` 和 `PATCH /storage-usages/{id}/quota`，仅超级管理员可调用；请求禁止额外字段，硬限额必填，软限额可选且必须严格小于硬限额。
 - 统一 quota service 根据集群类型调用现有 NetApp/Isilon 客户端：NetApp 支持 Qtree/用户 quota rule 和 Volume 容量，Isilon 支持 Directory/User quota 与宽限期；linked default-user 会创建显式用户配额。
 - 设备写入后执行读回校验，再同步本地资源、写 `quota_adjustment` 记录并在数据库提交后发送邮件；共享目标返回 `409`，设备 HTTP 错误保留原始响应，无设备响应或读回失败返回 `502`。
