@@ -380,6 +380,55 @@ def test_isilon_client_updates_explicit_quota_and_creates_for_linked_user():
     assert result["soft_grace"] == 3600
 
 
+def test_isilon_client_updates_existing_quota_with_mutable_fields_only():
+    client = object.__new__(IsilonClient)
+    client.base_url = "https://isilon/platform"
+    client.api_version = "22"
+    client.logger = None
+    client.session = MagicMock()
+    client.get_quotas = MagicMock(
+        side_effect=[
+            [
+                {
+                    "id": "quota-1",
+                    "type": "directory",
+                    "path": "/ifs/project-1",
+                    "linked": False,
+                }
+            ],
+            [
+                {
+                    "id": "quota-1",
+                    "type": "directory",
+                    "path": "/ifs/project-1",
+                    "linked": False,
+                }
+            ],
+        ]
+    )
+    client.session.put.return_value = _response({})
+    client.session.get.return_value = _response(
+        {"quotas": [{"thresholds": {"hard": 120 * GiB, "soft": 100 * GiB, "soft_grace": 3600}}]}
+    )
+
+    client.update_quota(
+        quota_type="directory",
+        volume_name="/ifs/project-1",
+        qtree_name=None,
+        path="/ifs/project-1",
+        username=None,
+        hard_limit=120 * GiB,
+        soft_limit=100 * GiB,
+        soft_grace=3600,
+    )
+
+    client.session.put.assert_called_once_with(
+        "https://isilon/platform/22/quota/quotas/quota-1",
+        json={"thresholds": {"hard": 120 * GiB, "soft": 100 * GiB, "soft_grace": 3600}},
+        timeout=60,
+    )
+
+
 @pytest.fixture
 def quota_api(api_client_factory, session_factory, monkeypatch):
     from routers import group, storage_usage
