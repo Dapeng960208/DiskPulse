@@ -880,6 +880,84 @@ def test_isilon_statistics_passes_key_unit_metadata_to_current_rows():
     assert rows[0]["unit"] == "microseconds"
 
 
+def test_isilon_statistics_collects_path_dataset_workload_latency():
+    client = object.__new__(IsilonClient)
+    client.api_version = "22"
+    client._get = Mock(
+        side_effect=[
+            {
+                "datasets": [
+                    {
+                        "id": 3,
+                        "name": "path",
+                        "metrics": ["path"],
+                        "statkey": "cluster.performance.dataset.3",
+                    }
+                ]
+            },
+            {
+                "workloads": [
+                    {
+                        "id": 100,
+                        "metric_values": {"path": "/ifs/data/project-a"},
+                    }
+                ]
+            },
+            {
+                "stats": [
+                    {
+                        "key": "cluster.performance.dataset.3",
+                        "time": 1784172559,
+                        "value": {
+                            "dataset": {
+                                "workloads": {
+                                    "workloads": [
+                                        {
+                                            "id": 100,
+                                            "type": "pinned",
+                                            "record": {
+                                                "latency_read": {"sum": 3000, "count": 2},
+                                                "latency_write": {"sum": 9000, "count": 3},
+                                                "latency_other": {"sum": 0, "count": 0},
+                                                "ops": {"sum": 50},
+                                                "bytes_in": {"sum": 1024},
+                                                "bytes_out": {"sum": 2048},
+                                            },
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                    }
+                ]
+            },
+        ]
+    )
+
+    assert client.get_performance_statistics() == [
+        {
+            "key": "cluster.performance.dataset.3.latency",
+            "workload": "/ifs/data/project-a",
+            "name": "/ifs/data/project-a",
+            "value": 2400.0,
+            "latency_read": 1500.0,
+            "latency_write": 3000.0,
+            "iops_total": 50.0,
+            "throughput_total": 3072.0,
+            "unit": "microseconds",
+            "time": 1784172559,
+        }
+    ]
+    assert [call.args[0] for call in client._get.call_args_list] == [
+        "/22/performance/datasets",
+        "/22/performance/datasets/3/workloads",
+        "/22/statistics/current",
+    ]
+    assert client._get.call_args_list[2].kwargs["params"] == {
+        "keys": "cluster.performance.dataset.3"
+    }
+
+
 def test_isilon_latency_rows_use_returned_workload_dimension_not_key_guessing():
     storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
 
@@ -905,7 +983,7 @@ def test_isilon_latency_rows_use_returned_workload_dimension_not_key_guessing():
     )
 
     assert [(row["object_type"], row["object_id"]) for row in rows] == [
-        ("workload", "workload-1")
+        ("volume", "workload-1")
     ]
 
 
@@ -938,7 +1016,46 @@ def test_isilon_latency_rows_convert_only_known_units(unit, expected):
     )
 
     assert rows[0]["latency_total"] == expected
-    assert rows[0]["object_type"] == "workload"
+    assert rows[0]["object_type"] == "volume"
+
+
+def test_isilon_latency_rows_include_path_read_and_write_latency():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+
+    rows = storage_health._isilon_performance_rows(
+        7,
+        [
+            {
+                "key": "cluster.performance.dataset.3.latency",
+                "workload": "/ifs/data/project-a",
+                "name": "/ifs/data/project-a",
+                "value": 2400,
+                "latency_read": 1500,
+                "latency_write": 3000,
+                "iops_total": 50,
+                "throughput_total": 3072,
+                "unit": "microseconds",
+                "time": 1784172559,
+            }
+        ],
+        datetime(2026, 7, 16, 10, 30),
+    )
+
+    assert rows == [
+        {
+            "storage_cluster_id": "7",
+            "vendor": "isilon",
+            "object_type": "volume",
+            "object_id": "/ifs/data/project-a",
+            "object_name": "/ifs/data/project-a",
+            "latency_read": 1.5,
+            "latency_write": 3.0,
+            "latency_total": 2.4,
+            "iops_total": 50.0,
+            "throughput_total": 3072.0,
+            "collected_at": datetime.fromtimestamp(1784172559),
+        }
+    ]
 
 
 def test_isilon_latency_rows_keep_zero_seconds_and_use_device_timestamp():
