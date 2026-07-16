@@ -159,6 +159,16 @@ describe('storage alert rule UI contract', () => {
     }
   });
 
+  it('does not render quota adjustment limits as alert usage percentages', () => {
+    const alerts = source('src/pages/alert/AlertListPage.vue');
+
+    expect(alerts).toContain("{ value: 'quota_adjustment', label: '配额调整' }");
+    expect(alerts).toContain("if (row.alert_type !== 'alert') return row.description || '-';");
+    expect(alerts).toContain("const alertField = (row, value) => row.alert_type === 'alert' ? value ?? '-' : '-';");
+    expect(alerts).toContain('alertField(row, row.threshold)');
+    expect(alerts).toContain('alertField(row, row.avg_use_ratio)');
+  });
+
   it('keeps the existing CRUD endpoints that carry the new fields and filters', () => {
     expect(source('src/api/config-api.js')).toContain("new ConfigApi('/config/storage')");
     expect(source('src/api/project-api.js')).toContain("new ProjectApi('/projects/')");
