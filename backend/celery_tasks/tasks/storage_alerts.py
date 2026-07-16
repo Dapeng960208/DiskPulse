@@ -172,10 +172,7 @@ def _evaluate_one(
         super_admin_usernames=base_config.get("super_admin_usernames", []),
     )
     if target_type == "storage_usage":
-        target_name = (
-            f"集群 {context.get('cluster') or '-'} 项目 {context.get('project') or '-'} "
-            f"Linux目录 {context.get('linux_path') or '-'}"
-        )
+        target_name = f"Linux目录 {context.get('linux_path') or '-'}"
     else:
         name_key = {"group": "group", "project": "project"}[target_type]
         target_name = f"{TARGET_TYPE_LABELS[target_type]} {context.get(name_key) or '-'}"
