@@ -49,12 +49,21 @@ describe('QueryForm progressive filter toolbar', () => {
     expect(source).toMatch(/\.query-form \{[\s\S]*display: grid;[\s\S]*grid-template-columns: minmax\(0, 1fr\) max-content;/);
     expect(source).toMatch(/\.query-form__toolbar \{[\s\S]*display: contents;/);
     expect(source).toContain('grid-template-columns: repeat(auto-fill, minmax(min(100%, max(220px, calc((100% - 4 * var(--spacing-md)) / 5))), 1fr));');
-    expect(source).toMatch(/\.query-form__advanced \{[\s\S]*grid-column: 1;/);
-    expect(source).toMatch(/\.query-form__actions \{[\s\S]*grid-column: 2;/);
+    expect(source).toMatch(/\.query-form__advanced \{[\s\S]*display: contents;/);
+    expect(source).toMatch(/\.query-form__actions \{[\s\S]*grid-column: 2;[\s\S]*align-self: start;[\s\S]*padding-top: 22px;/);
+    expect(source).toMatch(/:deep\(\.query-form-field--date-range\) \{[\s\S]*grid-column: span 2;/);
     expect(source).toMatch(/\.el-form-item__label \{[\s\S]*justify-content: flex-start;[\s\S]*text-align: left;[\s\S]*max-width: 100%;[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*color: var\(--text-primary\);[\s\S]*font-size: var\(--font-size-base\);/);
     expect(source).not.toMatch(/&\.query-form-field--wide \{[\s\S]*?(?:width|flex-basis):/);
     expect(source).not.toContain('query-form__action-spacer');
-    expect(source).toMatch(/@include mobile \{[\s\S]*\.query-form__actions \{[\s\S]*:deep\(\.el-button\) \{[\s\S]*flex: 1 1 100%;/);
+    expect(source).toMatch(/@include mobile \{[\s\S]*\.query-form-field--date-range[\s\S]*grid-column: span 1;[\s\S]*\.query-form__actions \{[\s\S]*:deep\(\.el-button\) \{[\s\S]*flex: 1 1 100%;/);
+  });
+
+  it('marks every second-level date-time range as a double-width field', () => {
+    const realtime = readFileSync(resolve(process.cwd(), 'src/pages/common/RealTimePage.vue'), 'utf8');
+    const storageHealth = readFileSync(resolve(process.cwd(), 'src/pages/admin/storage-cluster/StorageClusterDetailPage.vue'), 'utf8');
+
+    expect(realtime).toMatch(/label="时间范围"\s+class="query-form-field--date-range"[\s\S]*?format="YYYY-MM-DD HH:mm:ss"/);
+    expect(storageHealth).toMatch(/label="时间范围"\s+class="analytics-date-range query-form-field--date-range"[\s\S]*?format="YYYY-MM-DD HH:mm:ss"/);
   });
 
   it('keeps primary fields visible and toggles advanced fields against active chips', async () => {
@@ -73,6 +82,7 @@ describe('QueryForm progressive filter toolbar', () => {
 
     expect(wrapper.find('[data-test="advanced-filter"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="active-filter"]').exists()).toBe(false);
+    expect(wrapper.get('.query-form__advanced').element.parentElement).toBe(wrapper.get('.query-form__fields').element);
     expect(moreButton.attributes('aria-expanded')).toBe('true');
     expect(moreButton.text()).toContain('收起筛选');
   });
