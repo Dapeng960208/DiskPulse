@@ -138,6 +138,12 @@ describe('storage alert rule UI contract', () => {
     expect(alerts).toContain(
       "row.related_info?.context?.group_tag || row.related_info?.group_tag?.name || '-'",
     );
+    expect(alerts).toContain('alertDescription(row)');
+    expect(alerts).toContain("important: '重要'");
+    expect(alerts).toContain("serious: '严重'");
+    expect(alerts).toContain("emergency: '紧急'");
+    expect(alerts).toContain("StorageUsage: '用户目录'");
+    expect(alerts).toContain("repeat: '重复告警'");
     for (const field of ['event_type', 'quota_basis', 'delivery_status']) {
       expect(alerts).toContain(field);
       expect(alerts).toContain(`prop="${field}"`);

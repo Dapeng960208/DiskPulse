@@ -548,6 +548,10 @@ def test_evaluator_uses_current_successful_samples_and_keeps_project_event_aggre
     ]
     assert by_type["Project"].recipient_usernames == ["owner", "admin", "global"]
     assert all(event.alert_type == "alert" for event in events)
+    assert by_type["StorageUsage"].description == "用户目录 alice 首次告警（使用率 96.00%）"
+    assert by_type["Group"].description == "项目组 group-a 首次告警（使用率 96.00%）"
+    assert by_type["Project"].description == "项目 project-a 首次告警（使用率 96.00%）"
+    assert by_type["StorageUsage"].related_info["context"]["project"] == "project-a"
     assert db_session.query(models.StorageAlertState).filter_by(target_type="storage_usage", target_id=2).first() is None
 
     usage_text = "".join(
@@ -558,10 +562,12 @@ def test_evaluator_uses_current_successful_samples_and_keeps_project_event_aggre
         for value in (
             "用户名：alice",
             "集群：cluster-a",
+            "项目：project-a",
             "项目组标签：team",
             "项目组：group-a",
             "Linux路径：/data/alice",
-            "采用口径：hard",
+            "事件：首次告警",
+            "采用口径：硬限额",
             "硬限额：100.00 GB",
             "软限额：未设置",
             "已使用：96.00 GB",
@@ -585,7 +591,8 @@ def test_evaluator_uses_current_successful_samples_and_keeps_project_event_aggre
             "serious",
         )[0]
     )
-    assert "恢复前等级：serious" in recovery_text
+    assert "事件：恢复通知" in recovery_text
+    assert "恢复前等级：严重" in recovery_text
 
 
 def test_group_alert_cc_users_are_deduplicated_and_must_exist(db_session):
