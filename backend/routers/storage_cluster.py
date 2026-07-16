@@ -190,11 +190,25 @@ def read_repeated_faults(
 def read_system_events(
     storage_cluster_id: int,
     time_range: AnalyticsTimeRange,
-    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    keyword: Annotated[str | None, Query(max_length=100)] = None,
+    severity: Annotated[
+        Literal["critical", "error", "warning", "info"] | None,
+        Query(),
+    ] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     db: Session = Depends(get_db),
 ) -> dict:
     _require_storage_cluster(db, storage_cluster_id)
-    return get_system_events(db, storage_cluster_id, *time_range, limit=limit)
+    return get_system_events(
+        db,
+        storage_cluster_id,
+        *time_range,
+        keyword=keyword.strip() if keyword else None,
+        severity=severity,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/{storage_cluster_id}/analytics/export")

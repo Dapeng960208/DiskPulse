@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select, text
+from sqlalchemy import String, cast, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from crud.configCrud import get_storage_config
@@ -91,35 +91,72 @@ def get_system_event_rows(
     storage_cluster_id: int,
     start_time: datetime,
     end_time: datetime,
-    limit: int = 100,
-) -> list[dict]:
+    keyword: str | None = None,
+    severity: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[int, list[dict]]:
+    filters = [
+        StorageAlerts.storage_cluster_id == storage_cluster_id,
+        StorageAlerts.source.in_(("netapp", "isilon")),
+        StorageAlerts.updated_at.between(_naive(start_time), _naive(end_time)),
+    ]
+    if severity:
+        filters.append(StorageAlerts.severity == severity)
+    if keyword:
+        pattern = f"%{keyword.strip()}%"
+        filters.append(
+            or_(
+                StorageAlerts.description.ilike(pattern),
+                StorageAlerts.fingerprint.ilike(pattern),
+                StorageAlerts.external_event_id.ilike(pattern),
+                cast(StorageAlerts.related_info, String).ilike(pattern),
+            )
+        )
+
+    total = db.scalar(
+        select(func.count(StorageAlerts.id)).where(*filters)
+    ) or 0
     rows = db.execute(
         select(
             StorageAlerts.source,
             StorageAlerts.severity,
             StorageAlerts.description,
+            StorageAlerts.related_type,
             StorageAlerts.related_info,
             StorageAlerts.updated_at,
         )
-        .where(
-            StorageAlerts.storage_cluster_id == storage_cluster_id,
-            StorageAlerts.source.in_(("netapp", "isilon")),
-            StorageAlerts.updated_at.between(_naive(start_time), _naive(end_time)),
-        )
-        .order_by(StorageAlerts.updated_at.desc())
-        .limit(limit)
+        .where(*filters)
+        .order_by(StorageAlerts.updated_at.desc(), StorageAlerts.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     ).all()
-    return [
-        {
-            "source": row.source,
-            "severity": row.severity,
-            "event_code": (row.related_info or {}).get("event_code"),
-            "object_id": (row.related_info or {}).get("object_id"),
-            "description": row.description,
-            "occurred_at": row.updated_at,
-        }
-        for row in rows
-    ]
+    result = []
+    for row in rows:
+        related_info = row.related_info or {}
+        object_id = str(related_info.get("object_id") or "cluster")
+        raw = related_info.get("raw")
+        raw = raw if isinstance(raw, dict) else {}
+        node = raw.get("node") if isinstance(raw.get("node"), dict) else {}
+        if row.source == "netapp":
+            object_name = node.get("name") or object_id
+        elif object_id == "cluster":
+            object_name = "集群"
+        else:
+            object_name = f"节点 {object_id}"
+        result.append(
+            {
+                "source": row.source,
+                "severity": row.severity,
+                "event_code": related_info.get("event_code"),
+                "object_id": object_id,
+                "object_name": object_name,
+                "object_type": row.related_type or "node",
+                "description": row.description,
+                "occurred_at": row.updated_at,
+            }
+        )
+    return int(total), result
 
 
 def get_top_latency_rows(

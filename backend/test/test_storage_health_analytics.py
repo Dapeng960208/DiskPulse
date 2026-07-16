@@ -335,6 +335,39 @@ def test_system_events_filter_before_database_pagination(db_session):
     assert rows[0]["object_id"] == "6"
 
 
+def test_system_event_service_returns_pagination_metadata():
+    analytics = _analytics()
+    db = Mock()
+    rows = [{"event_code": "QUOTA_1"}]
+    with patch.object(
+        analytics.storageHealthAnalyticsCrud,
+        "get_system_event_rows",
+        return_value=(41, rows),
+    ) as get_rows:
+        result = analytics.get_system_events(
+            db,
+            11,
+            START,
+            END,
+            keyword="quota",
+            severity="warning",
+            page=2,
+            page_size=20,
+        )
+
+    get_rows.assert_called_once_with(
+        db,
+        11,
+        START,
+        END,
+        keyword="quota",
+        severity="warning",
+        page=2,
+        page_size=20,
+    )
+    assert result == {"data": rows, "total": 41, "page": 2, "page_size": 20}
+
+
 def test_top_latency_ranks_by_p95_and_applies_limit():
     rows = [
         {

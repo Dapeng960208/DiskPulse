@@ -9,7 +9,11 @@ import {
   ElDropdownItem,
   ElDropdownMenu,
   ElFormItem,
+  ElInput,
   ElMessage,
+  ElOption,
+  ElPagination,
+  ElSelect,
   ElTable,
   ElTableColumn,
   ElTabPane,
@@ -37,8 +41,10 @@ const latency = ref({ supported: true, data: [] });
 const severity = ref({ counts: {}, total: 0, sources: {} });
 const faults = ref({ data: [] });
 const systemEvents = ref({ data: [] });
+const systemEventFilters = reactive({ keyword: '', severity: '' });
+const systemEventPagination = reactive({ page: 1, pageSize: 20, total: 0 });
 const loaded = reactive({ capacity: false, distribution: false, performance: false, faults: false });
-const loading = reactive({ capacity: false, performance: false, faults: false });
+const loading = reactive({ capacity: false, performance: false, faults: false, systemEvents: false });
 
 const shortcuts = [
   { text: '一天内', value: () => getDefaultTime(8) },
@@ -50,6 +56,14 @@ const shortcuts = [
 const queryParams = () => ({
   start_time: dateRange.value?.[0],
   end_time: dateRange.value?.[1],
+});
+
+const systemEventQueryParams = () => ({
+  ...queryParams(),
+  ...(systemEventFilters.keyword.trim() ? { keyword: systemEventFilters.keyword.trim() } : {}),
+  ...(systemEventFilters.severity ? { severity: systemEventFilters.severity } : {}),
+  page: systemEventPagination.page,
+  page_size: systemEventPagination.pageSize,
 });
 
 const capacityData = computed(() => capacity.value?.data || []);
@@ -122,20 +136,64 @@ async function loadFaults(force = false) {
   if (!clusterId.value || (loaded.faults && !force)) return;
   loading.faults = true;
   try {
-    [severity.value, faults.value, systemEvents.value] = await Promise.all([
+    const [severityResponse, faultResponse, eventResponse] = await Promise.all([
       storageClusterApi.fetchErrorSeverity(clusterId.value, queryParams()),
       storageClusterApi.fetchRepeatedFaults(clusterId.value, queryParams()),
-      storageClusterApi.fetchSystemEvents(clusterId.value, queryParams()),
+      storageClusterApi.fetchSystemEvents(clusterId.value, systemEventQueryParams()),
     ]);
+    severity.value = severityResponse;
+    faults.value = faultResponse;
+    applySystemEventResponse(eventResponse);
     loaded.faults = true;
   } catch {
     severity.value = { counts: {}, total: 0, sources: {} };
     faults.value = { data: [] };
     systemEvents.value = { data: [] };
+    systemEventPagination.total = 0;
     ElMessage.error('加载故障数据失败，请稍后重试');
   } finally {
     loading.faults = false;
   }
+}
+
+function applySystemEventResponse(response) {
+  systemEvents.value = response || { data: [] };
+  systemEventPagination.total = Number(response?.total) || 0;
+  systemEventPagination.page = Number(response?.page) || systemEventPagination.page;
+  systemEventPagination.pageSize = Number(response?.page_size) || systemEventPagination.pageSize;
+}
+
+async function loadSystemEvents(resetPage = false) {
+  if (!clusterId.value) return;
+  if (resetPage) systemEventPagination.page = 1;
+  loading.systemEvents = true;
+  try {
+    applySystemEventResponse(
+      await storageClusterApi.fetchSystemEvents(clusterId.value, systemEventQueryParams()),
+    );
+  } catch {
+    systemEvents.value = { data: [] };
+    systemEventPagination.total = 0;
+    ElMessage.error('加载系统事件失败，请稍后重试');
+  } finally {
+    loading.systemEvents = false;
+  }
+}
+
+function resetSystemEventFilters() {
+  systemEventFilters.keyword = '';
+  systemEventFilters.severity = '';
+  loadSystemEvents(true);
+}
+
+function changeSystemEventPage(page) {
+  systemEventPagination.page = page;
+  loadSystemEvents();
+}
+
+function changeSystemEventPageSize(pageSize) {
+  systemEventPagination.pageSize = pageSize;
+  loadSystemEvents(true);
 }
 
 function loadActiveTab(force = false) {
@@ -143,6 +201,11 @@ function loadActiveTab(force = false) {
   if (activeTab.value === 'performance') return loadPerformance(force);
   if (activeTab.value === 'faults') return loadFaults(force);
   return loadCapacity(force);
+}
+
+function searchActiveTab() {
+  if (activeTab.value === 'faults') systemEventPagination.page = 1;
+  return loadActiveTab(true);
 }
 
 function resetRange() {
@@ -193,6 +256,7 @@ async function handleExport(command) {
 
 watch(activeTab, () => loadActiveTab());
 watch(dateRange, () => {
+  systemEventPagination.page = 1;
   loaded.capacity = false;
   loaded.performance = false;
   loaded.faults = false;
@@ -225,7 +289,7 @@ onBeforeMount(() => {
         <FilterForm
           v-if="activeTab !== 'distribution'"
           class="storage-health-filter"
-          @query="loadActiveTab(true)"
+          @query="searchActiveTab"
           @reset="resetRange">
           <ElFormItem
             label="时间范围"
@@ -374,11 +438,13 @@ onBeforeMount(() => {
             v-if="loading.faults"
             width="100%"
             height="360px" />
-          <div
-            v-else-if="!severity.total && !faultData.length && !systemEventData.length"
-            class="analytics-empty">当前时间范围内暂无故障数据；如设备已有告警，请检查厂商事件采集权限</div>
           <div v-else>
-            <div class="fault-grid">
+            <div
+              v-if="!severity.total && !faultData.length"
+              class="fault-analysis-empty">当前时间范围内暂无故障数据；如设备已有告警，请检查厂商事件采集权限</div>
+            <div
+              v-else
+              class="fault-grid">
               <PieCharts
                 :data="severityChartData"
                 title="错误严重级别"
@@ -410,8 +476,42 @@ onBeforeMount(() => {
               </div>
             </div>
             <div class="system-events">
-              <h3>系统事件</h3>
+              <div class="system-events__heading">
+                <h3>系统事件</h3>
+                <p>事件对象表示厂商事件关联的节点：NetApp 优先显示节点名称，Isilon 显示 OneFS 节点编号。</p>
+              </div>
+              <FilterForm
+                class="system-event-filter"
+                @query="loadSystemEvents(true)"
+                @reset="resetSystemEventFilters">
+                <ElFormItem label="关键字">
+                  <ElInput
+                    v-model="systemEventFilters.keyword"
+                    clearable
+                    placeholder="事件代码、对象或内容" />
+                </ElFormItem>
+                <ElFormItem label="日志等级">
+                  <ElSelect
+                    v-model="systemEventFilters.severity"
+                    clearable
+                    placeholder="全部等级">
+                    <ElOption
+                      label="严重"
+                      value="critical" />
+                    <ElOption
+                      label="错误"
+                      value="error" />
+                    <ElOption
+                      label="警告"
+                      value="warning" />
+                    <ElOption
+                      label="信息"
+                      value="info" />
+                  </ElSelect>
+                </ElFormItem>
+              </FilterForm>
               <ElTable
+                v-loading="loading.systemEvents"
                 :data="systemEventData"
                 empty-text="暂无系统事件">
                 <ElTableColumn
@@ -425,9 +525,15 @@ onBeforeMount(() => {
                   prop="event_code"
                   min-width="180" />
                 <ElTableColumn
-                  label="对象"
-                  prop="object_id"
-                  min-width="140" />
+                  label="事件对象"
+                  prop="object_name"
+                  min-width="160">
+                  <template #default="{ row }">
+                    <span :title="row.object_id && row.object_id !== row.object_name ? `原始标识：${row.object_id}` : undefined">
+                      {{ row.object_name || row.object_id || '-' }}
+                    </span>
+                  </template>
+                </ElTableColumn>
                 <ElTableColumn
                   label="内容"
                   prop="description"
@@ -437,6 +543,17 @@ onBeforeMount(() => {
                   prop="occurred_at"
                   min-width="170" />
               </ElTable>
+              <ElPagination
+                v-if="systemEventPagination.total > 0"
+                class="system-event-pagination"
+                background
+                layout="total, sizes, prev, pager, next, jumper"
+                :current-page="systemEventPagination.page"
+                :page-size="systemEventPagination.pageSize"
+                :page-sizes="[20, 50, 100]"
+                :total="systemEventPagination.total"
+                @current-change="changeSystemEventPage"
+                @size-change="changeSystemEventPageSize" />
             </div>
           </div>
         </ElTabPane>
@@ -489,8 +606,34 @@ onBeforeMount(() => {
   overflow-x: auto;
 }
 
+.fault-analysis-empty {
+  padding: var(--spacing-xl) 0;
+  color: var(--el-text-color-secondary);
+  text-align: center;
+}
+
 .system-events {
   margin-top: 20px;
+}
+
+.system-events__heading {
+  margin-bottom: var(--spacing-md);
+
+  p {
+    margin-top: var(--spacing-xs);
+    color: var(--text-tertiary);
+    font-size: var(--font-size-sm);
+  }
+}
+
+.system-event-filter {
+  margin-bottom: var(--spacing-md);
+}
+
+.system-event-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--spacing-md);
 }
 
 :deep(.el-card__body) {

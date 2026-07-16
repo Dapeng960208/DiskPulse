@@ -244,7 +244,7 @@ describe('storage cluster health analytics page', () => {
     const tabs = wrapper.get('[data-testid="analytics-tabs"]');
     const datePicker = tabs.findComponent({ name: 'ElDatePicker' });
 
-    expect(tabs.findComponent({ name: 'FilterForm' }).exists()).toBe(true);
+    expect(tabs.find('.storage-health-filter').exists()).toBe(true);
     expect(datePicker.attributes('format')).toBe('YYYY-MM-DD HH:mm:ss');
     expect(datePicker.attributes('start-placeholder')).toBe('开始日期时间');
     expect(datePicker.attributes('end-placeholder')).toBe('结束日期时间');
@@ -252,7 +252,7 @@ describe('storage cluster health analytics page', () => {
 
     await selectTab(wrapper, 'distribution');
 
-    expect(tabs.findComponent({ name: 'FilterForm' }).exists()).toBe(false);
+    expect(tabs.find('.storage-health-filter').exists()).toBe(false);
     expect(wrapper.findComponent({ name: 'DiskUsage' }).attributes('height')).toBe('520px');
   });
 
@@ -343,8 +343,8 @@ describe('storage cluster health analytics page', () => {
     const eventSection = wrapper.get('.system-events');
     const eventFilter = eventSection.findComponent({ name: 'FilterForm' });
     expect(eventFilter.exists()).toBe(true);
-    expect(eventSection.findComponent({ name: 'ElInput' }).attributes('placeholder')).toBe('事件代码、对象或内容');
-    expect(eventSection.findComponent({ name: 'ElSelect' }).attributes('placeholder')).toBe('全部等级');
+    expect(eventSection.findComponent({ name: 'ElInput' }).props('placeholder')).toBe('事件代码、对象或内容');
+    expect(eventSection.findComponent({ name: 'ElSelect' }).props('placeholder')).toBe('全部等级');
 
     await eventSection.findComponent({ name: 'ElInput' }).vm.$emit('update:modelValue', 'quota');
     await eventSection.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'warning');

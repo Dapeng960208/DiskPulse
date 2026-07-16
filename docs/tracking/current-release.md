@@ -1,5 +1,13 @@
 # 当前交付记录
 
+## 2026-07-16：系统事件搜索、分页与对象语义
+
+- `system-events` 接口新增 `keyword`、`severity`、`page`、`page_size`，默认每页 20 条、最多 100 条；数据库先按集群、时间、关键字和等级过滤，再执行 `count` 与分页。
+- 前端在系统事件区复用全局 `QueryForm`，增加关键字和日志等级筛选，保留故障页共用时间范围；翻页和每页条数变化只刷新系统事件，不重复刷新严重级别图和重复故障表。
+- 事件对象同时返回 `object_id`、`object_name`、`object_type`：NetApp 历史数据从原始 EMS `node.name` 优先生成名称，Isilon `devid` 格式化为“节点 N”，原始标识继续用于厂商侧核对。
+- TDD RED 提交为 `cdce770`；GREEN 为后端存储健康 `90 passed, 1 deselected`、前端 `10 passed`。页面聚焦覆盖率为 Statements/Lines `93.98%`、Branches `72.52%`；后端分析 Service 模块为 `82%`。完整存储健康测试仍有一个既有迁移顺序用例失败，见 `docs/tracking/error-log.md`。
+- 未执行登录浏览器和真实 PostgreSQL/MySQL API 冒烟；关键字对 JSON 原始事件的匹配已在 SQLite 聚焦测试覆盖，生产数据库查询计划仍需部署后观察。
+
 ## 2026-07-16：恢复 Isilon 性能与设备事件解析
 
 - 真机确认 Isilon 认证和接口均正常：statistics 返回 `1` 条节点磁盘延迟，event group/list 返回 `2888`/`218` 条；此前空页面由应用解析兼容问题导致，不再属于账号或权限阻塞。

@@ -1,5 +1,32 @@
 # 错误记录
 
+### 2026-07-16：后端环境未安装 pytest-cov 插件
+
+- 触发：尝试用 `pytest --cov` 统计系统事件改动模块覆盖率。
+- 现象：pytest 返回 `unrecognized arguments: --cov ... --cov-report=term`。
+- 根因：当前虚拟环境安装了 `coverage.py`，但没有注册 `pytest-cov` 插件。
+- 修复：不新增依赖，改用 `coverage run -m pytest` 和 `coverage report` 执行同一聚焦测试。
+- 验证：替代命令成功执行 `90 passed, 1 deselected` 并生成模块覆盖率报告。
+- 风险：后续继续直接使用 `pytest --cov` 仍会失败，应沿用项目现有 coverage 入口或安装插件后再使用。
+
+### 2026-07-16：系统事件日志等级选项未通过模板属性换行规则
+
+- 触发：执行存储集群详情页和聚焦测试的定向 ESLint。
+- 现象：四个 `ElOption` 报 `vue/max-attributes-per-line`，测试辅助组件另有既有 `vue/one-component-per-file` warning。
+- 根因：新增日志等级选项把 `label` 和 `value` 写在同一行，不符合当前 Vue 模板格式规则。
+- 修复：将四个选项的属性拆行；测试文件的既有多组件 warning 不影响退出码，本轮不拆分测试桩。
+- 验证：重新执行定向 ESLint，要求 `0 errors`。
+- 风险：仅为模板格式问题，不影响接口、筛选或分页行为。
+
+### 2026-07-16：存储健康迁移回填测试错误选择最后一个迁移
+
+- 触发：执行 `uv run pytest test/test_storage_health_analytics.py -q`。
+- 现象：`test_storage_health_migration_backfills_attributable_alerts_on_sqlite` 期望 `(1, "diskpulse", "critical")`，实际得到 `(None, "diskpulse", "info")`；其余本轮 RED 失败均为新功能预期失败。
+- 根因：测试按文件名加载全部迁移后使用 `migrations[-1]` 执行待测回填；新增 `000000000005_storage_cluster_session_cache.py` 后，最后一个迁移不再是包含回填逻辑的 `000000000004_storage_health.py`。
+- 修复：本轮不修改与系统事件搜索无关的迁移测试；功能验证改为精确执行系统事件 CRUD/API 用例，并保留该问题等待单独修复测试定位方式。
+- 验证：系统事件后端聚焦用例 `4 passed`，前端页面聚焦用例 `10 passed`。
+- 风险：全量存储健康测试仍会保持一个非功能断言失败；真实迁移链本轮未改动，不能由该失败推断生产迁移本身异常。
+
 ### 2026-07-16：Isilon 性能和系统事件接口有数据但解析后全部丢失
 
 - 触发：本地服务账号权限恢复后，存储集群详情的性能分析和故障分析仍为空；使用现有 `StoragePulseMonitor` 会话流程读取真实 OneFS 响应并对比解析结果。

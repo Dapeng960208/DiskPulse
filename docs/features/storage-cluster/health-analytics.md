@@ -15,7 +15,7 @@
 | 严重级别统计 | PostgreSQL `storage_alerts` | 合并可归属当前集群的 DiskPulse 容量告警与 NetApp/Isilon 设备事件，按 `critical`、`error`、`warning`、`info` 汇总。 |
 | Top 10 高延迟对象 | QuestDB `storage_performance_metrics` | 按 P95 延迟降序返回最多 10 个对象，同时返回平均值、最大值和样本数。NetApp 使用 Volume；PowerScale 优先使用 workload，缺失时降级为节点。 |
 | 重复故障 | PostgreSQL `storage_alerts` | 仅统计 `source=netapp` 或 `source=isilon` 的设备事件；同一 `fingerprint` 在所选范围出现至少两次时计为重复故障。 |
-| 系统事件 | PostgreSQL `storage_alerts` | 展示当前集群和时间范围内最近 100 条 NetApp/Isilon 原生事件，包含来源、严重级别、事件代码、对象、内容和发生时间。 |
+| 系统事件 | PostgreSQL `storage_alerts` | 按当前集群、时间范围、关键字和日志等级查询 NetApp/Isilon 原生事件；数据库分页默认每页 20 条，包含来源、严重级别、事件代码、事件对象、内容和发生时间。 |
 
 DiskPulse 既有容量告警使用 `source=diskpulse`，严重级别映射为 `high→critical`、`medium→warning`、`low→info`。原“告警”页面只查询 `source=diskpulse`，NetApp/Isilon 原生事件归类为“系统事件”并仅在存储健康中展示，不再与容量、周报或扩容记录混排。严重级别统计只接受 `diskpulse`、`netapp`、`isilon` 来源，重复故障和系统事件只接受 `netapp`、`isilon`；其他来源即使写入 `storage_alerts` 也不进入对应分析。无法唯一归属到存储集群的项目级容量告警保留在原告警范围内，不进入集群健康分析。设备故障指纹由厂商、事件代码、对象类型和对象 ID 组成，不使用可能包含动态内容的完整消息。
 
@@ -24,6 +24,8 @@ NetApp 事件来自 ONTAP EMS，性能来自 Volume `metric`。ONTAP 返回的 V
 PowerScale 事件来自 event group/list，性能来自 statistics API。客户端先通过 `/platform/latest` 发现资源版本，再读取 `/{version}/statistics/keys`：优先选择包含 workload 的延迟键，没有时选择节点延迟键，最后使用所选键请求 `/{version}/statistics/current`。统计键的 `units`/`unit` 元数据会传递给采集器；微秒和秒均转换为毫秒，毫秒原样保留，单位缺失或无法识别时跳过该指标；`time` Unix 时间戳作为设备采集时间。不能把 OneFS 主版本直接作为 API 资源版本，也不能根据键名臆造返回对象维度。
 
 OneFS event list 外层记录中的 `events[]` 按单条设备事件展开；event group 使用 `last_event`（缺失时使用 `time_noticed`）作为发生时间，并从 `causes` 取得事件代码和描述。OneFS 整数 Unix 时间戳统一换算为系统本地 naive 时间后入库。
+
+“事件对象”表示厂商事件关联的节点，而不是日志正文摘要。NetApp EMS 的原始对象 ID 通常是 ONTAP 节点 UUID，看起来像哈希但实际是设备提供的稳定节点标识；页面优先从原始事件的 `node.name` 显示节点名称，名称缺失时才回退 UUID。Isilon/PowerScale 的数字来自 OneFS 事件 `devid`（或 `specifier.devid`），表示事件所属节点/设备编号，页面显示为“节点 N”。原始 ID 仍随接口返回，并在页面悬停提示中保留，便于与厂商日志核对。
 
 ## 采集与保留边界
 
@@ -48,7 +50,7 @@ OneFS event list 外层记录中的 `events[]` 按单条设备事件展开；eve
 | 系统事件 | `GET /storage-clusters/{storage_cluster_id}/analytics/system-events` |
 | 导出 | `GET /storage-clusters/{storage_cluster_id}/analytics/export` |
 
-除存储分布外，所有健康分析接口要求 `start_time` 和 `end_time`，开始时间必须早于结束时间，范围不得超过 180 天。Top 10 接口支持对象类型和数量参数，数量默认且最多为 10；系统事件接口的 `limit` 默认为 100、最多为 200。无数据时返回空集合和可空汇总值，不把无数据表示成故障。
+除存储分布外，所有健康分析接口要求 `start_time` 和 `end_time`，开始时间必须早于结束时间，范围不得超过 180 天。Top 10 接口支持对象类型和数量参数，数量默认且最多为 10。系统事件接口支持 `keyword`（事件代码、对象标识/名称或内容）、`severity=critical|error|warning|info`、`page` 和 `page_size`；默认 `page=1&page_size=20`，单页最多 100 条，返回 `data`、`total`、`page`、`page_size`。过滤条件在数据库分页和 `total` 统计前生效。无数据时返回空集合和可空汇总值，不把无数据表示成故障。
 
 导出接口接受：
 
@@ -76,6 +78,6 @@ section=capacity|severity|latency|faults|all
 
 ## 测试与验证边界
 
-自动化验证覆盖厂商响应解析、PowerScale 资源版本/统计键/单位发现、NetApp 延迟单位转换、系统本地事件时间与 UTC `since`、来源白名单、严重级别映射、事件去重、统计口径、180 天参数校验、导出摘要与公式转义，以及前端空态/不支持状态。
+自动化验证覆盖厂商响应解析、PowerScale 资源版本/统计键/单位发现、NetApp 延迟单位转换、系统本地事件时间与 UTC `since`、来源白名单、严重级别映射、事件去重、系统事件先过滤后分页、可读事件对象、统计口径、180 天参数校验、导出摘要与公式转义，以及前端搜索、翻页、空态和不支持状态。
 
 真实 NetApp、PowerScale、PostgreSQL、MySQL、QuestDB 和登录浏览器的冒烟仍需在部署环境执行，重点确认设备权限、实际资源版本、事件字段、对象名称、延迟单位、指标可用性、QuestDB TTL、数据库迁移和浏览器下载行为。在这些验证完成前，不能把外部系统兼容性描述为已验证。
