@@ -556,7 +556,11 @@ class IsilonClient:
 
         collection_url = f"{self.base_url}/{self.api_version}/quota/quotas"
         if existing is not None and not existing.get("linked", False):
-            self._write_quota("put", f"{collection_url}/{existing['id']}", payload)
+            self._write_quota(
+                "put",
+                f"{collection_url}/{existing['id']}",
+                {"thresholds": thresholds},
+            )
         else:
             self._write_quota("post", collection_url, payload)
 
