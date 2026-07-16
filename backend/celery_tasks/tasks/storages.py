@@ -264,20 +264,11 @@ def storages_schedule_fetching_task(storage_cluster_id=None):
                 )
                 with SessionLocal() as db:
                     with db.begin():
-                        refreshed_project_ids = finalize_project_totals(
+                        finalize_project_totals(
                             db,
                             cluster_results=summary["cluster_results"],
                             collected_at=collected_at,
                         )
-                from celery_tasks.tasks.storage_alerts import evaluate_storage_alerts_task
-
-                evaluate_storage_alerts_task.delay(
-                    summary["succeeded_clusters"],
-                    tuple(refreshed_project_ids),
-                    collected_at.isoformat(),
-                    summary["refreshed_storage_usage_ids"],
-                    summary["refreshed_group_ids"],
-                )
             else:
                 logger.info("Storages schedule fetching task is already running.")
     except Exception as e:

@@ -48,6 +48,11 @@ diskpulse_app.conf.beat_schedule = {
         "schedule": 300.0,
         "options": {"expires": 300},
     },
+    "storage_alerts_schedule_task": {
+        "task": "celery_tasks.tasks.storage_alerts.storage_alerts_schedule_task",
+        "schedule": 60.0,
+        "options": {"expires": 60},
+    },
     "retry_storage_alerts_task": {
         "task": "celery_tasks.tasks.storage_alerts.retry_storage_alerts_task",
         "schedule": 60.0,

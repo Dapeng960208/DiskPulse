@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta
 
 from celery.utils.log import get_task_logger
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
@@ -316,26 +317,67 @@ def evaluate_storage_alerts(
     return delivery_ids
 
 
+def _latest_alert_sample():
+    with SessionLocal() as db:
+        observed_at = max(
+            filter(
+                None,
+                (
+                    db.query(func.max(StorageUsage.updated_at)).scalar(),
+                    db.query(func.max(Group.updated_at)).scalar(),
+                ),
+            ),
+            default=None,
+        )
+        if observed_at is None:
+            return None
+        usages = (
+            db.query(StorageUsage.id, StorageUsage.storage_cluster_id)
+            .filter(StorageUsage.updated_at == observed_at)
+            .order_by(StorageUsage.id)
+            .all()
+        )
+        groups = (
+            db.query(Group.id, Group.storage_cluster_id)
+            .filter(Group.updated_at == observed_at)
+            .order_by(Group.id)
+            .all()
+        )
+        project_ids = tuple(
+            row.id
+            for row in db.query(Project.id)
+            .filter(Project.updated_at == observed_at)
+            .order_by(Project.id)
+            .all()
+        )
+    return {
+        "successful_cluster_ids": tuple(
+            sorted(
+                {
+                    row.storage_cluster_id
+                    for row in (*usages, *groups)
+                    if row.storage_cluster_id is not None
+                }
+            )
+        ),
+        "refreshed_project_ids": project_ids,
+        "sample_identity": observed_at.isoformat(),
+        "refreshed_storage_usage_ids": tuple(row.id for row in usages),
+        "refreshed_group_ids": tuple(row.id for row in groups),
+    }
+
+
 @diskpulse_app.task(soft_time_limit=120, time_limit=150)
-def evaluate_storage_alerts_task(
-    successful_cluster_ids,
-    refreshed_project_ids,
-    sample_identity,
-    refreshed_storage_usage_ids,
-    refreshed_group_ids,
-):
+def storage_alerts_schedule_task():
     from celery_tasks.tasks.redis_lock import redis_lock
 
     with redis_lock("storage_alert_evaluation_lock", expires=140) as have_lock:
         if not have_lock:
             return []
-        event_ids = evaluate_storage_alerts(
-            successful_cluster_ids,
-            refreshed_project_ids,
-            sample_identity,
-            refreshed_storage_usage_ids,
-            refreshed_group_ids,
-        )
+        sample = _latest_alert_sample()
+        if sample is None:
+            return []
+        event_ids = evaluate_storage_alerts(**sample)
     for event_id in event_ids:
         deliver_storage_alert_task.delay(event_id)
     return event_ids

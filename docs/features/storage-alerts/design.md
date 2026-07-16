@@ -4,7 +4,7 @@
 > 设计基线：本地 `main` HEAD `ffe5d15`，2026-07-16
 > 实际迁移：`000000000006_storage_alert_rules`
 
-本文是存储容量告警的需求、实现和验收唯一来源。后端规则、状态机、采集后评估、飞书 outbox/重试、迁移与接口，以及前端三个规则入口和告警筛选均已落地；真实 Redis/Celery/飞书、多数据库在线迁移和登录浏览器仍按第 19 节标记为待验收。
+本文是存储容量告警的需求、实现和验收唯一来源。后端规则、状态机、独立 Celery Beat 评估、飞书 outbox/重试、迁移与接口，以及前端三个规则入口和告警筛选均已落地；真实 Redis/Celery/飞书、多数据库在线迁移和登录浏览器仍按第 19 节标记为待验收。
 
 ## 1. 背景与现状
 
@@ -20,7 +20,7 @@
 
 - 支持系统、项目、项目组三级完整规则及明确继承。
 - 对用户目录、项目组、项目统一执行确认、升级、降级、重复和恢复状态机。
-- 在采集提交后异步评估，并通过统一飞书通知微服务可靠发送。
+- 由独立 Celery Beat 任务读取最新已提交采集批次并评估，通过统一飞书通知微服务可靠发送。
 - 提供可审计的告警事件、发送状态、失败摘要及后台配置页面。
 - 保证多集群部分失败时只评估本轮数据新鲜的对象。
 
@@ -188,13 +188,14 @@ sequenceDiagram
     participant Feishu as 飞书通知微服务
 
     Beat->>Collect: 每 60 秒触发
+    Beat->>Eval: 每 60 秒独立触发
     loop 每个集群
         Collect->>DB: 独立事务写本轮最新值
         DB-->>Collect: commit / rollback
     end
     Collect->>DB: 独立事务汇总项目
-    DB-->>Collect: commit，返回刷新项目 ID
-    Collect-->>Eval: 事务提交后异步投递
+    DB-->>Collect: commit
+    Eval->>DB: 读取最新已提交批次的对象 ID
     Eval->>Eval: 获取 Redis 锁并解析有效规则
     Eval->>DB: 同事务更新状态并插入 pending/skipped 事件
     DB-->>Eval: commit
@@ -641,15 +642,15 @@ codegraph status D:\dev\worktrees\DiskPulse\storage-alert-rules
 
 | 查询 | 命中与调用链 | 设计决策 |
 | --- | --- | --- |
-| `storages_schedule_fetching_task run_collection_round finalize_project_totals` | `storageClusterService.schedule_storage_collection → storages_schedule_fetching_task`；每集群 `db.begin()`，项目汇总另有 `db.begin()` | 已捕获刷新用户目录、项目组和项目 ID，汇总事务提交后投递 `evaluate_storage_alerts_task`。 |
+| `storages_schedule_fetching_task run_collection_round finalize_project_totals` | `storageClusterService.schedule_storage_collection → storages_schedule_fetching_task`；每集群 `db.begin()`，项目汇总另有 `db.begin()` | 采集只负责提交最新值和项目汇总，不再投递告警任务；独立 Beat 从最新共同时间戳选择已提交对象。 |
 | `StorageUsage Group Project StorageAlerts StorageConf` | 命中现有 ORM、schema、CRUD 和路由；实施前 `Project.is_alert` 默认 false | `000000000006` 已增加规则/状态/投递字段，并将新项目默认及活动项目回填改为 true。 |
 | `StorageAlert legacy email Celery beat` | 旧管理类在 `storages.py` 有 5 个调用方；容量邮件 Beat 项已注释 | 保留旧代码和模板，不恢复调度。 |
 | `SettingsPage ProjectFormDialog GroupFormDialog AlertListPage` | 设置页调用 `configApi`；项目/项目组沿用共享 CRUD 表单；`RdUserSelect` 已支持多选 | 已复用现有 API 和组件模式，仅新增 `StorageAlertRuleForm` 与规则默认值工具。 |
 | `config storage storage_alerts` | `/config/storage` 已由 `require_super_admin` 保护；告警列表已有数据库分页 | 扩展既有契约，不新建平行接口，不做详情深加载。 |
-| `celery_worker beat schedule` | 容量采集每 60 秒；旧邮件任务未启用 | 已注册评估/发送任务和每分钟 `retry_storage_alerts_task`，采集事务不执行 HTTP。 |
+| `celery_worker beat schedule` | 容量采集每 60 秒；旧邮件任务未启用 | 已注册每分钟 `storage_alerts_schedule_task`、发送任务和每分钟 `retry_storage_alerts_task`，采集事务不执行告警评估或 HTTP。 |
 | Alembic revision | 探索时唯一 head `000000000005` | 实际新增 `000000000006_storage_alert_rules`，最终唯一 head 为 `000000000006`。 |
 
-共享模型、任务、CRUD、schema 和 Vue 组件修改前已执行 `codegraph impact`；RED、GREEN 和最终验证阶段均同步索引，并用 `codegraph affected` 选择聚焦测试。最终状态为 `[OK] Index is up to date`，索引路径指向本 Worktree。
+共享模型、任务、CRUD、schema 和 Vue 组件修改前已执行 `codegraph impact`；RED、GREEN 和最终验证阶段均同步索引，并用 `codegraph affected` 选择聚焦测试。最终状态为 `[OK] Index is up to date`。
 
 ### 20.2 实际实现落点
 
@@ -658,11 +659,11 @@ codegraph status D:\dev\worktrees\DiskPulse\storage-alert-rules
 | 规则与状态机 | `backend/schemas/storageAlertRuleSchema.py`、`backend/services/storageAlertRuleService.py` |
 | 模型与迁移 | `backend/models.py`、`backend/migrate/versions/000000000006_storage_alert_rules.py` |
 | 采集接入 | `backend/celery_tasks/tasks/storages.py`、`backend/celery_tasks/manager/storagePulseMonitor.py` |
-| 评估与 outbox | `evaluate_storage_alerts_task`、`deliver_storage_alert_task`、`retry_storage_alerts_task`，位于 `backend/celery_tasks/tasks/storage_alerts.py` |
+| 评估与 outbox | `storage_alerts_schedule_task`、`deliver_storage_alert_task`、`retry_storage_alerts_task`，位于 `backend/celery_tasks/tasks/storage_alerts.py`；Beat 配置位于 `backend/celery_worker.py` |
 | 飞书协议 | `backend/services/feishuNotificationService.py`、`backend/appConfig.py`、`backend/config.example.yml` |
 | API 契约 | 配置、项目、项目组、告警的既有 router/CRUD/schema；公开告警 schema 过滤投递内部字段 |
 | 前端 | `StorageAlertRuleForm.vue`、`SettingsPage.vue`、`ProjectFormDialog.vue`、`GroupFormDialog.vue`、`AlertListPage.vue` |
-| 测试 | `backend/test/test_storage_alert_rules.py` 28 个功能用例；`frontend/test/unit/storage-alert-rules.test.js` 8 个 UI/API 契约用例 |
+| 测试 | `backend/test/test_storage_alert_rules.py` 29 个功能用例；`frontend/test/unit/storage-alert-rules.test.js` 8 个 UI/API 契约用例 |
 
 ### 20.3 关键决策
 

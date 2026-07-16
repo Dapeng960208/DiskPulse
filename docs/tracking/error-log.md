@@ -1,5 +1,14 @@
 # 错误记录
 
+### 2026-07-16：独立告警任务测试数据违反项目组存储目标约束
+
+- 触发：为 `storage_alerts_schedule_task` 增加最新采集批次选择测试。
+- 现象：SQLite 报 `CHECK constraint failed: ck_group_monitored_has_storage_target`，测试未执行到缺失实现。
+- 根因：测试创建启用监控的项目组时未设置 `volume_id` 或 `qtree_id`。
+- 修复：测试项目组补充占位 `volume_id`，再次执行后 RED 仅来自独立 Beat 和样本选择实现缺失。
+- 验证：实现后 `backend/test/test_storage_alert_rules.py` 共 `29 passed`。
+- 风险：仅影响测试夹具，不涉及生产数据或迁移。
+
 ### 2026-07-16：性能多指标图表未通过模板缩进检查
 
 - 触发：执行存储集群详情页和页面测试的定向 ESLint。
