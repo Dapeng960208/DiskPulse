@@ -25,7 +25,12 @@ const passthrough = (name) => defineComponent({
 });
 
 const stubs = {
-  ElDialog: passthrough('ElDialog'),
+  ElDialog: defineComponent({
+    name: 'ElDialog',
+    setup(_, { slots }) {
+      return () => h('div', [slots.default?.(), slots.footer?.()]);
+    },
+  }),
   ElForm: defineComponent({
     name: 'ElForm',
     setup(_, { slots, expose }) {
@@ -33,7 +38,13 @@ const stubs = {
       return () => h('form', slots.default?.());
     },
   }),
-  ElFormItem: passthrough('ElFormItem'),
+  ElFormItem: defineComponent({
+    name: 'ElFormItem',
+    props: { label: String },
+    setup(props, { slots }) {
+      return () => h('label', [props.label, slots.default?.()]);
+    },
+  }),
   ElInputNumber: defineComponent({ name: 'ElInputNumber', template: '<input />' }),
   ElSelect: passthrough('ElSelect'),
   ElOption: passthrough('ElOption'),

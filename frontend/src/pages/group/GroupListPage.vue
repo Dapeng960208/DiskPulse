@@ -17,8 +17,10 @@ import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import GroupFormDialog from './components/GroupFormDialog.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 import { formatStorageTargetType } from '@/utils/storage-resource';
+import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
 
 const groupFormDialogRef = ref();
+const quotaAdjustmentDialogRef = ref();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
   size: 20,
@@ -400,6 +402,16 @@ function confirmDelete(row) {
         </template>
         <template #default="{ row }">
           <ElButton
+            v-if="hasRole('disk-monitor:admin')"
+            size="small"
+            plain
+            type="primary"
+            :disabled="row.associate_multiple_groups"
+            :title="row.associate_multiple_groups ? '共享存储目标不能单独调整项目组配额' : ''"
+            @click="quotaAdjustmentDialogRef.open(row)">
+            调整配额
+          </ElButton>
+          <ElButton
             size="small"
             plain
             @click="router.push({path: `/group/${row.id}`})">
@@ -424,6 +436,10 @@ function confirmDelete(row) {
     </DataTable>
     <GroupFormDialog
       ref="groupFormDialogRef"
+      @submitted="query" />
+    <QuotaAdjustmentDialog
+      ref="quotaAdjustmentDialogRef"
+      resource-type="group"
       @submitted="query" />
   </div>
 </template>

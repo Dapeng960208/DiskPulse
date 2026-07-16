@@ -19,10 +19,12 @@ import { exportReport } from '@/utils/common.js';
 import ExportDialog from '@/components/form/ExportDialog.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 import { formatStorageTargetType } from '@/utils/storage-resource';
+import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
 const exportRef =ref(null);
 const currentUser = useCurrentUser();
 const router = useRouter();
 const storageUsageFormDialogRef = ref();
+const quotaAdjustmentDialogRef = ref();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
   size: 20,
@@ -434,6 +436,14 @@ query();
         </template>
         <template #default="{ row }">
           <ElButton
+            v-if="hasRole('disk-monitor:admin')"
+            size="small"
+            plain
+            type="primary"
+            @click="quotaAdjustmentDialogRef.open(row)">
+            调整配额
+          </ElButton>
+          <ElButton
             size="small"
             plain
             @click="router.push({path: `/usage/${row.id}`})">
@@ -455,6 +465,10 @@ query();
     </DataTable>
     <UsageFormDialog
       ref="storageUsageFormDialogRef"
+      @submitted="query" />
+    <QuotaAdjustmentDialog
+      ref="quotaAdjustmentDialogRef"
+      resource-type="storage_usage"
       @submitted="query" />
     <ExportDialog
       ref="exportRef"

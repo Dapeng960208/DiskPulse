@@ -10,6 +10,10 @@ class StorageUsageApi extends BaseApi {
   backUpStorageUsageById(storageUsageId){
     return super.post(`/${storageUsageId}/back-up`,{closed : false})
   }
+
+  adjustQuota(storageUsageId, data) {
+    return super.patch(`/${storageUsageId}/quota`, data);
+  }
 }
 
 export default new StorageUsageApi('/storage-usages/');
