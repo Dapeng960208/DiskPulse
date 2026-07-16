@@ -14,6 +14,7 @@ describe('api modules', () => {
   const getSpy = vi.spyOn(BaseApi.prototype, 'get').mockResolvedValue({ ok: true });
   const postSpy = vi.spyOn(BaseApi.prototype, 'post').mockResolvedValue({ ok: true });
   const putSpy = vi.spyOn(BaseApi.prototype, 'put').mockResolvedValue({ ok: true });
+  const patchSpy = vi.spyOn(BaseApi.prototype, 'patch').mockResolvedValue({ ok: true });
   const deleteSpy = vi.spyOn(BaseApi.prototype, 'delete').mockResolvedValue({ ok: true });
   const exportSpy = vi.spyOn(BaseApi.prototype, 'export').mockResolvedValue({ ok: true });
 
@@ -21,6 +22,7 @@ describe('api modules', () => {
     getSpy.mockRestore();
     postSpy.mockRestore();
     putSpy.mockRestore();
+    patchSpy.mockRestore();
     deleteSpy.mockRestore();
     exportSpy.mockRestore();
   });
@@ -53,6 +55,7 @@ describe('api modules', () => {
     await departmentApi.fetchTopLevel();
     await domainGroupApi.fetch({ page: 1 });
     await groupApi.fetchStorageRealTimeDataById(5, { detail: true });
+    await groupApi.adjustQuota(5, { hard_limit: 100, unit: 'GiB' });
     await hostApi.fetchResource(1, { metric: 'cpu' });
     await hostApi.fetchSummary(1);
     await projectApi.fetchStorageRealTimeDataById(6, {});
@@ -67,6 +70,7 @@ describe('api modules', () => {
     await storageUsageApi.fetchStorageRealTimeDataById(11, {});
     await storageUsageApi.exportStorageUsages({});
     await storageUsageApi.backUpStorageUsageById(12);
+    await storageUsageApi.adjustQuota(12, { hard_limit: 50, unit: 'GiB' });
     await usersApi.login('user', 'password');
     await usersApi.logout();
     await usersApi.fetchProfile();
@@ -83,5 +87,7 @@ describe('api modules', () => {
     expect(postSpy).toHaveBeenCalledWith('', { username: 'user', password: 'password' });
     expect(deleteSpy).toHaveBeenCalledWith('');
     expect(exportSpy).toHaveBeenCalledWith('/export/', {});
+    expect(patchSpy).toHaveBeenCalledWith('/5/quota', { hard_limit: 100, unit: 'GiB' });
+    expect(patchSpy).toHaveBeenCalledWith('/12/quota', { hard_limit: 50, unit: 'GiB' });
   });
 });
