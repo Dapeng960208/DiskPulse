@@ -52,12 +52,13 @@ describe('storage alert rule UI contract', () => {
     expect(wrapper.emitted('validity-change').at(-1)).toEqual([false]);
   });
 
-  it('adds the system rule to superadmin-only storage settings', () => {
+  it('shows the system rule directly in superadmin-only storage settings', () => {
     const settings = source('src/pages/admin/settings/SettingsPage.vue');
     const routes = source('src/router/routes.js');
 
     expect(settings).toContain('StorageAlertRuleForm');
-    expect(settings).toContain('label="存储告警规则"');
+    expect(settings).toContain('<h2>系统设置</h2>');
+    expect(settings).not.toContain('<ElTabs');
     expect(settings).toContain('v-model="form.storage_alert_rule"');
     expect(routes).toMatch(/path: 'settings',[\s\S]*?meta: \{\s*title: '系统设置',\s*isAccessible: \(\) => hasRole\('superadmin'\) \? 200 : 403,?\s*\}/);
   });
