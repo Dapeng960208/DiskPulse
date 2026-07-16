@@ -1,5 +1,14 @@
 # 错误记录
 
+### 2026-07-16：NetApp/Isilon 设备错误响应在不同调用阶段被改写或吞掉
+
+- 触发：设备登录、探测、读取、配额写入或读回返回 4xx/5xx；尤其是 Isilon Session 登录/探测和 NetApp 非 JSON 错误。
+- 现象：部分路径只返回 `False`，配额接口会重新序列化 JSON，纯文本设备错误被包装成 DiskPulse 消息；状态码和厂商原始消息不完整，问题定位困难。
+- 根因：两个厂商客户端分别调用 `raise_for_status()`，缺少统一错误边界；Isilon `_login/_probe` 还捕获所有异常并返回 `False`，配额 service 只透传 JSON。
+- 修复：新增共享设备 HTTP 边界，所有 NetApp/Isilon 正式调用在 4xx/5xx 时记录原始状态和消息并保留 `HTTPError.response`；Isilon 登录/探测不再吞错；同步配额接口原样返回设备状态码、响应字节和 `Content-Type`。只有设备未返回 HTTP 响应时才使用 `502`，注销错误记录后不覆盖主业务结果。
+- 验证：TDD RED 复现 JSON 字节被改变、纯文本 `409` 被包装及 Isilon Session 错误被吞；GREEN 聚焦用例确认 NetApp `403`、Isilon 登录/探测/缓存 Session 验证错误和配额 JSON/纯文本响应均保持原生响应。相关测试共 `159 passed`，目标模块 `compileall` 通过。
+- 风险：后台 Celery 没有浏览器 HTTP 响应可透传，只能在 worker 日志保留厂商状态与消息；部署后需重启 API 和 Celery worker 才会加载统一约束。
+
 ### 2026-07-16：Isilon 原生 403 被改写为 502 且控制台重复 TLS warning
 
 - 触发：调整 Isilon 项目组已有的 Directory quota。

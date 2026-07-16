@@ -134,10 +134,10 @@ Router 只负责路径参数、请求 schema、超级管理员依赖和响应组
 | `404` | 项目组、用户目录或关联存储资源不存在。 |
 | `409` | 存储目标被多个项目组共享，或设备配额状态冲突。 |
 | `422` | 限额关系、单位、宽限期或存储类型字段组合无效。 |
-| 设备原始状态码 | NetApp/Isilon 返回 JSON HTTP 错误时，接口保留设备状态码和 JSON 响应体，例如 OneFS `403 AEC_FORBIDDEN`。 |
-| `502` | 连接失败、超时、设备未返回 HTTP 响应、非 JSON 设备错误、异步任务失败或读回不一致。 |
+| 设备原始状态码 | NetApp/Isilon 返回 HTTP 错误时，接口原样保留设备状态码、响应体和 `Content-Type`，JSON 和纯文本均不包装，例如 OneFS `403 AEC_FORBIDDEN` 或 ONTAP `409`。 |
+| `502` | 连接失败、超时、DNS/TLS 错误等设备未返回 HTTP 响应的情况，以及读回缺失或不一致。 |
 
-设备凭据继续从 `StorageCluster` 读取，不写入日志、响应或调整记录。服务端日志记录集群 ID、资源类型、资源 ID、设备操作阶段和设备状态码，不记录密码、原始认证信息或完整设备响应。设备 JSON 错误仅通过超级管理员配额接口原样返回；非 JSON 响应不透传正文。
+设备凭据继续从 `StorageCluster` 读取，不写入日志、响应或调整记录。服务端日志记录集群 ID、资源类型、资源 ID、设备操作阶段、设备状态码和设备错误消息，不记录密码、认证头、Cookie 或请求凭据。配额接口仅超级管理员可调用，设备错误正文按厂商接口原样返回。所有厂商调用还必须遵守[NetApp 与 PowerScale 厂商接口契约](../storage-cluster/vendor-api-contracts.md#11-设备-http-错误契约)。
 
 HTTPS 集群显式配置 `tls_verify=false` 时，配额调用关闭 urllib3 重复输出的 `InsecureRequestWarning`；该行为不改变实际证书校验配置，生产环境仍应配置受信任 CA 并启用校验。
 

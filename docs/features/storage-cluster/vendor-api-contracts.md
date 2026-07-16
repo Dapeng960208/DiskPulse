@@ -1,8 +1,20 @@
-# NetApp 与 PowerScale 性能、事件接口契约
+# NetApp 与 PowerScale 厂商接口契约
 
 ## 1. 适用范围
 
-本文记录 DiskPulse 当前实际调用的设备只读接口、字段映射和对外分析接口。示例中的主机、token、账号和密码均为占位符，不能复制为生产凭据。
+本文记录 DiskPulse 调用 NetApp ONTAP 与 PowerScale/Isilon OneFS 接口时必须遵守的公共约束，以及当前性能、事件接口的字段映射。示例中的主机、token、账号和密码均为占位符，不能复制为生产凭据。
+
+### 1.1 设备 HTTP 错误契约
+
+该约束适用于登录、探测、读取、写入、异步任务查询、写后读回和注销等所有 NetApp/Isilon HTTP 调用：
+
+- 设备已经返回 HTTP 响应时，客户端必须保留 `requests.HTTPError.response`，不得改写、吞掉或转换为 `False`/空列表。
+- 面向 DiskPulse HTTP 请求的同步调用必须返回设备原始状态码、响应体和 `Content-Type`。JSON、纯文本等错误正文均不重新序列化或包装，例如 ONTAP `409` 和 OneFS `403 AEC_FORBIDDEN` 直接返回。
+- 后台 Celery 调用没有可透传给浏览器的响应，必须在服务端日志中记录厂商、操作、原始状态码和设备响应消息，再让任务按原异常失败或回滚。
+- 只有连接失败、DNS/TLS 错误、超时等“设备没有返回 HTTP 响应”的场景，DiskPulse 同步接口才使用 `502`；设备写入成功后的本地事务失败、读回缺失或值不一致仍按 DiskPulse 自身错误处理。
+- 日志和响应不得包含请求认证头、Cookie、密码或请求凭据。注销属于清理动作：设备错误状态和消息必须记录，但不得覆盖已经完成的主业务结果。
+
+新增 NetApp/Isilon 调用必须复用 `utils.storageDeviceHttp.raise_for_device_status`；同步 API 需要向调用方返回设备错误时，复用 `device_error_response`。
 
 ## 2. NetApp ONTAP
 
