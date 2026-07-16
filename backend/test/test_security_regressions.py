@@ -181,6 +181,27 @@ def test_netapp_client_propagates_connection_failure():
         client.get_volumes()
 
 
+def test_netapp_client_preserves_native_http_error_response():
+    logger = Mock()
+    client = NetAppClient(
+        "storage.local", "svc", "secret", logger=logger, tls_verify=False
+    )
+    response = requests.Response()
+    response.status_code = 403
+    response.headers["content-type"] = "application/json"
+    response._content = b'{"error":{"code":"forbidden","message":"write required"}}'
+    client.session.get = Mock(return_value=response)
+
+    with pytest.raises(requests.HTTPError) as error:
+        client.get_volumes()
+
+    assert error.value.response is response
+    assert error.value.response.status_code == 403
+    assert error.value.response.content == response.content
+    assert "device_status=403" in logger.error.call_args_list[0].args[0]
+    assert "write required" in logger.error.call_args_list[0].args[0]
+
+
 def test_netapp_qtree_request_omits_unsupported_oplocks_field():
     client = NetAppClient("storage.local", "svc", "secret")
     client._get_all_records = Mock(return_value=[])
@@ -200,6 +221,53 @@ def test_isilon_client_propagates_connection_failure():
 
     with pytest.raises(requests.ConnectionError, match="unavailable"):
         client._get("/1/cluster/statfs")
+
+
+@pytest.mark.parametrize("method_name, request_method", [("_login", "post"), ("_probe", "get")])
+def test_isilon_session_setup_preserves_native_http_error_response(
+    method_name, request_method
+):
+    client = object.__new__(IsilonClient)
+    client.base_url = "https://storage.local:8080/platform"
+    client._session_url = "https://storage.local:8080/session/1/session"
+    client.session = Mock()
+    client._log = Mock()
+    client.username = "svc"
+    client.password = "secret"
+    response = requests.Response()
+    response.status_code = 403
+    response.headers["content-type"] = "application/json"
+    response._content = b'{"errors":[{"message":"Quota write privilege is required"}]}'
+    getattr(client.session, request_method).return_value = response
+
+    with pytest.raises(requests.HTTPError) as error:
+        getattr(client, method_name)()
+
+    assert error.value.response is response
+    assert error.value.response.status_code == 403
+    assert error.value.response.content == response.content
+
+
+def test_isilon_cached_session_validation_preserves_unrecoverable_http_error():
+    client = object.__new__(IsilonClient)
+    client._session_cache_enabled = True
+    client._session_url = "https://storage.local:8080/session/1/session"
+    client._cache_key = "https:storage.local:8080:svc"
+    client.session = Mock()
+    client._read_cache = Mock(return_value={client._cache_key: {"cookies": {}}})
+    client._apply_cookies = Mock()
+    client._log = Mock()
+    response = requests.Response()
+    response.status_code = 503
+    response.headers["content-type"] = "application/json"
+    response._content = b'{"message":"cluster service unavailable"}'
+    client.session.get.return_value = response
+
+    with pytest.raises(requests.HTTPError) as error:
+        client._load_cached_session()
+
+    assert error.value.response is response
+    assert error.value.response.content == response.content
 
 
 def test_isilon_client_uses_configured_protocol_for_all_session_urls():

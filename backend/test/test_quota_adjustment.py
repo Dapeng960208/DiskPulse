@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 from fastapi import HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 from urllib3.exceptions import InsecureRequestWarning
 
@@ -316,9 +316,32 @@ def test_quota_adjustment_preserves_native_device_json_error(db_session, monkeyp
         request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
     )
 
-    assert isinstance(result, JSONResponse)
+    assert isinstance(result, Response)
     assert result.status_code == 403
-    assert json.loads(result.body) == native_error
+    assert result.body == response.content
+    assert result.headers["content-type"] == "application/json"
+    assert client.closed is True
+
+
+def test_quota_adjustment_preserves_native_device_text_error(db_session, monkeypatch):
+    seed_quota_target(db_session, storage_type="netapp", volume_target=False)
+    response = requests.Response()
+    response.status_code = 409
+    response.headers["content-type"] = "text/plain; charset=utf-8"
+    response._content = b"quota rule is locked"
+    client = FailingQuotaClient(requests.HTTPError(response=response))
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+
+    result = quotaService.adjust_group_quota(
+        db_session,
+        group_id=1,
+        request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+    )
+
+    assert isinstance(result, Response)
+    assert result.status_code == 409
+    assert result.body == b"quota rule is locked"
+    assert result.headers["content-type"] == "text/plain; charset=utf-8"
     assert client.closed is True
 
 
