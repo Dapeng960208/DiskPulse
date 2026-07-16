@@ -46,6 +46,16 @@ describe('write form experience contract', () => {
     expect(writeFormStyle).toContain('@media (max-width:');
   });
 
+  it('keeps write dialog headers plain and shows only the title', () => {
+    const writeFormStyle = source('src/styles/write-form.scss');
+    const [dialogStyles] = writeFormStyle.split('.write-form-page');
+    const [dialogShell, headingStyles] = dialogStyles.split('.write-form-dialog__heading');
+
+    expect(dialogShell).toContain('background: var(--bg-primary);');
+    expect(headingStyles).toContain('color: var(--text-primary);');
+    expect(headingStyles).toContain('display: none;');
+  });
+
   it('uses a branded page form and an explicit saving state for system settings', () => {
     const settings = source('src/pages/admin/settings/SettingsPage.vue');
 
