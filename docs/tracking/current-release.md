@@ -1,5 +1,14 @@
 # 当前交付记录
 
+## 2026-07-16：存储告警规则设计与实施基线
+
+- 已从本地 `main` HEAD `ffe5d15` 创建独立分支 `codex/storage-alert-rules` 和 Worktree `D:\dev\worktrees\DiskPulse\storage-alert-rules`；主工作区 `frontend/src/pages/usage/UsageListPage.vue` 的既有修改未复制、未回退、未暂存。
+- 已复制 `.codegraph`，仅清理目标副本中的 daemon/WAL 运行文件并完整重建索引；`codegraph status` 显示新 Worktree 路径、286 个文件、3,866 个节点、9,936 条边和 `[OK] Index is up to date`。
+- `npm ci` 成功；Alembic 唯一 head 为 `000000000005`，history 连续。
+- 初始后端全量基线为 `283 passed, 1 failed`，失败是迁移测试错误选择最后一个迁移；初始前端全量基线为 `194 passed, 2 failed`，失败是存储术语旧断言。两类问题已由独立提交 `d16e8f1` 修复，复验为后端 `284 passed`、前端 39 个测试文件共 `196 passed`，实施基线已恢复。
+- 已新增 `docs/features/storage-alerts/design.md`，标记为“仅设计 / 待实现”，完整记录需求追踪、规则继承、状态机、事务时序、数据模型、API、页面、收件人、飞书 payload、失败矩阵、迁移部署、测试与 CodeGraph 探索证据。
+- 用户已确认继续并允许多智能体协作；基线修复已经完成，RED/GREEN 实施由对应代码任务继续推进。当前文档仍为“仅设计 / 待实现”，不声明接口、迁移、任务或页面已经实现。
+
 ## 2026-07-16：Isilon 性能按 Directory Quota 路径采集
 
 - 原采集错误选择 node 磁盘 latency，导致性能页显示 `node 1 / 0ms`；现改读 OneFS `path` performance dataset、workload 配置和 dataset statkey。

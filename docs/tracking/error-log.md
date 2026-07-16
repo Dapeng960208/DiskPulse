@@ -1,5 +1,22 @@
 # 错误记录
 
+### 2026-07-16：存储告警实施基线存在三个既有回归失败
+
+- 触发：在独立 Worktree 开始功能实施前执行 `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend\test -q` 和 `npm test`。
+- 现象：后端为 `283 passed, 1 failed`，`test_storage_health_migration_backfills_attributable_alerts_on_sqlite` 实际得到 `(None, "diskpulse", "info")`；前端为 `194 passed, 2 failed`，`storage-resource-terminology.test.js` 找不到 `label="存储目标"` 和 `label="访问协议"`。
+- 根因：后端测试按迁移文件名取最后一个迁移，新增 `000000000005` 后不再执行待测的 `000000000004` 回填；前端两个术语断言已与当前页面删除的列和详情摘要不一致。三项均可在功能代码改动前稳定复现。
+- 处理：按存储告警实施计划的基线门禁暂停；用户确认继续后，后端测试改为按明确 revision 定位待测迁移，前端术语测试同步当前页面契约，修复提交为 `d16e8f1`。
+- 验证：修复后后端全量 `284 passed`；前端全量 39 个测试文件、`196 passed`。`npm ci` 成功，Alembic `heads/history` 成功且唯一 head 为 `000000000005`，CodeGraph 索引为最新。
+- 风险：本条只确认既有基线恢复；存储告警接口、迁移、任务和页面仍处于待实现状态，必须按本功能 RED/GREEN 验证单独验收。
+
+### 2026-07-16：Worktree 前置检查对空 Git 输出调用 Trim 失败
+
+- 触发：首次检查主仓库路径时，对 `git rev-parse --show-superproject-working-tree` 的空输出直接调用 `.Trim()`。
+- 现象：PowerShell 报空值不能调用方法，Worktree 创建命令尚未执行。
+- 根因：普通非子模块仓库会返回空输出，检查脚本未先把输出规整为字符串。
+- 修复：改用 `@(git rev-parse --show-superproject-working-tree) -join ''` 后再判断，随后成功创建 Worktree；未产生半成品分支或目录。
+- 风险：仅影响一次性初始化检查，不影响仓库和功能代码。
+
 ### 2026-07-16：Isilon 性能错误读取节点磁盘延迟，无法按 Directory Quota 展示
 
 - 触发：性能分析只显示对象 `1`、类型 `node` 和 `0ms`，需求是按 Isilon 每个逻辑存储空间查看延迟；采集账号已经增加 `ISI_PRIV_PERFORMANCE`。
