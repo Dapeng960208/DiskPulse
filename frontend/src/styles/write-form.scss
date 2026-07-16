@@ -11,15 +11,11 @@
   .el-dialog__header {
     margin: 0;
     padding: var(--spacing-lg) var(--spacing-xl);
-    background: linear-gradient(135deg, var(--primary-dark), var(--primary-color));
+    background: var(--bg-primary);
   }
 
   .el-dialog__headerbtn {
     top: 12px;
-
-    .el-dialog__close {
-      color: #fff;
-    }
   }
 
   .el-dialog__body {
@@ -39,14 +35,12 @@
   padding-right: var(--spacing-xl);
 
   h2 {
-    color: #fff;
+    color: var(--text-primary);
     font-size: var(--font-size-lg);
   }
 
   p {
-    margin-top: var(--spacing-xs);
-    color: var(--el-color-primary-light-8);
-    font-size: var(--font-size-sm);
+    display: none;
   }
 }
 
