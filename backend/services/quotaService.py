@@ -40,18 +40,18 @@ def _validate_storage_request(storage_type: str, request: QuotaAdjustmentRequest
     if storage_type == "isilon":
         if request.soft_limit is not None and request.soft_grace_seconds is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Isilon soft limit requires a grace period",
             )
     elif storage_type == "netapp":
         if request.soft_grace_seconds is not None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="NetApp quota does not support a per-rule grace period",
             )
     else:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Unsupported storage type",
         )
 
@@ -145,7 +145,7 @@ def _execute_adjustment(
         and request.soft_limit is not None
     ):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="NetApp volume targets support only a hard limit",
         )
 

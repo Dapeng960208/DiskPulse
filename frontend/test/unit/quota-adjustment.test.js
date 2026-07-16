@@ -119,12 +119,12 @@ describe('quota adjustment dialog', () => {
   it('asks for confirmation before shrinking below the current hard limit', async () => {
     const wrapper = await mountDialog();
     wrapper.vm.$.exposed.open(row());
-    wrapper.vm.$.exposed.model.hard_limit = 70;
+    wrapper.vm.$.exposed.model.hard_limit = 50;
     wrapper.vm.$.exposed.model.soft_limit = null;
     await wrapper.findAll('button').find((button) => button.text() === '确认调整').trigger('click');
     await flushPromises();
 
     expect(apis.confirm).toHaveBeenCalled();
-    expect(apis.group.adjustQuota).toHaveBeenCalledWith(1, expect.objectContaining({ hard_limit: 70 }));
+    expect(apis.group.adjustQuota).toHaveBeenCalledWith(1, expect.objectContaining({ hard_limit: 50 }));
   });
 });

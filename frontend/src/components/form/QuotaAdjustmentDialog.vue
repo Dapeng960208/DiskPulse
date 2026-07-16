@@ -91,9 +91,9 @@ function toGiB(value) {
 
 async function submit() {
   await formRef.value?.validate();
-  if (resource.value?.limit && toGiB(model.hard_limit) < Number(resource.value.limit)) {
+  if (resource.value?.used != null && toGiB(model.hard_limit) < Number(resource.value.used)) {
     await ElMessageBox.confirm(
-      '新的硬限额低于当前硬限额，确认继续缩减配额？',
+      '新的硬限额低于当前已用容量，可能立即阻止写入，确认继续？',
       '确认缩减配额',
       { type: 'warning', confirmButtonText: '继续调整', cancelButtonText: '取消' },
     );
@@ -146,8 +146,12 @@ defineExpose({ open, model });
         <ElSelect
           v-model="model.unit"
           class="quota-unit">
-          <ElOption label="GiB" value="GiB" />
-          <ElOption label="TiB" value="TiB" />
+          <ElOption
+            label="GiB"
+            value="GiB" />
+          <ElOption
+            label="TiB"
+            value="TiB" />
         </ElSelect>
       </ElFormItem>
       <ElFormItem
@@ -175,9 +179,15 @@ defineExpose({ open, model });
           v-model="model.soft_grace_unit"
           :disabled="model.soft_limit == null"
           class="quota-unit">
-          <ElOption label="分钟" value="minutes" />
-          <ElOption label="小时" value="hours" />
-          <ElOption label="天" value="days" />
+          <ElOption
+            label="分钟"
+            value="minutes" />
+          <ElOption
+            label="小时"
+            value="hours" />
+          <ElOption
+            label="天"
+            value="days" />
         </ElSelect>
       </ElFormItem>
     </ElForm>
