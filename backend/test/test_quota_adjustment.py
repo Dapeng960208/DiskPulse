@@ -269,7 +269,7 @@ def test_isilon_user_adjustment_requires_grace_and_uses_current_username(db_sess
                 "quota_type": "user",
                 "volume_name": "/ifs/project-1",
                 "qtree_name": None,
-                "path": "/data/group-1/alice",
+                "path": "/ifs/project-1",
                 "username": "alice",
                 "hard_limit": 80 * GiB,
                 "soft_limit": 60 * GiB,
