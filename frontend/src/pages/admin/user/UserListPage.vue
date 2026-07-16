@@ -122,21 +122,6 @@ onBeforeMount(() => {
         </ElSelect>
       </ElFormItem>
     </FilterForm>
-
-    <div class="user-actions">
-      <ElButton
-        type="primary"
-        @click="userFormDialogRef.edit()">
-        新增用户
-      </ElButton>
-      <ElButton
-        :disabled="syncing"
-        :loading="syncing"
-        @click="syncLdapUsers">
-        同步 LDAP 用户
-      </ElButton>
-    </div>
-
     <!-- 数据表格 -->
     <DataTable
       :pagination="{
@@ -235,6 +220,25 @@ onBeforeMount(() => {
         align="center"
         min-width="120"
         fixed="right">
+        <template #header>
+          <ElButton
+            size="small"
+            plain
+            type="primary"
+            @click="userFormDialogRef.edit()">
+            新增用户
+          </ElButton>
+          <ElButton
+            size="small"
+            plain
+            type="success"
+            :disabled="syncing"
+            :loading="syncing"
+            @click="syncLdapUsers">
+            同步LDAP
+          </ElButton>
+        </template>
+
         <template #default="{ row }">
           <ElButton
             size="small"

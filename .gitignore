@@ -69,6 +69,7 @@ log/
 Thumbs.db
 .idea/
 .vscode/
+.superpowers/
 backend/celerybeat-schedule
 backend/celerybeat-schedule-shm
 backend/celerybeat-schedule-wal

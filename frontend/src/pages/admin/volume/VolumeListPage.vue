@@ -89,14 +89,14 @@ query();
         min-width="180"
         show-overflow-tooltip
       />
-      <ElTableColumn
+      <!-- <ElTableColumn
         label="服务域（SVM / Access Zone）"
         align="center"
         sortable
         prop="vserver"
         min-width="80"
       >
-      </ElTableColumn>
+      </ElTableColumn> -->
 
       <ElTableColumn
         label="所属容量池"
