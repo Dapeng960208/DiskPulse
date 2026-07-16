@@ -6,7 +6,8 @@
 - 延迟采集支持 OneFS 返回的 `seconds` 并转换为毫秒，保留 `0.0` 合法样本；statistics 的 `time` Unix 时间戳作为指标采集时间。
 - OneFS event list 的嵌套 `events[]` 现会展开，event group 使用 `last_event/time_noticed`、`causes` 和 `specifier.devid` 生成事件时间、代码、描述和对象标识。
 - TDD RED 检查点为 `eea05df`（`4 failed, 9 passed`）；GREEN 相关解析测试 `24 passed`，目标任务模块分支覆盖率 `83%`。真实 OneFS 无写入复验得到性能 `1/1` 条、事件 `3888` 条，其中最近 8 小时 `94` 条、最近 24 小时 `331` 条。
-- 运行中的 Celery worker 尚未加载本次代码；部署或本机重启 worker 后，性能任务最长等待 5 分钟，事件任务最长等待 1 分钟，再检查 QuestDB/PostgreSQL 最新时间戳。
+- 测试环境已执行正式采集并写入 QuestDB 性能 `1` 条、PostgreSQL 事件 `331` 条；随后重启 worker 与 Beat，异步性能任务被消费后 QuestDB 记录增至 `2` 条，最新时间为 `2026-07-16 10:39:54`。页面刷新后可直接查询这些数据。
+- Windows `solo` worker 在 OneFS 长分页期间可能不响应 inspect；本轮以进程存活、任务投递和数据库时间戳更新共同确认持续采集已加载新代码。
 
 ## 2026-07-15：全站渐进式筛选栏改造
 

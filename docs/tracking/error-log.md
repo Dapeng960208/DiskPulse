@@ -6,8 +6,8 @@
 - 现象：statistics 返回 `node.disk.access.latency.0`，单位为 `seconds`、值为 `0.0`，解析结果为 `0` 条；event group/list 分别返回 `2888`/`218` 条，标准化结果同样为 `0` 条。
 - 根因：延迟解析器只接受微秒和毫秒，未接受 OneFS 实际返回的秒；性能采集未读取 `time`。事件解析器未识别 event group 的 `last_event`、`time_noticed`、`causes`，也未展开 event list 外层记录中的 `events[]`；整数 Unix 时间戳还会被错误替换为采集当前时间。
 - 修复：秒统一乘 `1000` 转为毫秒并保留合法零值；统一支持整数 Unix 时间戳和 statistics `time`；展开 OneFS 嵌套事件，使用事件组最近时间、原因代码/消息及设备编号生成标准事件记录。
-- 验证：RED 为 `4 failed, 9 passed`；GREEN 相关解析测试 `24 passed`，目标任务模块分支覆盖率 `83%`。真实 OneFS 无写入复验得到性能 `1/1` 条可解析、事件 `3888` 条可解析，其中最近 8 小时 `94` 条、最近 24 小时 `331` 条，最新事件为 `2026-07-16 10:03:48`。
-- 风险：运行中的 Celery worker 必须重启后才会加载修复；重启并等待下一轮任务前，PostgreSQL/QuestDB 中仍不会自动出现 Isilon 健康数据。
+- 验证：RED 为 `4 failed, 9 passed`；GREEN 相关解析测试 `24 passed`，目标任务模块分支覆盖率 `83%`。真实 OneFS 无写入复验得到性能 `1/1` 条可解析、事件 `3888` 条可解析，其中最近 8 小时 `94` 条、最近 24 小时 `331` 条。正式采集写入 QuestDB 性能 `1` 条、PostgreSQL 事件 `331` 条；重启 worker/Beat 后再次异步投递性能任务，QuestDB 记录增至 `2` 条，最新时间为 `2026-07-16 10:39:54`。
+- 风险：Windows `solo` worker 执行 OneFS 长分页请求时不会及时响应 Celery inspect 控制命令，不能单凭 inspect 超时判断 worker 离线；应同时检查进程、任务结果或目标库最新时间戳。
 
 ### 2026-07-15：覆盖率插桩触发三个前端测试超时
 
