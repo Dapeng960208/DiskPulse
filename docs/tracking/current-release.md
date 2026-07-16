@@ -2,6 +2,7 @@
 
 ## 2026-07-16：项目组与用户目录配额调整
 
+- 修复前端权限角色不一致：后端 profile 返回的 `superadmin` 现在被前端识别为全局角色，超级管理员可看到项目组和用户目录的“调整配额”入口。
 - 已新增 `PATCH /groups/{id}/quota` 和 `PATCH /storage-usages/{id}/quota`，仅超级管理员可调用；请求禁止额外字段，硬限额必填，软限额可选且必须严格小于硬限额。
 - 统一 quota service 根据集群类型调用现有 NetApp/Isilon 客户端：NetApp 支持 Qtree/用户 quota rule 和 Volume 容量，Isilon 支持 Directory/User quota 与宽限期；linked default-user 会创建显式用户配额。
 - 设备写入后执行读回校验，再同步本地资源、写 `quota_adjustment` 记录并在数据库提交后发送邮件；共享目标返回 `409`，设备或读回失败返回 `502`。

@@ -112,7 +112,7 @@ export function hasAllPermissions(requiredPermissions) {
 export function hasRole(requiredRole) {
   if (requiredRole && isString(requiredRole)) {
     const roles = getRoles();
-    return roles.includes(requiredRole) || roles.includes('*:root');
+    return roles.includes(requiredRole) || roles.includes('*:root') || roles.includes('superadmin');
   } else {
     return false;
   }
