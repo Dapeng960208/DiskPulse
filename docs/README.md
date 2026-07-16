@@ -36,6 +36,7 @@ docs/
 | 用户信息管理 | [features/user-management/overview.md](./features/user-management/overview.md) |
 | 项目组标签 | [features/group-tag/design.md](./features/group-tag/design.md) |
 | 写入表单体验 | [features/form-experience/design.md](./features/form-experience/design.md) |
+| 系统设置废弃配置清理 | [features/system-settings-cleanup/design.md](./features/system-settings-cleanup/design.md) |
 | 存储集群 | [总览](./features/storage-cluster/overview.md) · [性能与事件设计](./features/storage-cluster/performance-event-collection.md) · [厂商/API 契约](./features/storage-cluster/vendor-api-contracts.md) |
 | 存储告警规则与飞书通知 | [features/storage-alerts/design.md](./features/storage-alerts/design.md) |
 | 存储配额软限额 | [features/storage-quota/overview.md](./features/storage-quota/overview.md) |
