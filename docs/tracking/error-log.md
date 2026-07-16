@@ -1,5 +1,14 @@
 # 错误记录
 
+### 2026-07-16：Isilon 已有目录配额调整返回 502
+
+- 触发：调整 Isilon 项目组已有的 Directory quota。
+- 现象：OneFS 返回 HTTP 错误，接口统一响应 `502 Storage quota adjustment failed`；TLS 未校验 warning 与失败无关。
+- 根因：新建和修改共用了包含 `type`、`path` 的请求体，但 OneFS 22 的 quota item PUT schema 仅接受 `thresholds` 等可修改字段。
+- 修复：已有非 linked quota 的 PUT 仅发送 `thresholds`；新建 quota 的 POST 继续发送 `type`、`path`、`persona` 和 `thresholds`。
+- 验证：只读查询确认目标 quota 存在且非 linked；后端聚焦测试 `9 passed`，`compileall` 通过。
+- 风险：未代替用户重放真实配额写入，需重试原操作完成设备写入和读回验证。
+
 ### 2026-07-16：配额弹窗未复用全局表单样式且软限额单位形似禁用
 
 - 触发：打开项目组或用户目录的配额调整弹窗。
