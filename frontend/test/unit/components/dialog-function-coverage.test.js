@@ -587,6 +587,9 @@ describe('dialog component function coverage', () => {
     expect(wrapper.text()).toContain('isi auth users create');
     expect(wrapper.text()).toContain('ISI_PRIV_LOGIN_PAPI');
     expect(wrapper.text()).toContain('ISI_PRIV_SYS_TIME');
+    expect(wrapper.text()).toContain('--add-priv-write ISI_PRIV_QUOTA');
+    expect(wrapper.text()).toContain('--add-priv-write ISI_PRIV_QUOTA_QUOTAMANAGEMENT');
+    expect(wrapper.text()).not.toContain('--add-priv-read ISI_PRIV_QUOTA');
     expect(wrapper.text()).toContain('diskpulse_monitor');
   }, 15000);
 
