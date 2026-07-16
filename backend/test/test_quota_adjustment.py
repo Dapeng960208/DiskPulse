@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
+import json
 from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from urllib3.exceptions import InsecureRequestWarning
 
 import models
 from appConfig import base_config
@@ -38,6 +42,15 @@ class FakeQuotaClient:
 
     def close(self):
         self.closed = True
+
+
+class FailingQuotaClient(FakeQuotaClient):
+    def __init__(self, error):
+        super().__init__()
+        self.error = error
+
+    def update_quota(self, **kwargs):
+        raise self.error
 
 
 def seed_quota_target(db, *, storage_type="netapp", volume_target=False):
@@ -278,6 +291,56 @@ def test_isilon_user_adjustment_requires_grace_and_uses_current_username(db_sess
     ]
     assert result.storage_type == "isilon"
     assert db_session.get(models.StorageUsage, 1).soft_limit == 60
+
+
+def test_quota_adjustment_preserves_native_device_json_error(db_session, monkeypatch):
+    seed_quota_target(db_session, storage_type="isilon", volume_target=True)
+    native_error = {
+        "errors": [
+            {
+                "code": "AEC_FORBIDDEN",
+                "message": "Quota Management privilege is required",
+            }
+        ]
+    }
+    response = requests.Response()
+    response.status_code = 403
+    response.headers["content-type"] = "application/json"
+    response._content = json.dumps(native_error).encode()
+    client = FailingQuotaClient(requests.HTTPError(response=response))
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+
+    result = quotaService.adjust_group_quota(
+        db_session,
+        group_id=1,
+        request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+    )
+
+    assert isinstance(result, JSONResponse)
+    assert result.status_code == 403
+    assert json.loads(result.body) == native_error
+    assert client.closed is True
+
+
+def test_quota_client_suppresses_warning_only_when_tls_verification_is_disabled(monkeypatch):
+    cluster = MagicMock(
+        storage_host="storage.internal",
+        storage_user="collector",
+        storage_password="secret",
+        protocol="https",
+        tls_verify=False,
+        storage_type="isilon",
+        storage_port=8080,
+        isilon_session_cache_mode="none",
+        isilon_session_cache_path=None,
+    )
+    disable_warnings = MagicMock()
+    monkeypatch.setattr(quotaService, "disable_warnings", disable_warnings, raising=False)
+    monkeypatch.setattr(quotaService, "IsilonClient", MagicMock())
+
+    quotaService._build_client(cluster)
+
+    disable_warnings.assert_called_once_with(InsecureRequestWarning)
 
 
 def _response(payload, status_code=200):
