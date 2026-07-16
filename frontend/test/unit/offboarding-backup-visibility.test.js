@@ -1,6 +1,7 @@
 import { mount, shallowMount } from '@vue/test-utils';
 import { defineComponent, h, ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
+import { createPinia } from 'pinia';
 
 const configApi = vi.hoisted(() => ({
   fetch: vi.fn(() => Promise.resolve({ back_up_enabled: true })),
@@ -43,6 +44,7 @@ vi.mock('@/composables/query', () => ({
 
 const mountOptions = {
   global: {
+    plugins: [createPinia()],
     renderStubDefaultSlot: true,
     stubs: {
       ElTableColumn: defineComponent({

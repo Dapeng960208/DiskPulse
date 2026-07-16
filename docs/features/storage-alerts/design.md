@@ -298,6 +298,18 @@ erDiagram
 
 接口继续由 `require_super_admin` 保护。公开响应沿用 `StorageConfPublic`，不得返回密码或 YAML `app_key`。
 
+列表页只需读取三级阈值，因此另提供登录用户可读的 `GET /config/storage-alert-thresholds`：
+
+```json
+{
+  "important": 80,
+  "serious": 90,
+  "emergency": 95
+}
+```
+
+该接口只返回三个整数阈值，未登录请求返回 `401`；完整 `GET /config/storage` 和 `PUT /config/storage` 仍由 `require_super_admin` 保护，普通用户读取完整配置返回 `403`。
+
 ### 10.2 项目与项目组
 
 项目现有 CRUD 写入/响应增加：
@@ -375,6 +387,8 @@ erDiagram
 - 项目组编辑已增加自定义开关、项目/系统继承来源和 `RdUserSelect multiple` 个人抄送；编辑时调用 `projectApi.fetchById` 获取完整项目规则。
 - 告警列表已增加集群、项目、事件类型、限额口径、发送状态和中文标签；集群使用告警记录已有的 `storage_cluster_id`，项目按当前用户目录/项目组关系批量解析，修复历史事件上下文缺少项目的问题，继续使用数据库分页。
 - 表单从自定义切换到继承时提交 `storage_alert_rule=null`；切回自定义时使用默认完整规则作为编辑初值。
+- 用户、项目、项目组、存储集群、容量池、存储空间和 Qtree 列表统一复用阈值缓存与响应式列策略。使用率列固定 `240px`，操作列固定 `132px`；`>=1440px` 显示全部列，`1024–1439px` 隐藏次要描述/类型列，`<1024px` 只保留主标识、使用率和操作入口。
+- 阈值由 Pinia 首次加载并缓存，多个进度条共享同一请求；系统设置保存成功后立即更新缓存，请求失败静默使用 `80/90/95`。颜色依次为绿色 `< important`、橙色 `< serious`、红色 `<= emergency`、深红色 `> emergency`。
 
 ## 12. 收件人、CC、debug 与去重矩阵
 

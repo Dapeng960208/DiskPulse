@@ -10,7 +10,9 @@ import Progress from '@/components/form/Progress.vue'
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 import { getStorageResourceNativeType } from '@/utils/storage-resource';
+import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 const router = useRouter();
+const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
@@ -73,10 +75,11 @@ query();
       }"
     >
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="存储集群"
         align="center"
         prop="storageCluster.name"
-        min-width="100"
+        min-width="140"
       >
         <template #default="{ row }">
           <span>{{ row.storage_cluster?.name || '-' }}</span>
@@ -89,22 +92,25 @@ query();
         min-width="180"
         show-overflow-tooltip
       />
-      <!-- <ElTableColumn
+      <ElTableColumn
+        v-if="showSecondaryColumns"
         label="服务域（SVM / Access Zone）"
         align="center"
         sortable
         prop="vserver"
-        min-width="80"
+        min-width="160"
       >
-      </ElTableColumn> -->
+      </ElTableColumn>
 
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="所属容量池"
         align="center"
         prop="aggregate"
         min-width="120"
       />
       <ElTableColumn
+        v-if="showSecondaryColumns"
         label="原生类型"
         align="center"
         min-width="150">
@@ -113,17 +119,19 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="状态"
         align="center"
         prop="state"
-        min-width="50"
+        min-width="90"
       />
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="硬限额"
         sortable="custom"
         align="center"
         prop="limit"
-        min-width="50"
+        min-width="100"
       >
         <template #default="{ row }">
           <span v-if="row.limit">{{ formatQuotaLimit(row.limit) }}</span>
@@ -133,11 +141,12 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="软限额"
         sortable="custom"
         align="center"
         prop="soft_limit"
-        min-width="60"
+        min-width="100"
       >
         <template #default="{ row }">
           <span v-if="row.soft_limit">{{ formatQuotaLimit(row.soft_limit, { emptyText: '无软限额' }) }}</span>
@@ -170,22 +179,23 @@ query();
         </template>
       </ElTableColumn> -->
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="使用量"
         sortable="custom"
         align="center"
         prop="used"
-        min-width="50"
+        min-width="100"
       >
         <template #default="{ row }">
           <span>{{ row.used>=1024 ? `${(row.used/1024).toFixed(1)} T`: `${row.used} G` }}</span>
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="硬利用率(%)"
+        label="硬限额使用率(%)"
         align="center"
         prop="use_ratio"
         sortable="custom"
-        width="400"
+        width="240"
       >
         <template #default="{ row }">
           <Progress
@@ -196,11 +206,11 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="软利用率(%)"
+        label="软限额使用率(%)"
         align="center"
         prop="soft_use_ratio"
         sortable="custom"
-        width="400"
+        width="240"
       >
         <template #default="{ row }">
           <Progress
@@ -217,7 +227,7 @@ query();
       <ElTableColumn
         v-if="hasRole('disk-monitor:admin')"
         align="right"
-        min-width="120">
+        width="132">
         <template #default="{ row }">
           <ElButton
             v-if="hasRole('disk-monitor:admin')"

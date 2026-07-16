@@ -9,8 +9,10 @@ import { useQuery, useQueryParams } from '@/composables/query';
 import { hasRole } from '@/utils/authorization';
 import StorageClusterFormDialog from './components/StorageClusterFormDialog.vue';
 import Progress from '@/components/form//Progress.vue';
+import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 const router = useRouter();
 const formDialogRef = ref();
+const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
@@ -95,15 +97,18 @@ query();
         align="center"
         sortable="custom"
         min-width="150"
-      />
-      <ElTableColumn
-        label="描述"
-        prop="description"
-        align="center"
-        min-width="200"
         show-overflow-tooltip
       />
       <ElTableColumn
+        v-if="showSecondaryColumns"
+        label="描述"
+        prop="description"
+        align="center"
+        min-width="220"
+        show-overflow-tooltip
+      />
+      <ElTableColumn
+        v-if="showSecondaryColumns"
         label="协议"
         prop="protocol"
         align="center"
@@ -113,6 +118,7 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showSecondaryColumns"
         label="TLS 校验"
         prop="tls_verify"
         align="center"
@@ -122,11 +128,12 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="限额"
         sortable="custom"
         align="center"
         prop="limit"
-        min-width="50"
+        min-width="100"
       >
         <template #default="{ row }">
           <span v-if="row.limit">{{ row.limit>=1024 ? `${(row.limit/1024).toFixed(1)} T`: `${row.limit}` }}</span>
@@ -136,22 +143,23 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="使用量"
         sortable="custom"
         align="center"
         prop="used"
-        min-width="50"
+        min-width="100"
       >
         <template #default="{ row }">
           <span>{{ row.used>=1024 ? `${(row.used/1024).toFixed(1)} T`: `${row.used} G` }}</span>
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="利用率(%)"
+        label="使用率(%)"
         align="center"
         prop="use_ratio"
         sortable="custom"
-        width="400"
+        width="240"
       >
         <template #default="{ row }">
           <Progress

@@ -1,6 +1,7 @@
 import { defineComponent, h, ref } from 'vue';
 import { shallowMount } from '@vue/test-utils';
 import { vi } from 'vitest';
+import { createPinia } from 'pinia';
 import { RouterLinkStub, commonStubs } from '../../helpers/mount';
 
 const { requestStub, routerPush } = vi.hoisted(() => ({
@@ -338,6 +339,7 @@ describe('surface regression smoke', () => {
         extraDescriptions: '<div>extra</div>',
       },
       global: {
+        plugins: [createPinia()],
         stubs: surfaceStubs,
         renderStubDefaultSlot: false,
         directives: {

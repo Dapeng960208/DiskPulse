@@ -10,7 +10,9 @@ import { hasRole } from '@/utils/authorization';
 import Progress from '@/components/form//Progress.vue';
 import ProjectFormDialog from './ProjectFormDialog.vue';
 import UserAvatar from '@/components/data/UserAvatar.vue'
+import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 const projectFormDialogRef = ref();
+const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
   size: 20,
@@ -67,9 +69,11 @@ query();
         prop="name"
         align="center"
         sortable
-        min-width="80"
+        min-width="160"
+        show-overflow-tooltip
       />
       <ElTableColumn
+        v-if="showSecondaryColumns"
         label="集群类型"
         align="center"
         min-width="120">
@@ -85,10 +89,11 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="PT经理"
         align="center"
         sortable
-        min-width="100"
+        min-width="160"
       >
         <template #default="{ row }">
           <div style="display: flex; align-items: center; justify-content: center;">
@@ -100,10 +105,11 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="开发代表"
         align="center"
         sortable
-        min-width="100"
+        min-width="160"
       >
         <template #default="{ row }">
           <div style="display: flex; align-items: center; justify-content: center;">
@@ -115,11 +121,12 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="限额"
         sortable="custom"
         align="center"
         prop="limit"
-        min-width="50"
+        min-width="100"
       >
         <template #default="{ row }">
           <span v-if="row.limit">{{ row.limit>=1024 ? `${(row.limit/1024).toFixed(1)} T`: `${row.limit}` }}</span>
@@ -129,22 +136,23 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="使用量"
         sortable="custom"
         align="center"
         prop="used"
-        min-width="50"
+        min-width="100"
       >
         <template #default="{ row }">
           <span>{{ row.used>=1024 ? `${(row.used/1024).toFixed(1)} T`: `${row.used} G` }}</span>
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="利用率(%)"
+        label="使用率(%)"
         align="center"
         prop="use_ratio"
         sortable="custom"
-        width="400"
+        width="240"
       >
         <template #default="{ row }">
           <Progress
@@ -157,7 +165,7 @@ query();
 
       <ElTableColumn
         align="right"
-        min-width="120">
+        width="132">
         <template #header>
           <ElButton
             size="small"

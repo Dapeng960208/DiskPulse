@@ -18,9 +18,11 @@ import GroupFormDialog from './components/GroupFormDialog.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 import { formatStorageTargetType } from '@/utils/storage-resource';
 import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
+import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 
 const groupFormDialogRef = ref();
 const quotaAdjustmentDialogRef = ref();
+const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
   size: 20,
@@ -242,10 +244,11 @@ function confirmDelete(row) {
       </ElTableColumn>
 
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="存储集群"
         align="center"
         prop="storageCluster.name"
-        min-width="100"
+        min-width="140"
       >
         <template #default="{ row }">
           <span>{{ row.storage_cluster?.name || '-' }}</span>
@@ -257,6 +260,7 @@ function confirmDelete(row) {
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showSecondaryColumns"
         label="项目组标签"
         align="center"
         min-width="120">
@@ -268,10 +272,12 @@ function confirmDelete(row) {
         label="项目组名"
         align="center"
         prop="name"
-        min-width="100"
+        min-width="160"
+        show-overflow-tooltip
       />
 
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="项目"
         align="center"
         sortable
@@ -286,10 +292,11 @@ function confirmDelete(row) {
       </ElTableColumn>
 
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="项目组业务代表"
         align="center"
         sortable
-        min-width="100"
+        min-width="160"
       >
         <template #default="{ row }">
           <div style="display: flex; align-items: center; justify-content: center;">
@@ -302,11 +309,12 @@ function confirmDelete(row) {
       </ElTableColumn>
 
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="硬限额"
         sortable="custom"
         align="center"
         prop="limit"
-        min-width="50"
+        min-width="100"
       >
         <template #default="{ row }">
           <span v-if="row.limit">{{ formatQuotaLimit(row.limit) }}</span>
@@ -316,11 +324,12 @@ function confirmDelete(row) {
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="软限额"
         sortable="custom"
         align="center"
         prop="soft_limit"
-        min-width="60"
+        min-width="100"
       >
         <template #default="{ row }">
           <span v-if="row.soft_limit">{{ formatQuotaLimit(row.soft_limit, { emptyText: '无软限额' }) }}</span>
@@ -331,22 +340,23 @@ function confirmDelete(row) {
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="使用量"
         sortable="custom"
         align="center"
         prop="used"
-        min-width="50"
+        min-width="100"
       >
         <template #default="{ row }">
           <span>{{ row.used>=1024 ? `${(row.used/1024).toFixed(1)} T`: `${row.used} G` }}</span>
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="硬利用率(%)"
+        label="硬限额使用率(%)"
         align="center"
         prop="use_ratio"
         sortable="custom"
-        width="300"
+        width="240"
       >
         <template #default="{ row }">
           <Progress
@@ -357,11 +367,11 @@ function confirmDelete(row) {
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="软利用率(%)"
+        label="软限额使用率(%)"
         align="center"
         prop="soft_use_ratio"
         sortable="custom"
-        width="300"
+        width="240"
       >
         <template #default="{ row }">
           <Progress
