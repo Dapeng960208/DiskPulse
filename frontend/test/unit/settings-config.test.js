@@ -8,98 +8,69 @@ const configApi = vi.hoisted(() => ({
 
 vi.mock('@/api/config-api', () => ({ default: configApi }));
 
-const InputNumberStub = {
-  name: 'ElInputNumber',
-  props: ['modelValue'],
-  emits: ['update:modelValue'],
-  template: '<input />',
+const storageAlertRule = {
+  quota_basis: 'hard',
+  important: { threshold: 70, repeat_hours: 24 },
+  serious: { threshold: 80, repeat_hours: 12 },
+  emergency: { threshold: 90, repeat_hours: 6 },
 };
 
-describe('storage settings configuration source', () => {
+async function mountSettings(config = { storage_alert_rule: storageAlertRule }) {
+  configApi.fetch.mockResolvedValue(config);
+  const { default: SettingsPage } = await import(
+    '@/pages/admin/settings/SettingsPage.vue'
+  );
+  const wrapper = shallowMount(SettingsPage, {
+    global: { renderStubDefaultSlot: true },
+  });
+  await flushPromises();
+  return wrapper;
+}
+
+describe('system settings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    configApi.fetch.mockResolvedValue({});
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('does not expose ineffective QuestDB connection fields', async () => {
-    const { default: SettingsPage } = await import(
-      '@/pages/admin/settings/SettingsPage.vue'
-    );
-    const wrapper = shallowMount(SettingsPage, {
-      global: {
-        renderStubDefaultSlot: true,
-        stubs: { ElInputNumber: InputNumberStub },
-      },
-    });
-    await flushPromises();
+  it('shows only the ordinary title and storage alert rule form', async () => {
+    const wrapper = await mountSettings();
 
-    const tabLabels = wrapper
-      .findAllComponents({ name: 'ElTabPane' })
-      .map((tab) => tab.props('label'));
-
-    expect(tabLabels).not.toContain('时序数据库配置');
-    expect(wrapper.html()).not.toMatch(/questdb_(host|port|user|password)/);
+    expect(wrapper.find('h2').text()).toBe('系统设置');
+    expect(wrapper.find('.write-form-page__header').exists()).toBe(false);
+    expect(wrapper.find('p').exists()).toBe(false);
+    expect(wrapper.findComponent({ name: 'ElTabs' }).exists()).toBe(false);
+    expect(wrapper.findAllComponents({ name: 'ElTabPane' })).toHaveLength(0);
+    expect(wrapper.findAllComponents({ name: 'ElInput' })).toHaveLength(0);
+    expect(wrapper.findComponent({ name: 'StorageAlertRuleForm' }).exists()).toBe(true);
+    expect(wrapper.text()).not.toMatch(/邮箱配置|邮件链接|IAM相关配置|存储配置/);
   });
 
-  it('loads editable settings and saves the updated form', async () => {
-    const initialConfig = {
-      mail_host: 'mail_host',
-      mail_port: 'mail_port',
-      mail_user: 'mail_user',
-      mail_password: 'mail_password',
-      mail_to: 'mail_to',
-      company: 'company',
-      domain_name: 'domain_name',
-      person_expand: 'person_expand',
-      group_expand: 'group_expand',
-      iam_url: 'iam_url',
-      iam_account: 'iam_account',
-      iam_password: 'iam_password',
-      storage_host: 'storage_host',
-      storage_port: 'storage_port',
-      storage_user: 'storage_user',
-      storage_password: 'storage_password',
-      back_up_enabled: true,
-      file_manage_host: 'file_manage_host',
-      file_manage_port: 'file_manage_port',
-      file_manage_user: 'file_manage_user',
-      file_manage_password: 'file_manage_password',
-      back_up_quit_days: 10,
-      back_up_dir: 'back_up_dir',
-      back_up_duration: 20,
-      bpm_process_id: 'bpm_process_id',
-      bpm_api_url: 'bpm_api_url',
+  it('preserves hidden mail settings when saving the alert rule', async () => {
+    const config = {
+      mail_host: 'smtp.example.com',
+      mail_port: '587',
+      mail_user: 'diskpulse',
+      mail_password: 'secret',
+      mail_to: 'ops@example.com',
+      company: 'DiskPulse',
+      domain_name: 'https://diskpulse.example.com',
+      person_expand: '/person-expand',
+      group_expand: '/group-expand',
+      storage_alert_rule: storageAlertRule,
     };
-    configApi.fetch.mockResolvedValue(initialConfig);
-    configApi.updateConfig.mockImplementation(async (config) => config);
-
+    configApi.updateConfig.mockResolvedValue(config);
     const { ElMessage } = await import('element-plus');
     const success = vi.spyOn(ElMessage, 'success').mockImplementation(() => {});
-    const { default: SettingsPage } = await import(
-      '@/pages/admin/settings/SettingsPage.vue'
-    );
-    const wrapper = shallowMount(SettingsPage, {
-      global: {
-        renderStubDefaultSlot: true,
-        stubs: { ElInputNumber: InputNumberStub },
-      },
-    });
-    await flushPromises();
+    const wrapper = await mountSettings(config);
 
-    const expected = { ...initialConfig };
-    for (const input of wrapper.findAllComponents({ name: 'ElInput' })) {
-      const field = input.props('modelValue');
-      expected[field] = `updated-${field}`;
-      input.vm.$emit('update:modelValue', expected[field]);
-    }
     await wrapper.findComponent({ name: 'ElButton' }).trigger('click');
     await flushPromises();
 
-    expect(configApi.updateConfig).toHaveBeenCalledWith(expected);
+    expect(configApi.updateConfig).toHaveBeenCalledWith(config);
     expect(success).toHaveBeenCalledWith('系统设置已保存');
   });
 });
