@@ -65,6 +65,37 @@ const TabPane = defineComponent({
   },
 });
 
+const Input = defineComponent({
+  name: 'ElInput',
+  props: { modelValue: { type: String, default: '' }, placeholder: String },
+  emits: ['update:modelValue'],
+  setup(props) {
+    return () => h('input', { value: props.modelValue, placeholder: props.placeholder });
+  },
+});
+
+const Select = defineComponent({
+  name: 'ElSelect',
+  props: { modelValue: { type: String, default: '' }, placeholder: String },
+  emits: ['update:modelValue'],
+  setup(props, { slots }) {
+    return () => h('select', { value: props.modelValue }, slots.default?.());
+  },
+});
+
+const Pagination = defineComponent({
+  name: 'ElPagination',
+  props: {
+    currentPage: { type: Number, default: 1 },
+    pageSize: { type: Number, default: 20 },
+    total: { type: Number, default: 0 },
+  },
+  emits: ['current-change', 'size-change'],
+  setup(props) {
+    return () => h('nav', { 'data-testid': 'system-event-pagination' }, `${props.total}`);
+  },
+});
+
 const Table = defineComponent({
   name: 'ElTable',
   props: { data: { type: Array, default: () => [] } },
@@ -118,8 +149,10 @@ async function mountPage() {
         ElDescriptionsItem: passthrough('ElDescriptionsItem'),
         ElFormItem: passthrough('ElFormItem'),
         ElDatePicker: DatePicker,
-        ElSelect: passthrough('ElSelect', 'select'),
+        ElInput: Input,
+        ElSelect: Select,
         ElOption: passthrough('ElOption', 'option'),
+        ElPagination: Pagination,
         ElTable: Table,
         ElTabs: Tabs,
         ElTabPane: TabPane,
@@ -156,7 +189,9 @@ describe('storage cluster health analytics page', () => {
     storageClusterApi.fetchErrorSeverity.mockResolvedValue({ total: 0, counts: {} });
     storageClusterApi.fetchTopLatency.mockResolvedValue({ supported: true, data: [] });
     storageClusterApi.fetchRepeatedFaults.mockResolvedValue({ data: [] });
-    storageClusterApi.fetchSystemEvents.mockResolvedValue({ data: [] });
+    storageClusterApi.fetchSystemEvents.mockResolvedValue({
+      data: [], total: 0, page: 1, page_size: 20,
+    });
     aggregateApi.fetchAggregateTrees.mockResolvedValue({ data: [{ name: 'volume-a' }] });
     storageClusterApi.exportAnalytics.mockResolvedValue({
       data: new Blob(['report']),
@@ -267,11 +302,15 @@ describe('storage cluster health analytics page', () => {
 
   it('shows vendor events as system events inside fault analysis', async () => {
     storageClusterApi.fetchSystemEvents.mockResolvedValue({
+      total: 1,
+      page: 1,
+      page_size: 20,
       data: [{
         source: 'netapp',
         severity: 'error',
         event_code: 'sec.authsys.lookup.failed',
         object_id: 'SVM_nas',
+        object_name: 'node-a',
         description: 'Unable to retrieve credentials',
         occurred_at: '2026-07-14 18:54:00',
       }],
@@ -282,7 +321,58 @@ describe('storage cluster health analytics page', () => {
 
     expect(wrapper.text()).toContain('系统事件');
     expect(wrapper.text()).toContain('Unable to retrieve credentials');
+    expect(wrapper.html()).toContain('label="事件对象"');
+    expect(wrapper.html()).toContain('prop="object_name"');
     expect(wrapper.text()).not.toContain('扩容');
+  });
+
+  it('searches and paginates system events with 20 rows by default', async () => {
+    storageClusterApi.fetchSystemEvents.mockResolvedValue({
+      data: [], total: 45, page: 1, page_size: 20,
+    });
+    const wrapper = await mountPage();
+
+    await selectTab(wrapper, 'faults');
+
+    expect(storageClusterApi.fetchSystemEvents).toHaveBeenLastCalledWith(42, {
+      start_time: initialRange[0],
+      end_time: initialRange[1],
+      page: 1,
+      page_size: 20,
+    });
+    const eventSection = wrapper.get('.system-events');
+    const eventFilter = eventSection.findComponent({ name: 'FilterForm' });
+    expect(eventFilter.exists()).toBe(true);
+    expect(eventSection.findComponent({ name: 'ElInput' }).attributes('placeholder')).toBe('事件代码、对象或内容');
+    expect(eventSection.findComponent({ name: 'ElSelect' }).attributes('placeholder')).toBe('全部等级');
+
+    await eventSection.findComponent({ name: 'ElInput' }).vm.$emit('update:modelValue', 'quota');
+    await eventSection.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'warning');
+    await eventFilter.vm.$emit('query');
+    await flushPromises();
+
+    expect(storageClusterApi.fetchSystemEvents).toHaveBeenLastCalledWith(42, {
+      start_time: initialRange[0],
+      end_time: initialRange[1],
+      keyword: 'quota',
+      severity: 'warning',
+      page: 1,
+      page_size: 20,
+    });
+
+    const pagination = eventSection.findComponent({ name: 'ElPagination' });
+    expect(pagination.props()).toMatchObject({ currentPage: 1, pageSize: 20, total: 45 });
+    await pagination.vm.$emit('current-change', 2);
+    await flushPromises();
+
+    expect(storageClusterApi.fetchSystemEvents).toHaveBeenLastCalledWith(42, {
+      start_time: initialRange[0],
+      end_time: initialRange[1],
+      keyword: 'quota',
+      severity: 'warning',
+      page: 2,
+      page_size: 20,
+    });
   });
 
   it('explains never-collected performance and empty fault states', async () => {

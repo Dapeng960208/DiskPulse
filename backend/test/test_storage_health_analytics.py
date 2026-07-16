@@ -6,7 +6,7 @@ import io
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import pytest
 import sqlalchemy as sa
@@ -262,29 +262,77 @@ def test_system_events_return_only_vendor_rows_for_the_selected_cluster(db_sessi
                 alert_level="error",
                 alert_type="vendor_event",
                 description=f"{source}-message",
-                related_info={"event_code": f"code-{index}", "object_id": f"object-{index}"},
+                related_info={
+                    "event_code": f"code-{index}",
+                    "object_id": f"object-{index}",
+                    "raw": {"node": {"name": "node-a"}},
+                },
                 updated_at=datetime(2026, 7, 15, 10, index),
             )
         )
     db_session.commit()
 
-    rows = storageHealthAnalyticsCrud.get_system_event_rows(
+    total, rows = storageHealthAnalyticsCrud.get_system_event_rows(
         db_session,
         7,
         datetime(2026, 7, 15, 10, 0),
         datetime(2026, 7, 15, 11, 0),
     )
 
+    assert total == 1
     assert rows == [
         {
             "source": "netapp",
             "severity": "error",
             "event_code": "code-1",
             "object_id": "object-1",
+            "object_name": "node-a",
+            "object_type": "node",
             "description": "netapp-message",
             "occurred_at": datetime(2026, 7, 15, 10, 1),
         }
     ]
+
+
+def test_system_events_filter_before_database_pagination(db_session):
+    db_session.add(
+        models.StorageCluster(id=11, name="cluster-eleven", storage_type="isilon")
+    )
+    db_session.add_all(
+        [
+            models.StorageAlerts(
+                storage_cluster_id=11,
+                source="isilon",
+                external_event_id=f"quota-{index}",
+                fingerprint=f"isilon:QUOTA_{index}:node:6",
+                severity="warning" if index < 4 else "error",
+                alert_level="warning" if index < 4 else "error",
+                alert_type="vendor_event",
+                description=f"Quota threshold event {index}",
+                related_type="node",
+                related_info={"event_code": f"QUOTA_{index}", "object_id": "6"},
+                updated_at=datetime(2026, 7, 15, 10, index),
+            )
+            for index in range(1, 5)
+        ]
+    )
+    db_session.commit()
+
+    total, rows = storageHealthAnalyticsCrud.get_system_event_rows(
+        db_session,
+        11,
+        datetime(2026, 7, 15, 10, 0),
+        datetime(2026, 7, 15, 11, 0),
+        keyword="quota",
+        severity="warning",
+        page=2,
+        page_size=2,
+    )
+
+    assert total == 3
+    assert [row["event_code"] for row in rows] == ["QUOTA_1"]
+    assert rows[0]["object_name"] == "节点 6"
+    assert rows[0]["object_id"] == "6"
 
 
 def test_top_latency_ranks_by_p95_and_applies_limit():
@@ -457,6 +505,44 @@ def test_storage_health_read_endpoints_return_service_results(
 
     assert response.status_code == 200
     assert response.json() == payload
+
+
+def test_system_events_endpoint_forwards_search_and_pagination(analytics_client):
+    payload = {"data": [], "total": 0, "page": 2, "page_size": 20}
+    with patch(
+        "routers.storage_cluster.get_system_events", return_value=payload
+    ) as service:
+        response = analytics_client.get(
+            "/storage-pulse/api/storage-clusters/1/analytics/system-events",
+            params=_query_params(
+                keyword="quota",
+                severity="warning",
+                page=2,
+                page_size=20,
+            ),
+        )
+
+    assert response.status_code == 200
+    assert response.json() == payload
+    service.assert_called_once_with(
+        ANY,
+        1,
+        START,
+        END,
+        keyword="quota",
+        severity="warning",
+        page=2,
+        page_size=20,
+    )
+
+
+def test_system_events_endpoint_rejects_unknown_severity(analytics_client):
+    response = analytics_client.get(
+        "/storage-pulse/api/storage-clusters/1/analytics/system-events",
+        params=_query_params(severity="fatal"),
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.parametrize(
