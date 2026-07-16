@@ -140,6 +140,16 @@ describe('quota adjustment dialog', () => {
     expect(unitSelects.at(0).props('modelValue')).toBe('GiB');
     expect(unitSelects.at(1).props('modelValue')).toBe('GiB');
     expect(unitSelects.at(1).props('disabled')).toBe(false);
+
+    wrapper.vm.$.exposed.model.hard_limit = 1024;
+    wrapper.vm.$.exposed.model.soft_limit = 512;
+    unitSelects.at(1).vm.$emit('update:modelValue', 'TiB');
+    await flushPromises();
+    expect(wrapper.vm.$.exposed.model).toMatchObject({
+      hard_limit: 1,
+      soft_limit: 0.5,
+      unit: 'TiB',
+    });
   });
 
   it('asks for confirmation before shrinking below the current hard limit', async () => {

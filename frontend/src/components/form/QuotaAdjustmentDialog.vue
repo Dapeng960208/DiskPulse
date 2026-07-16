@@ -43,6 +43,7 @@ const supportsSoftLimit = computed(() => !(
   && resource.value?.storage_target?.type?.toLowerCase() === 'volume'
 ));
 const title = computed(() => props.resourceType === 'group' ? '调整项目组配额' : '调整用户配额');
+const limitPrecision = computed(() => model.unit === 'TiB' ? 4 : 2);
 
 const rules = {
   hard_limit: [
@@ -89,6 +90,19 @@ function toGiB(value) {
   return Number(value) * (model.unit === 'TiB' ? 1024 : 1);
 }
 
+function changeUnit(nextUnit) {
+  if (nextUnit === model.unit) return;
+  const factor = nextUnit === 'TiB' ? 1 / 1024 : 1024;
+  const precision = nextUnit === 'TiB' ? 4 : 2;
+  if (model.hard_limit != null) {
+    model.hard_limit = Number((model.hard_limit * factor).toFixed(precision));
+  }
+  if (model.soft_limit != null) {
+    model.soft_limit = Number((model.soft_limit * factor).toFixed(precision));
+  }
+  model.unit = nextUnit;
+}
+
 async function submit() {
   await formRef.value?.validate();
   if (resource.value?.used != null && toGiB(model.hard_limit) < Number(resource.value.used)) {
@@ -124,71 +138,94 @@ defineExpose({ open, model });
 <template>
   <ElDialog
     v-model="visible"
+    class="write-form-dialog write-form-dialog--compact"
     :title="title"
-    width="560px">
-    <div class="quota-summary">
-      <span>对象：{{ resource?.name || resource?.user?.rd_username || '-' }}</span>
-      <span>存储：{{ resource?.storage_cluster?.storage_type || '-' }}</span>
-    </div>
+  >
+    <template #header>
+      <div class="write-form-dialog__heading">
+        <h2>{{ title }}</h2>
+      </div>
+    </template>
     <ElForm
       ref="formRef"
+      class="write-form write-form-grid write-form-grid--single"
       :model="model"
       :rules="rules"
-      label-width="120px">
+      label-position="top">
+      <div class="write-form-section">调整对象</div>
+      <div class="quota-summary write-form-field--full">
+        <span>对象：{{ resource?.name || resource?.user?.rd_username || '-' }}</span>
+        <span>存储：{{ resource?.storage_cluster?.storage_type || '-' }}</span>
+      </div>
+      <div class="write-form-section">空间限额</div>
       <ElFormItem
         label="硬限额"
         prop="hard_limit">
-        <ElInputNumber
-          v-model="model.hard_limit"
-          :min="0.01"
-          :precision="2"
-          controls-position="right" />
-        <ElSelect
-          v-model="model.unit"
-          class="quota-unit">
-          <ElOption
-            label="GiB"
-            value="GiB" />
-          <ElOption
-            label="TiB"
-            value="TiB" />
-        </ElSelect>
+        <div class="quota-input-row">
+          <ElInputNumber
+            v-model="model.hard_limit"
+            :min="0.01"
+            :precision="limitPrecision"
+            controls-position="right" />
+          <ElSelect
+            :model-value="model.unit"
+            @update:model-value="changeUnit">
+            <ElOption
+              label="GiB"
+              value="GiB" />
+            <ElOption
+              label="TiB"
+              value="TiB" />
+          </ElSelect>
+        </div>
       </ElFormItem>
       <ElFormItem
         v-if="supportsSoftLimit"
         label="软限额（可选）"
         prop="soft_limit">
-        <ElInputNumber
-          v-model="model.soft_limit"
-          :min="0.01"
-          :precision="2"
-          controls-position="right" />
-        <span class="quota-unit-text">{{ model.unit }}</span>
+        <div class="quota-input-row">
+          <ElInputNumber
+            v-model="model.soft_limit"
+            :min="0.01"
+            :precision="limitPrecision"
+            controls-position="right" />
+          <ElSelect
+            :model-value="model.unit"
+            @update:model-value="changeUnit">
+            <ElOption
+              label="GiB"
+              value="GiB" />
+            <ElOption
+              label="TiB"
+              value="TiB" />
+          </ElSelect>
+        </div>
       </ElFormItem>
       <ElFormItem
         v-if="isIsilon"
         label="软限额宽限期"
         prop="soft_grace">
-        <ElInputNumber
-          v-model="model.soft_grace"
-          :min="1"
-          :precision="0"
-          :disabled="model.soft_limit == null"
-          controls-position="right" />
-        <ElSelect
-          v-model="model.soft_grace_unit"
-          :disabled="model.soft_limit == null"
-          class="quota-unit">
-          <ElOption
-            label="分钟"
-            value="minutes" />
-          <ElOption
-            label="小时"
-            value="hours" />
-          <ElOption
-            label="天"
-            value="days" />
-        </ElSelect>
+        <div class="quota-input-row">
+          <ElInputNumber
+            v-model="model.soft_grace"
+            :min="1"
+            :precision="0"
+            :disabled="model.soft_limit == null"
+            controls-position="right" />
+          <ElSelect
+            v-model="model.soft_grace_unit"
+            :disabled="model.soft_limit == null">
+            <ElOption
+              label="分钟"
+              value="minutes" />
+            <ElOption
+              label="小时"
+              value="hours" />
+            <ElOption
+              label="天"
+              value="days" />
+          </ElSelect>
+        </div>
       </ElFormItem>
     </ElForm>
     <template #footer>
@@ -204,18 +241,14 @@ defineExpose({ open, model });
 <style scoped>
 .quota-summary {
   display: flex;
-  gap: 24px;
-  margin-bottom: 20px;
+  gap: var(--spacing-lg);
   color: var(--el-text-color-secondary);
 }
 
-.quota-unit {
-  width: 110px;
-  margin-left: 12px;
-}
-
-.quota-unit-text {
-  margin-left: 12px;
-  color: var(--el-text-color-secondary);
+.quota-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: var(--spacing-sm);
+  width: 100%;
 }
 </style>
