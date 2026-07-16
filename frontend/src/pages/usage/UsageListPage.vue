@@ -328,14 +328,7 @@ query();
           <span v-else>-</span>
         </template>
       </ElTableColumn>
-      <ElTableColumn
-        label="存储目标"
-        align="center"
-        min-width="160">
-        <template #default="{ row }">
-          <span>{{ formatStorageTargetType(row.storage_target?.type) }} / {{ row.storage_target?.name || '-' }}</span>
-        </template>
-      </ElTableColumn>
+
 
       <ElTableColumn
         label="Linux路径"
