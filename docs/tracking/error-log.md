@@ -3,11 +3,11 @@
 ### 2026-07-16：Isilon 已有目录配额调整返回 502
 
 - 触发：调整 Isilon 项目组已有的 Directory quota。
-- 现象：OneFS 返回 HTTP 错误，接口统一响应 `502 Storage quota adjustment failed`；TLS 未校验 warning 与失败无关。
-- 根因：新建和修改共用了包含 `type`、`path` 的请求体，但 OneFS 22 的 quota item PUT schema 仅接受 `thresholds` 等可修改字段。
-- 修复：已有非 linked quota 的 PUT 仅发送 `thresholds`；新建 quota 的 POST 继续发送 `type`、`path`、`persona` 和 `thresholds`。
-- 验证：只读查询确认目标 quota 存在且非 linked；后端聚焦测试 `9 passed`，`compileall` 通过。
-- 风险：未代替用户重放真实配额写入，需重试原操作完成设备写入和读回验证。
+- 现象：OneFS 返回 `403 AEC_FORBIDDEN`，接口统一响应 `502 Storage quota adjustment failed`；TLS 未校验 warning 与失败无关。
+- 根因：DiskPulse 配置的 Isilon 服务账号缺少写权限 `ISI_PRIV_QUOTA_QUOTAMANAGEMENT`。同时发现原更新请求包含仅创建时需要的 `type/path`，不符合 OneFS 22 quota item PUT schema，但不是本次 403 的原因。
+- 修复：外部需为服务账号所属自定义角色授予 Quota Management 写权限，或改用已有该权限的账号；代码侧已让已有 quota 的 PUT 仅发送 `thresholds`，POST 继续发送完整创建字段。
+- 验证：只读查询确认目标 quota 存在且非 linked；使用当前值执行等值 PUT 复现 `403` 并取得明确的缺权响应；后端聚焦测试 `9 passed`，`compileall` 通过。
+- 风险：权限调整前所有 Isilon quota 写入都会继续失败；授权后仍需重试原操作完成设备写入和读回验证。
 
 ### 2026-07-16：配额弹窗未复用全局表单样式且软限额单位形似禁用
 
