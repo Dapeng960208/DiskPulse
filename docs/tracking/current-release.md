@@ -1,5 +1,13 @@
 # 当前交付记录
 
+## 2026-07-16：Isilon 性能按 Directory Quota 路径采集
+
+- 原采集错误选择 node 磁盘 latency，导致性能页显示 `node 1 / 0ms`；现改读 OneFS `path` performance dataset、workload 配置和 dataset statkey。
+- workload ID 映射为完整路径，读/写/其他累计延迟按请求数求加权平均并从微秒转为毫秒，QuestDB 对象类型统一为 `volume`；前端只查询 Volume，历史 node 数据不再进入页面 Top 10。
+- TDD RED 提交 `7dfc158` 为 `3 failed`；GREEN 存储健康后端 `93 passed, 1 deselected`，前端页面 `10 passed`，目标前端 lint `0 errors`。真实 OneFS 9.11.0.5 的 8 个已固定 workload 中有 7 个匹配 Directory Quota；正式采集写入并通过服务接口回读 7 个路径，额外父路径不会再误标为存储空间。
+- 外部配置边界：数据库有 67 个 Directory Quota，设备 `path` dataset 当前仅有 7 个匹配 workload。要覆盖其余 60 个路径，root 需逐个执行 `isi performance workloads pin path "path:<完整路径>"`，固定后等待至少 30 秒；`ISI_PRIV_PERFORMANCE` 只提供读取权限，不会自动固定 workload。
+- 首次验证写入的一条非 Directory Quota 父路径样本因 QuestDB 不支持该表行级 `DELETE` 而保留到 TTL 到期；服务端按 PostgreSQL Volume 名称过滤，页面和导出均不会返回该样本。
+
 ## 2026-07-16：系统事件搜索、分页与对象语义
 
 - `system-events` 接口新增 `keyword`、`severity`、`page`、`page_size`，默认每页 20 条、最多 100 条；数据库先按集群、时间、关键字和等级过滤，再执行 `count` 与分页。
@@ -114,7 +122,7 @@
 
 ### 风险与边界
 
-- PowerScale 需通过 `/platform/latest` 发现资源版本；workload 延迟不可用时降级到节点，完全没有延迟指标时返回不支持且不写入虚构零值。
+- PowerScale 需通过 `/platform/latest` 发现资源版本；早期节点降级方案已由本页顶部的 path workload 采集替代，缺少逐路径 workload 时不写入虚构的卷延迟。
 - 性能历史从功能启用后开始累计，不回灌设备历史；查询和导出最多 180 天。
 - 无法唯一归属存储集群的既有项目级容量告警不进入集群错误统计；重复故障仅统计 NetApp/Isilon 设备事件。
 - 真实环境仍需确认设备权限、统计键及单位、事件字段、QuestDB TTL、数据库迁移和浏览器下载行为。

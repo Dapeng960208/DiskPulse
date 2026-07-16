@@ -7,10 +7,12 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import pandas as pd
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from appConfig import base_config
 from crud import storageHealthAnalyticsCrud
+from models import Volume
 from utils.pdf.pdfReporter import PDFReportGenerator
 
 
@@ -144,9 +146,22 @@ def get_top_latency(
     limit: int = 10,
     object_type: str | None = None,
 ) -> dict:
+    volume_names = None
+    query_limit = limit
+    if object_type == "volume":
+        volume_names = set(
+            db.execute(
+                select(Volume.name).where(
+                    Volume.storage_cluster_id == storage_cluster_id
+                )
+            ).scalars()
+        )
+        query_limit = max(limit, len(volume_names))
     rows = storageHealthAnalyticsCrud.get_top_latency_rows(
-        db, storage_cluster_id, start_time, end_time, limit, object_type
+        db, storage_cluster_id, start_time, end_time, query_limit, object_type
     )
+    if volume_names is not None:
+        rows = [row for row in rows if row.get("object_name") in volume_names]
     supported = bool(rows) or storageHealthAnalyticsCrud.has_performance_metrics(
         db, storage_cluster_id
     )

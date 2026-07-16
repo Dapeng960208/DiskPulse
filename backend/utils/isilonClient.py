@@ -29,6 +29,24 @@ _CACHE_FILE = os.path.join(_CACHE_DIR, "cache.json")
 _CACHE_MODES = {"none", "file", "redis"}
 
 
+def _sum_counters(*counters: Optional[Dict]) -> Dict[str, float]:
+    total = 0.0
+    count = 0.0
+    for counter in counters:
+        if not isinstance(counter, dict):
+            continue
+        total += float(counter.get('sum') or 0)
+        count += float(counter.get('count') or 0)
+    return {'sum': total, 'count': count}
+
+
+def _counter_average(counter: Optional[Dict], empty=None) -> Optional[float]:
+    if not isinstance(counter, dict):
+        return empty
+    count = float(counter.get('count') or 0)
+    return float(counter.get('sum') or 0) / count if count else empty
+
+
 class IsilonClient:
     """Thin REST client for Isilon OneFS PAPI.
 
@@ -349,42 +367,80 @@ class IsilonClient:
         return self.api_version
 
     def get_performance_statistics(self) -> List[Dict]:
-        metadata = self._get(f'/{self.api_version}/statistics/keys')
-        keys = metadata.get('keys') if isinstance(metadata, dict) else None
-        if not isinstance(keys, list):
-            raise ValueError("Invalid OneFS statistics keys response")
-        latency_keys = [
-            item
-            for item in keys
-            if isinstance(item, dict)
-            and isinstance(item.get('key'), str)
-            and 'latency' in item['key'].lower()
-        ]
-        selected_metadata = next(
-            (item for item in latency_keys if 'workload' in item['key'].lower()),
-            None,
-        ) or next(
-            (item for item in latency_keys if 'node' in item['key'].lower()),
+        dataset_data = self._get(f'/{self.api_version}/performance/datasets')
+        datasets = dataset_data.get('datasets') if isinstance(dataset_data, dict) else None
+        if not isinstance(datasets, list):
+            raise ValueError("Invalid OneFS performance datasets response")
+        dataset = next(
+            (
+                item
+                for item in datasets
+                if isinstance(item, dict)
+                and 'path' in [str(metric).lower() for metric in item.get('metrics', [])]
+            ),
             None,
         )
-        if selected_metadata is None:
-            raise ValueError("OneFS does not expose workload or node latency statistics")
-        selected = selected_metadata['key']
+        if dataset is None or dataset.get('id') is None or not dataset.get('statkey'):
+            raise ValueError("OneFS path performance dataset is not configured")
+
+        workload_data = self._get(
+            f"/{self.api_version}/performance/datasets/{dataset['id']}/workloads"
+        )
+        workloads = workload_data.get('workloads') if isinstance(workload_data, dict) else None
+        if not isinstance(workloads, list):
+            raise ValueError("Invalid OneFS performance workloads response")
+        paths = {
+            str(item['id']): str(item.get('metric_values', {}).get('path'))
+            for item in workloads
+            if isinstance(item, dict)
+            and item.get('id') is not None
+            and item.get('metric_values', {}).get('path')
+        }
 
         data = self._get(
             f'/{self.api_version}/statistics/current',
-            params={'keys': selected},
+            params={'keys': dataset['statkey']},
         )
         stats = data.get('stats') if isinstance(data, dict) else None
         if not isinstance(stats, list):
-            raise ValueError("Invalid OneFS statistics response")
-        unit = selected_metadata.get('units') or selected_metadata.get('unit')
-        if unit is None:
-            return stats
-        return [
-            row if row.get('unit') is not None else {**row, 'unit': unit}
-            for row in stats
-        ]
+            raise ValueError("Invalid OneFS path performance statistics response")
+
+        rows = []
+        for stat in stats:
+            current = (
+                (stat.get('value') or {})
+                .get('dataset', {})
+                .get('workloads', {})
+                .get('workloads', [])
+            )
+            for workload in current:
+                path = paths.get(str(workload.get('id')))
+                record = workload.get('record') or {}
+                if not path or not isinstance(record, dict):
+                    continue
+                read = _counter_average(record.get('latency_read'))
+                write = _counter_average(record.get('latency_write'))
+                total = _counter_average(
+                    _sum_counters(
+                        record.get('latency_read'),
+                        record.get('latency_write'),
+                        record.get('latency_other'),
+                    ),
+                    empty=0.0,
+                )
+                rows.append({
+                    'key': f"{dataset['statkey']}.latency",
+                    'workload': path,
+                    'name': path,
+                    'value': total,
+                    'latency_read': read,
+                    'latency_write': write,
+                    'iops_total': None,
+                    'throughput_total': None,
+                    'unit': 'microseconds',
+                    'time': stat.get('time'),
+                })
+        return rows
 
     def get_event_group_occurrences(self) -> List[Dict]:
         data = self._get(f'/{self.api_version}/event/eventgroup-occurrences')

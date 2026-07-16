@@ -1,5 +1,13 @@
 # 错误记录
 
+### 2026-07-16：Isilon 性能错误读取节点磁盘延迟，无法按 Directory Quota 展示
+
+- 触发：性能分析只显示对象 `1`、类型 `node` 和 `0ms`，需求是按 Isilon 每个逻辑存储空间查看延迟；采集账号已经增加 `ISI_PRIV_PERFORMANCE`。
+- 根因：客户端从 `statistics/keys` 选择第一个 node latency 键，没有读取 OneFS Partitioned Performance 的 dataset/workload。真机实际存在 ID `3` 的 `path` dataset，`cluster.performance.dataset.3` 返回 workload 延迟，但响应使用内部 workload ID，必须再用 performance workloads 接口映射到路径。
+- 修复：改为读取 `path` dataset、已固定 workload 和 dataset statkey；按 `latency_read/write/other` 的 `sum/count` 计算平均微秒并转为毫秒，保存对象类型为 `volume`、对象名称为 Directory Quota 完整路径；前端性能查询固定过滤 `volume`，不再混入历史 node 指标。
+- 验证：RED 为 `3 failed`；GREEN 存储健康后端 `93 passed, 1 deselected`。通过现有 Session 客户端连接 OneFS 9.11.0.5，解析到 8 个已固定 workload；其中 7 个匹配 PostgreSQL 的 67 个 Directory Quota，正式采集写入并回读 7 个路径，额外父路径被过滤。其余 60 个路径需要 root 在 OneFS 补充 workload，权限本身不会自动产生逐路径数据。
+- 数据清理边界：首次验证曾写入一条 `/ifs/data/ICO` 父路径样本；当前 QuestDB 对该表执行行级 `DELETE` 返回 `unexpected token [FROM]`，因此没有强行重建分区。查询服务现按 PostgreSQL Volume 路径二次校验，该历史样本不会显示，并按表的 180 天 TTL 自然过期。
+
 ### 2026-07-16：后端环境未安装 pytest-cov 插件
 
 - 触发：尝试用 `pytest --cov` 统计系统事件改动模块覆盖率。

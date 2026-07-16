@@ -285,6 +285,7 @@ describe('storage cluster health analytics page', () => {
     expect(storageClusterApi.fetchTopLatency).toHaveBeenLastCalledWith(42, {
       start_time: nextRange[0],
       end_time: nextRange[1],
+      object_type: 'volume',
     });
     expect(storageClusterApi.fetchCapacityChange).toHaveBeenCalledTimes(1);
 

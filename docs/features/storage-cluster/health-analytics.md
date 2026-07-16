@@ -13,7 +13,7 @@
 | 存储分布 | PostgreSQL 中当前集群的存储资源 | 按当前 `storage_cluster_id` 返回存储空间/Qtree（NetApp）容量树；不使用健康分析时间范围。 |
 | 容量变化 | QuestDB `storage_cluster_storage_usages` | 所选范围最后一个已用容量减去第一个已用容量；期初为零时变化率为 `null`。 |
 | 严重级别统计 | PostgreSQL `storage_alerts` | 合并可归属当前集群的 DiskPulse 容量告警与 NetApp/Isilon 设备事件，按 `critical`、`error`、`warning`、`info` 汇总。 |
-| Top 10 高延迟对象 | QuestDB `storage_performance_metrics` | 按 P95 延迟降序返回最多 10 个对象，同时返回平均值、最大值和样本数。NetApp 使用 Volume；PowerScale 优先使用 workload，缺失时降级为节点。 |
+| Top 10 高延迟对象 | QuestDB `storage_performance_metrics` | 按 P95 延迟降序返回最多 10 个存储空间，同时返回平均值、最大值和样本数。NetApp 使用 Volume；PowerScale 使用已固定的 path workload，并映射为对应 Directory Quota 路径。 |
 | 重复故障 | PostgreSQL `storage_alerts` | 仅统计 `source=netapp` 或 `source=isilon` 的设备事件；同一 `fingerprint` 在所选范围出现至少两次时计为重复故障。 |
 | 系统事件 | PostgreSQL `storage_alerts` | 按当前集群、时间范围、关键字和日志等级查询 NetApp/Isilon 原生事件；数据库分页默认每页 20 条，包含来源、严重级别、事件代码、事件对象、内容和发生时间。 |
 
@@ -21,7 +21,9 @@ DiskPulse 既有容量告警使用 `source=diskpulse`，严重级别映射为 `h
 
 NetApp 事件来自 ONTAP EMS，性能来自 Volume `metric`。ONTAP 返回的 Volume 总、读、写延迟以微秒为单位，采集器统一除以 `1000` 转为毫秒后写入 QuestDB，Top 10、页面和导出均使用毫秒口径。字段名必须使用 ONTAP REST 返回的单数 `metric`，请求不存在的 `metrics` 会返回 `400`。
 
-PowerScale 事件来自 event group/list，性能来自 statistics API。客户端先通过 `/platform/latest` 发现资源版本，再读取 `/{version}/statistics/keys`：优先选择包含 workload 的延迟键，没有时选择节点延迟键，最后使用所选键请求 `/{version}/statistics/current`。统计键的 `units`/`unit` 元数据会传递给采集器；微秒和秒均转换为毫秒，毫秒原样保留，单位缺失或无法识别时跳过该指标；`time` Unix 时间戳作为设备采集时间。不能把 OneFS 主版本直接作为 API 资源版本，也不能根据键名臆造返回对象维度。
+PowerScale 事件来自 event group/list。逐存储空间性能先通过 `/platform/latest` 发现资源版本，再从 `/{version}/performance/datasets` 选择包含 `path` 识别维度的 dataset，读取 `/{version}/performance/datasets/{id}/workloads` 建立 workload ID 到完整路径的映射，最后使用 dataset 的 `statkey` 请求 `/{version}/statistics/current`。每条 workload 的 `latency_read`、`latency_write` 和 `latency_other` 按 `sum/count` 求平均，OneFS 该计数使用微秒口径，写入 QuestDB 前统一除以 `1000` 转为毫秒；综合延迟使用三类请求的加权平均，`time` Unix 时间戳作为设备采集时间。不能用节点磁盘延迟替代目录延迟，也不能按容量或 IOPS 推算未返回路径的延迟。
+
+采集和查询都会用当前集群 PostgreSQL `Volume.name` 校验 workload 路径，仅保留已经同步为 Directory Quota 存储空间的对象。父目录或其他已固定 workload 即使存在性能数据，也不会误标成 DiskPulse Volume；该校验同时屏蔽修复前已写入的错误节点/父路径样本。
 
 OneFS event list 外层记录中的 `events[]` 按单条设备事件展开；event group 使用 `last_event`（缺失时使用 `time_noticed`）作为发生时间，并从 `causes` 取得事件代码和描述。OneFS 整数 Unix 时间戳统一换算为系统本地 naive 时间后入库。
 
@@ -70,14 +72,20 @@ section=capacity|severity|latency|faults|all
 
 ## 降级与不支持状态
 
-- PowerScale 没有 workload 延迟指标时自动尝试节点延迟指标。
+- PowerScale 必须存在包含 `path` 的 performance dataset；每个需要展示的 Directory Quota 路径必须固定为 workload。缺失 dataset 或未固定路径时不降级为节点延迟，避免把节点指标误标为“卷延迟”。
 - NetApp 或 PowerScale 从未成功写入性能指标时，性能接口返回 `supported=false` 和空数据；页面提示检查采集任务和设备 API 权限，不把“未采集”误写为“设备不支持”或零延迟。
-- PowerScale 采集账号必须能够登录 OneFS `platform` 服务，并对 event group/list 与 statistics API 具备只读权限；登录或接口返回 `401/403` 时不会生成虚构的空告警或零指标。
+- PowerScale 采集账号必须能够登录 OneFS `platform` 服务，并具备 `ISI_PRIV_STATISTICS`、`ISI_PRIV_PERFORMANCE` 和事件只读权限；登录或接口返回 `401/403` 时不会生成虚构的空告警或零指标。
 - 设备响应缺少可识别事件 ID、时间或严重级别时，不将该响应计入健康分析，并在服务端保留不含凭据的诊断日志。
 - 时间范围内没有容量采样、告警或事件时，相应板块显示带时间范围和采集权限提示的空态，其他板块仍可正常使用。
 
 ## 测试与验证边界
 
-自动化验证覆盖厂商响应解析、PowerScale 资源版本/统计键/单位发现、NetApp 延迟单位转换、系统本地事件时间与 UTC `since`、来源白名单、严重级别映射、事件去重、系统事件先过滤后分页、可读事件对象、统计口径、180 天参数校验、导出摘要与公式转义，以及前端搜索、翻页、空态和不支持状态。
+自动化验证覆盖厂商响应解析、PowerScale 资源版本、path dataset、workload 映射和延迟单位转换、NetApp 延迟单位转换、系统本地事件时间与 UTC `since`、来源白名单、严重级别映射、事件去重、系统事件先过滤后分页、可读事件对象、统计口径、180 天参数校验、导出摘要与公式转义，以及前端搜索、翻页、空态和不支持状态。
 
 真实 NetApp、PowerScale、PostgreSQL、MySQL、QuestDB 和登录浏览器的冒烟仍需在部署环境执行，重点确认设备权限、实际资源版本、事件字段、对象名称、延迟单位、指标可用性、QuestDB TTL、数据库迁移和浏览器下载行为。在这些验证完成前，不能把外部系统兼容性描述为已验证。
+
+## Dell 官方参考
+
+- [Performance datasets API resource](https://www.dell.com/support/manuals/en-us/isilon-onefs/ifs_pub_onefs_api_reference/performance-datasets-resource?guid=guid-f036e2e1-edff-43a6-b422-c27b6fe9d938&lang=en-us)
+- [查看 dataset workload 统计](https://www.dell.com/support/manuals/en-us/isilon-onefs/ifs_pub_administration_guide_cli/view-statistics?guid=guid-e5c06c8f-3d35-4374-b2fb-4e0cfac1fd38&lang=en-us)
+- [固定 performance workload](https://www.dell.com/support/manuals/en-us/isilon-onefs/ifs-pub-91100-cli-command-reference/isi-performance-workloads-pin?guid=guid-4b577f82-c008-49b9-b81a-fa5a74bf681d&lang=en-us)

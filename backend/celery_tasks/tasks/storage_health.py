@@ -12,7 +12,7 @@ from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
 from celery_tasks.tasks.redis_lock import redis_lock
 from database import SessionLocal
 from dependencies import QuestDBSession
-from models import StorageAlerts, StorageCluster
+from models import StorageAlerts, StorageCluster, Volume
 from services.storageHealthAnalyticsService import normalize_severity
 
 
@@ -303,15 +303,27 @@ def _netapp_performance_rows(cluster_id: int, records: list[dict], now: datetime
     return rows
 
 
-def _isilon_performance_rows(cluster_id: int, records: list[dict], now: datetime) -> list[dict]:
+def _isilon_performance_rows(
+    cluster_id: int,
+    records: list[dict],
+    now: datetime,
+    volume_paths: set[str] | None = None,
+) -> list[dict]:
     rows = []
     for record in records:
         key = str(record.get("key") or "").lower()
         if "latency" not in key:
             continue
-        object_type = "workload" if record.get("workload") not in (None, "") else "node"
+        workload = record.get("workload")
+        if (
+            workload not in (None, "")
+            and volume_paths is not None
+            and str(workload) not in volume_paths
+        ):
+            continue
+        object_type = "volume" if workload not in (None, "") else "node"
         object_id = str(
-            record.get("workload")
+            workload
             or record.get("devid")
             or record.get("node")
             or record.get("name")
@@ -327,15 +339,19 @@ def _isilon_performance_rows(cluster_id: int, records: list[dict], now: datetime
                 "object_type": object_type,
                 "object_id": object_id,
                 "object_name": str(record.get("name") or object_id),
-                "latency_read": None,
-                "latency_write": None,
+                "latency_read": _isilon_latency_milliseconds(
+                    record.get("latency_read"), record.get("unit")
+                ),
+                "latency_write": _isilon_latency_milliseconds(
+                    record.get("latency_write"), record.get("unit")
+                ),
                 "latency_total": value,
-                "iops_total": None,
-                "throughput_total": None,
+                "iops_total": _number(record.get("iops_total")),
+                "throughput_total": _number(record.get("throughput_total")),
                 "collected_at": _datetime(record.get("timestamp") or record.get("time"), now),
             }
         )
-    workloads = [row for row in rows if row["object_type"] == "workload"]
+    workloads = [row for row in rows if row["object_type"] == "volume"]
     return workloads or rows
 
 
@@ -368,10 +384,18 @@ def _collect_performance(storage_cluster_id: int) -> int:
                     storage_cluster_id, monitor.client.get_volume_metrics(), now
                 )
             else:
+                volume_paths = set(
+                    db.execute(
+                        select(Volume.name).where(
+                            Volume.storage_cluster_id == storage_cluster_id
+                        )
+                    ).scalars()
+                )
                 rows = _isilon_performance_rows(
                     storage_cluster_id,
                     monitor.client.get_performance_statistics(),
                     now,
+                    volume_paths=volume_paths,
                 )
             return _write_performance_rows(rows)
         finally:

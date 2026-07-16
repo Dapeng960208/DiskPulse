@@ -122,7 +122,10 @@ async function loadPerformance(force = false) {
   if (!clusterId.value || (loaded.performance && !force)) return;
   loading.performance = true;
   try {
-    latency.value = await storageClusterApi.fetchTopLatency(clusterId.value, queryParams());
+    latency.value = await storageClusterApi.fetchTopLatency(clusterId.value, {
+      ...queryParams(),
+      object_type: 'volume',
+    });
     loaded.performance = true;
   } catch {
     latency.value = { supported: true, data: [] };

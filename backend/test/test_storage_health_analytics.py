@@ -485,6 +485,58 @@ def test_top_latency_empty_range_distinguishes_supported_from_never_collected():
     assert unsupported == {"supported": False, "data": []}
 
 
+def test_top_latency_volume_filter_excludes_non_storage_space_paths(db_session):
+    db_session.add(
+        models.StorageCluster(
+            id=7,
+            name="isilon-a",
+            storage_type="isilon",
+            storage_host="storage.local",
+            is_active=True,
+        )
+    )
+    db_session.add(
+        models.Volume(
+            storage_cluster_id=7,
+            name="/ifs/data/project-a",
+            vserver="",
+            aggregate="",
+            type="directory_quota",
+            state="",
+            updated_at=START,
+        )
+    )
+    db_session.commit()
+    analytics = _analytics()
+    with patch.object(
+        analytics.storageHealthAnalyticsCrud,
+        "get_top_latency_rows",
+        return_value=[
+            {
+                "object_id": path,
+                "object_name": path,
+                "object_type": "volume",
+                "p95_latency": latency,
+            }
+            for path, latency in (
+                ("/ifs/data/parent", 20.0),
+                ("/ifs/data/project-a", 10.0),
+            )
+        ],
+    ):
+        result = analytics.get_top_latency(
+            db_session,
+            7,
+            START,
+            END,
+            object_type="volume",
+        )
+
+    assert [row["object_name"] for row in result["data"]] == [
+        "/ifs/data/project-a"
+    ]
+
+
 @pytest.mark.parametrize(
     ("start_time", "end_time", "message"),
     [
@@ -806,78 +858,46 @@ def test_isilon_client_discovers_platform_version_before_statistics_and_events()
         side_effect=[
             {"latest": 16},
             {
-                "keys": [
-                    {"key": "ifs.workload.latency"},
-                    {"key": "ifs.node.latency"},
+                "datasets": [
+                    {
+                        "id": 3,
+                        "metrics": ["path"],
+                        "statkey": "cluster.performance.dataset.3",
+                    }
                 ]
             },
-            {"stats": [{"key": "ifs.workload.latency", "workload": "workload-1"}]},
+            {"workloads": []},
+            {"stats": []},
             {"eventgroups": [{"id": "event-1"}]},
             {"eventlists": [{"id": "event-list-1"}]},
         ]
     )
 
     assert client.discover_api_version() == "16"
-    assert client.get_performance_statistics() == [
-        {"key": "ifs.workload.latency", "workload": "workload-1"}
-    ]
+    assert client.get_performance_statistics() == []
     assert client.get_event_group_occurrences() == [{"id": "event-1"}]
     assert client.get_event_lists() == [{"id": "event-list-1"}]
     assert [call.args[0] for call in client._get.call_args_list] == [
         "/latest",
-        "/16/statistics/keys",
+        "/16/performance/datasets",
+        "/16/performance/datasets/3/workloads",
         "/16/statistics/current",
         "/16/event/eventgroup-occurrences",
         "/16/event/eventlists",
     ]
-    assert client._get.call_args_list[2].kwargs["params"]["keys"] == "ifs.workload.latency"
+    assert client._get.call_args_list[3].kwargs["params"]["keys"] == "cluster.performance.dataset.3"
 
 
-def test_isilon_statistics_discovery_falls_back_to_node_latency_key():
+def test_isilon_statistics_requires_path_performance_dataset():
     client = object.__new__(IsilonClient)
     client.api_version = "16"
-    client._get = Mock(
-        side_effect=[
-            {"keys": [{"key": "ifs.node.latency"}]},
-            {"stats": [{"key": "ifs.node.latency", "devid": 2}]},
-        ]
-    )
+    client._get = Mock(return_value={"datasets": [{"id": 2, "metrics": ["username"]}]})
 
-    assert client.get_performance_statistics() == [
-        {"key": "ifs.node.latency", "devid": 2}
-    ]
+    with pytest.raises(ValueError, match="path performance dataset"):
+        client.get_performance_statistics()
     assert [call.args[0] for call in client._get.call_args_list] == [
-        "/16/statistics/keys",
-        "/16/statistics/current",
+        "/16/performance/datasets",
     ]
-    assert client._get.call_args_list[1].kwargs["params"]["keys"] == "ifs.node.latency"
-
-
-def test_isilon_statistics_passes_key_unit_metadata_to_current_rows():
-    client = object.__new__(IsilonClient)
-    client.api_version = "16"
-    client._get = Mock(
-        side_effect=[
-            {
-                "keys": [
-                    {"key": "ifs.workload.latency", "units": "microseconds"}
-                ]
-            },
-            {
-                "stats": [
-                    {
-                        "key": "ifs.workload.latency",
-                        "workload": "workload-1",
-                        "value": 2500,
-                    }
-                ]
-            },
-        ]
-    )
-
-    rows = client.get_performance_statistics()
-
-    assert rows[0]["unit"] == "microseconds"
 
 
 def test_isilon_statistics_collects_path_dataset_workload_latency():
@@ -942,8 +962,8 @@ def test_isilon_statistics_collects_path_dataset_workload_latency():
             "value": 2400.0,
             "latency_read": 1500.0,
             "latency_write": 3000.0,
-            "iops_total": 50.0,
-            "throughput_total": 3072.0,
+            "iops_total": None,
+            "throughput_total": None,
             "unit": "microseconds",
             "time": 1784172559,
         }
@@ -1056,6 +1076,28 @@ def test_isilon_latency_rows_include_path_read_and_write_latency():
             "collected_at": datetime.fromtimestamp(1784172559),
         }
     ]
+
+
+def test_isilon_latency_rows_keep_only_directory_quota_paths():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+    records = [
+        {
+            "key": "cluster.performance.dataset.3.latency",
+            "workload": path,
+            "value": 1000,
+            "unit": "microseconds",
+        }
+        for path in ("/ifs/data/project-a", "/ifs/data/parent")
+    ]
+
+    rows = storage_health._isilon_performance_rows(
+        7,
+        records,
+        datetime(2026, 7, 16, 10, 30),
+        volume_paths={"/ifs/data/project-a"},
+    )
+
+    assert [row["object_name"] for row in rows] == ["/ifs/data/project-a"]
 
 
 def test_isilon_latency_rows_keep_zero_seconds_and_use_device_timestamp():

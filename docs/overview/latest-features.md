@@ -1,5 +1,11 @@
 # 最新功能与修复
 
+## 2026-07-16：Isilon 按 Directory Quota 路径采集延迟
+
+- 性能采集改读 OneFS `path` performance dataset，通过已固定 workload ID 映射 Directory Quota 完整路径，并按读、写、其他请求计数计算微秒平均值后转为毫秒。
+- 性能页固定查询 `object_type=volume`，不再把历史节点磁盘延迟显示成 Isilon 卷延迟。
+- 真机 OneFS 9.11.0.5 已验证：当前 `path` dataset 有 8 个已固定 workload，其中 7 个匹配数据库中的 Directory Quota，正式采集写入并回读 7 个路径；另一个父路径由服务端过滤。数据库共有 67 个 Directory Quota，其余 60 个路径需由 root 执行 `isi performance workloads pin path "path:<完整路径>"` 后才可采集。
+
 ## 2026-07-16：系统事件支持搜索和分页
 
 - 故障分析中的系统事件支持按时间范围、关键字和日志等级查询，默认每页展示 20 条，可切换为 50 或 100 条并跳转页码。
@@ -57,7 +63,7 @@
 
 - 存储集群详情新增容量变化、严重级别错误统计、Top 10 高延迟对象和重复设备故障分析，共用最长 180 天的时间范围。
 - 错误统计合并可归属当前集群的 DiskPulse 容量告警和 NetApp/Isilon 设备事件；重复故障仅统计设备事件。
-- NetApp 按 Volume 分析延迟；PowerScale 优先使用 workload、不可用时降级到节点，完全没有延迟指标时明确显示不支持。
+- NetApp 按 Volume 分析延迟；PowerScale 仅使用已固定的 path workload 映射 Directory Quota，不再用节点延迟冒充存储空间延迟。
 - 当前板块支持 CSV、Excel、PDF 导出；完整报告支持多工作表 Excel、分章节 PDF，以及包含四个 CSV 的 ZIP。
 - 功能实现、存储健康聚焦测试和后端/前端全量自动化验证已完成；真实 NetApp、PowerScale、PostgreSQL、MySQL、QuestDB 和浏览器冒烟尚未执行。
 
