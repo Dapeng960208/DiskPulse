@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-import ast
 import importlib
 import importlib.util
 import inspect
 import io
 import json
-import textwrap
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, call, patch
@@ -275,33 +273,73 @@ def test_storage_rule_api_schemas_expose_rules_without_secrets_or_internal_deliv
     assert "app_key" not in config_fields
 
 
-def test_collection_enqueues_alert_evaluation_only_after_collection_transaction():
-    storages = _module("celery_tasks.tasks.storages")
-    tree = ast.parse(textwrap.dedent(inspect.getsource(storages.storages_schedule_fetching_task)))
-    function = tree.body[0]
-    transactions = [
-        node
-        for node in ast.walk(function)
-        if isinstance(node, ast.With)
-        and any("db.begin" in ast.unparse(item.context_expr) for item in node.items)
-    ]
-    assert transactions
-    transaction = transactions[0]
-    assert any(
-        isinstance(node, ast.Assign)
-        and "refreshed_project_ids" in ast.unparse(node)
-        and "finalize_project_totals" in ast.unparse(node)
-        for node in ast.walk(transaction)
+def test_storage_alert_evaluation_has_an_independent_beat_schedule():
+    worker_source = (BACKEND_ROOT / "celery_worker.py").read_text(encoding="utf-8")
+    collection_source = (BACKEND_ROOT / "celery_tasks" / "tasks" / "storages.py").read_text(
+        encoding="utf-8"
     )
-    enqueues = [
-        node
-        for node in ast.walk(function)
-        if "evaluate_storage_alerts_task.delay" in ast.unparse(node)
-        and isinstance(node, ast.Call)
-    ]
 
-    assert len(enqueues) == 1
-    assert enqueues[0].lineno > transaction.end_lineno
+    assert '"storage_alerts_schedule_task": {' in worker_source
+    assert (
+        '"task": "celery_tasks.tasks.storage_alerts.storage_alerts_schedule_task"'
+        in worker_source
+    )
+    assert "evaluate_storage_alerts_task.delay" not in collection_source
+
+
+def test_independent_alert_schedule_selects_only_the_latest_committed_sample(
+    db_session, session_factory, monkeypatch
+):
+    import models
+
+    tasks = _module("celery_tasks.tasks.storage_alerts")
+    monkeypatch.setattr(tasks, "SessionLocal", session_factory)
+    previous = NOW - timedelta(minutes=1)
+    db_session.add_all(
+        [
+            models.Project(id=1, name="old-project", updated_at=previous),
+            models.Project(id=2, name="latest-project", updated_at=NOW),
+            models.Group(
+                id=1,
+                project_id=1,
+                storage_cluster_id=1,
+                group_tag_id=1,
+                volume_id=1,
+                name="old-group",
+                updated_at=previous,
+            ),
+            models.Group(
+                id=2,
+                project_id=2,
+                storage_cluster_id=2,
+                group_tag_id=1,
+                volume_id=2,
+                name="latest-group",
+                updated_at=NOW,
+            ),
+            models.StorageUsage(
+                id=1,
+                storage_cluster_id=1,
+                linux_path="/old",
+                updated_at=previous,
+            ),
+            models.StorageUsage(
+                id=2,
+                storage_cluster_id=2,
+                linux_path="/latest",
+                updated_at=NOW,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    assert tasks._latest_alert_sample() == {
+        "successful_cluster_ids": (2,),
+        "refreshed_project_ids": (2,),
+        "sample_identity": NOW.isoformat(),
+        "refreshed_storage_usage_ids": (2,),
+        "refreshed_group_ids": (2,),
+    }
 
 
 def test_storage_alert_migration_revision_and_schema_contract():
