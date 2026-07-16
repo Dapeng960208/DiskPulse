@@ -177,7 +177,7 @@ const yAxisUnit = computed(() => {
       </ElFormItem>
       <ElFormItem
         label="时间范围"
-        class="query-form-field--wide">
+        class="query-form-field--date-range">
         <ElDatePicker
           v-model="dateRange"
           type="datetimerange"

@@ -25,6 +25,15 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
       <div class="query-form__toolbar">
         <div class="query-form__fields">
           <slot></slot>
+
+          <Transition name="filter-expand">
+            <div
+              v-if="showAdvancedFilters"
+              id="query-form-advanced"
+              class="query-form__advanced">
+              <slot name="advanced"></slot>
+            </div>
+          </Transition>
         </div>
 
         <div class="query-form__actions">
@@ -64,15 +73,6 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
         </div>
       </div>
 
-      <Transition name="filter-expand">
-        <div
-          v-if="showAdvancedFilters"
-          id="query-form-advanced"
-          class="query-form__advanced">
-          <slot name="advanced"></slot>
-        </div>
-      </Transition>
-
       <div
         v-if="!showAdvancedFilters && advancedCount > 0 && hasActiveFiltersSlot"
         class="query-form__active-filters"
@@ -110,8 +110,7 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
   display: contents;
 }
 
-.query-form__fields,
-.query-form__advanced {
+.query-form__fields {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, max(220px, calc((100% - 4 * var(--spacing-md)) / 5))), 1fr));
   align-items: flex-end;
@@ -125,21 +124,19 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
 }
 
 .query-form__advanced {
-  grid-column: 1;
-  margin-top: var(--spacing-md);
-  padding-top: var(--spacing-md);
-  border-top: 1px solid var(--border-light);
+  display: contents;
 }
 
 .query-form__actions {
   display: flex;
   grid-column: 2;
   align-items: center;
-  align-self: end;
+  align-self: start;
   justify-content: flex-end;
   gap: var(--spacing-sm);
   flex: 0 0 auto;
   margin-left: auto;
+  padding-top: 22px;
 }
 
 .query-form__active-filters {
@@ -192,6 +189,10 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
       width: 100%;
     }
   }
+}
+
+:deep(.query-form-field--date-range) {
+  grid-column: span 2;
 }
 
 :deep(.el-input__wrapper),
@@ -269,6 +270,10 @@ const hasExportExcelSlot = computed(() => slots.exportExcel != null);
   :deep(.el-form-item) {
     width: 100%;
     min-width: 0;
+  }
+
+  :deep(.query-form-field--date-range) {
+    grid-column: span 1;
   }
 
   .query-form__actions {

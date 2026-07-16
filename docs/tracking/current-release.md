@@ -1,5 +1,11 @@
 # 当前交付记录
 
+## 2026-07-16：筛选栏密度与时间范围适配
+
+- `QueryForm` 展开高级筛选时改为与主筛选连续流入同一个 `1–5` 列网格；操作按钮保持独立右侧轨道，普通关键词仍占一个标准列。
+- 秒级 `datetimerange` 使用 `.query-form-field--date-range` 跨两个标准列，手机端回落单列；移除存储健康页原有的局部 `480px` 宽度补丁。
+- TDD RED 提交为 `ca2fd35`（聚焦测试 `3 failed, 1 passed`），GREEN 聚焦测试为 `4 passed`。前端全量 `40 files / 207 passed`，覆盖率 Statements/Lines `92.73%`、Branches `81.85%`、Functions `70.92%`，其中 `QueryForm.vue` 为 `100%`；lint 和生产构建通过，构建仅保留既有大 chunk 提示。浏览器在 `1920px` 验证项目组展开后首行 5 个等宽组件（每项约 `242.9px`），时间范围宽约 `553.8px` 且两个 `YYYY-MM-DD HH:mm:ss` 完整显示；`1024px` 自动为两列，`414px` 无页面横向溢出。
+
 ## 2026-07-16：存储告警规则与飞书通知
 
 - 已从本地 `main` HEAD `ffe5d15` 创建独立分支 `codex/storage-alert-rules` 和 Worktree `D:\dev\worktrees\DiskPulse\storage-alert-rules`；主工作区 `frontend/src/pages/usage/UsageListPage.vue` 的既有修改未复制、未回退、未暂存。

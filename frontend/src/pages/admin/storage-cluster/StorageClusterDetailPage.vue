@@ -319,7 +319,7 @@ onBeforeMount(() => {
           @reset="resetRange">
           <ElFormItem
             label="时间范围"
-            class="analytics-date-range query-form-field--wide">
+            class="analytics-date-range query-form-field--date-range">
             <ElDatePicker
               v-model="dateRange"
               type="datetimerange"
@@ -624,13 +624,6 @@ onBeforeMount(() => {
 
 .storage-health-filter {
   margin-bottom: var(--spacing-md);
-}
-
-:deep(.analytics-date-range.query-form-field--wide) {
-  flex-basis: 480px;
-  width: 480px;
-  min-width: 0;
-  max-width: 100%;
 }
 
 :deep(.analytics-date-range .el-date-editor) {

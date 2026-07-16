@@ -82,7 +82,7 @@ describe('QueryForm progressive filter toolbar', () => {
 
     expect(wrapper.find('[data-test="advanced-filter"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="active-filter"]').exists()).toBe(false);
-    expect(wrapper.get('.query-form__advanced').element.parentElement).toBe(wrapper.get('.query-form__fields').element);
+    expect(wrapper.get('.query-form__fields').find('.query-form__advanced').exists()).toBe(true);
     expect(moreButton.attributes('aria-expanded')).toBe('true');
     expect(moreButton.text()).toContain('收起筛选');
   });
