@@ -47,6 +47,12 @@ def _counter_average(counter: Optional[Dict], empty=None) -> Optional[float]:
     return float(counter.get('sum') or 0) / count if count else empty
 
 
+def _counter_sum(counter: Optional[Dict], empty=None) -> Optional[float]:
+    if not isinstance(counter, dict) or counter.get('sum') is None:
+        return empty
+    return float(counter['sum'])
+
+
 class IsilonClient:
     """Thin REST client for Isilon OneFS PAPI.
 
@@ -428,6 +434,8 @@ class IsilonClient:
                     ),
                     empty=0.0,
                 )
+                bytes_in = _counter_sum(record.get('bytes_in'))
+                bytes_out = _counter_sum(record.get('bytes_out'))
                 rows.append({
                     'key': f"{dataset['statkey']}.latency",
                     'workload': path,
@@ -435,8 +443,12 @@ class IsilonClient:
                     'value': total,
                     'latency_read': read,
                     'latency_write': write,
-                    'iops_total': None,
-                    'throughput_total': None,
+                    'iops_total': _counter_sum(record.get('protocol_ops') or record.get('ops')),
+                    'throughput_total': (
+                        None
+                        if bytes_in is None and bytes_out is None
+                        else (bytes_in or 0) + (bytes_out or 0)
+                    ),
                     'unit': 'microseconds',
                     'time': stat.get('time'),
                 })

@@ -894,3 +894,21 @@ npm test -- --coverage.enabled=false
 
 - RED：选择 Isilon 后帮助入口不存在，新增组件用例失败。
 - GREEN：存储集群表单组件 `14 passed`；目标组件覆盖率 statements/lines `100%`、branches `98.43%`、functions `80%`。帮助入口仅对 Isilon 显示，弹窗包含账号名、创建命令和关键权限；改动文件 ESLint `0 errors`，生产构建通过。
+
+## 2026-07-16：性能分析条数与多指标筛选
+
+### 已完成
+
+- 性能分析新增 10、20、50、100 条筛选，默认 10 条，后端 `limit` 上限同步扩展到 100。
+- 性能指标支持多选，默认 P95；可展示平均/最大/读/写延迟、IOPS 和吞吐量，不同单位独立成图，表格列跟随所选指标。
+- 分析查询聚合 QuestDB 既有统一字段；PowerScale workload 的操作数和收发字节映射到 IOPS、吞吐量，NetApp 继续读取 Volume `metric` 的嵌套总值。
+
+### 验证状态
+
+- RED：后端新增契约 `3 failed, 1 passed`，前端页面 `2 failed, 9 passed`；失败点均为缺少本次行为。
+- GREEN：后端新增契约 `4 passed`；存储健康整文件（排除已记录的迁移定位失败）`94 passed, 1 deselected`；前端页面 `11 passed`，目标页面覆盖率 statements/lines `96.18%`、branches `74.54%`、functions `82.75%`；定向 ESLint `0 errors`，生产构建与 Python `compileall` 通过。
+
+### 风险
+
+- 尚未用真实 NetApp、PowerScale 和 QuestDB 数据复验多指标数值与页面布局；部署后需重启 Celery worker，等待新采集样本再验收 IOPS/吞吐量。
+- 存储健康测试文件的既有迁移定位用例仍有 1 个已记录失败，见 `docs/tracking/error-log.md`；本次未修改迁移链。

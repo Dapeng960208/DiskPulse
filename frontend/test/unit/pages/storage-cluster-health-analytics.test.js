@@ -112,6 +112,21 @@ const DiskUsage = defineComponent({
   },
 });
 
+const BarStackChart = defineComponent({
+  name: 'BarStackChart',
+  props: {
+    data: { type: Array, default: () => [] },
+    categories: { type: Array, default: () => [] },
+    seriesNames: { type: Array, default: () => [] },
+    seriesMap: { type: Object, default: () => ({}) },
+    title: String,
+    unit: String,
+  },
+  setup() {
+    return () => h('div');
+  },
+});
+
 const Dropdown = defineComponent({
   name: 'ElDropdown',
   emits: ['command'],
@@ -162,7 +177,7 @@ async function mountPage() {
         ElButton: passthrough('ElButton', 'button'),
         LineCharts: passthrough('LineCharts'),
         PieCharts: passthrough('PieCharts'),
-        BarStackChart: passthrough('BarStackChart'),
+        BarStackChart,
         DiskUsage,
         LoadingCharts: passthrough('LoadingCharts'),
         AnimatedTextChart: passthrough('AnimatedTextChart'),
@@ -353,6 +368,11 @@ describe('storage cluster health analytics page', () => {
       object_type: 'volume',
       limit: 50,
     });
+
+    await wrapper.get('.storage-health-filter').findComponent({ name: 'FilterForm' }).vm.$emit('reset');
+    await flushPromises();
+    expect(wrapper.get('.performance-limit').findComponent({ name: 'ElSelect' }).props('modelValue')).toBe(10);
+    expect(wrapper.get('.performance-metrics').findComponent({ name: 'ElSelect' }).props('modelValue')).toEqual(['p95_latency']);
   });
 
   it('shows vendor events as system events inside fault analysis', async () => {
@@ -426,6 +446,15 @@ describe('storage cluster health analytics page', () => {
       keyword: 'quota',
       severity: 'warning',
       page: 2,
+      page_size: 20,
+    });
+
+    await eventFilter.vm.$emit('reset');
+    await flushPromises();
+    expect(storageClusterApi.fetchSystemEvents).toHaveBeenLastCalledWith(42, {
+      start_time: initialRange[0],
+      end_time: initialRange[1],
+      page: 1,
       page_size: 20,
     });
   });

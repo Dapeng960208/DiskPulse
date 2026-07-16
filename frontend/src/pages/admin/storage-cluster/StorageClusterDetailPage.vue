@@ -38,6 +38,8 @@ const dateRange = ref(getDefaultTime(8));
 const activeTab = ref('capacity');
 const capacity = ref({ data: [] });
 const latency = ref({ supported: true, data: [] });
+const performanceLimit = ref(10);
+const selectedPerformanceMetrics = ref(['p95_latency']);
 const severity = ref({ counts: {}, total: 0, sources: {} });
 const faults = ref({ data: [] });
 const systemEvents = ref({ data: [] });
@@ -51,6 +53,16 @@ const shortcuts = [
   { text: '一周内', value: () => getDefaultTime(24 * 7) },
   { text: '一月内', value: () => getDefaultTime(24 * 30) },
   { text: '三月内', value: () => getDefaultTime(24 * 90) },
+];
+
+const performanceMetricOptions = [
+  { key: 'p95_latency', label: 'P95 延迟', unit: 'ms' },
+  { key: 'avg_latency', label: '平均延迟', unit: 'ms' },
+  { key: 'max_latency', label: '最大延迟', unit: 'ms' },
+  { key: 'avg_read_latency', label: '平均读延迟', unit: 'ms' },
+  { key: 'avg_write_latency', label: '平均写延迟', unit: 'ms' },
+  { key: 'avg_iops', label: '平均 IOPS', unit: 'IOPS' },
+  { key: 'avg_throughput', label: '平均吞吐量', unit: 'B/s' },
 ];
 
 const queryParams = () => ({
@@ -70,7 +82,13 @@ const capacityData = computed(() => capacity.value?.data || []);
 const capacityChartData = computed(() => capacityData.value.map((item) => [item.updated_at, Number(item.used)]));
 const latencyData = computed(() => latency.value?.data || []);
 const latencyCategories = computed(() => latencyData.value.map((item) => item.object_name || item.object_id || '-'));
-const latencySeries = computed(() => [latencyData.value.map((item) => Number(item.p95_latency) || 0)]);
+const selectedPerformanceMetricOptions = computed(() => performanceMetricOptions.filter(
+  ({ key }) => selectedPerformanceMetrics.value.includes(key),
+));
+const performanceCharts = computed(() => selectedPerformanceMetricOptions.value.map((metric) => ({
+  ...metric,
+  data: [latencyData.value.map((item) => Number(item[metric.key]) || 0)],
+})));
 const faultData = computed(() => faults.value?.data || []);
 const systemEventData = computed(() => systemEvents.value?.data || []);
 const severityChartData = computed(() => [
@@ -125,6 +143,7 @@ async function loadPerformance(force = false) {
     latency.value = await storageClusterApi.fetchTopLatency(clusterId.value, {
       ...queryParams(),
       object_type: 'volume',
+      limit: performanceLimit.value,
     });
     loaded.performance = true;
   } catch {
@@ -212,6 +231,10 @@ function searchActiveTab() {
 }
 
 function resetRange() {
+  if (activeTab.value === 'performance') {
+    performanceLimit.value = 10;
+    selectedPerformanceMetrics.value = ['p95_latency'];
+  }
   dateRange.value = getDefaultTime(8);
 }
 
@@ -307,6 +330,34 @@ onBeforeMount(() => {
               end-placeholder="结束日期时间"
               :shortcuts="shortcuts" />
           </ElFormItem>
+          <ElFormItem
+            v-if="activeTab === 'performance'"
+            label="展示条数"
+            class="performance-limit">
+            <ElSelect v-model="performanceLimit">
+              <ElOption
+                v-for="limit in [10, 20, 50, 100]"
+                :key="limit"
+                :label="`${limit} 条`"
+                :value="limit" />
+            </ElSelect>
+          </ElFormItem>
+          <ElFormItem
+            v-if="activeTab === 'performance'"
+            label="性能指标"
+            class="performance-metrics">
+            <ElSelect
+              v-model="selectedPerformanceMetrics"
+              multiple
+              collapse-tags
+              collapse-tags-tooltip>
+              <ElOption
+                v-for="metric in performanceMetricOptions"
+                :key="metric.key"
+                :label="metric.label"
+                :value="metric.key" />
+            </ElSelect>
+          </ElFormItem>
           <template #actions>
             <ElDropdown @command="handleExport">
               <ElButton type="primary">导出报告</ElButton>
@@ -399,15 +450,19 @@ onBeforeMount(() => {
             v-else-if="!latencyData.length"
             class="analytics-empty">当前时间范围内暂无性能数据</div>
           <div v-else>
-            <BarStackChart
-              :data="latencySeries"
-              :categories="latencyCategories"
-              :series-names="['p95']"
-              :series-map="{ p95: 'P95 延迟' }"
-              title="Top 10 高延迟对象"
-              unit="ms"
-              width="100%"
-              height="360px" />
+            <div class="performance-charts">
+              <BarStackChart
+                v-for="metric in performanceCharts"
+                :key="metric.key"
+                :data="metric.data"
+                :categories="latencyCategories"
+                :series-names="[metric.key]"
+                :series-map="{ [metric.key]: metric.label }"
+                :title="`${metric.label}（最多 ${performanceLimit} 条）`"
+                :unit="metric.unit"
+                width="100%"
+                height="360px" />
+            </div>
             <div class="table-wrap">
               <ElTable :data="latencyData">
                 <ElTableColumn
@@ -418,14 +473,10 @@ onBeforeMount(() => {
                   label="类型"
                   prop="object_type" />
                 <ElTableColumn
-                  label="P95 延迟(ms)"
-                  prop="p95_latency" />
-                <ElTableColumn
-                  label="平均延迟(ms)"
-                  prop="avg_latency" />
-                <ElTableColumn
-                  label="最大延迟(ms)"
-                  prop="max_latency" />
+                  v-for="metric in selectedPerformanceMetricOptions"
+                  :key="metric.key"
+                  :label="`${metric.label}(${metric.unit})`"
+                  :prop="metric.key" />
                 <ElTableColumn
                   label="样本数"
                   prop="sample_count" />
@@ -607,6 +658,12 @@ onBeforeMount(() => {
 .table-wrap {
   max-width: 100%;
   overflow-x: auto;
+}
+
+.performance-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
+  gap: var(--spacing-md);
 }
 
 .fault-analysis-empty {

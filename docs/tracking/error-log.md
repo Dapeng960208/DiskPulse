@@ -1,5 +1,14 @@
 # 错误记录
 
+### 2026-07-16：性能多指标图表未通过模板缩进检查
+
+- 触发：执行存储集群详情页和页面测试的定向 ESLint。
+- 现象：`StorageClusterDetailPage.vue` 的多指标 `BarStackChart` 区块出现 11 个 `vue/html-indent` error；生产构建仍可完成。
+- 根因：在 `performance-charts` 容器内新增循环图表时，子组件缩进层级少了两个空格。
+- 修复：按现有 Vue 模板规则对齐整个循环图表区块，不改页面行为。
+- 验证：重新执行定向 ESLint，要求生产页面 `0 errors`；测试文件只保留既有 `vue/one-component-per-file` warning。
+- 风险：仅为模板格式问题，不影响性能指标查询与图表数据。
+
 ### 2026-07-16：Isilon 性能错误读取节点磁盘延迟，无法按 Directory Quota 展示
 
 - 触发：性能分析只显示对象 `1`、类型 `node` 和 `0ms`，需求是按 Isilon 每个逻辑存储空间查看延迟；采集账号已经增加 `ISI_PRIV_PERFORMANCE`。

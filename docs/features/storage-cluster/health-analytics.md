@@ -2,7 +2,7 @@
 
 ## 目标与入口
 
-存储集群详情用于查看当前集群的存储分布，以及在一个时间范围内查看已用容量变化、按严重级别汇总的错误、Top 10 高延迟对象和重复设备故障，并按需导出健康分析结果。
+存储集群详情用于查看当前集群的存储分布，以及在一个时间范围内查看已用容量变化、按严重级别汇总的错误、存储空间性能指标和重复设备故障，并按需导出健康分析结果。
 
 入口只保留在“系统管理 → 存储集群”列表最后一列的“详情”按钮，不再提供独立“存储健康”或“存储一览”菜单和集群选择器。页签顺序为“容量趋势”“存储分布”“性能分析”“故障分析”；存储分布、性能和故障数据在相应页签首次打开时加载，普通页签往返复用已加载数据。容量、性能和故障分析共用页面时间范围；存储分布展示当前容量树，不使用时间范围或健康报告导出，因此打开该页签时隐藏筛选工具栏。页面不重复展示集群名称、描述、API 用户名、端口和 TLS 等集群配置字段。
 
@@ -13,15 +13,15 @@
 | 存储分布 | PostgreSQL 中当前集群的存储资源 | 按当前 `storage_cluster_id` 返回存储空间/Qtree（NetApp）容量树；不使用健康分析时间范围。 |
 | 容量变化 | QuestDB `storage_cluster_storage_usages` | 所选范围最后一个已用容量减去第一个已用容量；期初为零时变化率为 `null`。 |
 | 严重级别统计 | PostgreSQL `storage_alerts` | 合并可归属当前集群的 DiskPulse 容量告警与 NetApp/Isilon 设备事件，按 `critical`、`error`、`warning`、`info` 汇总。 |
-| Top 10 高延迟对象 | QuestDB `storage_performance_metrics` | 按 P95 延迟降序返回最多 10 个存储空间，同时返回平均值、最大值和样本数。NetApp 使用 Volume；PowerScale 使用已固定的 path workload，并映射为对应 Directory Quota 路径。 |
+| 存储空间性能 | QuestDB `storage_performance_metrics` | 按 P95 延迟降序返回最多 100 个存储空间，页面可选择 10、20、50、100 条；返回 P95、平均、最大、读、写延迟，以及平均 IOPS、平均吞吐量和样本数。NetApp 使用 Volume；PowerScale 使用已固定的 path workload，并映射为对应 Directory Quota 路径。 |
 | 重复故障 | PostgreSQL `storage_alerts` | 仅统计 `source=netapp` 或 `source=isilon` 的设备事件；同一 `fingerprint` 在所选范围出现至少两次时计为重复故障。 |
 | 系统事件 | PostgreSQL `storage_alerts` | 按当前集群、时间范围、关键字和日志等级查询 NetApp/Isilon 原生事件；数据库分页默认每页 20 条，包含来源、严重级别、事件代码、事件对象、内容和发生时间。 |
 
 DiskPulse 既有容量告警使用 `source=diskpulse`，严重级别映射为 `high→critical`、`medium→warning`、`low→info`。原“告警”页面只查询 `source=diskpulse`，NetApp/Isilon 原生事件归类为“系统事件”并仅在存储健康中展示，不再与容量、周报或扩容记录混排。严重级别统计只接受 `diskpulse`、`netapp`、`isilon` 来源，重复故障和系统事件只接受 `netapp`、`isilon`；其他来源即使写入 `storage_alerts` 也不进入对应分析。无法唯一归属到存储集群的项目级容量告警保留在原告警范围内，不进入集群健康分析。设备故障指纹由厂商、事件代码、对象类型和对象 ID 组成，不使用可能包含动态内容的完整消息。
 
-NetApp 事件来自 ONTAP EMS，性能来自 Volume `metric`。ONTAP 返回的 Volume 总、读、写延迟以微秒为单位，采集器统一除以 `1000` 转为毫秒后写入 QuestDB，Top 10、页面和导出均使用毫秒口径。字段名必须使用 ONTAP REST 返回的单数 `metric`，请求不存在的 `metrics` 会返回 `400`。
+NetApp 事件来自 ONTAP EMS，性能来自 Volume `metric`。ONTAP 返回的 Volume 总、读、写延迟以微秒为单位，采集器统一除以 `1000` 转为毫秒后写入 QuestDB；`iops.total` 和 `throughput.total` 分别按 IOPS、B/s 写入统一字段。字段名必须使用 ONTAP REST 返回的单数 `metric`，请求不存在的 `metrics` 会返回 `400`。
 
-PowerScale 事件来自 event group/list。逐存储空间性能先通过 `/platform/latest` 发现资源版本，再从 `/{version}/performance/datasets` 选择包含 `path` 识别维度的 dataset，读取 `/{version}/performance/datasets/{id}/workloads` 建立 workload ID 到完整路径的映射，最后使用 dataset 的 `statkey` 请求 `/{version}/statistics/current`。每条 workload 的 `latency_read`、`latency_write` 和 `latency_other` 按 `sum/count` 求平均，OneFS 该计数使用微秒口径，写入 QuestDB 前统一除以 `1000` 转为毫秒；综合延迟使用三类请求的加权平均，`time` Unix 时间戳作为设备采集时间。不能用节点磁盘延迟替代目录延迟，也不能按容量或 IOPS 推算未返回路径的延迟。
+PowerScale 事件来自 event group/list。逐存储空间性能先通过 `/platform/latest` 发现资源版本，再从 `/{version}/performance/datasets` 选择包含 `path` 识别维度的 dataset，读取 `/{version}/performance/datasets/{id}/workloads` 建立 workload ID 到完整路径的映射，最后使用 dataset 的 `statkey` 请求 `/{version}/statistics/current`。每条 workload 的 `latency_read`、`latency_write` 和 `latency_other` 按 `sum/count` 求平均，OneFS 该计数使用微秒口径，写入 QuestDB 前统一除以 `1000` 转为毫秒；综合延迟使用三类请求的加权平均，`protocol_ops`（兼容 `ops`）映射到 IOPS，`bytes_in + bytes_out` 映射到吞吐量，`time` Unix 时间戳作为设备采集时间。不能用节点磁盘延迟替代目录延迟，也不能按容量或 IOPS 推算未返回路径的延迟。
 
 采集和查询都会用当前集群 PostgreSQL `Volume.name` 校验 workload 路径，仅保留已经同步为 Directory Quota 存储空间的对象。父目录或其他已固定 workload 即使存在性能数据，也不会误标成 DiskPulse Volume；该校验同时屏蔽修复前已写入的错误节点/父路径样本。
 
@@ -47,12 +47,12 @@ OneFS event list 外层记录中的 `events[]` 按单条设备事件展开；eve
 | 存储分布 | `GET /aggregates/storage-trees/?storage_cluster_id={storage_cluster_id}` |
 | 容量变化 | `GET /storage-clusters/{storage_cluster_id}/analytics/capacity-change` |
 | 严重级别统计 | `GET /storage-clusters/{storage_cluster_id}/analytics/error-severity` |
-| Top 10 高延迟对象 | `GET /storage-clusters/{storage_cluster_id}/analytics/top-latency` |
+| 存储空间性能 | `GET /storage-clusters/{storage_cluster_id}/analytics/top-latency` |
 | 重复故障 | `GET /storage-clusters/{storage_cluster_id}/analytics/repeated-faults` |
 | 系统事件 | `GET /storage-clusters/{storage_cluster_id}/analytics/system-events` |
 | 导出 | `GET /storage-clusters/{storage_cluster_id}/analytics/export` |
 
-除存储分布外，所有健康分析接口要求 `start_time` 和 `end_time`，开始时间必须早于结束时间，范围不得超过 180 天。Top 10 接口支持对象类型和数量参数，数量默认且最多为 10。系统事件接口支持 `keyword`（事件代码、对象标识/名称或内容）、`severity=critical|error|warning|info`、`page` 和 `page_size`；默认 `page=1&page_size=20`，单页最多 100 条，返回 `data`、`total`、`page`、`page_size`。过滤条件在数据库分页和 `total` 统计前生效。无数据时返回空集合和可空汇总值，不把无数据表示成故障。
+除存储分布外，所有健康分析接口要求 `start_time` 和 `end_time`，开始时间必须早于结束时间，范围不得超过 180 天。性能接口支持对象类型和 `limit` 参数，数量默认 10、最多 100；页面提供 10、20、50、100 四档，并可多选 P95、平均、最大、读、写延迟、IOPS 和吞吐量，默认只选 P95。系统事件接口支持 `keyword`（事件代码、对象标识/名称或内容）、`severity=critical|error|warning|info`、`page` 和 `page_size`；默认 `page=1&page_size=20`，单页最多 100 条，返回 `data`、`total`、`page`、`page_size`。过滤条件在数据库分页和 `total` 统计前生效。无数据时返回空集合和可空汇总值，不把无数据表示成故障。
 
 导出接口接受：
 
@@ -80,7 +80,7 @@ section=capacity|severity|latency|faults|all
 
 ## 测试与验证边界
 
-自动化验证覆盖厂商响应解析、PowerScale 资源版本、path dataset、workload 映射和延迟单位转换、NetApp 延迟单位转换、系统本地事件时间与 UTC `since`、来源白名单、严重级别映射、事件去重、系统事件先过滤后分页、可读事件对象、统计口径、180 天参数校验、导出摘要与公式转义，以及前端搜索、翻页、空态和不支持状态。
+自动化验证覆盖厂商响应解析、PowerScale 资源版本、path dataset、workload 映射、延迟/IOPS/吞吐量统一映射、NetApp 延迟单位和嵌套指标转换、性能条数上限与多指标筛选、系统本地事件时间与 UTC `since`、来源白名单、严重级别映射、事件去重、系统事件先过滤后分页、可读事件对象、统计口径、180 天参数校验、导出摘要与公式转义，以及前端搜索、翻页、空态和不支持状态。
 
 真实 NetApp、PowerScale、PostgreSQL、MySQL、QuestDB 和登录浏览器的冒烟仍需在部署环境执行，重点确认设备权限、实际资源版本、事件字段、对象名称、延迟单位、指标可用性、QuestDB TTL、数据库迁移和浏览器下载行为。在这些验证完成前，不能把外部系统兼容性描述为已验证。
 

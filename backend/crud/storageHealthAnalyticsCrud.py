@@ -172,6 +172,10 @@ def get_top_latency_rows(
         "SELECT object_id, object_name, object_type, "
         "approx_percentile(latency_total, 0.95) AS p95_latency, "
         "avg(latency_total) AS avg_latency, max(latency_total) AS max_latency, "
+        "avg(latency_read) AS avg_read_latency, "
+        "avg(latency_write) AS avg_write_latency, "
+        "avg(iops_total) AS avg_iops, "
+        "avg(throughput_total) AS avg_throughput, "
         "count() AS sample_count "
         "FROM storage_performance_metrics "
         "WHERE storage_cluster_id = :storage_cluster_id "
@@ -199,7 +203,11 @@ def get_top_latency_rows(
             "p95_latency": float(row[3]),
             "avg_latency": float(row[4]),
             "max_latency": float(row[5]),
-            "sample_count": int(row[6]),
+            "avg_read_latency": None if row[6] is None else float(row[6]),
+            "avg_write_latency": None if row[7] is None else float(row[7]),
+            "avg_iops": None if row[8] is None else float(row[8]),
+            "avg_throughput": None if row[9] is None else float(row[9]),
+            "sample_count": int(row[10]),
         }
         for row in rows
     ]

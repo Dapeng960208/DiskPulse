@@ -159,7 +159,7 @@ def read_error_severity(
 def read_top_latency(
     storage_cluster_id: int,
     time_range: AnalyticsTimeRange,
-    limit: Annotated[int, Query(ge=1, le=10)] = 10,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
     object_type: Annotated[
         Literal["volume", "workload", "node"] | None,
         Query(),

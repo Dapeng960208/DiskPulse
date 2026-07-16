@@ -1,5 +1,11 @@
 # 最新功能与修复
 
+## 2026-07-16：性能分析支持条数与多指标筛选
+
+- 性能分析新增展示条数筛选，可选 10、20、50、100 条，默认 10 条；性能指标支持多选，默认展示 P95 延迟。
+- 页面统一支持 P95、平均、最大、读、写延迟，以及 IOPS、吞吐量；不同单位分图展示，表格列随所选指标变化。
+- NetApp Volume 与 PowerScale Directory Quota workload 统一写入延迟、IOPS 和吞吐量字段；PowerScale 使用 `protocol_ops`/`ops` 及 `bytes_in + bytes_out` 填充统一指标。
+
 ## 2026-07-16：Isilon 按 Directory Quota 路径采集延迟
 
 - 性能采集改读 OneFS `path` performance dataset，通过已固定 workload ID 映射 Directory Quota 完整路径，并按读、写、其他请求计数计算微秒平均值后转为毫秒。
