@@ -2,13 +2,14 @@
 
 ## 2026-07-16：项目组与用户目录配额调整
 
+- 配额调用在集群显式配置 `tls_verify=false` 时不再重复输出 `InsecureRequestWarning`；设备返回 JSON HTTP 错误时保留原始状态码和响应体，例如 OneFS 权限错误直接返回 `403 AEC_FORBIDDEN`，不再统一改成 502。无设备响应、连接失败和超时仍返回 502。
 - 存储集群表单内置的 root 授权命令及存储集群文档已统一修正：监控权限只读，`ISI_PRIV_QUOTA` 父权限和 `ISI_PRIV_QUOTA_QUOTAMANAGEMENT` 子权限均为写权限；既有只读角色先删除 `ISI_PRIV_QUOTA:r` 再按父子顺序重建写权限。
 - 修复 Isilon 已有 Directory quota 更新 payload：PUT 仅提交 OneFS 允许修改的 `thresholds`，不再携带只用于创建的 `type/path`。TDD RED `fb3d0af`、GREEN `e4b6453`，聚焦测试 `9 passed`。真实设备等值 PUT 返回 `403 AEC_FORBIDDEN`；OneFS 要求父权限不能低于子权限，因此 `ISI_PRIV_QUOTA` 与 `ISI_PRIV_QUOTA_QUOTAMANAGEMENT` 必须同时配置为写权限。
 - 配额弹窗已复用全局 `write-form` 标题、分组、顶部标签、紧凑宽度和底部操作区；软限额单位由灰色静态文本改为可选下拉，切换 GiB/TiB 时同步换算硬、软限额数值。
 - 修复前端权限角色不一致：后端 profile 返回的 `superadmin` 现在被前端识别为全局角色，超级管理员可看到项目组和用户目录的“调整配额”入口。
 - 已新增 `PATCH /groups/{id}/quota` 和 `PATCH /storage-usages/{id}/quota`，仅超级管理员可调用；请求禁止额外字段，硬限额必填，软限额可选且必须严格小于硬限额。
 - 统一 quota service 根据集群类型调用现有 NetApp/Isilon 客户端：NetApp 支持 Qtree/用户 quota rule 和 Volume 容量，Isilon 支持 Directory/User quota 与宽限期；linked default-user 会创建显式用户配额。
-- 设备写入后执行读回校验，再同步本地资源、写 `quota_adjustment` 记录并在数据库提交后发送邮件；共享目标返回 `409`，设备或读回失败返回 `502`。
+- 设备写入后执行读回校验，再同步本地资源、写 `quota_adjustment` 记录并在数据库提交后发送邮件；共享目标返回 `409`，设备 HTTP JSON 错误保留原始响应，无设备响应或读回失败返回 `502`。
 - 项目组和用户目录列表复用统一弹窗；NetApp Volume 项目组隐藏软限额，宽限期仅 Isilon 显示，新硬限额低于已用容量时要求二次确认。
 - TDD 检查点：后端 RED `8c7629a`/`e00d38c`、GREEN `d5c1eef`；前端 RED `44418fd`、GREEN `41221d9`。验证为后端 `8 passed`、前端聚焦 `4 passed`、页面烟测 `64 passed`，`compileall`、定向 ESLint 与 `npm run build:test` 通过。
 - 未连接真实 NetApp/Isilon 测试目标执行写入、读回和恢复原值；未运行后端全量回归。完整边界见 [配额调整设计](../features/storage-quota/quota-adjustment-design.md)。
