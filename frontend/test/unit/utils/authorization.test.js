@@ -27,6 +27,7 @@ const authorization = await import('@/utils/authorization');
 
 describe('utils/authorization', () => {
   beforeEach(() => {
+    currentUser.roleCodes = ['diskpulse:admin'];
     cookieApi.get.mockReset();
     cookieApi.set.mockReset();
     cookieApi.remove.mockReset();
@@ -59,5 +60,11 @@ describe('utils/authorization', () => {
     expect(authorization.hasAnyRole(['diskpulse:user', 'diskpulse:admin'])).toBe(true);
     expect(authorization.hasAllRoles(['diskpulse:admin'])).toBe(true);
     expect(authorization.hasRole('diskpulse:user')).toBe(false);
+  });
+
+  it('treats the backend superadmin role as a global role', () => {
+    currentUser.roleCodes = ['superadmin'];
+
+    expect(authorization.hasRole('disk-monitor:admin')).toBe(true);
   });
 });
