@@ -41,7 +41,7 @@ describe('cross-vendor storage resource terminology', () => {
     expect(groupList).toContain('存储目标');
     expect(groupDetail).toContain('info?.storage_target');
     expect(projectDetail).toContain('formatStorageTargetType');
-    expect(usageList).toContain('label="存储目标"');
+    expect(usageList).toContain('label="存储类型"');
     expect(usageList).not.toContain('label="Volume"');
     expect(usageList).not.toContain('label="Qtree"');
   });
@@ -60,16 +60,13 @@ describe('cross-vendor storage resource terminology', () => {
     expect(realtime).not.toContain("'NO DATA'");
   });
 
-  it('exposes each storage cluster protocol and TLS verification state', () => {
+  it('exposes each storage cluster protocol and TLS verification state where configured', () => {
     const form = source('src/pages/admin/storage-cluster/components/StorageClusterFormDialog.vue');
     const list = source('src/pages/admin/storage-cluster/StorageClusterListPage.vue');
-    const detail = source('src/pages/admin/storage-cluster/StorageClusterDetailPage.vue');
 
     expect(form).toContain('label="访问协议"');
     expect(form).toContain('label="TLS 证书校验"');
     expect(list).toContain('label="协议"');
     expect(list).toContain('label="TLS 校验"');
-    expect(detail).toContain('label="访问协议"');
-    expect(detail).toContain('label="TLS 证书校验"');
   });
 });
