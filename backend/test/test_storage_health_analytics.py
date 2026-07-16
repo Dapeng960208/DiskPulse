@@ -388,6 +388,45 @@ def test_top_latency_ranks_by_p95_and_applies_limit():
     assert all({"p95_latency", "avg_latency", "max_latency", "sample_count"} <= row.keys() for row in result)
 
 
+def test_top_latency_crud_returns_standard_performance_metrics():
+    connection = Mock()
+    connection.execute.return_value.all.return_value = [
+        ("volume-1", "vol-a", "volume", 9.5, 5.0, 12.0, 3.0, 7.0, 125.0, 4096.0, 8)
+    ]
+    session = Mock()
+    session.__enter__ = Mock(return_value=connection)
+    session.__exit__ = Mock(return_value=False)
+
+    with (
+        patch.object(storageHealthAnalyticsCrud, "get_storage_config", return_value=Mock()),
+        patch.object(storageHealthAnalyticsCrud, "QuestDBSession", return_value=session),
+    ):
+        rows = storageHealthAnalyticsCrud.get_top_latency_rows(
+            Mock(), 7, START, END, 10, "volume"
+        )
+
+    statement = str(connection.execute.call_args.args[0])
+    assert "avg(latency_read) AS avg_read_latency" in statement
+    assert "avg(latency_write) AS avg_write_latency" in statement
+    assert "avg(iops_total) AS avg_iops" in statement
+    assert "avg(throughput_total) AS avg_throughput" in statement
+    assert rows == [
+        {
+            "object_id": "volume-1",
+            "object_name": "vol-a",
+            "object_type": "volume",
+            "p95_latency": 9.5,
+            "avg_latency": 5.0,
+            "max_latency": 12.0,
+            "avg_read_latency": 3.0,
+            "avg_write_latency": 7.0,
+            "avg_iops": 125.0,
+            "avg_throughput": 4096.0,
+            "sample_count": 8,
+        }
+    ]
+
+
 def test_repeated_faults_group_vendor_events_only():
     result = _analytics().group_repeated_faults(
         [
@@ -659,15 +698,20 @@ def test_storage_health_endpoint_returns_422_for_mixed_timezone_awareness(analyt
     assert response.status_code == 422
 
 
-def test_top_latency_endpoint_rejects_limit_above_ten(analytics_client):
+def test_top_latency_endpoint_supports_up_to_one_hundred_rows(analytics_client):
     with patch("routers.storage_cluster.get_top_latency", return_value={"data": []}) as service:
-        response = analytics_client.get(
+        supported = analytics_client.get(
             "/storage-pulse/api/storage-clusters/1/analytics/top-latency",
-            params=_query_params(limit=11),
+            params=_query_params(limit=100),
+        )
+        rejected = analytics_client.get(
+            "/storage-pulse/api/storage-clusters/1/analytics/top-latency",
+            params=_query_params(limit=101),
         )
 
-    assert response.status_code == 422
-    service.assert_not_called()
+    assert supported.status_code == 200
+    assert rejected.status_code == 422
+    assert service.call_args.kwargs["limit"] == 100
 
 
 @pytest.mark.parametrize(
@@ -962,8 +1006,8 @@ def test_isilon_statistics_collects_path_dataset_workload_latency():
             "value": 2400.0,
             "latency_read": 1500.0,
             "latency_write": 3000.0,
-            "iops_total": None,
-            "throughput_total": None,
+            "iops_total": 50.0,
+            "throughput_total": 3072.0,
             "unit": "microseconds",
             "time": 1784172559,
         }
@@ -1615,6 +1659,8 @@ def test_netapp_latency_metrics_are_converted_from_microseconds_to_milliseconds(
                 "name": "vol-a",
                 "metric": {
                     "latency": {"total": 2500, "read": 1500, "write": 3500},
+                    "iops": {"total": 125, "read": 75, "write": 50},
+                    "throughput": {"total": 4096, "read": 3072, "write": 1024},
                     "timestamp": "2026-07-15T10:00:00Z",
                 },
             }
@@ -1625,3 +1671,5 @@ def test_netapp_latency_metrics_are_converted_from_microseconds_to_milliseconds(
     assert rows[0]["latency_total"] == 2.5
     assert rows[0]["latency_read"] == 1.5
     assert rows[0]["latency_write"] == 3.5
+    assert rows[0]["iops_total"] == 125.0
+    assert rows[0]["throughput_total"] == 4096.0

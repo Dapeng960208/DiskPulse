@@ -76,7 +76,7 @@ const Input = defineComponent({
 
 const Select = defineComponent({
   name: 'ElSelect',
-  props: { modelValue: { type: String, default: '' }, placeholder: String },
+  props: { modelValue: { type: [String, Number, Array], default: '' }, placeholder: String },
   emits: ['update:modelValue'],
   setup(props, { slots }) {
     return () => h('select', { value: props.modelValue }, slots.default?.());
@@ -286,6 +286,7 @@ describe('storage cluster health analytics page', () => {
       start_time: nextRange[0],
       end_time: nextRange[1],
       object_type: 'volume',
+      limit: 10,
     });
     expect(storageClusterApi.fetchCapacityChange).toHaveBeenCalledTimes(1);
 
@@ -299,6 +300,59 @@ describe('storage cluster health analytics page', () => {
     expect(storageClusterApi.fetchErrorSeverity).toHaveBeenCalledTimes(1);
     expect(storageClusterApi.fetchRepeatedFaults).toHaveBeenCalledTimes(1);
     expect(storageClusterApi.fetchSystemEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it('filters performance row count and shows multiple standardized metrics with p95 by default', async () => {
+    storageClusterApi.fetchTopLatency.mockResolvedValue({
+      supported: true,
+      data: [{
+        object_id: 'volume-1',
+        object_name: 'vol-a',
+        object_type: 'volume',
+        p95_latency: 9.5,
+        avg_latency: 5,
+        max_latency: 12,
+        avg_read_latency: 3,
+        avg_write_latency: 7,
+        avg_iops: 125,
+        avg_throughput: 4096,
+        sample_count: 8,
+      }],
+    });
+    const wrapper = await mountPage();
+
+    await selectTab(wrapper, 'performance');
+
+    expect(storageClusterApi.fetchTopLatency).toHaveBeenLastCalledWith(42, {
+      start_time: initialRange[0],
+      end_time: initialRange[1],
+      object_type: 'volume',
+      limit: 10,
+    });
+    expect(wrapper.get('.performance-limit').findComponent({ name: 'ElSelect' }).props('modelValue')).toBe(10);
+    expect(wrapper.get('.performance-metrics').findComponent({ name: 'ElSelect' }).props('modelValue')).toEqual(['p95_latency']);
+    expect(wrapper.findAllComponents({ name: 'BarStackChart' })).toHaveLength(1);
+    expect(wrapper.findComponent({ name: 'BarStackChart' }).props()).toMatchObject({
+      data: [[9.5]],
+      seriesNames: ['p95_latency'],
+      unit: 'ms',
+    });
+
+    await wrapper.get('.performance-metrics').findComponent({ name: 'ElSelect' })
+      .vm.$emit('update:modelValue', ['p95_latency', 'avg_iops']);
+    await flushPromises();
+    expect(wrapper.findAllComponents({ name: 'BarStackChart' })).toHaveLength(2);
+
+    await wrapper.get('.performance-limit').findComponent({ name: 'ElSelect' })
+      .vm.$emit('update:modelValue', 50);
+    await wrapper.get('.storage-health-filter').findComponent({ name: 'FilterForm' }).vm.$emit('query');
+    await flushPromises();
+    expect(storageClusterApi.fetchTopLatency).toHaveBeenLastCalledWith(42, {
+      start_time: initialRange[0],
+      end_time: initialRange[1],
+      object_type: 'volume',
+      limit: 50,
+    });
   });
 
   it('shows vendor events as system events inside fault analysis', async () => {
