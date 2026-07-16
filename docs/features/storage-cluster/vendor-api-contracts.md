@@ -148,6 +148,6 @@ GET /storage-clusters/{storage_cluster_id}/analytics/export
 
 ## 5. 最小权限与前置条件
 
-PowerScale 采集账号至少需要 `ISI_PRIV_LOGIN_PAPI`、`ISI_PRIV_CLUSTER`、`ISI_PRIV_SMARTPOOLS`、`ISI_PRIV_QUOTA`、`ISI_PRIV_STATISTICS`、`ISI_PRIV_PERFORMANCE`、`ISI_PRIV_EVENT`、`ISI_PRIV_SYS_TIME` 的只读权限。权限满足后仍需创建 `path` dataset 并固定每一个需展示的 Directory Quota workload；权限本身不会产生 workload 数据。
+PowerScale 服务账号的监控权限至少包括只读的 `ISI_PRIV_LOGIN_PAPI`、`ISI_PRIV_CLUSTER`、`ISI_PRIV_SMARTPOOLS`、`ISI_PRIV_STATISTICS`、`ISI_PRIV_PERFORMANCE`、`ISI_PRIV_EVENT`、`ISI_PRIV_SYS_TIME`。项目组和用户扩容还要求 `ISI_PRIV_QUOTA` 与 `ISI_PRIV_QUOTA_QUOTAMANAGEMENT` 均为写权限；父权限为只读时 OneFS 会拒绝添加写子权限。权限满足后仍需创建 `path` dataset 并固定每一个需展示的 Directory Quota workload；权限本身不会产生 workload 数据。
 
 详细部署和验证命令见[排障手册](../../guides/storage-performance-event-troubleshooting.md)。

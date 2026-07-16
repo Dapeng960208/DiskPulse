@@ -2,7 +2,8 @@
 
 ## 2026-07-16：项目组与用户目录配额调整
 
-- 修复 Isilon 已有 Directory quota 更新 payload：PUT 仅提交 OneFS 允许修改的 `thresholds`，不再携带只用于创建的 `type/path`。TDD RED `fb3d0af`、GREEN `e4b6453`，聚焦测试 `9 passed`。真实设备等值 PUT 返回 `403 AEC_FORBIDDEN`，仍需为服务账号授予 `ISI_PRIV_QUOTA_QUOTAMANAGEMENT` 写权限后验收。
+- 存储集群表单内置的 root 授权命令及存储集群文档已统一修正：监控权限只读，`ISI_PRIV_QUOTA` 父权限和 `ISI_PRIV_QUOTA_QUOTAMANAGEMENT` 子权限均为写权限；既有只读角色先删除 `ISI_PRIV_QUOTA:r` 再按父子顺序重建写权限。
+- 修复 Isilon 已有 Directory quota 更新 payload：PUT 仅提交 OneFS 允许修改的 `thresholds`，不再携带只用于创建的 `type/path`。TDD RED `fb3d0af`、GREEN `e4b6453`，聚焦测试 `9 passed`。真实设备等值 PUT 返回 `403 AEC_FORBIDDEN`；OneFS 要求父权限不能低于子权限，因此 `ISI_PRIV_QUOTA` 与 `ISI_PRIV_QUOTA_QUOTAMANAGEMENT` 必须同时配置为写权限。
 - 配额弹窗已复用全局 `write-form` 标题、分组、顶部标签、紧凑宽度和底部操作区；软限额单位由灰色静态文本改为可选下拉，切换 GiB/TiB 时同步换算硬、软限额数值。
 - 修复前端权限角色不一致：后端 profile 返回的 `superadmin` 现在被前端识别为全局角色，超级管理员可看到项目组和用户目录的“调整配额”入口。
 - 已新增 `PATCH /groups/{id}/quota` 和 `PATCH /storage-usages/{id}/quota`，仅超级管理员可调用；请求禁止额外字段，硬限额必填，软限额可选且必须严格小于硬限额。

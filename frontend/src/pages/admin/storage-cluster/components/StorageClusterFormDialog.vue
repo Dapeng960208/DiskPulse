@@ -11,7 +11,7 @@ const isilonAccountCommands = `ROLE='DiskPulseMonitor'
 SVC_USER='diskpulse_monitor'
 
 isi auth roles view "$ROLE" --zone System >/dev/null 2>&1 ||
-isi auth roles create "$ROLE" --zone System --description "DiskPulse read-only monitoring"
+isi auth roles create "$ROLE" --zone System --description "DiskPulse monitoring and quota management"
 
 isi auth users create "$SVC_USER" --zone System --enabled yes --password-expires no --set-password
 isi auth roles modify "$ROLE" --zone System --add-user "$SVC_USER"
@@ -20,10 +20,13 @@ isi auth roles modify "$ROLE" --zone System \\
   --add-priv-read ISI_PRIV_LOGIN_PAPI \\
   --add-priv-read ISI_PRIV_CLUSTER \\
   --add-priv-read ISI_PRIV_SMARTPOOLS \\
-  --add-priv-read ISI_PRIV_QUOTA \\
   --add-priv-read ISI_PRIV_STATISTICS \\
   --add-priv-read ISI_PRIV_EVENT \\
   --add-priv-read ISI_PRIV_SYS_TIME
+
+isi auth roles modify "$ROLE" --zone System --remove-priv ISI_PRIV_QUOTA 2>/dev/null || true
+isi auth roles modify "$ROLE" --zone System --add-priv-write ISI_PRIV_QUOTA
+isi auth roles modify "$ROLE" --zone System --add-priv-write ISI_PRIV_QUOTA_QUOTAMANAGEMENT
 
 isi auth users view "$SVC_USER" --zone System
 isi auth roles view "$ROLE" --zone System`;
@@ -318,7 +321,7 @@ defineExpose({
       <h3>账号要求</h3>
       <ul>
         <li>使用 System Zone 的 OneFS 本地服务账号，不使用 NIS、LDAP 或 AD 人员账号。</li>
-        <li>账号只加入 <code>DiskPulseMonitor</code> 只读角色，不授予系统管理权限。</li>
+        <li>账号只加入 <code>DiskPulseMonitor</code> 最小权限角色：监控权限只读，Quota 与 Quota Management 必须为写权限。</li>
         <li>推荐使用 HTTPS，并将 Session 缓存选择为“不缓存（每次安全注销）”。</li>
       </ul>
 

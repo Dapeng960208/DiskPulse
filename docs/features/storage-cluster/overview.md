@@ -56,20 +56,21 @@ Isilon 集群在新增/编辑表单中按集群选择 Session 缓存模式：
 
 数据库只保存 `isilon_session_cache_mode` 和 `isilon_session_cache_path`，不保存 Cookie。缓存读取或写入失败时退回安全注销，避免遗留未管理的设备 Session。本地缓存文件和 Redis 都包含有效认证材料，部署时必须限制文件 ACL 和 Redis 网络访问。
 
-Isilon 配额采集使用 `resolve_names=true`，通过 `persona.name` 关联已经由 LDAP 同步到 DiskPulse 的用户；`persona.name` 缺失时仍可回退读取 `UID:<数字>`。采集账号必须使用加入只读角色的 OneFS 本地服务账号，不能使用 NIS 人员账号：目标 OneFS 9.11 在 NIS 人员账号触发身份解析后会使其下一次 PAPI 登录返回 `403`，本地服务账号不受该身份映射影响。
+Isilon 配额采集使用 `resolve_names=true`，通过 `persona.name` 关联已经由 LDAP 同步到 DiskPulse 的用户；`persona.name` 缺失时仍可回退读取 `UID:<数字>`。采集账号必须使用加入专用最小权限角色的 OneFS 本地服务账号，不能使用 NIS 人员账号：目标 OneFS 9.11 在 NIS 人员账号触发身份解析后会使其下一次 PAPI 登录返回 `403`，本地服务账号不受该身份映射影响。
 
 ## Isilon 采集账号要求
 
-Isilon 类型必须使用 System Zone 的 OneFS 本地服务账号。不要使用个人 NIS、LDAP 或 AD 账号作为长期采集账号。推荐账号名为 `diskpulse_monitor`，并加入专用的 `DiskPulseMonitor` 只读角色。
+Isilon 类型必须使用 System Zone 的 OneFS 本地服务账号。不要使用个人 NIS、LDAP 或 AD 账号作为长期采集账号。推荐账号名为 `diskpulse_monitor`，并加入专用的 `DiskPulseMonitor` 最小权限角色。监控权限保持只读；项目组和用户扩容要求 Quota 父权限及 Quota Management 子权限均为写权限。
 
-角色需要以下只读权限：
+角色需要以下最小权限：
 
 | 权限 | 用途 |
 | --- | --- |
 | `ISI_PRIV_LOGIN_PAPI` | 登录 Platform API。 |
 | `ISI_PRIV_CLUSTER` | 读取集群配置和总容量。 |
 | `ISI_PRIV_SMARTPOOLS` | 读取 Storage Pool。 |
-| `ISI_PRIV_QUOTA` | 读取目录和用户配额。 |
+| `ISI_PRIV_QUOTA`（写） | 读取、调整目录和用户配额；OneFS 要求父权限不能低于 Quota Management 子权限。 |
+| `ISI_PRIV_QUOTA_QUOTAMANAGEMENT`（写） | 创建和修改 Directory/User quota。 |
 | `ISI_PRIV_STATISTICS` | 读取性能统计。 |
 | `ISI_PRIV_PERFORMANCE` | 读取 performance dataset 和已固定 workload 配置。 |
 | `ISI_PRIV_EVENT` | 读取系统事件。 |
@@ -82,7 +83,7 @@ ROLE='DiskPulseMonitor'
 SVC_USER='diskpulse_monitor'
 
 isi auth roles view "$ROLE" --zone System >/dev/null 2>&1 ||
-isi auth roles create "$ROLE" --zone System --description "DiskPulse read-only monitoring"
+isi auth roles create "$ROLE" --zone System --description "DiskPulse monitoring and quota management"
 
 isi auth users create "$SVC_USER" --zone System --enabled yes --password-expires no --set-password
 isi auth roles modify "$ROLE" --zone System --add-user "$SVC_USER"
@@ -91,11 +92,15 @@ isi auth roles modify "$ROLE" --zone System \
   --add-priv-read ISI_PRIV_LOGIN_PAPI \
   --add-priv-read ISI_PRIV_CLUSTER \
   --add-priv-read ISI_PRIV_SMARTPOOLS \
-  --add-priv-read ISI_PRIV_QUOTA \
   --add-priv-read ISI_PRIV_STATISTICS \
   --add-priv-read ISI_PRIV_PERFORMANCE \
   --add-priv-read ISI_PRIV_EVENT \
   --add-priv-read ISI_PRIV_SYS_TIME
+
+# 兼容既有角色从只读升级：先删除 ISI_PRIV_QUOTA:r，再按父子顺序添加写权限。
+isi auth roles modify "$ROLE" --zone System --remove-priv ISI_PRIV_QUOTA 2>/dev/null || true
+isi auth roles modify "$ROLE" --zone System --add-priv-write ISI_PRIV_QUOTA
+isi auth roles modify "$ROLE" --zone System --add-priv-write ISI_PRIV_QUOTA_QUOTAMANAGEMENT
 
 isi auth users view "$SVC_USER" --zone System
 isi auth roles view "$ROLE" --zone System

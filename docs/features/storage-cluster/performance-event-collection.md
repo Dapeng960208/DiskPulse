@@ -110,7 +110,7 @@ flowchart TD
 ## 6. 运行与安全边界
 
 - API 访问统一受 DiskPulse `Authorization: Bearer <token>` 保护；存储集群详情与分析接口沿用登录用户访问边界。
-- OneFS 推荐使用 System Zone 的本地只读服务账号和 `DiskPulseMonitor` 角色；长期使用个人 NIS/LDAP/AD 账号会引入身份映射与权限漂移风险。
+- OneFS 推荐使用 System Zone 的本地服务账号和 `DiskPulseMonitor` 最小权限角色；监控权限只读，配额调整所需的 `ISI_PRIV_QUOTA` 与 `ISI_PRIV_QUOTA_QUOTAMANAGEMENT` 为写权限。长期使用个人 NIS/LDAP/AD 账号会引入身份映射与权限漂移风险。
 - OneFS Session 默认不缓存；选择文件或 Redis 缓存时，Cookie 与 CSRF Token 不进入数据库，必须限制缓存文件 ACL 和 Redis 网络访问。
 - HTTPS 默认启用 TLS 证书校验；无法验证的证书应通过受控 CA 配置处理，不应在代码中全局关闭校验。
 - 真机权限、已固定 workload、Celery worker/Beat 运行状态与数据库最新时间戳必须共同验收；仅凭前端空态或 `celery inspect` 超时不能判断采集失败。

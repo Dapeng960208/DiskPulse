@@ -24,7 +24,7 @@ flowchart TD
 
 ### 3.1 账号与 Session
 
-使用 System Zone 本地只读服务账号，不使用个人 NIS、LDAP 或 AD 账号。近期实机排障确认：NIS 人员账号在身份解析后可能导致下一次 Platform API 登录 `403`；替换为专用本地服务账号后，配额、事件与性能接口恢复可读。
+使用 System Zone 本地最小权限服务账号，不使用个人 NIS、LDAP 或 AD 账号。近期实机排障确认：NIS 人员账号在身份解析后可能导致下一次 Platform API 登录 `403`；替换为专用本地服务账号后，配额、事件与性能接口恢复可读。
 
 先检查角色和用户：
 
@@ -33,7 +33,7 @@ isi auth users view diskpulse_monitor --zone System
 isi auth roles view DiskPulseMonitor --zone System
 ```
 
-必须具备 `ISI_PRIV_LOGIN_PAPI`、`ISI_PRIV_STATISTICS`、`ISI_PRIV_PERFORMANCE`、`ISI_PRIV_EVENT` 等只读权限；完整权限清单和创建命令见[存储集群总览](../features/storage-cluster/overview.md#isilon-采集账号要求)。配置变更后重启 Celery worker。
+必须具备 `ISI_PRIV_LOGIN_PAPI`、`ISI_PRIV_STATISTICS`、`ISI_PRIV_PERFORMANCE`、`ISI_PRIV_EVENT` 等只读权限；扩容还要求 `ISI_PRIV_QUOTA` 与 `ISI_PRIV_QUOTA_QUOTAMANAGEMENT` 写权限。完整权限清单和创建命令见[存储集群总览](../features/storage-cluster/overview.md#isilon-采集账号要求)。配置变更后重启 Celery worker。
 
 ### 3.2 path workload 不是目录存在性检查
 
