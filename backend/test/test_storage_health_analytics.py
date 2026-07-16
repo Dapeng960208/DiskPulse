@@ -1215,6 +1215,20 @@ def test_isilon_event_list_normalizes_nested_events():
     assert rows[0]["updated_at"] == datetime.fromtimestamp(event_time)
 
 
+def test_storage_health_parser_boundary_values():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+    now = datetime(2026, 7, 16, 10, 30)
+
+    assert storage_health._datetime(now) is now
+    assert storage_health._datetime(None, now) is now
+    assert storage_health._number("invalid") is None
+    assert storage_health._netapp_performance_rows(7, [{"metric": {}}], now) == []
+    assert storage_health._isilon_performance_rows(7, [{"key": "ifs.ops"}], now) == []
+    assert storage_health._write_performance_rows([]) == 0
+    assert storage_health._persist_vendor_events(Mock(), [], now) == 0
+    assert len(storage_health._event_identity("isilon", {"severity": "info"})[0]) == 64
+
+
 @pytest.mark.parametrize(
     ("vendor", "record"),
     [

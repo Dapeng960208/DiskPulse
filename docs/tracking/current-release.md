@@ -1,5 +1,13 @@
 # 当前交付记录
 
+## 2026-07-16：恢复 Isilon 性能与设备事件解析
+
+- 真机确认 Isilon 认证和接口均正常：statistics 返回 `1` 条节点磁盘延迟，event group/list 返回 `2888`/`218` 条；此前空页面由应用解析兼容问题导致，不再属于账号或权限阻塞。
+- 延迟采集支持 OneFS 返回的 `seconds` 并转换为毫秒，保留 `0.0` 合法样本；statistics 的 `time` Unix 时间戳作为指标采集时间。
+- OneFS event list 的嵌套 `events[]` 现会展开，event group 使用 `last_event/time_noticed`、`causes` 和 `specifier.devid` 生成事件时间、代码、描述和对象标识。
+- TDD RED 检查点为 `eea05df`（`4 failed, 9 passed`）；GREEN 相关解析测试 `24 passed`，目标任务模块分支覆盖率 `83%`。真实 OneFS 无写入复验得到性能 `1/1` 条、事件 `3888` 条，其中最近 8 小时 `94` 条、最近 24 小时 `331` 条。
+- 运行中的 Celery worker 尚未加载本次代码；部署或本机重启 worker 后，性能任务最长等待 5 分钟，事件任务最长等待 1 分钟，再检查 QuestDB/PostgreSQL 最新时间戳。
+
 ## 2026-07-15：全站渐进式筛选栏改造
 
 - 共享 `QueryForm` 已改为紧凑工具栏：筛选项统一为左对齐 label 与等宽控件，主筛选和高级筛选按容器宽度自适应为每行 `1–5` 项；支持高级条件数量、条件标签和动作插槽。操作顺序统一为“更多筛选、重置、绿色导出、蓝色搜索”，搜索固定在最右侧。

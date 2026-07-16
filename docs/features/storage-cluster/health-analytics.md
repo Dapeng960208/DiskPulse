@@ -21,7 +21,9 @@ DiskPulse 既有容量告警使用 `source=diskpulse`，严重级别映射为 `h
 
 NetApp 事件来自 ONTAP EMS，性能来自 Volume `metric`。ONTAP 返回的 Volume 总、读、写延迟以微秒为单位，采集器统一除以 `1000` 转为毫秒后写入 QuestDB，Top 10、页面和导出均使用毫秒口径。字段名必须使用 ONTAP REST 返回的单数 `metric`，请求不存在的 `metrics` 会返回 `400`。
 
-PowerScale 事件来自 event group/list，性能来自 statistics API。客户端先通过 `/platform/latest` 发现资源版本，再读取 `/{version}/statistics/keys`：优先选择包含 workload 的延迟键，没有时选择节点延迟键，最后使用所选键请求 `/{version}/statistics/current`。统计键的 `units`/`unit` 元数据会传递给采集器；微秒转换为毫秒，毫秒原样保留，单位缺失或无法识别时跳过该指标。不能把 OneFS 主版本直接作为 API 资源版本，也不能根据键名臆造返回对象维度。
+PowerScale 事件来自 event group/list，性能来自 statistics API。客户端先通过 `/platform/latest` 发现资源版本，再读取 `/{version}/statistics/keys`：优先选择包含 workload 的延迟键，没有时选择节点延迟键，最后使用所选键请求 `/{version}/statistics/current`。统计键的 `units`/`unit` 元数据会传递给采集器；微秒和秒均转换为毫秒，毫秒原样保留，单位缺失或无法识别时跳过该指标；`time` Unix 时间戳作为设备采集时间。不能把 OneFS 主版本直接作为 API 资源版本，也不能根据键名臆造返回对象维度。
+
+OneFS event list 外层记录中的 `events[]` 按单条设备事件展开；event group 使用 `last_event`（缺失时使用 `time_noticed`）作为发生时间，并从 `causes` 取得事件代码和描述。OneFS 整数 Unix 时间戳统一换算为系统本地 naive 时间后入库。
 
 ## 采集与保留边界
 

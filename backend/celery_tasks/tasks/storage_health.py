@@ -28,6 +28,8 @@ def _datetime(value, default: datetime | None = None) -> datetime:
         result = value
     elif isinstance(value, str):
         result = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    elif isinstance(value, (int, float)):
+        result = datetime.fromtimestamp(value)
     else:
         result = default or datetime.now()
     if result.tzinfo is not None:
@@ -50,17 +52,23 @@ def _event_identity(vendor: str, record: dict) -> tuple[str, str, str, str]:
         return external_id, event_code, "node", object_id
 
     object_data = record.get("node") or record.get("object") or {}
+    specifier = record.get("specifier") or {}
+    causes = record.get("causes") or []
+    cause = causes[0] if causes else []
     object_id = str(
         record.get("devid")
         or record.get("node_id")
         or object_data.get("id")
         or object_data.get("name")
+        or specifier.get("devid")
         or "cluster"
     )
     event_code = str(
         record.get("event_type")
         or record.get("event_type_id")
+        or record.get("event")
         or record.get("name")
+        or (cause[0] if cause else None)
         or "unknown"
     )
     external_id = record.get("id") or record.get("eventgroup_instance_id")
@@ -77,14 +85,31 @@ def normalize_vendor_events(
     records: list[dict],
 ) -> list[dict]:
     rows = []
-    for record in records:
+    expanded_records = [
+        event
+        for record in records
+        for event in (
+            record["events"]
+            if isinstance(record.get("events"), list)
+            else [record]
+        )
+    ]
+    for record in expanded_records:
+        causes = record.get("causes") or []
+        cause = causes[0] if causes else []
         message_data = record.get("message") if isinstance(record.get("message"), dict) else {}
         raw_severity = (
             message_data.get("severity")
             if vendor == "netapp"
             else record.get("severity") or record.get("event_severity")
         )
-        raw_time = record.get("time") or record.get("timestamp") or record.get("start_time")
+        raw_time = (
+            record.get("time")
+            or record.get("timestamp")
+            or record.get("start_time")
+            or record.get("last_event")
+            or record.get("time_noticed")
+        )
         raw_external_id = (
             record.get("index")
             if vendor == "netapp"
@@ -106,6 +131,7 @@ def normalize_vendor_events(
             record.get("log_message")
             or record.get("message_text")
             or record.get("message")
+            or (cause[1] if len(cause) > 1 else None)
             or event_code
         )
         rows.append(
@@ -246,6 +272,8 @@ def _isilon_latency_milliseconds(value, unit):
         return value / 1000
     if normalized in {"milliseconds", "millisecond", "ms"}:
         return value
+    if normalized in {"seconds", "second", "s", "sec"}:
+        return value * 1000
     return None
 
 
@@ -304,7 +332,7 @@ def _isilon_performance_rows(cluster_id: int, records: list[dict], now: datetime
                 "latency_total": value,
                 "iops_total": None,
                 "throughput_total": None,
-                "collected_at": _datetime(record.get("timestamp"), now),
+                "collected_at": _datetime(record.get("timestamp") or record.get("time"), now),
             }
         )
     workloads = [row for row in rows if row["object_type"] == "workload"]
