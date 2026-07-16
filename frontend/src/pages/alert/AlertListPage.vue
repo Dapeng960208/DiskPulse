@@ -84,10 +84,13 @@ const alertDescription = (row) => {
   const targetLabel = relatedTypeLabels[row.related_type];
   const eventLabel = eventTypeLabels[row.event_type];
   if (!targetLabel || !eventLabel) return row.description || '-';
-  const context = row.related_info?.context || {};
+  const context = { cluster: '-', project: '-', linux_path: '-', ...(row.related_info?.context || {}) };
+  const location = row.related_type === 'StorageUsage'
+    ? `集群 ${context.cluster} 项目 ${context.project} Linux目录 ${context.linux_path}`
+    : null;
   const targetName = context.username || context.group || context.project;
   const ratio = Number(row.avg_use_ratio);
-  return `${targetLabel}${targetName ? ` ${targetName}` : ''} ${eventLabel}${Number.isFinite(ratio) ? `（使用率 ${ratio.toFixed(2)}%）` : ''}`;
+  return `${location || `${targetLabel}${targetName ? ` ${targetName}` : ''}`} ${eventLabel}${Number.isFinite(ratio) ? `（使用率 ${ratio.toFixed(2)}%）` : ''}`;
 };
 
 const alertTypeDisplay = (alertType) => {

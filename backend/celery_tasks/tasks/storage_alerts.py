@@ -171,6 +171,14 @@ def _evaluate_one(
         emergency=emergency,
         super_admin_usernames=base_config.get("super_admin_usernames", []),
     )
+    if target_type == "storage_usage":
+        target_name = (
+            f"集群 {context.get('cluster') or '-'} 项目 {context.get('project') or '-'} "
+            f"Linux目录 {context.get('linux_path') or '-'}"
+        )
+    else:
+        name_key = {"group": "group", "project": "project"}[target_type]
+        target_name = f"{TARGET_TYPE_LABELS[target_type]} {context.get(name_key) or '-'}"
     alert = StorageAlerts(
         storage_cluster_id=(None if target_type == "project" else getattr(target, "storage_cluster_id", None)),
         source="diskpulse",
@@ -178,11 +186,7 @@ def _evaluate_one(
         severity=result.level or result.previous_level or "info",
         alert_level=result.level or result.previous_level,
         alert_type="alert",
-        description=(
-            f"{TARGET_TYPE_LABELS[target_type]} "
-            f"{context.get({'storage_usage': 'username', 'group': 'group', 'project': 'project'}[target_type], '')} "
-            f"{EVENT_TYPE_LABELS[result.event_type]}（使用率 {ratio:.2f}%）"
-        ),
+        description=f"{target_name} {EVENT_TYPE_LABELS[result.event_type]}（使用率 {ratio:.2f}%）",
         threshold=rule[result.level]["threshold"] if result.level else rule["important"]["threshold"],
         avg_use_ratio=ratio,
         related_id=target.id,
