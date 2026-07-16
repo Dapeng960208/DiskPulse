@@ -23,6 +23,8 @@ class StorageAlert(BaseModel):
     event_type: str = "trigger"
     quota_basis: str = "hard"
     delivery_status: str = "legacy"
+    cluster_name: Optional[str] = None
+    project_name: Optional[str] = None
 
     class Config:
         from_attributes = True

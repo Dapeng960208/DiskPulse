@@ -84,7 +84,13 @@ const alertDescription = (row) => {
   const targetLabel = relatedTypeLabels[row.related_type];
   const eventLabel = eventTypeLabels[row.event_type];
   if (!targetLabel || !eventLabel) return row.description || '-';
-  const context = { cluster: '-', project: '-', linux_path: '-', ...(row.related_info?.context || {}) };
+  const storedContext = row.related_info?.context || {};
+  const context = {
+    ...storedContext,
+    cluster: row.cluster_name || storedContext.cluster || '-',
+    project: row.project_name || storedContext.project || '-',
+    linux_path: storedContext.linux_path || '-',
+  };
   const location = row.related_type === 'StorageUsage'
     ? `集群 ${context.cluster} 项目 ${context.project} Linux目录 ${context.linux_path}`
     : null;
@@ -243,11 +249,19 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        label="集群"
+        align="center"
+        min-width="90">
+        <template #default="{ row }">
+          {{ row.cluster_name || row.related_info?.context?.cluster || row.related_info?.context?.clusters?.join(', ') || '-' }}
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
         label="项目"
         align="center"
         min-width="80">
         <template #default="{ row }">
-          {{ row.related_info?.context?.project || row.related_info?.project?.name || '-' }}
+          {{ row.project_name || row.related_info?.context?.project || '-' }}
         </template>
       </ElTableColumn>
       <ElTableColumn

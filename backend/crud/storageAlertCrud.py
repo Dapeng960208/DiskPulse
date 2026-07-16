@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from sqlalchemy.orm import Session
-from models import StorageAlerts
+from models import Group, Project, StorageAlerts, StorageCluster, StorageUsage
 from schemas import storageAlertsSchema
 from sqlalchemy import or_, desc, asc
 from utils.query import get_sort_column
@@ -38,4 +38,40 @@ def get_storage_alerts(db: Session, page: int, size: int, nameLike: str | None =
     else:
         query = query.order_by(StorageAlerts.updated_at.desc())
     storage_alerts = query.offset((page - 1) * size).limit(size).all()
+    cluster_names = dict(
+        db.query(StorageCluster.id, StorageCluster.name)
+        .filter(StorageCluster.id.in_({row.storage_cluster_id for row in storage_alerts if row.storage_cluster_id}))
+        .all()
+    )
+    project_names = {}
+    usage_ids = {row.related_id for row in storage_alerts if row.related_type == "StorageUsage" and row.related_id}
+    if usage_ids:
+        project_names.update(
+            (("StorageUsage", usage_id), project_name)
+            for usage_id, project_name in db.query(StorageUsage.id, Project.name)
+            .join(Group, StorageUsage.group_id == Group.id)
+            .join(Project, Group.project_id == Project.id)
+            .filter(StorageUsage.id.in_(usage_ids))
+            .all()
+        )
+    group_ids = {row.related_id for row in storage_alerts if row.related_type == "Group" and row.related_id}
+    if group_ids:
+        project_names.update(
+            (("Group", group_id), project_name)
+            for group_id, project_name in db.query(Group.id, Project.name)
+            .join(Project, Group.project_id == Project.id)
+            .filter(Group.id.in_(group_ids))
+            .all()
+        )
+    project_ids = {row.related_id for row in storage_alerts if row.related_type == "Project" and row.related_id}
+    if project_ids:
+        project_names.update(
+            (("Project", project_id), project_name)
+            for project_id, project_name in db.query(Project.id, Project.name)
+            .filter(Project.id.in_(project_ids))
+            .all()
+        )
+    for row in storage_alerts:
+        row.cluster_name = cluster_names.get(row.storage_cluster_id)
+        row.project_name = project_names.get((row.related_type, row.related_id))
     return storage_alerts, total
