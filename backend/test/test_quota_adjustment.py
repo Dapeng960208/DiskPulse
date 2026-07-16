@@ -330,6 +330,7 @@ def test_isilon_user_adjustment_requires_grace_and_uses_current_username(db_sess
     client = FakeQuotaClient()
     monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
     monkeypatch.setattr(quotaService, "_send_adjustment_email", lambda *args, **kwargs: None)
+    monkeypatch.setattr(quotaService, "_enqueue_adjustment_feishu", lambda _event_id: None)
 
     with pytest.raises(HTTPException) as error:
         quotaService.adjust_storage_usage_quota(

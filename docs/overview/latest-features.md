@@ -12,6 +12,7 @@
 - 项目组和用户目录列表新增“调整配额”，输入最终目标硬限额；软限额可选且必须小于硬限额，不提供文件限额或用户映射。
 - 后端用统一服务分派 NetApp 与 Isilon：支持 NetApp Qtree/用户 quota rule、NetApp Volume 容量，以及 Isilon Directory/User quota；Isilon 设置软限额时同时要求宽限期。
 - 设备写入完成后必须读回一致才更新本地限额、利用率和 `quota_adjustment` 记录；共享存储目标的项目组被阻止，设备失败不会写成功记录。
+- 配额调整成功后除邮件外还会进入现有飞书队列：用户目录通知目录用户，项目组通知负责人，失败沿用告警通知的重试和投递状态。
 - 后端聚焦测试 `8 passed`；前端配额/API 测试 `4 passed`、页面烟测 `64 passed`，测试构建通过。真实设备写入与恢复原值仍需在专用测试目标人工验收。
 - 完整边界见 [项目组与用户目录配额调整设计](../features/storage-quota/quota-adjustment-design.md)。
 

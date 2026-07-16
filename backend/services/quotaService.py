@@ -8,8 +8,10 @@ from sqlalchemy.orm import Session
 from urllib3 import disable_warnings
 from urllib3.exceptions import InsecureRequestWarning
 
+from appConfig import base_config
 from models import Group, Qtree, StorageAlerts, StorageUsage, Volume
 from schemas.quotaSchema import QuotaAdjustmentRequest, QuotaAdjustmentResponse
+from services.storageAlertRuleService import resolve_recipient_usernames
 from utils.isilonClient import IsilonClient
 from utils.mailTools.emailNotification import EmailNotification
 from utils.netAppClient import NetAppClient
@@ -66,6 +68,16 @@ def _ratio(used: float | None, limit: float | None) -> float | None:
     return round((used or 0) * 100 / limit, 2) if limit else None
 
 
+def _display_limit(value: float | None) -> str:
+    return "未设置" if value is None else f"{value:.2f} GiB"
+
+
+def _enqueue_adjustment_feishu(event_id: int) -> None:
+    from celery_tasks.tasks.storage_alerts import deliver_storage_alert_task
+
+    deliver_storage_alert_task.delay(event_id)
+
+
 def _record_adjustment(
     db: Session,
     *,
@@ -78,6 +90,25 @@ def _record_adjustment(
     soft_limit: float | None,
     soft_grace_seconds: int | None,
 ) -> StorageAlerts:
+    feishu = base_config.get("feishu_notification", {}) or {}
+    primary_username = (
+        resource.user.rd_username
+        if isinstance(resource, StorageUsage) and resource.user
+        else resource.in_charge_user.rd_username
+        if isinstance(resource, Group) and resource.in_charge_user
+        else None
+    )
+    recipients = resolve_recipient_usernames(
+        primary_usernames=[primary_username],
+        group_cc_usernames=[],
+        global_cc_usernames=feishu.get("cc_usernames", []),
+        debug=bool(feishu.get("debug")),
+        super_admin_usernames=base_config.get("super_admin_usernames", []),
+    )
+    resource_label = "用户目录" if isinstance(resource, StorageUsage) else "项目组"
+    resource_name = (
+        resource.linux_path if isinstance(resource, StorageUsage) else resource.name
+    )
     alert = StorageAlerts(
         storage_cluster_id=resource.storage_cluster_id,
         source="diskpulse",
@@ -100,7 +131,25 @@ def _record_adjustment(
             "new_soft_limit": soft_limit,
             "soft_grace_seconds": soft_grace_seconds,
             "storage_type": storage_type,
+            "title": "存储配额调整",
+            "paragraphs": [
+                [
+                    {"tag": "text", "text": f"{resource_label}：{resource_name}\n"},
+                    {
+                        "tag": "text",
+                        "text": f"硬限额：{_display_limit(old_hard_limit)} → {_display_limit(hard_limit)}\n",
+                    },
+                    {
+                        "tag": "text",
+                        "text": f"软限额：{_display_limit(old_soft_limit)} → {_display_limit(soft_limit)}",
+                    },
+                ]
+            ],
         },
+        delivery_status="pending" if recipients else "skipped",
+        recipient_usernames=recipients,
+        delivery_attempts=0,
+        next_attempt_at=datetime.now() if recipients else None,
         updated_at=datetime.now(),
     )
     db.add(alert)
@@ -244,7 +293,7 @@ def _execute_adjustment(
         soft_limit=soft_limit,
         soft_grace_seconds=device_result.get("soft_grace"),
     )
-    _record_adjustment(
+    alert = _record_adjustment(
         db,
         resource=resource,
         resource_type=resource_type,
@@ -266,6 +315,17 @@ def _execute_adjustment(
             resource.id,
         )
         raise
+
+    if alert.delivery_status == "pending":
+        try:
+            _enqueue_adjustment_feishu(alert.id)
+        except Exception as error:
+            logger.error(
+                "Quota adjustment Feishu enqueue failed resource_type=%s resource_id=%s error_type=%s",
+                resource_type,
+                resource.id,
+                type(error).__name__,
+            )
 
     try:
         _send_adjustment_email(db, resource, result)
