@@ -1,5 +1,5 @@
 <script setup>
-import { ElButton, ElTableColumn, ElFormItem, ElInput, ElMessageBox, ElMessage } from 'element-plus';
+import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElTableColumn, ElFormItem, ElInput, ElMessageBox, ElMessage } from 'element-plus';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import storageClusterApi from '@/api/storage-cluster-api';
@@ -69,16 +69,6 @@ query();
           placeholder="根据集群名称搜索" />
       </ElFormItem>
     </FilterForm>
-
-    <div
-      v-if="hasRole('disk-monitor:admin')"
-      class="mt-2.5 flex justify-end">
-      <ElButton
-        type="primary"
-        @click="formDialogRef.create()">
-        新增集群
-      </ElButton>
-    </div>
 
     <DataTable
       :pagination="{
@@ -174,39 +164,52 @@ query();
 
       <ElTableColumn
         align="right"
-        min-width="180"
+        width="132"
         fixed="right"
       >
         <template #header>
           <ElButton
+            v-if="hasRole('disk-monitor:admin')"
             size="small"
             plain
             type="primary"
             @click="formDialogRef.edit()">
-            添加存储集群
+            添加集群
           </ElButton>
         </template>
         <template #default="{ row }">
-          <ElButton
-            size="small"
-            plain
-            @click="router.push({ path: `/admin/storage-cluster/${row.id}` })">
-            详情
-          </ElButton>
-          <ElButton
-            size="small"
-            type="primary"
-            link
-            @click="formDialogRef.edit(row)">
-            编辑
-          </ElButton>
-          <ElButton
-            size="small"
-            type="danger"
-            link
-            @click="confirmDelete(row)">
-            删除
-          </ElButton>
+          <div class="list-row-actions">
+            <ElButton
+              size="small"
+              plain
+              @click="router.push({ path: `/admin/storage-cluster/${row.id}` })">
+              详情
+            </ElButton>
+            <ElDropdown
+              v-if="hasRole('disk-monitor:admin')"
+              trigger="click"
+              placement="bottom-end">
+              <ElButton
+                class="list-row-actions__more"
+                size="small"
+                plain
+                aria-label="更多操作">
+                ···
+              </ElButton>
+              <template #dropdown>
+                <ElDropdownMenu>
+                  <ElDropdownItem @click="formDialogRef.edit(row)">
+                    编辑
+                  </ElDropdownItem>
+                  <ElDropdownItem
+                    class="list-row-actions__danger"
+                    @click="confirmDelete(row)">
+                    删除
+                  </ElDropdownItem>
+                </ElDropdownMenu>
+              </template>
+            </ElDropdown>
+          </div>
         </template>
       </ElTableColumn>
     </DataTable>

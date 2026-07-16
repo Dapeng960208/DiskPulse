@@ -460,21 +460,4 @@ function confirmDelete(row) {
   @include page-container;
 }
 
-.list-row-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--spacing-sm);
-  white-space: nowrap;
-}
-
-.list-row-actions__more {
-  width: 32px;
-  padding: 0;
-}
-
-:global(.list-row-actions__danger) {
-  color: var(--danger-color);
-}
-
 </style>

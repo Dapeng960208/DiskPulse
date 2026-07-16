@@ -4,14 +4,17 @@ import { useRoute, useRouter } from 'vue-router';
 import {
   ElButton,
   ElDialog,
+  ElDropdown,
+  ElDropdownItem,
+  ElDropdownMenu,
   ElForm,
   ElFormItem,
   ElInput,
   ElInputNumber,
   ElMessage,
+  ElMessageBox,
   ElOption,
   ElPagination,
-  ElPopconfirm,
   ElSelect,
   ElSwitch,
   ElTabPane,
@@ -140,6 +143,14 @@ async function deleteModel(model) {
   await loadModels();
 }
 
+function confirmDeleteModel(model) {
+  ElMessageBox.confirm(`确认删除模型配置「${model.name}」？此操作不可撤销。`, '删除模型配置', {
+    type: 'warning',
+    confirmButtonText: '删除模型',
+    cancelButtonText: '取消',
+  }).then(() => deleteModel(model)).catch(() => {});
+}
+
 function openAudit(row) {
   router.push(`/admin/ai-center/audits/${row.id}`);
 }
@@ -167,9 +178,6 @@ onMounted(async () => {
       <ElTabPane
         label="模型管理"
         name="models">
-        <div class="toolbar"><ElButton
-          type="primary"
-          @click="addModel">新增模型</ElButton></div>
         <ElTable
           :data="models"
           stripe>
@@ -193,22 +201,46 @@ onMounted(async () => {
             width="110"><template #default="{ row }"><ElTag :type="row.enabled && row.enable_chat ? 'success' : 'info'">{{ row.enabled && row.enable_chat ? '可对话' : '已停用' }}</ElTag></template></ElTableColumn>
           <ElTableColumn
             label="操作"
-            width="240"
+            align="right"
+            width="132"
             fixed="right">
+            <template #header>
+              <ElButton
+                type="primary"
+                plain
+                size="small"
+                @click="addModel">新增模型</ElButton>
+            </template>
             <template #default="{ row }">
-              <ElButton
-                link
-                type="primary"
-                @click="editModel(row)">编辑</ElButton>
-              <ElButton
-                link
-                type="primary"
-                @click="testModel(row)">连接测试</ElButton>
-              <ElPopconfirm
-                title="删除这个模型配置？"
-                @confirm="deleteModel(row)"><template #reference><ElButton
-                  link
-                  type="danger">删除</ElButton></template></ElPopconfirm>
+              <div class="list-row-actions">
+                <ElButton
+                  size="small"
+                  plain
+                  @click="editModel(row)">编辑</ElButton>
+                <ElDropdown
+                  trigger="click"
+                  placement="bottom-end">
+                  <ElButton
+                    class="list-row-actions__more"
+                    size="small"
+                    plain
+                    aria-label="更多操作">
+                    ···
+                  </ElButton>
+                  <template #dropdown>
+                    <ElDropdownMenu>
+                      <ElDropdownItem @click="testModel(row)">
+                        连接测试
+                      </ElDropdownItem>
+                      <ElDropdownItem
+                        class="list-row-actions__danger"
+                        @click="confirmDeleteModel(row)">
+                        删除
+                      </ElDropdownItem>
+                    </ElDropdownMenu>
+                  </template>
+                </ElDropdown>
+              </div>
             </template>
           </ElTableColumn>
         </ElTable>

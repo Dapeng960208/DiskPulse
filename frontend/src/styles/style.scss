@@ -184,6 +184,23 @@ a {
 }
 
 // ==================== 工具类 ====================
+.list-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  white-space: nowrap;
+}
+
+.list-row-actions__more {
+  width: 32px;
+  padding: 0;
+}
+
+.list-row-actions__danger {
+  color: var(--danger-color);
+}
+
 .text-center { text-align: center; }
 .text-left { text-align: left; }
 .text-right { text-align: right; }
