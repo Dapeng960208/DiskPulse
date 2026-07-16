@@ -21,6 +21,7 @@ import redis
 from pathlib import Path
 from typing import List, Dict, Optional
 from appConfig import base_config
+from utils.storageDeviceHttp import raise_for_device_status
 
 # Optional cache file: <project root>/.isilon_cache/cache.json
 _PROJECT_ROOT = str(base_config.app_root_path)
@@ -249,9 +250,25 @@ class IsilonClient:
                           f"(services={info.get('services')}, "
                           f"timeout_absolute={info.get('timeout_absolute')}s)")
                 return True
+            if resp.status_code not in (401, 403):
+                raise_for_device_status(
+                    resp,
+                    logger=self,
+                    context="[IsilonClient] Cached session validation failed",
+                )
+            try:
+                raise_for_device_status(
+                    resp,
+                    logger=self,
+                    context="[IsilonClient] Cached session expired",
+                )
+            except requests.HTTPError:
+                pass
             self._log('info',
                       f"[IsilonClient] Cached session invalid "
                       f"(HTTP {resp.status_code}), will re-login")
+        except requests.HTTPError:
+            raise
         except Exception as exc:
             self._log('warning', f"[IsilonClient] Session validation error: {exc}")
 
@@ -265,7 +282,7 @@ class IsilonClient:
     def _login(self) -> bool:
         """POST /session/1/session, store cookies, persist to cache.
 
-        Returns True on success, False on failure (logs error, does not raise).
+        Returns True on success. Device and transport errors are re-raised unchanged.
         """
         payload = {
             'username': self.username,
@@ -276,14 +293,11 @@ class IsilonClient:
             resp = self.session.post(self._session_url, json=payload, timeout=30)
             self._log('info',
                       f"[IsilonClient] Login HTTP {resp.status_code} ← {self._session_url}")
-            if not resp.ok:
-                try:
-                    msg = resp.json().get('message', resp.text)
-                except Exception:
-                    msg = resp.text
-                self._log('error',
-                          f"[IsilonClient] Login failed ({resp.status_code}): {msg}")
-                return False
+            raise_for_device_status(
+                resp,
+                logger=self,
+                context="[IsilonClient] Login failed",
+            )
 
             csrf = self.session.cookies.get('isicsrf', '')
             if csrf:
@@ -296,22 +310,25 @@ class IsilonClient:
                       f"timeout_absolute={data.get('timeout_absolute')}s")
             self._save_session_cache(data.get('timeout_absolute') or 14400)
             return True
+        except requests.HTTPError:
+            raise
         except Exception as exc:
             self._log('error', f"[IsilonClient] Login error: {exc}")
-            return False
+            raise
 
     def _probe(self) -> bool:
         """Fetch cluster config to confirm connectivity and extract OneFS version.
 
-        Returns True on success, False on failure (logs error, does not raise).
+        Returns True on success. Device and transport errors are re-raised unchanged.
         """
         url = f"{self.base_url}/1/cluster/config"
         try:
             resp = self.session.get(url, timeout=30)
-            if not resp.ok:
-                self._log('error',
-                          f"[IsilonClient] Probe failed ({resp.status_code}) ← {url}")
-                return False
+            raise_for_device_status(
+                resp,
+                logger=self,
+                context=f"[IsilonClient] Probe failed url={url}",
+            )
             data = resp.json()
             onefs_ver = data.get('onefs_version', {}).get('release', 'unknown')
             self.discover_api_version()
@@ -319,9 +336,11 @@ class IsilonClient:
                       f"[IsilonClient] Connected to {self.hostname}:{self.port} "
                       f"— OneFS {onefs_ver}")
             return True
+        except requests.HTTPError:
+            raise
         except Exception as exc:
             self._log('error', f"[IsilonClient] Probe error: {exc}")
-            return False
+            raise
 
     # ------------------------------------------------------------------
     # Generic GET with auto re-login
@@ -343,7 +362,11 @@ class IsilonClient:
                     self._clear_cache_entry()
                     self._login()
                     continue
-                resp.raise_for_status()
+                raise_for_device_status(
+                    resp,
+                    logger=self,
+                    context=f"[IsilonClient] GET {path} failed",
+                )
                 return resp.json()
             except requests.HTTPError as exc:
                 self._log('error', f"[IsilonClient] GET {path} failed: {exc}")
@@ -512,7 +535,11 @@ class IsilonClient:
                 self._clear_cache_entry()
                 self._login()
                 continue
-            response.raise_for_status()
+            raise_for_device_status(
+                response,
+                logger=self,
+                context=f"[IsilonClient] {method.upper()} quota failed url={url}",
+            )
             return
         raise RuntimeError("Isilon quota update authentication failed")
 
@@ -575,7 +602,11 @@ class IsilonClient:
         if current is None:
             raise RuntimeError("Isilon quota readback failed")
         response = self.session.get(f"{collection_url}/{current['id']}", timeout=60)
-        response.raise_for_status()
+        raise_for_device_status(
+            response,
+            logger=self,
+            context=f"[IsilonClient] GET quota readback failed url={collection_url}/{current['id']}",
+        )
         data = response.json()
         quota = (data.get("quotas") or [data])[0]
         readback = quota.get("thresholds") or {}
@@ -621,7 +652,12 @@ class IsilonClient:
                 getattr(self, "_session_cache_enabled", False),
             )
             if not cache_persisted:
-                self.session.delete(self._session_url, timeout=15)
+                response = self.session.delete(self._session_url, timeout=15)
+                raise_for_device_status(
+                    response,
+                    logger=self,
+                    context="[IsilonClient] Logout failed",
+                )
         except requests.RequestException as exc:
             self._log(
                 "warning",

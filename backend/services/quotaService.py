@@ -4,7 +4,6 @@ from datetime import datetime
 
 import requests
 from fastapi import HTTPException, status
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from urllib3 import disable_warnings
 from urllib3.exceptions import InsecureRequestWarning
@@ -14,6 +13,7 @@ from schemas.quotaSchema import QuotaAdjustmentRequest, QuotaAdjustmentResponse
 from utils.isilonClient import IsilonClient
 from utils.mailTools.emailNotification import EmailNotification
 from utils.netAppClient import NetAppClient
+from utils.storageDeviceHttp import device_error_response
 from utils.storageTarget import resolve_group_storage_target
 
 
@@ -187,8 +187,8 @@ def _execute_adjustment(
     except HTTPException:
         raise
     except requests.HTTPError as error:
-        response = error.response
-        if response is None:
+        native_response = device_error_response(error)
+        if native_response is None:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Storage quota adjustment failed",
@@ -198,18 +198,9 @@ def _execute_adjustment(
             cluster.id,
             resource_type,
             resource.id,
-            response.status_code,
+            native_response.status_code,
         )
-        try:
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json(),
-            )
-        except ValueError:
-            raise HTTPException(
-                status_code=response.status_code,
-                detail=response.reason or "Storage device request failed",
-            ) from error
+        return native_response
     except Exception as error:
         logger.error(
             "Quota device update failed cluster_id=%s resource_type=%s resource_id=%s error_type=%s",

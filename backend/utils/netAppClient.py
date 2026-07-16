@@ -3,6 +3,8 @@ import requests
 import time
 from typing import List, Dict, Optional
 
+from utils.storageDeviceHttp import raise_for_device_status
+
 
 class NetAppClient:
     """NetApp ONTAP REST API client (ONTAP 9.6+)."""
@@ -34,7 +36,11 @@ class NetAppClient:
         while url:
             try:
                 response = self.session.get(url, params=params, timeout=60)
-                response.raise_for_status()
+                raise_for_device_status(
+                    response,
+                    logger=self.logger,
+                    context=f"[Storage_Pulse] NetApp GET {endpoint} failed",
+                )
                 data = response.json()
                 records.extend(data.get('records', []))
                 next_link = data.get('_links', {}).get('next', {}).get('href')
@@ -92,7 +98,11 @@ class NetAppClient:
             json=payload,
             timeout=120,
         )
-        response.raise_for_status()
+        raise_for_device_status(
+            response,
+            logger=self.logger,
+            context=f"[Storage_Pulse] NetApp {method.upper()} {endpoint} failed",
+        )
         data = response.json() if response.content else {}
         if response.status_code == 202:
             job_uuid = (data.get("job") or {}).get("uuid")
@@ -106,7 +116,11 @@ class NetAppClient:
             response = self.session.get(
                 f"{self.base_url}/cluster/jobs/{job_uuid}", timeout=60
             )
-            response.raise_for_status()
+            raise_for_device_status(
+                response,
+                logger=self.logger,
+                context=f"[Storage_Pulse] NetApp GET cluster/jobs/{job_uuid} failed",
+            )
             state = response.json().get("state")
             if state == "success":
                 return
