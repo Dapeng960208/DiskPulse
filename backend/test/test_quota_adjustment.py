@@ -550,3 +550,27 @@ def test_quota_routes_use_resource_paths_and_reject_extra_input(quota_api):
         json={"hard_limit": 100, "unit": "GiB", "unexpected": True},
     )
     assert usage_response.status_code == 422
+
+
+def test_quota_route_returns_native_device_json_without_502_wrapper(quota_api, monkeypatch):
+    native_error = {
+        "errors": [
+            {
+                "code": "AEC_FORBIDDEN",
+                "message": "Quota Management privilege is required",
+            }
+        ]
+    }
+    monkeypatch.setattr(
+        quotaService,
+        "adjust_group_quota",
+        lambda *_args, **_kwargs: JSONResponse(status_code=403, content=native_error),
+    )
+
+    response = quota_api.patch(
+        f"{API_PREFIX}/groups/7/quota",
+        json={"hard_limit": 120, "unit": "GiB"},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == native_error

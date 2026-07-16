@@ -2,8 +2,12 @@
 import logging
 from datetime import datetime
 
+import requests
 from fastapi import HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from urllib3 import disable_warnings
+from urllib3.exceptions import InsecureRequestWarning
 
 from models import Group, Qtree, StorageAlerts, StorageUsage, Volume
 from schemas.quotaSchema import QuotaAdjustmentRequest, QuotaAdjustmentResponse
@@ -26,6 +30,8 @@ def _build_client(cluster):
         "protocol": cluster.protocol or "https",
         "tls_verify": cluster.tls_verify,
     }
+    if common["protocol"] == "https" and common["tls_verify"] is False:
+        disable_warnings(InsecureRequestWarning)
     if (cluster.storage_type or "").lower() == "netapp":
         return NetAppClient(port=cluster.storage_port or 443, **common)
     return IsilonClient(
@@ -180,6 +186,30 @@ def _execute_adjustment(
             )
     except HTTPException:
         raise
+    except requests.HTTPError as error:
+        response = error.response
+        if response is None:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Storage quota adjustment failed",
+            ) from error
+        logger.error(
+            "Quota device request rejected cluster_id=%s resource_type=%s resource_id=%s device_status=%s",
+            cluster.id,
+            resource_type,
+            resource.id,
+            response.status_code,
+        )
+        try:
+            return JSONResponse(
+                status_code=response.status_code,
+                content=response.json(),
+            )
+        except ValueError:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=response.reason or "Storage device request failed",
+            ) from error
     except Exception as error:
         logger.error(
             "Quota device update failed cluster_id=%s resource_type=%s resource_id=%s error_type=%s",
