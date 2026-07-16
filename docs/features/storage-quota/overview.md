@@ -39,6 +39,19 @@ NetApp 和 Isilon 的设备协议与 TLS 证书校验由 `storage_clusters.proto
 - 无软限额时页面显示“无软限额”，不显示 0%。
 - 存储使用导出增加“软限额”“软使用率”列。
 
+## 配额调整
+
+超级管理员可在项目组列表和用户目录列表直接调整最终目标配额，输入值不是扩容量：
+
+- `PATCH /groups/{group_id}/quota` 调整项目组独占存储目标；共享 Volume/Qtree 返回 `409`，不调用设备。
+- `PATCH /storage-usages/{storage_usage_id}/quota` 按当前研发用户名调整用户配额。
+- 硬限额必填；软限额可不设置，设置时必须严格小于硬限额；不支持文件限额和用户映射。
+- NetApp Qtree/用户写 quota rule；NetApp Volume 项目组只调整 Volume 容量且仅支持硬限额。
+- Isilon Directory/User quota 支持硬限额、软限额和宽限期；设置软限额时宽限期必填。继承 default-user 的用户会创建独立配额，不修改共享默认值。
+- 后端统一换算单位并在设备写入后读回校验；成功后更新本地限额与利用率、写入 `quota_adjustment` 记录，再发送结果邮件。
+
+详细接口、厂商映射和异常边界见 [项目组与用户目录配额调整设计](quota-adjustment-design.md)。
+
 ## 数据库与迁移
 
 PostgreSQL initial baseline `000000000001` 在以下表直接创建 nullable 字段：
@@ -61,3 +74,5 @@ QuestDB 保留已执行的 `000000000001_initial_schema`，通过前向迁移 `0
 - `cd frontend && npx vitest run test/unit/smoke/surface-regression.test.js --coverage.enabled=false`
 - `.\.venv\Scripts\python.exe -m pytest backend\test\test_core_api.py backend\test\test_storage_collection_trigger.py -q`
 - `cd backend && ..\.venv\Scripts\python.exe -m pytest test\test_questdb_migrations.py test\test_storage_soft_quota.py -q`
+- `.\.venv\Scripts\python.exe -m pytest backend\test\test_quota_adjustment.py -q`
+- `cd frontend && npm test -- test/unit/quota-adjustment.test.js test/unit/api/modules.test.js`

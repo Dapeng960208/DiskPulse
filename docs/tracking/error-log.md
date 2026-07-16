@@ -1,5 +1,32 @@
 # 错误记录
 
+### 2026-07-16：前端测试误在仓库根目录执行
+
+- 触发：组合复验时在 `D:\dev\DiskPulse` 执行 `npm test -- test/unit/quota-adjustment.test.js`。
+- 现象：npm 报 `ENOENT`，找不到仓库根目录下的 `package.json`。
+- 根因：本项目的前端 `package.json` 位于 `frontend`，命令未切换工作目录。
+- 修复：在 `D:\dev\DiskPulse\frontend` 执行相同测试命令。
+- 验证：修正工作目录后配额弹窗测试 `3 passed`。
+- 风险：仅影响本地验证命令，不影响实现。
+
+### 2026-07-16：配额弹窗选项属性未通过 Vue 模板格式检查
+
+- 触发：对配额调整相关前端文件执行定向 ESLint。
+- 现象：`QuotaAdjustmentDialog.vue` 的 5 个 `ElOption` 报 `vue/max-attributes-per-line`。
+- 根因：`label` 与 `value` 写在同一行，不符合仓库多属性组件的换行规则。
+- 修复：将 5 个选项的 `label`、`value` 分行排列，不改变字段值或交互。
+- 验证：重新执行相同定向 ESLint，结果为 `0 errors`。
+- 风险：仅为模板格式问题，不影响 API 和配额行为。
+
+### 2026-07-16：Vitest 聚焦测试路径相对工作目录错误
+
+- 触发：在 `frontend` 工作目录执行 `npm test -- --run frontend/test/unit/quota-adjustment.test.js frontend/test/unit/api/modules.test.js`。
+- 现象：Vitest 提示 `No test files found`，两个测试文件均未执行。
+- 根因：测试路径仍带仓库根目录的 `frontend/` 前缀，并额外传入了不需要的 `--run` 参数。
+- 修复：改用 `npm test -- test/unit/quota-adjustment.test.js test/unit/api/modules.test.js`。
+- 验证：修正命令后配额弹窗与 API 聚焦测试 `4 passed`。
+- 风险：仅影响本地验证命令，不影响生产代码。
+
 ### 2026-07-16：独立告警任务测试数据违反项目组存储目标约束
 
 - 触发：为 `storage_alerts_schedule_task` 增加最新采集批次选择测试。
