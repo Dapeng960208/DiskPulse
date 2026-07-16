@@ -7,7 +7,6 @@ from sqlalchemy import select, update
 from dependencies import DBSession
 from database import SessionLocal
 from celery_worker import diskpulse_app
-from celery_tasks.manager.storageMonitor import SynchronousPathState
 from celery_tasks.manager.remoteFileManager import RemoteFileManager
 from celery.utils.log import get_task_logger
 from datetime import datetime, timedelta
@@ -276,16 +275,6 @@ def storages_schedule_fetching_task(storage_cluster_id=None):
         raise
 
 
-@diskpulse_app.task(soft_time_limit=3000, time_limit=3000, expires=600)
-def check_user_path_status_hourly():
-    try:
-        with DBSession() as db:
-            sync_path = SynchronousPathState(db=db, logger=logger)
-            sync_path.start()
-    except Exception as e:
-        logger.error(f"Error in Check user path status :{e}")
-
-
 @diskpulse_app.task(soft_time_limit=120, time_limit=150, expires=1800)
 def user_storage_usage_alert_hourly():
     with DBSession() as db:
@@ -330,7 +319,6 @@ def group_quit_user_storage_usage_alert_weekly():
 def quit_user_back_up_daily():
     with DBSession() as db:
         remote_file_manager = RemoteFileManager(db=db, logger=logger)
-        remote_file_manager.initiating_quit_users_bpm_process()
         # remote_file_manager.back_up_quit_users_storage_usages()
         remote_file_manager.bacK_up_delete_alarm()
         remote_file_manager.delete_back_up()

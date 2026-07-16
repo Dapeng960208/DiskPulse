@@ -9,7 +9,6 @@ from schemas import storageBackUpRecordSchema
 from utils.mailTools.emailNotification import EmailNotification
 from sqlalchemy import and_, or_, update
 from sqlalchemy.orm import joinedload
-from utils.iam.iamApi import IamApi
 from appConfig import base_config
 
 
@@ -484,91 +483,3 @@ class RemoteFileManager:
             data=self.add_email_company_info(data=data),
             template_name='BackUpDeletedAlarm',
         )
-
-    def initiating_quit_users_bpm_process(self):
-        """
-        定期判断离职小于三十天的用户是否已离职，离职发起离职数据清理电子流
-        :return:
-        """
-        if not self.storage_config.back_up_enabled:
-            self.logger.warning(
-                "The project team disables the user backup function. Please check the project team Settings.")
-            return False
-        quit_days = self.storage_config.back_up_quit_days if self.storage_config.back_up_quit_days else 30
-        storage_usage_dbs = self.db.query(StorageUsage).options(
-            joinedload(StorageUsage.user),
-            joinedload(StorageUsage.group).joinedload(Group.project),
-            joinedload(StorageUsage.group).joinedload(Group.group_tag),
-            joinedload(StorageUsage.group).joinedload(Group.in_charge_user),
-        ).join(
-            User, StorageUsage.user_id == User.id
-        ).join(
-            Group, Group.id == StorageUsage.group_id
-        ).filter(
-            StorageUsage.used > 0,
-            User.user_type == 0,
-            User.quit_days <= quit_days,
-            Group.back_up_enabled == 1,
-        ).all()
-        iam = IamApi(db=self.db, logger=self.logger, type='storage')
-        iam.set_up()
-        if len(storage_usage_dbs) == 0:
-            self.logger.warning(f'No quit users')
-            return
-        source_paths = {storage_usage.linux_path for storage_usage in storage_usage_dbs}
-        existing_records = self.db.query(StorageBackUpRecord).filter(
-            StorageBackUpRecord.source_path.in_(source_paths)
-        ).all()
-        existing_by_source = {record.source_path: record for record in existing_records}
-        candidates = []
-        for storage_usage_db in storage_usage_dbs:
-            group = storage_usage_db.group
-            if group is None or group.in_charge_user_id is None or storage_usage_db.linux_path is None:
-                self.logger.warning(
-                    f"Storage usage ({storage_usage_db.id}) group is None or charge user is None or linux path is None"
-                )
-                continue
-            user_path = storage_usage_db.linux_path
-            if self.directory_exists(user_path) is False:
-                self.logger.warning(f'User directory {user_path} not exit')
-                continue
-            storage_back_up_record_db = existing_by_source.get(user_path)
-            if storage_back_up_record_db:
-                self.logger.warning(
-                    f'Storage back up record {storage_back_up_record_db.id} exited '
-                )
-                continue
-            candidates.append(
-                {
-                    "form_data": {
-                        "formData": {
-                            "groupId": group.id,
-                            "rdUsernameId": storage_usage_db.user_id,
-                            "storageUsageId": storage_usage_db.id,
-                            "inChargeUserId": group.in_charge_user.iam_id,
-                        },
-                    },
-                    "source_path": user_path,
-                    "destination_path": self._build_back_up_destination_path(
-                        storage_usage_db,
-                        self.storage_config.back_up_dir,
-                    ),
-                    "user_id": storage_usage_db.user_id,
-                }
-            )
-        for candidate in candidates:
-            bpm_uid = iam.initiating_bpm_process(data=candidate["form_data"])
-            if bpm_uid is None:
-                continue
-            start_time = datetime.now()
-            storage_back_up_record = StorageBackUpRecord(
-                source_path=candidate["source_path"],
-                destination_path=candidate["destination_path"],
-                start_time=start_time,
-                user_id=candidate["user_id"],
-                end_time=start_time,
-                status=9,
-                process_uid=bpm_uid,
-            )
-            self.db.add(storage_back_up_record)
-            self.db.commit()

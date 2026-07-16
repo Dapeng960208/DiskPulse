@@ -368,7 +368,7 @@ def test_storage_alert_migration_revision_and_schema_contract():
 
 
 def test_storage_alert_migration_preserves_default_rule_values_and_offline_sql():
-    paths = sorted((BACKEND_ROOT / "migrate" / "versions").glob("00000000000*.py"))
+    paths = sorted((BACKEND_ROOT / "migrate" / "versions").glob("00000000000[1-6]_*.py"))
     migrations = []
     for path in paths:
         spec = importlib.util.spec_from_file_location(path.stem, path)

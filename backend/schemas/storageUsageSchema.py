@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from datetime import datetime
 from schemas import usersSchema, groupSchema
 
@@ -77,12 +77,6 @@ class StorageUsage(StorageUsageBase):
 
 
 StorageUsage.model_rebuild()
-
-
-class StorageUsageExpand(BaseModel):
-    expand_id: int = Field(gt=0)
-    expand_type: str = Field(pattern="^(StorageUsage|Group|Volume|Qtree)$")
-    size: float = Field(gt=0)
 
 
 class StorageUsageExport(BaseModel):

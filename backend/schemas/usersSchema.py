@@ -103,15 +103,3 @@ class UserId(BaseModel):
 
 class UsersIds(BaseModel):
     ids: List[int] = Field(default_factory=list)
-
-
-class IamUser(BaseModel):
-    iam_id: int
-    username: str
-    rd_username: str | None = None
-    department: str | None = None
-    avatar_url: str | None = None
-    email: str | None = None
-
-    class Config:
-        from_attributes = True

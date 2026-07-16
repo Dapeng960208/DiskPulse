@@ -48,11 +48,15 @@ def test_deprecated_global_config_fields_are_absent_but_cluster_credentials_rema
 
 
 def test_deprecated_expansion_and_iam_bpm_entry_points_are_removed():
+    from celery_tasks.manager import largeFileAlert
     from celery_tasks.manager.remoteFileManager import RemoteFileManager
+    from celery_tasks.tasks import large_files
     from routers import storage_usage
     from schemas import storageUsageSchema
 
     assert not hasattr(RemoteFileManager, "initiating_quit_users_bpm_process")
+    assert not hasattr(largeFileAlert, "LargeFileState")
+    assert not hasattr(large_files, "check_large_files_status_daily")
     assert not hasattr(storageUsageSchema, "StorageUsageExpand")
     assert "/storage-usages/expand" not in {route.path for route in storage_usage.router.routes}
 
@@ -96,10 +100,10 @@ def test_cleanup_migration_drops_and_restores_columns_on_sqlite():
         assert all(value is None for value in restored)
 
 
-def test_cleanup_migration_compiles_for_postgresql_and_mysql():
+def test_cleanup_migration_compiles_for_supported_dialects():
     migration = _cleanup_migration()
 
-    for dialect in ("postgresql", "mysql"):
+    for dialect in ("sqlite", "postgresql", "mysql"):
         output = io.StringIO()
         context = MigrationContext.configure(
             dialect_name=dialect,

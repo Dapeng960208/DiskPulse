@@ -6,20 +6,11 @@ from schemas.storageAlertRuleSchema import DEFAULT_STORAGE_ALERT_RULE, StorageAl
 class StorageConf(BaseModel):
     id: int | None = None
     name: str | None = None
-    iam_url: str | None = None
-    iam_account: str | None = None
-    iam_password: str | None = None
-    bpm_api_url: str | None = None
-    bpm_process_id: int | None = 31
     mail_host: str | None = None
     mail_port: int = 587
     mail_to: str | None = None
     mail_user: str | None = None
     mail_password: str | None = None
-    storage_host: str | None = None
-    storage_port: int | None = 22
-    storage_user: str | None = None
-    storage_password: str | None = None
     domain_name: str | None = None
     person_expand: str | None = None
     group_expand: str | None = None
@@ -41,17 +32,10 @@ class StorageConf(BaseModel):
 class StorageConfPublic(BaseModel):
     id: int | None = None
     name: str | None = None
-    iam_url: str | None = None
-    iam_account: str | None = None
-    bpm_api_url: str | None = None
-    bpm_process_id: int | None = 31
     mail_host: str | None = None
     mail_port: int = 587
     mail_to: str | None = None
     mail_user: str | None = None
-    storage_host: str | None = None
-    storage_port: int | None = 22
-    storage_user: str | None = None
     domain_name: str | None = None
     person_expand: str | None = None
     group_expand: str | None = None

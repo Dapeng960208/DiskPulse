@@ -49,12 +49,8 @@ def seed_security_data(session_factory):
         session.add(
             models.StorageConf(
                 name="storage conf",
-                iam_account="iam-user",
-                iam_password="iam-secret",
                 mail_user="mail-user",
                 mail_password="mail-secret",
-                storage_user="storage-user",
-                storage_password="storage-secret",
                 file_manage_user="file-user",
                 file_manage_password="file-secret",
             )

@@ -298,18 +298,13 @@ class TestCoreApi:
 
         assert response.path == str(image_path)
 
-    def test_isilon_group_expansion_is_rejected_before_storage_write(self):
-        self.bind_seeded_group_to_volume("isilon")
+    def test_deprecated_storage_expansion_route_is_removed(self):
+        response = self.client.post(
+            "/storage-pulse/api/storage-usages/expand",
+            json={"expand_id": 1, "expand_type": "Group", "size": 1},
+        )
 
-        with patch("routers.storage_usage.StorageManagement") as management:
-            response = self.client.post(
-                "/storage-pulse/api/storage-usages/expand",
-                json={"expand_id": 1, "expand_type": "Group", "size": 1},
-            )
-
-        assert response.status_code == 422
-        assert "Isilon" in response.json()["detail"]
-        management.assert_not_called()
+        assert response.status_code == 405
 
     def test_storage_cluster_crud_and_realtime_contract(self):
         with patch("routers.storage_cluster._schedule_storage_collection") as schedule_collection:

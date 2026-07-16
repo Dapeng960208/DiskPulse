@@ -73,16 +73,6 @@ diskpulse_app.conf.beat_schedule = {
     #     "schedule": 60.0,
     #     "options": {"expires": 60},
     # },
-    # "check_user_path_status_hourly": {
-    #     "task": "celery_tasks.tasks.storages.check_user_path_status_hourly",
-    #     "schedule": crontab(minute='20'),
-    #     "options": {"expires": 60},
-    # },
-    # "synchronize_iam_user_data": {
-    #     "task": "celery_tasks.tasks.iam.synchronize_iam_user_data_task",
-    #     "schedule": crontab(minute='5'),
-    #     "options": {"expires": 60},
-    # },
     # "user_storage_usage_alert_hourly": {
     #     "task": "celery_tasks.tasks.storages.user_storage_usage_alert_hourly",
     #     "schedule": crontab(minute='0'),
@@ -108,19 +98,9 @@ diskpulse_app.conf.beat_schedule = {
     #     "schedule": crontab(hour='1', minute='0'),
     #     "options": {"expires": 60},
     # },
-    # "synchronize_project_milestone_data_daily": {
-    #     "task": "celery_tasks.tasks.iam.synchronize_project_milestone_data_daily",
-    #     "schedule": crontab(hour='10', minute='30'),
-    #     "options": {"expires": 60},
-    # },
     # "user_large_files_alert_twice_monthly": {
     #     "task": "celery_tasks.tasks.large_files.user_large_files_alert_twice_monthly",
     #     "schedule": crontab(hour='9', minute='40', day_of_month='14,28'),
-    #     "options": {"expires": 60},
-    # },
-    # "check_large_files_status_daily": {
-    #     "task": "celery_tasks.tasks.large_files.check_large_files_status_daily",
-    #     "schedule": crontab(hour='11,23', minute='30'),
     #     "options": {"expires": 60},
     # },
     # "evaluate_all_rules_parallel": {
@@ -137,7 +117,6 @@ import celery_tasks.tasks.storages
 import celery_tasks.tasks.large_files
 import celery_tasks.tasks.storage_health
 import celery_tasks.tasks.storage_alerts
-# import celery_tasks.tasks.iam
 # import celery_tasks.tasks.check_quest_db
 # import celery_tasks.tasks.large_files
 # import celery_tasks.tasks.lsf_alerts
