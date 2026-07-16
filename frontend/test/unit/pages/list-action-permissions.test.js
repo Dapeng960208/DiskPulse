@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const readPage = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
@@ -6,6 +6,20 @@ const readPage = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 function actionColumn(source) {
   const start = source.lastIndexOf('<ElTableColumn');
   return source.slice(start, source.indexOf('</ElTableColumn>', start));
+}
+
+function columnContaining(source, text) {
+  const position = source.indexOf(text);
+  const start = source.lastIndexOf('<ElTableColumn', position);
+  return source.slice(start, source.indexOf('</ElTableColumn>', position));
+}
+
+function vueFiles(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) return vueFiles(path);
+    return entry.name.endsWith('.vue') ? [path] : [];
+  });
 }
 
 describe('role-aware list actions', () => {
@@ -50,5 +64,57 @@ describe('role-aware list actions', () => {
 
     expect(header).toContain('v-if="hasRole(\'disk-monitor:admin\')"');
     expect(header).toContain(label);
+  });
+});
+
+describe('global list row actions', () => {
+  const storageSource = readPage('src/pages/admin/storage-cluster/StorageClusterListPage.vue');
+  const aiSource = readPage('src/pages/admin/ai/AiCenterPage.vue');
+
+  it('never renders more than two direct controls in a table row action column', () => {
+    const violations = [];
+
+    for (const file of vueFiles(resolve(process.cwd(), 'src'))) {
+      const source = readFileSync(file, 'utf8');
+      for (const [column] of source.matchAll(/<ElTableColumn\b[\s\S]*?<\/ElTableColumn>/g)) {
+        if (!/<template\s+#default/.test(column)) continue;
+
+        const rowActions = column
+          .replace(/<template\s+#header[\s\S]*?<\/template>/g, '')
+          .replace(/<template\s+#dropdown[\s\S]*?<\/template>/g, '');
+        const directControls = rowActions.match(/<(?:ElButton|ElLink)\b/g) ?? [];
+        if (directControls.length > 2) {
+          violations.push(`${file}: ${directControls.length}`);
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps storage details direct and gates management actions and creation', () => {
+    const actions = columnContaining(storageSource, '添加集群');
+    const header = actions.match(/<template[\s\S]*?#header[^>]*>([\s\S]*?)<\/template>/)?.[1];
+
+    expect(actions).toContain('width="132"');
+    expect(actions).toContain('class="list-row-actions"');
+    expect(actions.indexOf('详情')).toBeLessThan(actions.indexOf('<ElDropdown'));
+    expect(actions).toMatch(/<ElDropdown[\s\S]*?v-if="hasRole\('disk-monitor:admin'\)"/);
+    expect(actions).toContain('编辑');
+    expect(actions).toContain('删除');
+    expect(actions).toContain('class="list-row-actions__danger"');
+    expect(header).toContain('v-if="hasRole(\'disk-monitor:admin\')"');
+  });
+
+  it('keeps AI editing direct and confirms deletion from the more menu', () => {
+    const actions = columnContaining(aiSource, '新增模型');
+
+    expect(actions).toContain('width="132"');
+    expect(actions).toContain('class="list-row-actions"');
+    expect(actions.indexOf('编辑')).toBeLessThan(actions.indexOf('<ElDropdown'));
+    expect(actions).toContain('连接测试');
+    expect(actions).toContain('删除');
+    expect(actions).toContain('class="list-row-actions__danger"');
+    expect(aiSource).toContain('ElMessageBox.confirm');
   });
 });
