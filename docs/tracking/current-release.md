@@ -1,5 +1,14 @@
 # 当前交付记录
 
+## 2026-07-16：项目组与用户目录配额调整
+
+- 已新增 `PATCH /groups/{id}/quota` 和 `PATCH /storage-usages/{id}/quota`，仅超级管理员可调用；请求禁止额外字段，硬限额必填，软限额可选且必须严格小于硬限额。
+- 统一 quota service 根据集群类型调用现有 NetApp/Isilon 客户端：NetApp 支持 Qtree/用户 quota rule 和 Volume 容量，Isilon 支持 Directory/User quota 与宽限期；linked default-user 会创建显式用户配额。
+- 设备写入后执行读回校验，再同步本地资源、写 `quota_adjustment` 记录并在数据库提交后发送邮件；共享目标返回 `409`，设备或读回失败返回 `502`。
+- 项目组和用户目录列表复用统一弹窗；NetApp Volume 项目组隐藏软限额，宽限期仅 Isilon 显示，新硬限额低于已用容量时要求二次确认。
+- TDD 检查点：后端 RED `8c7629a`/`e00d38c`、GREEN `d5c1eef`；前端 RED `44418fd`、GREEN `41221d9`。验证为后端 `8 passed`、前端聚焦 `4 passed`、页面烟测 `64 passed`，`compileall`、定向 ESLint 与 `npm run build:test` 通过。
+- 未连接真实 NetApp/Isilon 测试目标执行写入、读回和恢复原值；未运行后端全量回归。完整边界见 [配额调整设计](../features/storage-quota/quota-adjustment-design.md)。
+
 ## 2026-07-16：系统设置废弃配置清理
 
 - 系统设置已收敛为普通“系统设置”标题、存储告警规则和保存按钮；邮箱配置与邮件链接仅从页面隐藏，`mail_*`、`company`、`domain_name`、`person_expand`、`group_expand` 及邮件发送逻辑继续保留。
