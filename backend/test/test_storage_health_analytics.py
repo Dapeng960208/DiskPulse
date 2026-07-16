@@ -1287,8 +1287,17 @@ def test_storage_health_migration_backfills_attributable_alerts_on_sqlite():
         spec.loader.exec_module(migration)
         migrations.append(migration)
 
+    migrations_by_revision = {migration.revision: migration for migration in migrations}
+    target_migration = migrations_by_revision["000000000004"]
+    prior_migrations = []
+    revision = target_migration.down_revision
+    while revision is not None:
+        migration = migrations_by_revision[revision]
+        prior_migrations.append(migration)
+        revision = migration.down_revision
+
     with sa.create_engine("sqlite://").begin() as connection:
-        for migration in migrations[:-1]:
+        for migration in reversed(prior_migrations):
             migration.op = Operations(MigrationContext.configure(connection))
             migration.upgrade()
         connection.execute(
@@ -1310,8 +1319,8 @@ def test_storage_health_migration_backfills_attributable_alerts_on_sqlite():
             )
         )
 
-        migrations[-1].op = Operations(MigrationContext.configure(connection))
-        migrations[-1].upgrade()
+        target_migration.op = Operations(MigrationContext.configure(connection))
+        target_migration.upgrade()
 
         row = connection.execute(
             sa.text(

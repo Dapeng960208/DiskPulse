@@ -246,6 +246,7 @@ export default [
         component: () => import('@/pages/admin/settings/SettingsPage.vue'),
         meta: {
           title: '系统设置',
+          isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },
       {

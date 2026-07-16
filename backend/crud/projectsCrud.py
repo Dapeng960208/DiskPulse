@@ -51,6 +51,9 @@ def create_project(db: Session, project: projectsSchema.ProjectUpdate):
         project_process_code=project.project_process_code,
         recipients=" ".join(map(str, project.recipient_ids)) if project.recipient_ids else None,
         is_alert=project.is_alert,
+        storage_alert_rule=(
+            project.storage_alert_rule.model_dump() if project.storage_alert_rule else None
+        ),
         in_charge_user_id=project.in_charge_user_id,
         pt_user_id=project.pt_user_id,
     )
@@ -69,6 +72,9 @@ def update_project(db: Session, project_id: int, project: projectsSchema.Project
         project_db.is_common = project.is_common
         project_db.recipients = " ".join(map(str, project.recipient_ids)) if project.recipient_ids else None
         project_db.is_alert = project.is_alert
+        project_db.storage_alert_rule = (
+            project.storage_alert_rule.model_dump() if project.storage_alert_rule else None
+        )
         project_db.in_charge_user_id = project.in_charge_user_id
         project_db.pt_user_id = project.pt_user_id
         project_db.project_process_code = project.project_process_code

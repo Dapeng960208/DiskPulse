@@ -8,7 +8,8 @@ from utils.query import get_sort_column
 
 def get_storage_alerts(db: Session, page: int, size: int, nameLike: str | None = None, prop: str | None = None,
                        order: str | None = None, related_type: str | None = None, related_id: int | None = None,
-                       alert_type: str | None = None):
+                       alert_type: str | None = None, event_type: str | None = None,
+                       quota_basis: str | None = None, delivery_status: str | None = None):
     query = db.query(StorageAlerts).filter(StorageAlerts.source == "diskpulse")
     conditions = []
     if nameLike and len(nameLike.strip()) > 0:
@@ -20,6 +21,12 @@ def get_storage_alerts(db: Session, page: int, size: int, nameLike: str | None =
         conditions.append(StorageAlerts.related_id == related_id)
     if alert_type:
         conditions.append(StorageAlerts.alert_type == alert_type)
+    if event_type:
+        conditions.append(StorageAlerts.event_type == event_type)
+    if quota_basis:
+        conditions.append(StorageAlerts.quota_basis == quota_basis)
+    if delivery_status:
+        conditions.append(StorageAlerts.delivery_status == delivery_status)
     query = query.filter(*conditions)
     total = query.count()
     sort_column = get_sort_column(StorageAlerts, prop)

@@ -1,0 +1,399 @@
+# -*- coding: utf-8 -*-
+from datetime import datetime, timedelta
+
+from celery.utils.log import get_task_logger
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
+
+from appConfig import base_config
+from celery_worker import diskpulse_app
+from database import SessionLocal
+from models import (
+    Group,
+    Project,
+    StorageAlerts,
+    StorageAlertState,
+    StorageConf,
+    StorageCluster,
+    StorageUsage,
+    User,
+)
+from schemas.storageAlertRuleSchema import DEFAULT_STORAGE_ALERT_RULE
+from services.feishuNotificationService import FeishuNotificationService
+from services.storageAlertRuleService import (
+    canonical_rule_signature,
+    resolve_recipient_usernames,
+    resolve_storage_alert_rule,
+    transition_alert_state,
+)
+
+
+logger = get_task_logger(__name__)
+RETRY_DELAYS_SECONDS = (60, 300, 900)
+MAX_DELIVERY_ATTEMPTS = 4
+
+
+def _usernames_for_ids(db, user_ids):
+    if not user_ids:
+        return []
+    rows = db.query(User.id, User.rd_username).filter(User.id.in_(user_ids)).all()
+    by_id = {row.id: row.rd_username for row in rows}
+    return [by_id.get(user_id) for user_id in user_ids]
+
+
+def _effective_rule(system_rule, target_type, project, group=None):
+    return resolve_storage_alert_rule(
+        target_type=target_type,
+        system_rule=system_rule,
+        project_rule=project.storage_alert_rule if project else None,
+        group_rule=group.storage_alert_rule if group else None,
+    ).rule
+
+
+def _display(value, suffix=""):
+    return "未设置" if value is None else f"{value:.2f}{suffix}"
+
+
+def _paragraphs(target, rule, ratio, event_type, context, previous_level=None):
+    labels = {
+        "username": "用户名",
+        "cluster": "集群",
+        "clusters": "集群",
+        "project": "项目",
+        "group_tag": "项目组标签",
+        "group": "项目组",
+        "linux_path": "Linux路径",
+    }
+    lines = [f"{labels[key]}：{', '.join(value) if isinstance(value, list) else value}\n" for key, value in context.items() if value]
+    lines.extend(
+        [
+            f"事件：{event_type}\n",
+            f"采用口径：{rule['quota_basis']}，使用率：{ratio:.2f}%\n",
+            f"硬限额：{_display(target.limit, ' GB')}，已使用：{_display(target.used, ' GB')}，硬限额使用率：{_display(target.use_ratio, '%')}\n",
+            f"软限额：{_display(target.soft_limit, ' GB')}，已使用：{_display(target.used, ' GB')}，软限额使用率：{_display(target.soft_use_ratio, '%')}\n",
+        ]
+    )
+    if previous_level:
+        lines.append(f"恢复前等级：{previous_level}")
+    return [[{"tag": "text", "text": line} for line in lines]]
+
+
+def _evaluate_one(
+    db,
+    *,
+    target_type,
+    target,
+    project,
+    group,
+    system_rule,
+    primary_usernames,
+    observed_at,
+    context,
+):
+    rule = _effective_rule(system_rule, target_type, project, group)
+    basis = rule["quota_basis"]
+    ratio = target.use_ratio if basis == "hard" else target.soft_use_ratio
+    soft_available = target.soft_limit is not None and target.soft_limit > 0 and ratio is not None
+    if ratio is None:
+        return None
+    state = (
+        db.query(StorageAlertState)
+        .filter_by(target_type=target_type, target_id=target.id)
+        .with_for_update()
+        .first()
+    )
+    result = transition_alert_state(
+        state=state,
+        rule=rule,
+        use_ratio=ratio,
+        observed_at=observed_at,
+        soft_limit_available=soft_available,
+    )
+    if result.skipped:
+        return None
+    if state is None:
+        candidate = StorageAlertState(
+            target_type=target_type,
+            target_id=target.id,
+            rule_signature=result.state.rule_signature,
+        )
+        try:
+            with db.begin_nested():
+                db.add(candidate)
+                db.flush()
+            state = candidate
+        except IntegrityError:
+            state = (
+                db.query(StorageAlertState)
+                .filter_by(target_type=target_type, target_id=target.id)
+                .with_for_update()
+                .one()
+            )
+            result = transition_alert_state(
+                state=state,
+                rule=rule,
+                use_ratio=ratio,
+                observed_at=observed_at,
+                soft_limit_available=soft_available,
+            )
+            if result.skipped:
+                return None
+    for field in (
+        "rule_signature",
+        "consecutive_breach_count",
+        "current_level",
+        "last_use_ratio",
+        "last_observed_at",
+        "last_notified_at",
+    ):
+        setattr(state, field, getattr(result.state, field))
+    if not result.event_type:
+        return None
+
+    feishu = base_config.get("feishu_notification", {}) or {}
+    group_cc = _usernames_for_ids(db, group.alert_cc_user_ids or []) if group else []
+    emergency = (result.level or result.previous_level) == "emergency"
+    recipients = resolve_recipient_usernames(
+        primary_usernames=primary_usernames,
+        group_cc_usernames=group_cc if target_type in {"storage_usage", "group"} else [],
+        global_cc_usernames=feishu.get("cc_usernames", []),
+        debug=bool(feishu.get("debug")),
+        emergency=emergency,
+        super_admin_usernames=base_config.get("super_admin_usernames", []),
+    )
+    alert = StorageAlerts(
+        storage_cluster_id=(None if target_type == "project" else getattr(target, "storage_cluster_id", None)),
+        source="diskpulse",
+        fingerprint=f"storage-rule:{target_type}:{target.id}:{observed_at.isoformat()}",
+        severity=result.level or result.previous_level or "info",
+        alert_level=result.level or result.previous_level,
+        alert_type="alert",
+        description=f"{target_type} storage {result.event_type}",
+        threshold=rule[result.level]["threshold"] if result.level else rule["important"]["threshold"],
+        avg_use_ratio=ratio,
+        related_id=target.id,
+        related_type={"storage_usage": "StorageUsage", "group": "Group", "project": "Project"}[target_type],
+        related_info={
+            "title": "存储恢复通知" if result.event_type == "recovery" else "存储容量告警",
+            "context": context,
+            "paragraphs": _paragraphs(
+                target, rule, ratio, result.event_type, context, result.previous_level
+            ),
+        },
+        event_type=result.event_type,
+        quota_basis=basis,
+        delivery_status="pending" if recipients else "skipped",
+        recipient_usernames=recipients,
+        delivery_attempts=0,
+        next_attempt_at=observed_at if recipients else None,
+        updated_at=observed_at,
+    )
+    db.add(alert)
+    db.flush()
+    return alert.id if recipients else None
+
+
+def evaluate_storage_alerts(
+    successful_cluster_ids,
+    refreshed_project_ids,
+    sample_identity=None,
+    refreshed_storage_usage_ids=(),
+    refreshed_group_ids=(),
+    observed_at=None,
+):
+    observed_at = observed_at or sample_identity or datetime.now()
+    if isinstance(observed_at, str):
+        observed_at = datetime.fromisoformat(observed_at)
+    delivery_ids = []
+    with SessionLocal.begin() as db:
+        config = db.query(StorageConf).first()
+        system_rule = (config.storage_alert_rule if config else None) or DEFAULT_STORAGE_ALERT_RULE
+        cluster_ids = set(successful_cluster_ids)
+        usages = (
+            db.query(StorageUsage)
+            .options(
+                joinedload(StorageUsage.user),
+                joinedload(StorageUsage.storage_cluster),
+                joinedload(StorageUsage.group).joinedload(Group.project),
+                joinedload(StorageUsage.group).joinedload(Group.group_tag),
+            )
+            .filter(
+                StorageUsage.storage_cluster_id.in_(cluster_ids),
+                StorageUsage.id.in_(set(refreshed_storage_usage_ids)),
+                StorageUsage.updated_at == observed_at,
+            )
+            .all()
+        )
+        for usage in usages:
+            if not usage.group or not usage.group.enable_monitoring or not usage.user or not usage.user.is_alert:
+                continue
+            event_id = _evaluate_one(
+                db,
+                target_type="storage_usage",
+                target=usage,
+                project=usage.group.project,
+                group=usage.group,
+                system_rule=system_rule,
+                primary_usernames=[usage.user.rd_username],
+                observed_at=observed_at,
+                context={
+                    "username": usage.user.rd_username,
+                    "cluster": usage.storage_cluster.name if usage.storage_cluster else None,
+                    "group_tag": usage.group.group_tag.name if usage.group.group_tag else None,
+                    "group": usage.group.name,
+                    "linux_path": usage.linux_path,
+                },
+            )
+            if event_id:
+                delivery_ids.append(event_id)
+
+        groups = (
+            db.query(Group)
+            .options(joinedload(Group.project), joinedload(Group.in_charge_user))
+            .options(joinedload(Group.storage_cluster), joinedload(Group.group_tag))
+            .filter(
+                Group.storage_cluster_id.in_(cluster_ids),
+                Group.enable_monitoring.is_(True),
+                Group.id.in_(set(refreshed_group_ids)),
+                Group.updated_at == observed_at,
+            )
+            .all()
+        )
+        for group in groups:
+            event_id = _evaluate_one(
+                db,
+                target_type="group",
+                target=group,
+                project=group.project,
+                group=group,
+                system_rule=system_rule,
+                primary_usernames=[group.in_charge_user.rd_username if group.in_charge_user else None],
+                observed_at=observed_at,
+                context={
+                    "cluster": group.storage_cluster.name if group.storage_cluster else None,
+                    "group_tag": group.group_tag.name if group.group_tag else None,
+                    "project": group.project.name if group.project else None,
+                    "group": group.name,
+                    "linux_path": group.linux_path,
+                },
+            )
+            if event_id:
+                delivery_ids.append(event_id)
+
+        projects = (
+            db.query(Project)
+            .options(joinedload(Project.in_charge_user))
+            .filter(
+                Project.id.in_(set(refreshed_project_ids)),
+                Project.status == 1,
+                Project.is_alert.is_(True),
+            )
+            .all()
+        )
+        for project in projects:
+            cluster_names = [
+                row[0]
+                for row in db.query(StorageCluster.name)
+                .join(Group, Group.storage_cluster_id == StorageCluster.id)
+                .filter(Group.project_id == project.id, Group.enable_monitoring.is_(True))
+                .distinct()
+                .order_by(StorageCluster.name)
+                .all()
+            ]
+            event_id = _evaluate_one(
+                db,
+                target_type="project",
+                target=project,
+                project=project,
+                group=None,
+                system_rule=system_rule,
+                primary_usernames=[project.in_charge_user.rd_username if project.in_charge_user else None],
+                observed_at=observed_at,
+                context={"project": project.name, "clusters": cluster_names},
+            )
+            if event_id:
+                delivery_ids.append(event_id)
+    return delivery_ids
+
+
+@diskpulse_app.task(soft_time_limit=120, time_limit=150)
+def evaluate_storage_alerts_task(
+    successful_cluster_ids,
+    refreshed_project_ids,
+    sample_identity,
+    refreshed_storage_usage_ids,
+    refreshed_group_ids,
+):
+    from celery_tasks.tasks.redis_lock import redis_lock
+
+    with redis_lock("storage_alert_evaluation_lock", expires=140) as have_lock:
+        if not have_lock:
+            return []
+        event_ids = evaluate_storage_alerts(
+            successful_cluster_ids,
+            refreshed_project_ids,
+            sample_identity,
+            refreshed_storage_usage_ids,
+            refreshed_group_ids,
+        )
+    for event_id in event_ids:
+        deliver_storage_alert_task.delay(event_id)
+    return event_ids
+
+
+@diskpulse_app.task(soft_time_limit=30, time_limit=45)
+def deliver_storage_alert_task(event_id):
+    with SessionLocal.begin() as db:
+        event = db.query(StorageAlerts).filter_by(id=event_id).with_for_update().first()
+        if event is None or event.delivery_status not in {"pending", "retrying"}:
+            return
+        if not event.recipient_usernames:
+            event.delivery_status = "skipped"
+            return
+        config = base_config.get("feishu_notification", {}) or {}
+        if not config.get("enabled"):
+            event.delivery_status = "skipped"
+            return
+        event.delivery_attempts += 1
+        try:
+            info = event.related_info or {}
+            FeishuNotificationService(config).send(
+                usernames=event.recipient_usernames,
+                title=info.get("title", "存储容量告警"),
+                paragraphs=info.get("paragraphs", []),
+            )
+        except Exception as error:
+            event.delivery_error = str(error)[:512]
+            if event.delivery_attempts >= MAX_DELIVERY_ATTEMPTS:
+                event.delivery_status = "failed"
+                event.next_attempt_at = None
+            else:
+                event.delivery_status = "retrying"
+                event.next_attempt_at = datetime.now() + timedelta(
+                    seconds=RETRY_DELAYS_SECONDS[event.delivery_attempts - 1]
+                )
+            logger.warning("Feishu storage alert delivery failed: event=%s", event_id)
+        else:
+            event.delivery_status = "sent"
+            event.notified_at = datetime.now()
+            event.next_attempt_at = None
+            event.delivery_error = None
+
+
+@diskpulse_app.task(soft_time_limit=50, time_limit=55)
+def retry_storage_alerts_task():
+    now = datetime.now()
+    with SessionLocal() as db:
+        event_ids = [
+            row.id
+            for row in db.query(StorageAlerts.id)
+            .filter(
+                StorageAlerts.delivery_status.in_(("pending", "retrying")),
+                StorageAlerts.next_attempt_at <= now,
+            )
+            .limit(100)
+            .all()
+        ]
+    for event_id in event_ids:
+        deliver_storage_alert_task.delay(event_id)
+    return event_ids

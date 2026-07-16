@@ -10,6 +10,9 @@ const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
   size: 20,
   alert_type: '',
+  event_type: '',
+  quota_basis: '',
+  delivery_status: '',
   prop:null,
   order:null
 
@@ -39,6 +42,25 @@ const alertTypeOptions = [
   { value: 'report', label: '周报' },
   { value: 'expand', label: '扩容' },
 ];
+const eventTypeOptions = [
+  { value: 'trigger', label: '首次告警' },
+  { value: 'escalation', label: '告警升级' },
+  { value: 'repeat', label: '重复告警' },
+  { value: 'recovery', label: '恢复通知' },
+];
+const quotaBasisOptions = [
+  { value: 'hard', label: '硬限额' },
+  { value: 'soft', label: '软限额' },
+];
+const deliveryStatusOptions = [
+  { value: 'pending', label: '待发送' },
+  { value: 'retrying', label: '重试中' },
+  { value: 'sent', label: '已发送' },
+  { value: 'failed', label: '发送失败' },
+  { value: 'skipped', label: '已跳过' },
+  { value: 'legacy', label: '历史记录' },
+];
+const optionLabel = (options, value) => options.find((option) => option.value === value)?.label || '-';
 
 const alertTypeDisplay = (alertType) => {
   switch (alertType) {
@@ -117,6 +139,42 @@ query();
           />
         </ElSelect>
       </ElFormItem>
+      <ElFormItem label="事件类型">
+        <ElSelect
+          v-model="queryParams.event_type"
+          clearable
+          placeholder="全部事件">
+          <ElOption
+            v-for="option in eventTypeOptions"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value" />
+        </ElSelect>
+      </ElFormItem>
+      <ElFormItem label="限额口径">
+        <ElSelect
+          v-model="queryParams.quota_basis"
+          clearable
+          placeholder="全部口径">
+          <ElOption
+            v-for="option in quotaBasisOptions"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value" />
+        </ElSelect>
+      </ElFormItem>
+      <ElFormItem label="发送状态">
+        <ElSelect
+          v-model="queryParams.delivery_status"
+          clearable
+          placeholder="全部状态">
+          <ElOption
+            v-for="option in deliveryStatusOptions"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value" />
+        </ElSelect>
+      </ElFormItem>
     </FilterForm>
 
     <DataTable
@@ -156,10 +214,31 @@ query();
         min-width="80">
         <template #default="{ row }">
           <span v-if="row.related_type === 'Group'">
-            {{ row.related_info?.project?.name || '-' }}
+            {{ row.related_info?.context?.project || row.related_info?.project?.name || '-' }}
           </span>
           <span v-else>-</span>
         </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="事件类型"
+        align="center"
+        prop="event_type"
+        min-width="90">
+        <template #default="{ row }">{{ optionLabel(eventTypeOptions, row.event_type) }}</template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="限额口径"
+        align="center"
+        prop="quota_basis"
+        min-width="80">
+        <template #default="{ row }">{{ optionLabel(quotaBasisOptions, row.quota_basis) }}</template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="发送状态"
+        align="center"
+        prop="delivery_status"
+        min-width="90">
+        <template #default="{ row }">{{ optionLabel(deliveryStatusOptions, row.delivery_status) }}</template>
       </ElTableColumn>
       <ElTableColumn
         label="项目组标签"
@@ -167,7 +246,7 @@ query();
         min-width="80">
         <template #default="{ row }">
           <span v-if="row.related_type === 'Group'">
-            {{ row.related_info?.group_tag?.name || '-' }}
+            {{ row.related_info?.context?.group_tag || row.related_info?.group_tag?.name || '-' }}
           </span>
           <span v-else>-</span>
         </template>

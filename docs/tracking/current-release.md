@@ -1,5 +1,20 @@
 # 当前交付记录
 
+## 2026-07-16：存储告警规则与飞书通知
+
+- 已从本地 `main` HEAD `ffe5d15` 创建独立分支 `codex/storage-alert-rules` 和 Worktree `D:\dev\worktrees\DiskPulse\storage-alert-rules`；主工作区 `frontend/src/pages/usage/UsageListPage.vue` 的既有修改未复制、未回退、未暂存。
+- 已复制 `.codegraph`，仅清理目标副本中的 daemon/WAL 运行文件并完整重建索引；`codegraph status` 显示新 Worktree 路径、286 个文件、3,866 个节点、9,936 条边和 `[OK] Index is up to date`。
+- `npm ci` 成功；Alembic 唯一 head 为 `000000000005`，history 连续。
+- 初始后端全量基线为 `283 passed, 1 failed`，失败是迁移测试错误选择最后一个迁移；初始前端全量基线为 `194 passed, 2 failed`，失败是存储术语旧断言。两类问题已由独立提交 `d16e8f1` 修复，复验为后端 `284 passed`、前端 39 个测试文件共 `196 passed`，实施基线已恢复。
+- 已完成系统、项目、项目组完整规则与继承：硬/软口径、严格递增阈值、正整数重复频次、连续两次确认、升级、静默降级、同级重复、恢复和规则变化静默重置均已实现。
+- `000000000006_storage_alert_rules` 已新增规则字段、项目默认告警开关、项目组个人 CC、`storage_alert_states` 和告警 outbox 投递字段/索引；历史告警回填为 `trigger/hard/legacy`。
+- 容量采集在每轮提交后携带本轮刷新用户目录、项目组和项目 ID 异步投递 `evaluate_storage_alerts_task`；状态与事件同事务提交，飞书 HTTP 由 `deliver_storage_alert_task` 处理，每分钟补偿任务按 1/5/15 分钟重试。旧容量邮件代码保留但 Beat 调度继续关闭。
+- 飞书配置默认关闭，协议使用 `/auth/token`、Bearer Token 和 `/send_info` 富文本 `post`；业务收件人、全局 CC、项目组 CC、紧急管理员和 debug 替换均已实现，密钥、收件人快照和内部错误不进入公开 API。
+- 后台已提供系统规则页签、项目告警/自定义规则、项目组继承预览/个人 CC，以及告警事件类型、限额口径和发送状态筛选；共享 `StorageAlertRuleForm` 负责三处规则校验。
+- TDD RED 契约提交为 `84b0d47`。最终后端全量 `312 passed`，仓库 coverage `84%`（通过现有 80% 门禁，但未达到本计划 90%），规则 schema/服务/飞书核心选择性覆盖率 `92%`；前端 40 个测试文件、`205 passed`，Statements/Lines `92.62%`、Branches `81.96%`、Functions `70.29%`，lint 和生产构建通过。
+- Alembic 唯一 head 为 `000000000006`；SQLite 在线升降级、SQLite 离线 SQL 实际执行、PostgreSQL/MySQL 离线 SQL 生成通过。`compileall`、`pip check`、`git diff --check` 与最终 CodeGraph 同步/status 通过。
+- 未验证真实 Redis/Celery、飞书通知微服务、PostgreSQL/MySQL 在线迁移、真实多集群部分失败和登录浏览器人工验收；覆盖率差距与部署验收边界保留为交付风险。完整实现与验收证据见 [存储告警规则设计](../features/storage-alerts/design.md)。
+
 ## 2026-07-16：Isilon 性能按 Directory Quota 路径采集
 
 - 原采集错误选择 node 磁盘 latency，导致性能页显示 `node 1 / 0ms`；现改读 OneFS `path` performance dataset、workload 配置和 dataset statkey。

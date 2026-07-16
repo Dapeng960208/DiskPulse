@@ -52,6 +52,12 @@ class StorageConf(Base):
     back_up_dir = Column(String)
     back_up_duration = Column(Integer, default=60)
     back_up_quit_days = Column(Integer, default=30)
+    storage_alert_rule = Column(JSON, nullable=False, default=lambda: {
+        "quota_basis": "hard",
+        "important": {"threshold": 80, "repeat_hours": 24},
+        "serious": {"threshold": 90, "repeat_hours": 6},
+        "emergency": {"threshold": 95, "repeat_hours": 1},
+    })
 
 
 class User(Base):
@@ -92,7 +98,8 @@ class Project(Base):
     status = Column(Integer, default=1)
     project_process_code = Column(String, nullable=True)
     recipients = Column(String, nullable=True)
-    is_alert = Column(Boolean, default=False)
+    is_alert = Column(Boolean, default=True)
+    storage_alert_rule = Column(JSON, nullable=True)
     in_charge_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     pt_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     limit = Column(Float, default=0)
@@ -267,6 +274,8 @@ class Group(Base):
     enable_monitoring = Column(Boolean, default=True)
     completed = Column(Boolean, default=False)
     back_up_enabled = Column(Boolean, default=True)
+    storage_alert_rule = Column(JSON, nullable=True)
+    alert_cc_user_ids = Column(JSON, nullable=False, default=list)
     updated_at = Column(DateTime, default=datetime.now)
 
     qtree = relationship("Qtree", back_populates="groups", lazy=True)
@@ -329,6 +338,7 @@ class StorageAlerts(Base):
         ),
         Index("ix_storage_alert_severity_updated", "severity", "updated_at"),
         Index("ix_storage_alert_fingerprint_updated", "fingerprint", "updated_at"),
+        Index("ix_storage_alert_delivery_due", "delivery_status", "next_attempt_at"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -349,9 +359,35 @@ class StorageAlerts(Base):
     related_id = Column(Integer, index=True)
     related_type = Column(String, index=True)
     related_info = Column(JSON)
+    event_type = Column(String(16), nullable=False, default="trigger")
+    quota_basis = Column(String(8), nullable=False, default="hard")
+    delivery_status = Column(String(16), nullable=False, default="legacy")
+    recipient_usernames = Column(JSON, nullable=True)
+    delivery_attempts = Column(Integer, nullable=False, default=0)
+    next_attempt_at = Column(DateTime, nullable=True)
+    notified_at = Column(DateTime, nullable=True)
+    delivery_error = Column(String(512), nullable=True)
     updated_at = Column(DateTime, default=datetime.now)
 
     storage_cluster = relationship("StorageCluster", lazy=True)
+
+
+class StorageAlertState(Base):
+    __tablename__ = "storage_alert_states"
+    __table_args__ = (
+        UniqueConstraint("target_type", "target_id", name="uq_storage_alert_state_target"),
+        Index("ix_storage_alert_state_target", "target_type", "target_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    target_type = Column(String(32), nullable=False)
+    target_id = Column(Integer, nullable=False)
+    rule_signature = Column(String(64), nullable=False)
+    consecutive_breach_count = Column(Integer, nullable=False, default=0)
+    current_level = Column(String(16), nullable=True)
+    last_use_ratio = Column(Float, nullable=True)
+    last_observed_at = Column(DateTime, nullable=True)
+    last_notified_at = Column(DateTime, nullable=True)
 
 
 class StorageBackUpRecord(Base):

@@ -36,6 +36,12 @@ class Config:
         ):
             raise ValueError("LDAP requires lookup_user_dn=true and lookup_as_user=false")
 
+        feishu = loaded.get("feishu_notification")
+        if isinstance(feishu, dict) and feishu.get("enabled"):
+            missing = [key for key in ("base_url", "app", "app_key") if not feishu.get(key)]
+            if missing:
+                raise ValueError(f"Missing Feishu configuration: {', '.join(missing)}")
+
         self.config = loaded
         self._loaded = True
 

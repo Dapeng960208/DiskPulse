@@ -2,7 +2,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 
-from models import Group, GroupTag, Project, Qtree, StorageCluster, StorageUsage, Volume
+from models import Group, GroupTag, Project, Qtree, StorageCluster, StorageUsage, User, Volume
 from schemas import groupSchema
 from sqlalchemy import or_, desc, asc
 from datetime import datetime, timedelta
@@ -68,6 +68,7 @@ def create_group(
     group: groupSchema.GroupBindingCreate,
 ):
     data = group.model_dump(exclude_unset=True)
+    _validate_alert_cc_users(db, data)
     _validate_binding(db, data)
     data.setdefault("volume_id", None)
     data.setdefault("qtree_id", None)
@@ -86,6 +87,7 @@ def update_group(
     db_group = db.query(Group).filter(Group.id == group_id).first()
     if db_group:
         data = group.model_dump(exclude_unset=True)
+        _validate_alert_cc_users(db, data)
         if {
             "project_id",
             "storage_cluster_id",
@@ -101,6 +103,22 @@ def update_group(
         db.commit()
         db.refresh(db_group)
     return db_group
+
+
+def _validate_alert_cc_users(db: Session, data: dict) -> None:
+    if "alert_cc_user_ids" not in data:
+        return
+    user_ids = list(dict.fromkeys(data["alert_cc_user_ids"] or []))
+    existing = {
+        row[0] for row in db.query(User.id).filter(User.id.in_(user_ids)).all()
+    }
+    missing = [user_id for user_id in user_ids if user_id not in existing]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Alert CC users not found: {', '.join(map(str, missing))}",
+        )
+    data["alert_cc_user_ids"] = user_ids
 
 
 def _validate_binding(db: Session, data: dict) -> None:

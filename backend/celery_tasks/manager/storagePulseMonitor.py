@@ -44,7 +44,7 @@ class StoragePulseMonitor:
     通过 REST API 采集存储数据，并写入 PostgreSQL 和 QuestDB。
     """
 
-    def __init__(self, db, logger, storage_cluster_id: int, snapshot=None):
+    def __init__(self, db, logger, storage_cluster_id: int, snapshot=None, collected_at=None):
         """
         初始化存储监控器
 
@@ -57,6 +57,7 @@ class StoragePulseMonitor:
         self.logger = logger
         self.storage_cluster_id = storage_cluster_id
         self.snapshot = snapshot
+        self.collected_at = collected_at or datetime.now()
         self.group_snapshots = {
             row["group_id"]: row
             for row in (snapshot or {}).get("rows", ())
@@ -95,9 +96,36 @@ class StoragePulseMonitor:
 
     def collect_postgres(self):
         """Collect and flush PostgreSQL data inside the caller's transaction."""
+        started_at = datetime.now()
         self.setup()
         self.execute_data_collection(include_questdb=False)
-        return None
+        self.db.flush()
+        storage_usage_ids = [
+            row[0]
+            for row in self.db.query(StorageUsage.id).filter(
+                StorageUsage.storage_cluster_id == self.storage_cluster_id,
+                StorageUsage.updated_at >= started_at,
+            ).all()
+        ]
+        group_ids = [
+            row[0]
+            for row in self.db.query(Group.id).filter(
+                Group.storage_cluster_id == self.storage_cluster_id,
+                Group.updated_at >= started_at,
+            ).all()
+        ]
+        if storage_usage_ids:
+            self.db.query(StorageUsage).filter(StorageUsage.id.in_(storage_usage_ids)).update(
+                {StorageUsage.updated_at: self.collected_at}, synchronize_session=False
+            )
+        if group_ids:
+            self.db.query(Group).filter(Group.id.in_(group_ids)).update(
+                {Group.updated_at: self.collected_at}, synchronize_session=False
+            )
+        return {
+            "storage_usage_ids": tuple(storage_usage_ids),
+            "group_ids": tuple(group_ids),
+        }
 
     def write_questdb(self, _metrics=None):
         """Write time-series data after the PostgreSQL transaction committed."""

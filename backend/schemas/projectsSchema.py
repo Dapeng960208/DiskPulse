@@ -4,6 +4,7 @@ from typing import Any
 from pydantic import BaseModel, Field, computed_field
 
 from schemas import usersSchema
+from schemas.storageAlertRuleSchema import StorageAlertRule
 
 
 class ProjectBaseInfo(BaseModel):
@@ -24,7 +25,8 @@ class ProjectBaseInfo(BaseModel):
 
 class ProjectBase(ProjectBaseInfo):
     recipients: str | None = None
-    is_alert: bool | None = False
+    is_alert: bool | None = True
+    storage_alert_rule: StorageAlertRule | None = None
     descriptions: str | None = None
     in_charge_user_id: int | None = None
     in_charge_user: usersSchema.OnlyUser | None = None
@@ -49,7 +51,8 @@ class ProjectOverview(Project):
 
 class ProjectUpdate(BaseModel):
     recipient_ids: list[int] = Field(default_factory=list)
-    is_alert: bool | None = False
+    is_alert: bool | None = True
+    storage_alert_rule: StorageAlertRule | None = None
     descriptions: str | None = None
     name: str
     in_charge_user_id: int | None = None
