@@ -505,6 +505,88 @@ class IsilonClient:
 
         return result
 
+    def _write_quota(self, method: str, url: str, payload: Dict) -> None:
+        for attempt in range(2):
+            response = getattr(self.session, method)(url, json=payload, timeout=60)
+            if response.status_code in (401, 403) and attempt == 0:
+                self._clear_cache_entry()
+                self._login()
+                continue
+            response.raise_for_status()
+            return
+        raise RuntimeError("Isilon quota update authentication failed")
+
+    @staticmethod
+    def _matches_quota(quota: Dict, quota_type: str, path: str, username: str | None) -> bool:
+        if quota.get("type") != quota_type or quota.get("path") != path:
+            return False
+        if quota_type != "user":
+            return True
+        persona = quota.get("persona") or {}
+        return str(persona.get("name") or "") == str(username or "")
+
+    def update_quota(
+        self,
+        *,
+        quota_type: str,
+        volume_name: str,
+        qtree_name: str | None,
+        path: str,
+        username: str | None,
+        hard_limit: float,
+        soft_limit: float | None,
+        soft_grace: int | None,
+    ) -> Dict:
+        quotas = self.get_quotas(quota_type=quota_type)
+        existing = next(
+            (
+                quota for quota in quotas
+                if self._matches_quota(quota, quota_type, path, username)
+            ),
+            None,
+        )
+        thresholds = {
+            "hard": hard_limit,
+            "soft": soft_limit,
+            "soft_grace": soft_grace if soft_limit is not None else None,
+        }
+        payload = {"type": quota_type, "path": path, "thresholds": thresholds}
+        if quota_type == "user":
+            payload["persona"] = {"type": "user", "name": username}
+
+        collection_url = f"{self.base_url}/{self.api_version}/quota/quotas"
+        if existing is not None and not existing.get("linked", False):
+            self._write_quota("put", f"{collection_url}/{existing['id']}", payload)
+        else:
+            self._write_quota("post", collection_url, payload)
+
+        current = next(
+            (
+                quota for quota in self.get_quotas(quota_type=quota_type)
+                if self._matches_quota(quota, quota_type, path, username)
+                and not quota.get("linked", False)
+            ),
+            None,
+        )
+        if current is None:
+            raise RuntimeError("Isilon quota readback failed")
+        response = self.session.get(f"{collection_url}/{current['id']}", timeout=60)
+        response.raise_for_status()
+        data = response.json()
+        quota = (data.get("quotas") or [data])[0]
+        readback = quota.get("thresholds") or {}
+        if (
+            readback.get("hard") != hard_limit
+            or readback.get("soft") != soft_limit
+            or readback.get("soft_grace") != thresholds["soft_grace"]
+        ):
+            raise RuntimeError("Isilon quota readback mismatch")
+        return {
+            "hard_limit": readback.get("hard"),
+            "soft_limit": readback.get("soft"),
+            "soft_grace": readback.get("soft_grace"),
+        }
+
     def get_exports(self) -> List[Dict]:
         """Return all NFS exports, following resume-based pagination."""
         result: List[Dict] = []

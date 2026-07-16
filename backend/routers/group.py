@@ -2,9 +2,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from schemas import groupSchema, commonSchema
+from schemas import groupSchema, commonSchema, quotaSchema
 from crud import groupCrud
 from dependencies import get_db, require_super_admin
+from services import quotaService
 import logging
 from utils.common import convert_timestamp_to_datetime
 from utils.plot import plot_real_time_line
@@ -80,6 +81,16 @@ def update_group(
     return groupCrud.serialize_group(
         groupCrud.update_group(db=db, group_id=group_id, group=group)
     )
+
+
+@router.patch("/{group_id}/quota", response_model=quotaSchema.QuotaAdjustmentResponse)
+def adjust_group_quota(
+    group_id: int,
+    payload: quotaSchema.QuotaAdjustmentRequest,
+    _admin: None = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    return quotaService.adjust_group_quota(db, group_id=group_id, request=payload)
 
 
 @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -8,7 +8,6 @@ from pydantic import ValidationError
 
 import models
 from appConfig import base_config
-from routers import group, storage_usage
 from schemas.quotaSchema import QuotaAdjustmentRequest
 from services import quotaService
 from utils.isilonClient import IsilonClient
@@ -383,6 +382,8 @@ def test_isilon_client_updates_explicit_quota_and_creates_for_linked_user():
 
 @pytest.fixture
 def quota_api(api_client_factory, session_factory, monkeypatch):
+    from routers import group, storage_usage
+
     base_config.set("jwt.secret_key", "test-secret")
     base_config.set("super_admin_usernames", ["admin"])
     session = session_factory()

@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="zh-CN">
+<body>
+  <h3>配额调整结果</h3>
+  <p>对象：{{ data.resource }}</p>
+  <p>存储类型：{{ data.storage_type }}</p>
+  <p>硬限额：{{ data.hard_limit }} GiB</p>
+  <p>软限额：{{ data.soft_limit if data.soft_limit is not none else '未设置' }}{% if data.soft_limit is not none %} GiB{% endif %}</p>
+  {% if data.soft_grace_seconds is not none %}<p>软限额宽限期：{{ data.soft_grace_seconds }} 秒</p>{% endif %}
+</body>
+</html>

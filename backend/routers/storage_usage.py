@@ -5,15 +5,15 @@ import os.path
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
-from schemas import storageUsageSchema, commonSchema
-from crud import storageUsageCrud, usersCrud, groupCrud, volumeCrud
+from schemas import storageUsageSchema, commonSchema, quotaSchema
+from crud import storageUsageCrud, usersCrud, groupCrud
 from dependencies import get_db, require_super_admin
 from datetime import datetime, timedelta
 from utils.plot import plot_real_time_line
 from utils.common import convert_timestamp_to_datetime
 import logging
 from routers.common import handle_exceptions
-from celery_tasks.manager.storageMonitor import StorageManagement
+from services import quotaService
 from utils.storageTarget import resolve_group_storage_target
 from fastapi.responses import StreamingResponse
 import urllib.parse
@@ -143,37 +143,18 @@ def read_storage_usage_realtime_data(storage_usage_id: int, start_time: datetime
                                                                                    info=storageUsageCrud.serialize_storage_usage(db_storage_usage))
 
 
-@router.post("/expand")
-def expand_storage_usage_limit(
-    payload: storageUsageSchema.StorageUsageExpand,
+@router.patch("/{storage_usage_id}/quota", response_model=quotaSchema.QuotaAdjustmentResponse)
+def adjust_storage_usage_quota(
+    storage_usage_id: int,
+    payload: quotaSchema.QuotaAdjustmentRequest,
     _admin: None = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
-    expand_id = payload.expand_id
-    expand_type = payload.expand_type
-    size = payload.size
-    if expand_type == "Group":
-        target = groupCrud.get_group_by_id(db, expand_id)
-        cluster = target.storage_cluster if target is not None else None
-    elif expand_type == "StorageUsage":
-        target = storageUsageCrud.get_storage_usage_by_id(db, expand_id)
-        cluster = target.group.storage_cluster if target is not None and target.group is not None else None
-    elif expand_type == "Volume":
-        target = volumeCrud.get_volume_by_id(db, expand_id)
-        cluster = target.storage_cluster if target is not None else None
-    else:
-        cluster = None
-    if cluster is not None and (cluster.storage_type or "").lower() == "isilon":
-        raise HTTPException(status_code=422, detail="Isilon storage targets do not support expansion")
-    manage = StorageManagement(db, logger)
-    try:
-        manage.expand(expand_id=expand_id, size=size, expand_type=expand_type)
-        result = {"id": expand_id, "size": size, "type": expand_type, "message": "Expansion successful"}
-    except Exception as e:
-        logger.error(f"Error expanding storage: {e}")
-        raise HTTPException(status_code=400, detail="Expansion failed") from e
-
-    return result
+    return quotaService.adjust_storage_usage_quota(
+        db,
+        storage_usage_id=storage_usage_id,
+        request=payload,
+    )
 
 
 @router.get("/{storage_usage_id}/image")

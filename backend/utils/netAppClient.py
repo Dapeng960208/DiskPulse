@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import requests
+import time
 from typing import List, Dict, Optional
 
 
@@ -83,6 +84,116 @@ class NetAppClient:
             'storage/volumes',
             params={'fields': 'uuid,name,metric'},
         )
+
+    def _write(self, method: str, endpoint: str, payload: Dict) -> Dict:
+        response = getattr(self.session, method)(
+            f"{self.base_url}/{endpoint}",
+            params={"return_timeout": 120},
+            json=payload,
+            timeout=120,
+        )
+        response.raise_for_status()
+        data = response.json() if response.content else {}
+        if response.status_code == 202:
+            job_uuid = (data.get("job") or {}).get("uuid")
+            if not job_uuid:
+                raise RuntimeError("NetApp quota update returned an unknown job")
+            self._wait_for_job(job_uuid)
+        return data
+
+    def _wait_for_job(self, job_uuid: str) -> None:
+        for _ in range(120):
+            response = self.session.get(
+                f"{self.base_url}/cluster/jobs/{job_uuid}", timeout=60
+            )
+            response.raise_for_status()
+            state = response.json().get("state")
+            if state == "success":
+                return
+            if state in {"failure", "paused"}:
+                raise RuntimeError("NetApp quota update job failed")
+            time.sleep(1)
+        raise TimeoutError("NetApp quota update job timed out")
+
+    def update_quota(
+        self,
+        *,
+        quota_type: str,
+        volume_name: str,
+        qtree_name: str | None,
+        path: str,
+        username: str | None,
+        hard_limit: float,
+        soft_limit: float | None,
+        soft_grace: int | None,
+    ) -> Dict:
+        if soft_grace is not None:
+            raise ValueError("NetApp quotas do not support per-rule soft grace")
+        params = {
+            "fields": "uuid,volume,qtree,type,users,space",
+            "volume.name": volume_name,
+            "type": quota_type,
+        }
+        if qtree_name is not None:
+            params["qtree.name"] = qtree_name
+        if username is not None:
+            params["users.name"] = username
+        rules = self._get_all_records("storage/quota/rules", params=params)
+        limits = {
+            "hard_limit": hard_limit,
+            "soft_limit": soft_limit if soft_limit is not None else -1,
+        }
+        if rules:
+            self._write("patch", f"storage/quota/rules/{rules[0]['uuid']}", {"space": limits})
+        else:
+            payload = {
+                "type": quota_type,
+                "volume": {"name": volume_name},
+                "qtree": {"name": qtree_name or ""},
+                "space": limits,
+            }
+            if username is not None:
+                payload["users"] = [{"name": username}]
+            self._write("post", "storage/quota/rules", payload)
+
+        report_params = {
+            "fields": "volume,qtree,type,users,space",
+            "volume.name": volume_name,
+            "type": quota_type,
+        }
+        if qtree_name is not None:
+            report_params["qtree.name"] = qtree_name
+        if username is not None:
+            report_params["users.name"] = username
+        reports = self._get_all_records("storage/quota/reports", params=report_params)
+        if not reports:
+            raise RuntimeError("NetApp quota readback failed")
+        space = reports[0].get("space") or {}
+        return {
+            "hard_limit": space.get("hard_limit"),
+            "soft_limit": space.get("soft_limit"),
+            "soft_grace": None,
+        }
+
+    def update_volume_capacity(self, *, volume_name: str, hard_limit: float) -> Dict:
+        volumes = self._get_all_records(
+            "storage/volumes",
+            params={"name": volume_name, "fields": "uuid,name,size"},
+        )
+        if not volumes:
+            raise RuntimeError("NetApp volume not found")
+        self._write(
+            "patch",
+            f"storage/volumes/{volumes[0]['uuid']}",
+            {"size": hard_limit},
+        )
+        current = self._get_all_records(
+            "storage/volumes",
+            params={"name": volume_name, "fields": "uuid,name,size"},
+        )
+        if not current or current[0].get("size") != hard_limit:
+            raise RuntimeError("NetApp volume capacity readback failed")
+        return {"hard_limit": current[0]["size"], "soft_limit": None}
 
     def close(self):
         if self.session:
