@@ -61,6 +61,34 @@ const deliveryStatusOptions = [
   { value: 'legacy', label: '历史记录' },
 ];
 const optionLabel = (options, value) => options.find((option) => option.value === value)?.label || '-';
+const alertLevelLabels = {
+  important: '重要',
+  serious: '严重',
+  emergency: '紧急',
+  high: '高',
+  medium: '中',
+};
+const relatedTypeLabels = {
+  StorageUsage: '用户目录',
+  Group: '项目组',
+  Project: '项目',
+};
+const eventTypeLabels = {
+  trigger: '首次告警',
+  escalation: '告警升级',
+  repeat: '重复告警',
+  recovery: '恢复通知',
+};
+
+const alertDescription = (row) => {
+  const targetLabel = relatedTypeLabels[row.related_type];
+  const eventLabel = eventTypeLabels[row.event_type];
+  if (!targetLabel || !eventLabel) return row.description || '-';
+  const context = row.related_info?.context || {};
+  const targetName = context.username || context.group || context.project;
+  const ratio = Number(row.avg_use_ratio);
+  return `${targetLabel}${targetName ? ` ${targetName}` : ''} ${eventLabel}${Number.isFinite(ratio) ? `（使用率 ${ratio.toFixed(2)}%）` : ''}`;
+};
 
 const alertTypeDisplay = (alertType) => {
   switch (alertType) {
@@ -79,12 +107,15 @@ const alertTypeDisplay = (alertType) => {
 
 const alertLevelDisplay = (alertLevel) => {
   switch (alertLevel) {
+    case 'emergency':
+    case 'serious':
     case 'high':
       return 'danger';
+    case 'important':
     case 'medium':
       return 'warning';
     default:
-      return 'success';
+      return 'info';
   }
 };
 
@@ -213,10 +244,7 @@ query();
         align="center"
         min-width="80">
         <template #default="{ row }">
-          <span v-if="row.related_type === 'Group'">
-            {{ row.related_info?.context?.project || row.related_info?.project?.name || '-' }}
-          </span>
-          <span v-else>-</span>
+          {{ row.related_info?.context?.project || row.related_info?.project?.name || '-' }}
         </template>
       </ElTableColumn>
       <ElTableColumn
@@ -245,10 +273,7 @@ query();
         align="center"
         min-width="80">
         <template #default="{ row }">
-          <span v-if="row.related_type === 'Group'">
-            {{ row.related_info?.context?.group_tag || row.related_info?.group_tag?.name || '-' }}
-          </span>
-          <span v-else>-</span>
+          {{ row.related_info?.context?.group_tag || row.related_info?.group_tag?.name || '-' }}
         </template>
       </ElTableColumn>
       <ElTableColumn
@@ -256,7 +281,9 @@ query();
         align="center"
         prop="description"
         min-width="300"
-      />
+      >
+        <template #default="{ row }">{{ alertDescription(row) }}</template>
+      </ElTableColumn>
       <ElTableColumn
         label="级别"
         align="center"
@@ -265,7 +292,7 @@ query();
       >
         <template #default="{ row }">
           <ElTag :type="alertLevelDisplay(row.alert_level)">
-            {{ row.alert_level }}
+            {{ alertLevelLabels[row.alert_level] || row.alert_level || '-' }}
           </ElTag>
         </template>
       </ElTableColumn>

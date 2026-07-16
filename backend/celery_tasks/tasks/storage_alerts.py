@@ -32,6 +32,15 @@ from services.storageAlertRuleService import (
 logger = get_task_logger(__name__)
 RETRY_DELAYS_SECONDS = (60, 300, 900)
 MAX_DELIVERY_ATTEMPTS = 4
+TARGET_TYPE_LABELS = {"storage_usage": "用户目录", "group": "项目组", "project": "项目"}
+EVENT_TYPE_LABELS = {
+    "trigger": "首次告警",
+    "escalation": "告警升级",
+    "repeat": "重复告警",
+    "recovery": "恢复通知",
+}
+QUOTA_BASIS_LABELS = {"hard": "硬限额", "soft": "软限额"}
+ALERT_LEVEL_LABELS = {"important": "重要", "serious": "严重", "emergency": "紧急"}
 
 
 def _usernames_for_ids(db, user_ids):
@@ -68,14 +77,14 @@ def _paragraphs(target, rule, ratio, event_type, context, previous_level=None):
     lines = [f"{labels[key]}：{', '.join(value) if isinstance(value, list) else value}\n" for key, value in context.items() if value]
     lines.extend(
         [
-            f"事件：{event_type}\n",
-            f"采用口径：{rule['quota_basis']}，使用率：{ratio:.2f}%\n",
+            f"事件：{EVENT_TYPE_LABELS.get(event_type, event_type)}\n",
+            f"采用口径：{QUOTA_BASIS_LABELS.get(rule['quota_basis'], rule['quota_basis'])}，使用率：{ratio:.2f}%\n",
             f"硬限额：{_display(target.limit, ' GB')}，已使用：{_display(target.used, ' GB')}，硬限额使用率：{_display(target.use_ratio, '%')}\n",
             f"软限额：{_display(target.soft_limit, ' GB')}，已使用：{_display(target.used, ' GB')}，软限额使用率：{_display(target.soft_use_ratio, '%')}\n",
         ]
     )
     if previous_level:
-        lines.append(f"恢复前等级：{previous_level}")
+        lines.append(f"恢复前等级：{ALERT_LEVEL_LABELS.get(previous_level, previous_level)}")
     return [[{"tag": "text", "text": line} for line in lines]]
 
 
@@ -169,7 +178,11 @@ def _evaluate_one(
         severity=result.level or result.previous_level or "info",
         alert_level=result.level or result.previous_level,
         alert_type="alert",
-        description=f"{target_type} storage {result.event_type}",
+        description=(
+            f"{TARGET_TYPE_LABELS[target_type]} "
+            f"{context.get({'storage_usage': 'username', 'group': 'group', 'project': 'project'}[target_type], '')} "
+            f"{EVENT_TYPE_LABELS[result.event_type]}（使用率 {ratio:.2f}%）"
+        ),
         threshold=rule[result.level]["threshold"] if result.level else rule["important"]["threshold"],
         avg_use_ratio=ratio,
         related_id=target.id,
@@ -240,6 +253,7 @@ def evaluate_storage_alerts(
                 context={
                     "username": usage.user.rd_username,
                     "cluster": usage.storage_cluster.name if usage.storage_cluster else None,
+                    "project": usage.group.project.name if usage.group.project else None,
                     "group_tag": usage.group.group_tag.name if usage.group.group_tag else None,
                     "group": usage.group.name,
                     "linux_path": usage.linux_path,

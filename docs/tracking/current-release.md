@@ -46,6 +46,7 @@
 - `backend/celery_worker.py` 已独立注册每分钟 `storage_alerts_schedule_task`；该任务读取最新已提交采集批次后评估，容量采集任务不再投递告警。状态与事件同事务提交，飞书 HTTP 由 `deliver_storage_alert_task` 处理，每分钟补偿任务按 1/5/15 分钟重试。旧容量邮件代码保留但 Beat 调度继续关闭。
 - 独立调度调整按 TDD 完成：RED 提交 `b12b73b`，聚焦测试 `29 passed`，后端全量 `314 passed`，仓库覆盖率 `87%`；静态加载确认任务已注册且 Beat 周期为 60 秒。
 - 飞书配置默认关闭，协议使用 `/auth/token`、Bearer Token 和 `/send_info` 富文本 `post`；业务收件人、全局 CC、项目组 CC、紧急管理员和 debug 替换均已实现，密钥、收件人快照和内部错误不进入公开 API。
+- 部署实例已确认告警评估和重试正常生成事件，但飞书地址解析到 `10.0.42.47` 后 TCP `32013` 不可达，最新事件 4 次发送均超时；连接恢复前不会收到提醒。已修复新消息与历史列表的中文摘要、事件、限额口径和三级告警标签，并为用户目录补充项目上下文；失败历史事件不自动重放。
 - 后台已提供系统规则页签、项目告警/自定义规则、项目组继承预览/个人 CC，以及告警事件类型、限额口径和发送状态筛选；共享 `StorageAlertRuleForm` 负责三处规则校验。
 - TDD RED 契约提交为 `84b0d47`。最终后端全量 `312 passed`，仓库 coverage `84%`（通过现有 80% 门禁，但未达到本计划 90%），规则 schema/服务/飞书核心选择性覆盖率 `92%`；前端 40 个测试文件、`205 passed`，Statements/Lines `92.62%`、Branches `81.96%`、Functions `70.29%`，lint 和生产构建通过。
 - Alembic 唯一 head 为 `000000000006`；SQLite 在线升降级、SQLite 离线 SQL 实际执行、PostgreSQL/MySQL 离线 SQL 生成通过。`compileall`、`pip check`、`git diff --check` 与最终 CodeGraph 同步/status 通过。
