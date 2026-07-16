@@ -41,6 +41,7 @@ const alertTypeOptions = [
   { value: 'alert', label: '告警' },
   { value: 'report', label: '周报' },
   { value: 'expand', label: '扩容' },
+  { value: 'quota_adjustment', label: '配额调整' },
 ];
 const eventTypeOptions = [
   { value: 'trigger', label: '首次告警' },
@@ -79,8 +80,10 @@ const eventTypeLabels = {
   repeat: '重复告警',
   recovery: '恢复通知',
 };
+const alertField = (row, value) => row.alert_type === 'alert' ? value ?? '-' : '-';
 
 const alertDescription = (row) => {
+  if (row.alert_type !== 'alert') return row.description || '-';
   const targetLabel = relatedTypeLabels[row.related_type];
   const eventLabel = eventTypeLabels[row.event_type];
   if (!targetLabel || !eventLabel) return row.description || '-';
@@ -107,6 +110,8 @@ const alertTypeDisplay = (alertType) => {
       return '周报';
     case 'expand':
       return '扩容';
+    case 'quota_adjustment':
+      return '配额调整';
     case 'vendor_event':
       return '系统事件';
     default:
@@ -269,14 +274,14 @@ query();
         align="center"
         prop="event_type"
         min-width="90">
-        <template #default="{ row }">{{ optionLabel(eventTypeOptions, row.event_type) }}</template>
+        <template #default="{ row }">{{ alertField(row, optionLabel(eventTypeOptions, row.event_type)) }}</template>
       </ElTableColumn>
       <ElTableColumn
         label="限额口径"
         align="center"
         prop="quota_basis"
         min-width="80">
-        <template #default="{ row }">{{ optionLabel(quotaBasisOptions, row.quota_basis) }}</template>
+        <template #default="{ row }">{{ alertField(row, optionLabel(quotaBasisOptions, row.quota_basis)) }}</template>
       </ElTableColumn>
       <ElTableColumn
         label="发送状态"
@@ -309,7 +314,7 @@ query();
       >
         <template #default="{ row }">
           <ElTag :type="alertLevelDisplay(row.alert_level)">
-            {{ alertLevelLabels[row.alert_level] || row.alert_level || '-' }}
+            {{ alertField(row, alertLevelLabels[row.alert_level] || row.alert_level) }}
           </ElTag>
         </template>
       </ElTableColumn>
@@ -318,15 +323,17 @@ query();
         align="center"
         sortable
         prop="threshold"
-        min-width="60"
-      />
+        min-width="60">
+        <template #default="{ row }">{{ alertField(row, row.threshold) }}</template>
+      </ElTableColumn>
       <ElTableColumn
         label="触发值"
         align="center"
         sortable
         prop="avg_use_ratio"
-        min-width="60"
-      />
+        min-width="60">
+        <template #default="{ row }">{{ alertField(row, row.avg_use_ratio) }}</template>
+      </ElTableColumn>
       <ElTableColumn
         label="时间"
         align="center"
