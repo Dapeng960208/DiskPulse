@@ -26,6 +26,7 @@ docs/
 | 文档 | 说明 |
 | --- | --- |
 | [guides/frontend-testing-guide.md](./guides/frontend-testing-guide.md) | 前端测试命令、覆盖率门禁和 mock 约定。 |
+| [guides/storage-performance-event-troubleshooting.md](./guides/storage-performance-event-troubleshooting.md) | NetApp/PowerScale 性能与事件采集排障、验证命令和验收清单。 |
 
 ## 功能专题
 
@@ -34,7 +35,7 @@ docs/
 | LDAP 认证 | [features/authentication/backend.md](./features/authentication/backend.md) |
 | 用户信息管理 | [features/user-management/overview.md](./features/user-management/overview.md) |
 | 项目组标签 | [features/group-tag/design.md](./features/group-tag/design.md) |
-| 存储集群 | [features/storage-cluster/overview.md](./features/storage-cluster/overview.md) |
+| 存储集群 | [总览](./features/storage-cluster/overview.md) · [性能与事件设计](./features/storage-cluster/performance-event-collection.md) · [厂商/API 契约](./features/storage-cluster/vendor-api-contracts.md) |
 | 存储告警规则与飞书通知 | [features/storage-alerts/design.md](./features/storage-alerts/design.md) |
 | 存储配额软限额 | [features/storage-quota/overview.md](./features/storage-quota/overview.md) |
 | AI 对话与管理中心 | [总览](./features/ai-chat/overview.md) · [后端实现](./features/ai-chat/backend.md) · [前端实现](./features/ai-chat/frontend.md) |

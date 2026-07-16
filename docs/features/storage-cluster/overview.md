@@ -124,6 +124,9 @@ isi statistics workload --dataset path
 | [migration.md](./migration.md) | PostgreSQL baseline 与 QuestDB 前向 revision 管理。 |
 | [api-examples.md](./api-examples.md) | 集群 CRUD、实时查询和按集群过滤的 API 示例。 |
 | [health-analytics.md](./health-analytics.md) | 容量变化、错误级别、高延迟、重复故障和报表导出。 |
+| [performance-event-collection.md](./performance-event-collection.md) | NetApp/PowerScale 性能与事件采集整体设计、标准化和数据流。 |
+| [vendor-api-contracts.md](./vendor-api-contracts.md) | 厂商设备接口、字段映射和 DiskPulse 分析 API 契约。 |
+| [../../guides/storage-performance-event-troubleshooting.md](../../guides/storage-performance-event-troubleshooting.md) | 性能与事件采集的部署前检查、排障路径和真机验收清单。 |
 
 ## 维护边界
 

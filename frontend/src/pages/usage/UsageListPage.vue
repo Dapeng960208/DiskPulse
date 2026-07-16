@@ -213,6 +213,12 @@ query();
             :column="3"
             class="usage-descriptions">
             <ElDescriptionsItem
+              label="文件数量"
+              align="center">{{ props.row?.file_used }} G</ElDescriptionsItem>
+            <ElDescriptionsItem
+              label="权限"
+              align="center">{{ props.row?.access }} %</ElDescriptionsItem>
+            <ElDescriptionsItem
               label="使用量"
               align="center">{{ props.row?.used }} G</ElDescriptionsItem>
             <ElDescriptionsItem
@@ -296,7 +302,7 @@ query();
       <ElTableColumn
         label="项目组"
         align="center"
-        min-width="50"
+        min-width="80"
       >
         <template #default="{ row }">
           <ElTag v-if="row.group">
@@ -336,27 +342,6 @@ query();
         sortable="custom"
         prop="linux_path"
         min-width="200"
-      />
-      <ElTableColumn
-        label="文件数量"
-        align="center"
-        sortable="custom"
-        prop="file_used"
-        min-width="60"
-      />
-      <ElTableColumn
-        label="权限"
-        align="center"
-        sortable="custom"
-        prop="access"
-        min-width="60"
-      />
-      <ElTableColumn
-        label="修改时间"
-        align="center"
-        sortable="custom"
-        prop="modify_time"
-        min-width="80"
       />
       <ElTableColumn
         label="硬限额"

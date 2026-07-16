@@ -927,3 +927,19 @@ npm test -- --coverage.enabled=false
 
 - 尚未用真实 NetApp、PowerScale 和 QuestDB 数据复验多指标数值与页面布局；部署后需重启 Celery worker，等待新采集样本再验收 IOPS/吞吐量。
 - 存储健康测试文件的既有迁移定位用例仍有 1 个已记录失败，见 `docs/tracking/error-log.md`；本次未修改迁移链。
+
+## 2026-07-16：存储性能与事件采集专题文档
+
+### 已完成
+
+- 新增性能/事件采集设计、NetApp/PowerScale 与 DiskPulse API 契约、部署排障与真机验收三篇文档。
+- 文档串联近期已完成的 path workload、单位转换、Session、EMS/OneFS 事件解析、统一指标、页面筛选和已知排障结论，并引用 Dell/NetApp 官方接口资料。
+- 更新存储集群专题和根文档索引。
+
+### 验证状态
+
+- 文档内容已依据当前采集、分析、路由实现和 `docs/tracking/error-log.md` 的已记录真机排障结果复核；相对 Markdown 链接与 `git diff --check` 均通过。
+
+### 风险
+
+- 厂商 API 的实际字段和权限会随 OneFS/ONTAP 版本、license、workload 配置变化；文档中的真机结论只适用于已记录环境，其他集群仍需按验收清单验证。
