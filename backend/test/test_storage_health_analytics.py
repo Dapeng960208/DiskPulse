@@ -798,6 +798,7 @@ def test_isilon_latency_rows_use_returned_workload_dimension_not_key_guessing():
         ("usec", 2.5),
         ("milliseconds", 2500.0),
         ("ms", 2500.0),
+        ("seconds", 2500000.0),
     ],
 )
 def test_isilon_latency_rows_convert_only_known_units(unit, expected):
@@ -821,7 +822,29 @@ def test_isilon_latency_rows_convert_only_known_units(unit, expected):
     assert rows[0]["object_type"] == "workload"
 
 
-@pytest.mark.parametrize("unit", [None, "", "seconds"])
+def test_isilon_latency_rows_keep_zero_seconds_and_use_device_timestamp():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+    captured_at = 1784168941
+
+    rows = storage_health._isilon_performance_rows(
+        7,
+        [
+            {
+                "key": "node.disk.access.latency.0",
+                "devid": 1,
+                "value": 0.0,
+                "unit": "seconds",
+                "time": captured_at,
+            }
+        ],
+        datetime(2026, 7, 16, 10, 30),
+    )
+
+    assert rows[0]["latency_total"] == 0.0
+    assert rows[0]["collected_at"] == datetime.fromtimestamp(captured_at)
+
+
+@pytest.mark.parametrize("unit", [None, "", "minutes"])
 def test_isilon_latency_rows_skip_missing_or_unknown_units(unit):
     storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
 
@@ -1128,6 +1151,68 @@ def test_vendor_event_parser_normalizes_identity_severity_and_fingerprint():
     assert rows[0]["severity"] == "critical"
     assert rows[0]["fingerprint"] == "netapp:disk.offline:node:node-1"
     assert rows[0]["storage_cluster_id"] == 7
+
+
+def test_isilon_event_group_uses_last_event_and_cause_details():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+    last_event = 1781582403
+
+    rows = storage_health.normalize_vendor_events(
+        7,
+        "isilon",
+        [
+            {
+                "id": "724916",
+                "eventgroup_instance": "724916",
+                "severity": "information",
+                "time_noticed": 1780804835,
+                "last_event": last_event,
+                "causes": [
+                    [
+                        "QUOTA_THRESHOLD_VIOLATION",
+                        "SmartQuotas threshold violation",
+                    ]
+                ],
+                "specifier": {"devid": 6},
+            }
+        ],
+    )
+
+    assert rows[0]["external_event_id"] == "724916"
+    assert rows[0]["fingerprint"] == "isilon:QUOTA_THRESHOLD_VIOLATION:node:6"
+    assert rows[0]["description"] == "SmartQuotas threshold violation"
+    assert rows[0]["updated_at"] == datetime.fromtimestamp(last_event)
+
+
+def test_isilon_event_list_normalizes_nested_events():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+    event_time = 1783274393
+
+    rows = storage_health.normalize_vendor_events(
+        7,
+        "isilon",
+        [
+            {
+                "id": "737855",
+                "events": [
+                    {
+                        "devid": 6,
+                        "event": 600010001,
+                        "id": "6.346657",
+                        "message": "Snapshot creation failed",
+                        "severity": "warning",
+                        "time": event_time,
+                    }
+                ],
+            }
+        ],
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["external_event_id"] == "6.346657"
+    assert rows[0]["fingerprint"] == "isilon:600010001:node:6"
+    assert rows[0]["description"] == "Snapshot creation failed"
+    assert rows[0]["updated_at"] == datetime.fromtimestamp(event_time)
 
 
 @pytest.mark.parametrize(
