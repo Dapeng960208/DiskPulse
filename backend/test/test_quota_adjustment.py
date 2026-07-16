@@ -216,6 +216,86 @@ def test_netapp_qtree_group_adjustment_updates_device_and_local_state(db_session
     assert client.closed is True
 
 
+def test_quota_adjustments_queue_feishu_for_group_owner_and_directory_user(db_session, monkeypatch):
+    seed_quota_target(db_session)
+    group = db_session.get(models.Group, 1)
+    group.in_charge_user_id = 1
+    db_session.commit()
+    db_session.expire_all()
+    client = FakeQuotaClient()
+    enqueue = MagicMock()
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+    monkeypatch.setattr(quotaService, "_send_adjustment_email", lambda *args, **kwargs: None)
+    monkeypatch.setattr(quotaService, "_enqueue_adjustment_feishu", enqueue, raising=False)
+    monkeypatch.setattr(
+        quotaService.base_config,
+        "get",
+        lambda key, default=None: {
+            "feishu_notification": {"enabled": True, "debug": False, "cc_usernames": ["auditor"]},
+            "super_admin_usernames": ["admin"],
+        }.get(key, default),
+    )
+
+    quotaService.adjust_group_quota(
+        db_session,
+        group_id=1,
+        request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+    )
+    quotaService.adjust_storage_usage_quota(
+        db_session,
+        storage_usage_id=1,
+        request=QuotaAdjustmentRequest(hard_limit=80, unit="GiB"),
+    )
+
+    alerts = db_session.query(models.StorageAlerts).order_by(models.StorageAlerts.id).all()
+    assert [alert.recipient_usernames for alert in alerts] == [
+        ["alice", "auditor"],
+        ["alice", "auditor"],
+    ]
+    assert [alert.delivery_status for alert in alerts] == ["pending", "pending"]
+    assert [call.args[0] for call in enqueue.call_args_list] == [alerts[0].id, alerts[1].id]
+    group_text = "".join(
+        item["text"] for paragraph in alerts[0].related_info["paragraphs"] for item in paragraph
+    )
+    usage_text = "".join(
+        item["text"] for paragraph in alerts[1].related_info["paragraphs"] for item in paragraph
+    )
+    assert alerts[0].related_info["title"] == "存储配额调整"
+    assert "项目组：group-1" in group_text
+    assert "硬限额：100.00 GiB → 120.00 GiB" in group_text
+    assert "用户目录：/data/group-1/alice" in usage_text
+
+
+def test_quota_adjustment_succeeds_when_feishu_enqueue_fails(db_session, monkeypatch):
+    seed_quota_target(db_session)
+    group = db_session.get(models.Group, 1)
+    group.in_charge_user_id = 1
+    db_session.commit()
+    client = FakeQuotaClient()
+    enqueue = MagicMock(side_effect=RuntimeError("broker unavailable"))
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+    monkeypatch.setattr(quotaService, "_send_adjustment_email", lambda *args, **kwargs: None)
+    monkeypatch.setattr(quotaService, "_enqueue_adjustment_feishu", enqueue, raising=False)
+    monkeypatch.setattr(
+        quotaService.base_config,
+        "get",
+        lambda key, default=None: {
+            "feishu_notification": {"enabled": True, "debug": False, "cc_usernames": []},
+            "super_admin_usernames": [],
+        }.get(key, default),
+    )
+
+    result = quotaService.adjust_group_quota(
+        db_session,
+        group_id=1,
+        request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+    )
+
+    assert result.hard_limit == 120
+    assert db_session.query(models.StorageAlerts).one().delivery_status == "pending"
+    enqueue.assert_called_once()
+
+
 def test_netapp_volume_group_accepts_only_hard_limit(db_session, monkeypatch):
     seed_quota_target(db_session, volume_target=True)
     client = FakeQuotaClient()
