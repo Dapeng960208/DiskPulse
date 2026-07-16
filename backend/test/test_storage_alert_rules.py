@@ -590,7 +590,7 @@ def test_evaluator_uses_current_successful_samples_and_keeps_project_event_aggre
     assert by_type["Project"].recipient_usernames == ["owner", "admin", "global"]
     assert all(event.alert_type == "alert" for event in events)
     assert by_type["StorageUsage"].description == (
-        "集群 cluster-a 项目 project-a Linux目录 /data/alice 首次告警（使用率 96.00%）"
+        "Linux目录 /data/alice 首次告警（使用率 96.00%）"
     )
     assert by_type["Group"].description == "项目组 group-a 首次告警（使用率 96.00%）"
     assert by_type["Project"].description == "项目 project-a 首次告警（使用率 96.00%）"

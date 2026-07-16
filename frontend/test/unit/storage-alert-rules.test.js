@@ -141,7 +141,7 @@ describe('storage alert rule UI contract', () => {
     expect(alerts).toContain('alertDescription(row)');
     expect(alerts).toContain('context.cluster');
     expect(alerts).toContain('context.linux_path');
-    expect(alerts).toContain('`集群 ${context.cluster} 项目 ${context.project} Linux目录 ${context.linux_path}`');
+    expect(alerts).toContain('`Linux目录 ${context.linux_path}`');
     expect(alerts).toContain("important: '重要'");
     expect(alerts).toContain("serious: '严重'");
     expect(alerts).toContain("emergency: '紧急'");
