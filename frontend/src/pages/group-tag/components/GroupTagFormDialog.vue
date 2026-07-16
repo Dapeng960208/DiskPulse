@@ -5,8 +5,11 @@ import { useDialog } from '@/composables/dialog';
 import { useForm } from '@/composables/form';
 
 const emit = defineEmits(['submitted']);
-const { visible, open, close } = useDialog();
-const { formRef, mode, model, modelRules, submitting, edit, submit } = useForm(
+const { visible, open, close, beforeClose, forceClose } = useDialog({
+  isDirty: () => isDirty.value,
+  isBusy: () => submitting.value,
+});
+const { formRef, mode, model, modelRules, submitting, isDirty, edit, submit } = useForm(
   () => ({ name: '' }),
   {
     rules: () => ({
@@ -21,7 +24,7 @@ const { formRef, mode, model, modelRules, submitting, edit, submit } = useForm(
     onSuccess(currentMode) {
       ElMessage.success(`${currentMode === 'create' ? '新增' : '修改'}成功`);
       emit('submitted');
-      close();
+      forceClose();
     },
     onFailure() {
       ElMessage.error('保存项目组标签失败，请稍后重试');
@@ -40,12 +43,22 @@ defineExpose({
 <template>
   <ElDialog
     v-model="visible"
-    :title="mode === 'create' ? '新增项目组标签' : '修改项目组标签'">
+    class="write-form-dialog write-form-dialog--compact"
+    :title="mode === 'create' ? '新增项目组标签' : '修改项目组标签'"
+    :before-close="beforeClose">
+    <template #header>
+      <div class="write-form-dialog__heading">
+        <h2>{{ mode === 'create' ? '新增项目组标签' : '修改项目组标签' }}</h2>
+        <p>标签用于统一分类和筛选项目组。</p>
+      </div>
+    </template>
     <ElForm
       ref="formRef"
+      class="write-form write-form-grid write-form-grid--single"
       :model="model"
       :rules="modelRules"
-      label-width="100">
+      label-position="top">
+      <div class="write-form-section">标签信息</div>
       <ElFormItem
         label="标签名称"
         prop="name">
@@ -60,7 +73,9 @@ defineExpose({
       <ElButton
         type="primary"
         :loading="submitting"
-        @click="submit">提交</ElButton>
+        @click="submit">
+        {{ submitting ? (mode === 'create' ? '创建中…' : '保存中…') : (mode === 'create' ? '创建标签' : '保存修改') }}
+      </ElButton>
     </template>
   </ElDialog>
 </template>

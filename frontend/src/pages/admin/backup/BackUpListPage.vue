@@ -23,9 +23,9 @@ const { result, querying, query } = useQuery(() => storageBackUpRecordApi.fetch(
   totalElements: 0,
 });
 function confirmDeleteBackUp(row) {
-  ElMessageBox.confirm(`确认删除此数据备份：${row.destination_path}？此操作不可撤销。`, '提示', {
+  ElMessageBox.confirm(`确认删除数据备份「${row.destination_path}」？此操作不可撤销。`, '删除数据备份', {
     type: 'warning',
-    confirmButtonText: '确认',
+    confirmButtonText: '删除备份',
     cancelButtonText: '取消',
     beforeClose: (action, instance, done) => {
       if (action === 'confirm') {
@@ -43,9 +43,9 @@ function confirmDeleteBackUp(row) {
 }
 
 function confirmRollBack(row) {
-  ElMessageBox.confirm(`确认将此数据备份${row.destination_path}回滚至${row.source_path}？此操作不可撤销。`, '提示', {
+  ElMessageBox.confirm(`确认将数据备份「${row.destination_path}」回滚至「${row.source_path}」？此操作不可撤销。`, '回滚数据备份', {
     type: 'warning',
-    confirmButtonText: '确认',
+    confirmButtonText: '开始回滚',
     cancelButtonText: '取消',
     beforeClose: (action, instance, done) => {
       if (action === 'confirm') {

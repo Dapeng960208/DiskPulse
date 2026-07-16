@@ -28,13 +28,17 @@ isi auth roles modify "$ROLE" --zone System \\
 isi auth users view "$SVC_USER" --zone System
 isi auth roles view "$ROLE" --zone System`;
 
-const { visible, open, close } = useDialog();
+const { visible, open, close, beforeClose, forceClose } = useDialog({
+  isDirty: () => isDirty.value,
+  isBusy: () => submitting.value,
+});
 const {
   formRef,
   mode,
   model,
   modelRules,
   submitting,
+  isDirty,
   edit,
   submit,
 } = useForm(() => ({
@@ -87,7 +91,7 @@ const {
   onSuccess(mode) {
     ElMessage.success(`${mode === 'create' ? '新增' : '修改'}成功`);
     emit('submitted');
-    close();
+    forceClose();
   },
 });
 
@@ -124,14 +128,24 @@ defineExpose({
 <template>
   <ElDialog
     v-model="visible"
+    class="write-form-dialog"
     :title="mode === 'create' ? '新增存储集群' : '编辑存储集群'"
+    :before-close="beforeClose"
     @close="formRef.clearValidate()">
+    <template #header>
+      <div class="write-form-dialog__heading">
+        <h2>{{ mode === 'create' ? '新增存储集群' : '编辑存储集群' }}</h2>
+        <p>配置设备连接、安全校验和采集状态。</p>
+      </div>
+    </template>
     <ElForm
       ref="formRef"
-      label-width="100"
+      class="write-form write-form-grid"
+      label-position="top"
       :model="model"
       :rules="modelRules"
     >
+      <div class="write-form-section">基本信息</div>
       <ElFormItem
         label="集群名称"
         prop="name">
@@ -141,6 +155,7 @@ defineExpose({
           placeholder="请输入集群名称" />
       </ElFormItem>
       <ElFormItem
+        class="write-form-field--full"
         label="描述"
         prop="description">
         <ElInput
@@ -164,6 +179,7 @@ defineExpose({
             value="isilon" />
         </ElSelect>
       </ElFormItem>
+      <div class="write-form-section">连接配置</div>
       <ElFormItem
         label="主机地址"
         prop="storage_host">
@@ -221,8 +237,12 @@ defineExpose({
           clearable
           placeholder="请输入 API 密码" />
       </ElFormItem>
+      <div
+        v-if="model.storage_type === 'isilon'"
+        class="write-form-section">Isilon Session</div>
       <ElFormItem
         v-if="model.storage_type === 'isilon'"
+        class="write-form-field--full"
         label="账号要求">
         <div class="account-help-trigger">
           <ElButton
@@ -262,7 +282,9 @@ defineExpose({
           clearable
           placeholder="请输入服务端缓存文件路径" />
       </ElFormItem>
+      <div class="write-form-section">状态</div>
       <ElFormItem
+        class="write-form-field--full"
         label="是否启用"
         prop="is_active">
         <ElSwitch
@@ -281,7 +303,7 @@ defineExpose({
         type="primary"
         :loading="submitting"
         @click="submit">
-        提交
+        {{ submitting ? (mode === 'create' ? '创建中…' : '保存中…') : (mode === 'create' ? '创建集群' : '保存修改') }}
       </ElButton>
     </template>
   </ElDialog>

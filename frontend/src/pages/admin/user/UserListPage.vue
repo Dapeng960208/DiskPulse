@@ -26,9 +26,9 @@ const { result, querying, query } = useQuery(() => usersApi.fetch(queryParams.va
 });
 
 function confirmDelete(row) {
-  ElMessageBox.confirm(`确认删除 ${row.rd_username}？此操作不可撤销。`, '提示', {
+  ElMessageBox.confirm(`确认删除用户「${row.rd_username}」？此操作不可撤销。`, '删除用户', {
     type: 'warning',
-    confirmButtonText: '删除',
+    confirmButtonText: '删除用户',
     cancelButtonText: '取消',
     beforeClose: (action, instance, done) => {
       if (action === 'confirm') {

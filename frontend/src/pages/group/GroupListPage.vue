@@ -96,9 +96,9 @@ function removeQtreeFilter() {
 
 query();
 function confirmDelete(row) {
-  ElMessageBox.confirm(`确认删除 ${row.name}？此操作不可撤销。`, '提示', {
+  ElMessageBox.confirm(`确认删除项目组「${row.name}」？此操作不可撤销。`, '删除项目组', {
     type: 'warning',
-    confirmButtonText: '删除',
+    confirmButtonText: '删除项目组',
     cancelButtonText: '取消',
     beforeClose: (action, instance, done) => {
       if (action === 'confirm') {

@@ -21,7 +21,10 @@ import { useForm } from '@/composables/form';
 import { defaultStorageAlertRule } from '@/utils/storage-alert-rule';
 
 const emit = defineEmits(['submitted']);
-const { visible, open, close } = useDialog();
+const { visible, open, close, beforeClose, forceClose } = useDialog({
+  isDirty: () => isDirty.value,
+  isBusy: () => submitting.value,
+});
 const selectedCluster = ref(null);
 const selectedProject = ref(null);
 const systemRule = ref(defaultStorageAlertRule());
@@ -38,7 +41,7 @@ function initialModel() {
   };
 }
 
-const { formRef, mode, model, modelRules, submitting, edit: editForm, submit } = useForm(initialModel, {
+const { formRef, mode, model, modelRules, submitting, isDirty, edit: editForm, submit } = useForm(initialModel, {
   rules: (currentModel) => ({
     name: [{ required: true, message: '名称不能为空', trigger: 'blur' }],
     project_id: [{ type: 'number', required: true, message: '关联项目不能为空', trigger: 'change' }],
@@ -70,7 +73,7 @@ const { formRef, mode, model, modelRules, submitting, edit: editForm, submit } =
   onSuccess(currentMode) {
     ElMessage.success(`${currentMode === 'create' ? '新增' : '修改'}成功`);
     emit('submitted');
-    close();
+    forceClose();
   },
   onFailure() { ElMessage.error('保存项目组失败，请稍后重试'); },
 });
@@ -155,12 +158,23 @@ defineExpose({
 <template>
   <ElDialog
     v-model="visible"
-    :title="mode === 'create' ? '新增项目组监控配置' : '修改项目组监控配置'">
+    class="write-form-dialog"
+    :title="mode === 'create' ? '新增项目组监控配置' : '修改项目组监控配置'"
+    :before-close="beforeClose"
+    @close="formRef.clearValidate()">
+    <template #header>
+      <div class="write-form-dialog__heading">
+        <h2>{{ mode === 'create' ? '新增项目组监控配置' : '修改项目组监控配置' }}</h2>
+        <p>配置项目归属、存储目标、负责人和告警策略。</p>
+      </div>
+    </template>
     <ElForm
       ref="formRef"
+      class="write-form write-form-grid"
       :model="model"
       :rules="modelRules"
-      label-width="auto">
+      label-position="top">
+      <div class="write-form-section">基本信息</div>
       <ElFormItem
         label="组名"
         prop="name"><ElInput v-model="model.name" /></ElFormItem>
@@ -179,6 +193,7 @@ defineExpose({
       <ElFormItem
         label="项目组标签"
         prop="group_tag_id"><GroupTagSelect v-model="model.group_tag_id" /></ElFormItem>
+      <div class="write-form-section">存储目标</div>
       <ElFormItem
         v-if="isNetApp"
         label="目标类型"
@@ -213,8 +228,10 @@ defineExpose({
           :storage-cluster-id="model.storage_cluster_id" />
       </ElFormItem>
       <ElFormItem
+        class="write-form-field--full"
         label="关联Linux路径"
         prop="linux_path"><ElInput v-model="model.linux_path" /></ElFormItem>
+      <div class="write-form-section">负责人和通知</div>
       <ElFormItem label="单个存储目标关联多个项目组"><ElSwitch v-model="model.associate_multiple_groups" /></ElFormItem>
       <ElFormItem label="项目组开发代表"><RdUserSelect
         v-model="model.in_charge_user_id"
@@ -223,6 +240,7 @@ defineExpose({
         v-model="model.associated_mail_groups"
         type="distribution"
         multiple /></ElFormItem>
+      <div class="write-form-section">监控和告警</div>
       <ElFormItem label="是否监控"><ElSwitch v-model="model.enable_monitoring" /></ElFormItem>
       <ElFormItem label="自定义告警规则">
         <ElSwitch
@@ -232,15 +250,18 @@ defineExpose({
       <template v-if="model.enable_monitoring">
         <ElAlert
           v-if="!customAlertRule"
+          class="write-form-field--full"
           :title="`继承${inheritedRuleSource}`"
           type="info"
           :closable="false" />
         <StorageAlertRuleForm
           v-if="customAlertRule"
           v-model="model.storage_alert_rule"
+          class="write-form-field--full"
           @validity-change="alertRuleValid = $event" />
         <StorageAlertRuleForm
           v-else
+          class="write-form-field--full"
           :model-value="inheritedRule"
           disabled />
       </template>
@@ -260,7 +281,9 @@ defineExpose({
         type="primary"
         :loading="submitting"
         :disabled="customAlertRule && !alertRuleValid"
-        @click="submit">提交</ElButton>
+        @click="submit">
+        {{ submitting ? (mode === 'create' ? '创建中…' : '保存中…') : (mode === 'create' ? '创建项目组' : '保存修改') }}
+      </ElButton>
     </template>
   </ElDialog>
 </template>

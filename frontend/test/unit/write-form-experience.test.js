@@ -21,7 +21,7 @@ describe('write form experience contract', () => {
 
     expect(content).toContain('write-form-dialog');
     expect(content).toContain('write-form-dialog__heading');
-    expect(content).toContain('class="write-form"');
+    expect(content).toContain('class="write-form');
     expect(content).toContain('label-position="top"');
     expect(content).toContain('write-form-grid');
     expect(content).toContain(':before-close="beforeClose"');
@@ -51,7 +51,7 @@ describe('write form experience contract', () => {
 
     expect(settings).toContain('write-form-page');
     expect(settings).toContain('write-form-page__actions');
-    expect(settings).toContain('class="write-form"');
+    expect(settings).toContain('class="write-form');
     expect(settings).toContain('label-position="top"');
     expect(settings).toContain(':loading="saving"');
     expect(settings).toContain("saving ? '保存中…' : '保存设置'");

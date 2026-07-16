@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ElButton,
@@ -21,6 +21,7 @@ import {
   ElTag,
 } from 'element-plus';
 import aiApi from '@/api/ai-api';
+import { useDialog } from '@/composables/dialog';
 
 const route = useRoute();
 const router = useRouter();
@@ -29,7 +30,6 @@ const models = ref([]);
 const audits = ref([]);
 const total = ref(0);
 const loading = ref(false);
-const dialogVisible = ref(false);
 const editingId = ref(null);
 const auditQuery = reactive({ page: 1, size: 20, status: '' });
 const form = reactive({
@@ -45,6 +45,16 @@ const form = reactive({
   max_tokens: 2048,
   system_prompt: '',
 });
+const modelSubmitting = ref(false);
+const formSnapshot = ref(JSON.stringify(form));
+const isModelDirty = computed(() => JSON.stringify(form) !== formSnapshot.value);
+const {
+  visible: dialogVisible,
+  open: openModelDialog,
+  close: closeModelDialog,
+  beforeClose,
+  forceClose,
+} = useDialog({ isDirty: isModelDirty, isBusy: modelSubmitting });
 
 watch(activeTab, (tab) => {
   router.replace({ query: { ...route.query, tab } });
@@ -79,7 +89,8 @@ function resetForm() {
 function addModel() {
   editingId.value = null;
   resetForm();
-  dialogVisible.value = true;
+  formSnapshot.value = JSON.stringify(form);
+  openModelDialog();
 }
 
 function editModel(model) {
@@ -97,17 +108,25 @@ function editModel(model) {
     max_tokens: model.max_tokens,
     system_prompt: model.system_prompt || '',
   });
-  dialogVisible.value = true;
+  formSnapshot.value = JSON.stringify(form);
+  openModelDialog();
 }
 
 async function saveModel() {
-  const payload = { ...form };
-  if (editingId.value && !payload.api_key) delete payload.api_key;
-  if (editingId.value) await aiApi.updateModel(editingId.value, payload);
-  else await aiApi.createModel(payload);
-  dialogVisible.value = false;
-  ElMessage.success('模型配置已保存');
-  await loadModels();
+  if (modelSubmitting.value) return;
+  modelSubmitting.value = true;
+  try {
+    const payload = { ...form };
+    if (editingId.value && !payload.api_key) delete payload.api_key;
+    if (editingId.value) await aiApi.updateModel(editingId.value, payload);
+    else await aiApi.createModel(payload);
+    formSnapshot.value = JSON.stringify(form);
+    forceClose();
+    ElMessage.success(editingId.value ? '模型配置已更新' : '模型配置已创建');
+    await loadModels();
+  } finally {
+    modelSubmitting.value = false;
+  }
 }
 
 async function testModel(model) {
@@ -266,11 +285,20 @@ onMounted(async () => {
 
     <ElDialog
       v-model="dialogVisible"
+      class="write-form-dialog"
       :title="editingId ? '编辑模型' : '新增模型'"
-      width="680px">
+      :before-close="beforeClose">
+      <template #header>
+        <div class="write-form-dialog__heading">
+          <h2>{{ editingId ? '编辑模型' : '新增模型' }}</h2>
+          <p>配置模型连接、生成参数和对话能力。</p>
+        </div>
+      </template>
       <ElForm
+        class="write-form write-form-grid"
         :model="form"
-        label-width="110px">
+        label-position="top">
+        <div class="write-form-section">模型信息</div>
         <ElFormItem
           label="名称"
           required><ElInput
@@ -295,6 +323,7 @@ onMounted(async () => {
           label="模型标识"
           required><ElInput v-model="form.model" /></ElFormItem>
         <ElFormItem label="描述"><ElInput v-model="form.description" /></ElFormItem>
+        <div class="write-form-section">生成参数</div>
         <ElFormItem label="Temperature"><ElInputNumber
           v-model="form.temperature"
           :min="0"
@@ -304,16 +333,24 @@ onMounted(async () => {
           v-model="form.max_tokens"
           :min="1"
           :max="128000" /></ElFormItem>
-        <ElFormItem label="系统提示词"><ElInput
-          v-model="form.system_prompt"
-          type="textarea"
-          :rows="3" /></ElFormItem>
+        <ElFormItem
+          class="write-form-field--full"
+          label="系统提示词"><ElInput
+            v-model="form.system_prompt"
+            type="textarea"
+            :rows="3" /></ElFormItem>
+        <div class="write-form-section">可用状态</div>
         <ElFormItem label="启用配置"><ElSwitch v-model="form.enabled" /></ElFormItem>
         <ElFormItem label="允许对话"><ElSwitch v-model="form.enable_chat" /></ElFormItem>
       </ElForm>
-      <template #footer><ElButton @click="dialogVisible = false">取消</ElButton><ElButton
-        type="primary"
-        @click="saveModel">保存</ElButton></template>
+      <template #footer><ElButton
+        :disabled="modelSubmitting"
+        @click="closeModelDialog">取消</ElButton><ElButton
+          type="primary"
+          :loading="modelSubmitting"
+          @click="saveModel">
+          {{ modelSubmitting ? (editingId ? '保存中…' : '创建中…') : (editingId ? '保存修改' : '创建模型') }}
+        </ElButton></template>
     </ElDialog>
   </section>
 </template>
@@ -321,8 +358,8 @@ onMounted(async () => {
 <style scoped lang="scss">
 .ai-center { padding-bottom: 24px; }
 header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
-h2 { margin: 0 0 5px; font-size: 22px; color: var(--text-primary); }
-p { margin: 0; color: var(--text-secondary); }
+.ai-center > header h2 { margin: 0 0 5px; font-size: 22px; color: var(--text-primary); }
+.ai-center > header p { margin: 0; color: var(--text-secondary); }
 .toolbar { display: flex; justify-content: flex-end; gap: 10px; margin: 8px 0 14px; }
 .toolbar .el-select { width: 150px; }
 .el-pagination { justify-content: flex-end; margin-top: 16px; }

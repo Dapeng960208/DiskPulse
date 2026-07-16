@@ -24,9 +24,9 @@ const { result, querying, query } = useQuery(() => storageClusterApi.fetch(query
 });
 
 function confirmDelete(row) {
-  ElMessageBox.confirm(`确认删除存储集群「${row.name}」？此操作不可撤销。`, '提示', {
+  ElMessageBox.confirm(`确认删除存储集群「${row.name}」？此操作不可撤销。`, '删除存储集群', {
     type: 'warning',
-    confirmButtonText: '删除',
+    confirmButtonText: '删除集群',
     cancelButtonText: '取消',
     beforeClose: (action, instance, done) => {
       if (action === 'confirm') {

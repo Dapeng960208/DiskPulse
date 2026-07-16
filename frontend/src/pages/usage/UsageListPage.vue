@@ -93,9 +93,9 @@ const removeGroupFilter = () => {
 };
 const openExport = () => exportRef.value?.open?.();
 function confirmBackUp(row) {
-  ElMessageBox.confirm(`确认移动此目录${row.linux_path}至备份目录？此操作不可撤销。`, '提示', {
+  ElMessageBox.confirm(`确认移动用户目录「${row.linux_path}」至备份目录？此操作不可撤销。`, '移动用户目录', {
     type: 'warning',
-    confirmButtonText: '确认',
+    confirmButtonText: '移动目录',
     cancelButtonText: '取消',
     beforeClose: (action, instance, done) => {
       if (action === 'confirm') {

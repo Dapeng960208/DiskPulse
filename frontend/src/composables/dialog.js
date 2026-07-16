@@ -10,9 +10,10 @@ export function useDialog({ isDirty, isBusy } = {}) {
   }
 
   async function requestClose(done) {
-    if (unref(isBusy)) return false;
+    const resolveState = (state) => typeof state === 'function' ? state() : unref(state);
+    if (resolveState(isBusy)) return false;
 
-    if (unref(isDirty)) {
+    if (resolveState(isDirty)) {
       try {
         await ElMessageBox.confirm(
           '当前修改尚未保存，确认放弃吗？',

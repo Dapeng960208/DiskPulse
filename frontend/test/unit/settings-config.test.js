@@ -100,6 +100,6 @@ describe('storage settings configuration source', () => {
     await flushPromises();
 
     expect(configApi.updateConfig).toHaveBeenCalledWith(expected);
-    expect(success).toHaveBeenCalledWith('保存成功');
+    expect(success).toHaveBeenCalledWith('系统设置已保存');
   });
 });

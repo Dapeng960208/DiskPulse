@@ -15,7 +15,11 @@ const { result, querying, query } = useQuery(() => groupTagApi.fetch(queryParams
 });
 
 function confirmDelete(row) {
-  ElMessageBox.confirm(`确认删除项目组标签「${row.name}」？`, '提示', { type: 'warning' })
+  ElMessageBox.confirm(`确认删除项目组标签「${row.name}」？`, '删除项目组标签', {
+    type: 'warning',
+    confirmButtonText: '删除标签',
+    cancelButtonText: '取消',
+  })
     .then(() => groupTagApi.deleteById(row.id))
     .then(() => {
       ElMessage.success('删除成功');

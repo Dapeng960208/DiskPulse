@@ -87,15 +87,18 @@ vi.mock('@/components/data/UserAvatar.vue', () => ({
 vi.mock('@/composables/dialog', () => ({
   useDialog: () => {
     const visible = ref(false);
+    const close = vi.fn(() => {
+      visible.value = false;
+    });
 
     return {
       visible,
       open: vi.fn(() => {
         visible.value = true;
       }),
-      close: vi.fn(() => {
-        visible.value = false;
-      }),
+      close,
+      forceClose: close,
+      beforeClose: vi.fn((done) => done()),
     };
   },
 }));
@@ -110,6 +113,7 @@ vi.mock('@/composables/form', () => ({
     const model = ref(initialModel());
     const modelRules = computed(() => options.rules(model));
     const submitting = ref(false);
+    const isDirty = ref(false);
 
     // Force evaluation so the component-local rules callbacks count as covered.
     void modelRules.value;
@@ -137,6 +141,7 @@ vi.mock('@/composables/form', () => ({
       model,
       modelRules,
       submitting,
+      isDirty,
       edit,
       submit,
     };
@@ -292,7 +297,9 @@ function getExposed(wrapper) {
 }
 
 function findSubmitButton(wrapper) {
-  return wrapper.findAll('button').find((button) => button.text().includes('提交'));
+  return wrapper.findAll('button').find((button) => (
+    /^(?:创建(?:项目组|项目|标签|用户|目录|集群)|保存修改)$/.test(button.text().trim())
+  ));
 }
 
 describe('dialog component function coverage', () => {

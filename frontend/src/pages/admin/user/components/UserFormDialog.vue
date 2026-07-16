@@ -5,13 +5,17 @@ import { useForm } from '@/composables/form';
 import usersApi from '@/api/users-api';
 const emit = defineEmits(['submitted']);
 
-const { visible, open, close } = useDialog();
+const { visible, open, close, beforeClose, forceClose } = useDialog({
+  isDirty: () => isDirty.value,
+  isBusy: () => submitting.value,
+});
 const {
   formRef,
   mode,
   model,
   modelRules,
   submitting,
+  isDirty,
   edit,
   submit,
 } = useForm(() => ({
@@ -48,7 +52,7 @@ const {
   onSuccess(mode) {
     ElMessage.success(`${mode === 'create' ? '新增' : '修改'}成功`);
     emit('submitted');
-    close();
+    forceClose();
   },
 });
 
@@ -69,14 +73,24 @@ defineExpose({
 <template>
   <ElDialog
     v-model="visible"
+    class="write-form-dialog"
     :title="mode === 'create' ? '新增用户' : '修改用户'"
+    :before-close="beforeClose"
     @close="formRef.clearValidate()">
+    <template #header>
+      <div class="write-form-dialog__heading">
+        <h2>{{ mode === 'create' ? '新增用户' : '修改用户' }}</h2>
+        <p>维护用户身份信息、账户类型和告警状态。</p>
+      </div>
+    </template>
     <ElForm
       ref="formRef"
-      label-width="100px"
+      class="write-form write-form-grid"
+      label-position="top"
       :model="model"
       :rules="modelRules"
     >
+      <div class="write-form-section">身份信息</div>
       <ElFormItem
         label="用户名"
         prop="rd_username">
@@ -106,6 +120,7 @@ defineExpose({
           v-model="model.department"
           clearable />
       </ElFormItem>
+      <div class="write-form-section">账户设置</div>
       <ElFormItem
         label="账户类型"
         prop="user_type">
@@ -139,7 +154,7 @@ defineExpose({
         type="primary"
         :loading="submitting"
         @click="submit">
-        提交
+        {{ submitting ? (mode === 'create' ? '创建中…' : '保存中…') : (mode === 'create' ? '创建用户' : '保存修改') }}
       </ElButton>
     </template>
   </ElDialog>

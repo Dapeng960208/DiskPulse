@@ -12,7 +12,10 @@ import { ref, computed } from 'vue';
 import { number } from 'echarts';
 
 const emit = defineEmits(['submitted']);
-const { visible, open, close } = useDialog();
+const { visible, open, close, beforeClose, forceClose } = useDialog({
+  isDirty: () => isDirty.value,
+  isBusy: () => submitting.value,
+});
 
 const {
   formRef,
@@ -20,6 +23,7 @@ const {
   model,
   modelRules,
   submitting,
+  isDirty,
   edit,
   submit,
 } = useForm(() => ({
@@ -51,7 +55,7 @@ const {
   onSuccess(mode) {
     ElMessage.success(`${mode === 'create' ? '新增' : '修改'}成功`);
     emit('submitted');
-    close();
+    forceClose();
   },
 });
 
@@ -138,14 +142,24 @@ defineExpose({
 <template>
   <ElDialog
     v-model="visible"
+    class="write-form-dialog"
     :title="mode === 'create' ? '新增用户目录' : '修改用户目录'"
+    :before-close="beforeClose"
     @close="formRef.clearValidate()">
+    <template #header>
+      <div class="write-form-dialog__heading">
+        <h2>{{ mode === 'create' ? '新增用户目录' : '修改用户目录' }}</h2>
+        <p>关联项目、项目组和研发用户，路径由选择结果自动生成。</p>
+      </div>
+    </template>
     <ElForm
       ref="formRef"
-      label-width="auto"
+      class="write-form write-form-grid"
+      label-position="top"
       :model="model"
       :rules="modelRules"
     >
+      <div class="write-form-section">归属关系</div>
       <ElFormItem label="项目">
         <ProjectSelect
           :model-value="model.project_id"
@@ -175,7 +189,10 @@ defineExpose({
           {{ selectedGroup?.storage_cluster?.name || '-' }}
         </span>
       </ElFormItem>
-      <ElFormItem label="Linux路径">
+      <div class="write-form-section">路径预览</div>
+      <ElFormItem
+        class="write-form-field--full"
+        label="Linux路径">
         <ElInput
           v-model="linuxPath"
           :disabled="true" />
@@ -191,7 +208,7 @@ defineExpose({
         type="primary"
         :loading="submitting"
         @click="submit">
-        提交
+        {{ submitting ? (mode === 'create' ? '创建中…' : '保存中…') : (mode === 'create' ? '创建目录' : '保存修改') }}
       </ElButton>
     </template>
   </ElDialog>
