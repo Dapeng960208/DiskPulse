@@ -2,9 +2,10 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from schemas import projectsSchema, qtreeSchema, usersSchema
+from schemas.storageAlertRuleSchema import StorageAlertRule
 
 
 class GroupDiskBase(BaseModel):
@@ -41,6 +42,8 @@ class GroupWriteBase(BaseModel):
     completed: bool | None = False
     back_up_enabled: bool | None = True
     updated_at: datetime | None = None
+    storage_alert_rule: StorageAlertRule | None = None
+    alert_cc_user_ids: list[int] = Field(default_factory=list)
 
     @field_validator("associated_mail_groups", mode="before")
     @classmethod
@@ -48,6 +51,13 @@ class GroupWriteBase(BaseModel):
         if isinstance(value, list):
             return ",".join(value)
         return value
+
+    @field_validator("alert_cc_user_ids")
+    @classmethod
+    def validate_alert_cc_user_ids(cls, value):
+        if any(user_id <= 0 for user_id in value):
+            raise ValueError("alert_cc_user_ids must contain positive user IDs")
+        return list(dict.fromkeys(value))
 
 
 class GroupBindingCreate(GroupWriteBase):
@@ -134,6 +144,8 @@ class GroupBase(BaseModel):
     in_charge_user: usersSchema.OnlyUser | None = None
     completed: bool | None = False
     back_up_enabled: bool | None = True
+    storage_alert_rule: StorageAlertRule | None = None
+    alert_cc_user_ids: list[int] = Field(default_factory=list)
 
 
 class Group(GroupBase):

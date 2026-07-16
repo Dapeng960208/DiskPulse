@@ -3,12 +3,18 @@ import ast
 import importlib
 import importlib.util
 import inspect
+import io
+import json
 import textwrap
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, call, patch
 
 import pytest
+import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 
@@ -321,3 +327,315 @@ def test_storage_alert_migration_revision_and_schema_contract():
         "delivery_error",
     ):
         assert contract in source
+
+
+def test_storage_alert_migration_preserves_default_rule_values_and_offline_sql():
+    paths = sorted((BACKEND_ROOT / "migrate" / "versions").glob("00000000000*.py"))
+    migrations = []
+    for path in paths:
+        spec = importlib.util.spec_from_file_location(path.stem, path)
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+        migrations.append(migration)
+    with sa.create_engine("sqlite://").begin() as connection:
+        for migration in migrations[:-1]:
+            migration.op = Operations(MigrationContext.configure(connection))
+            migration.upgrade()
+        connection.execute(sa.text("INSERT INTO storage_conf (id, name) VALUES (1, 'test')"))
+        migration = migrations[-1]
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        stored = connection.execute(
+            sa.text("SELECT storage_alert_rule FROM storage_conf WHERE id = 1")
+        ).scalar_one()
+        assert json.loads(stored) == DEFAULT_RULE
+        migration.downgrade()
+
+    for dialect in ("postgresql", "mysql"):
+        output = io.StringIO()
+        context = MigrationContext.configure(
+            dialect_name=dialect,
+            opts={"as_sql": True, "output_buffer": output},
+        )
+        migration.op = Operations(context)
+        migration.upgrade()
+        sql = output.getvalue().replace("\\:", ":")
+        for value in (80, 24, 90, 6, 95, 1):
+            assert f'"threshold":{value}' in sql or f'"repeat_hours":{value}' in sql
+
+
+def test_storage_alert_migration_generates_sqlite_offline_upgrade_and_downgrade_sql():
+    path = BACKEND_ROOT / "migrate" / "versions" / "000000000006_storage_alert_rules.py"
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    output = io.StringIO()
+    context = MigrationContext.configure(
+        dialect_name="sqlite",
+        opts={"as_sql": True, "output_buffer": output},
+    )
+    migration.op = Operations(context)
+
+    migration.upgrade()
+    migration.downgrade()
+
+    sql = output.getvalue().replace("\\:", ":")
+    assert "ALTER TABLE storage_conf ADD COLUMN storage_alert_rule" in sql
+    assert "ALTER TABLE groups ADD COLUMN alert_cc_user_ids" in sql
+    assert "CREATE TABLE storage_alert_states" in sql
+    assert "ALTER TABLE storage_alerts ADD COLUMN delivery_status" in sql
+    assert "DROP TABLE storage_alert_states" in sql
+    assert "ALTER TABLE storage_conf DROP COLUMN storage_alert_rule" in sql
+    for value in (80, 24, 90, 6, 95, 1):
+        assert f'"threshold":{value}' in sql or f'"repeat_hours":{value}' in sql
+
+
+def test_evaluator_uses_current_successful_samples_and_keeps_project_event_aggregated(
+    db_session, session_factory, monkeypatch
+):
+    import models
+
+    tasks = _module("celery_tasks.tasks.storage_alerts")
+    monkeypatch.setattr(tasks, "SessionLocal", session_factory)
+    config = {
+        "feishu_notification": {"enabled": True, "debug": False, "cc_usernames": ["global"]},
+        "super_admin_usernames": ["admin"],
+    }
+    monkeypatch.setattr(tasks.base_config, "get", lambda key, default=None: config.get(key, default))
+    db_session.add_all(
+        [
+            models.User(id=1, rd_username="alice", is_alert=True),
+            models.User(id=2, rd_username="owner", is_alert=True),
+            models.User(id=3, rd_username="group-cc", is_alert=True),
+            models.StorageCluster(id=1, name="cluster-a", storage_type="netapp"),
+            models.StorageCluster(id=2, name="cluster-b", storage_type="netapp"),
+            models.GroupTag(id=1, name="team"),
+            models.Project(
+                id=1,
+                name="project-a",
+                status=1,
+                is_alert=True,
+                in_charge_user_id=2,
+                limit=200,
+                used=192,
+                use_ratio=96,
+            ),
+            models.Volume(id=1, storage_cluster_id=1, name="vol-a"),
+            models.Volume(id=2, storage_cluster_id=2, name="vol-b"),
+            models.Group(
+                id=1,
+                project_id=1,
+                storage_cluster_id=1,
+                group_tag_id=1,
+                volume_id=1,
+                name="group-a",
+                enable_monitoring=True,
+                in_charge_user_id=2,
+                alert_cc_user_ids=[3],
+                limit=100,
+                used=96,
+                use_ratio=96,
+                updated_at=NOW,
+            ),
+            models.Group(
+                id=2,
+                project_id=1,
+                storage_cluster_id=2,
+                group_tag_id=1,
+                volume_id=2,
+                name="group-b",
+                enable_monitoring=True,
+                limit=100,
+                used=96,
+                use_ratio=96,
+                updated_at=NOW,
+            ),
+            models.StorageUsage(
+                id=1,
+                storage_cluster_id=1,
+                group_id=1,
+                user_id=1,
+                linux_path="/data/alice",
+                limit=100,
+                used=96,
+                use_ratio=96,
+                updated_at=NOW,
+            ),
+            models.StorageUsage(
+                id=2,
+                storage_cluster_id=1,
+                group_id=1,
+                user_id=1,
+                linux_path="/data/stale",
+                limit=100,
+                used=99,
+                use_ratio=99,
+                updated_at=NOW - timedelta(hours=1),
+            ),
+            models.StorageConf(id=1, name="storage conf", storage_alert_rule=DEFAULT_RULE),
+        ]
+    )
+    db_session.commit()
+
+    assert tasks.evaluate_storage_alerts(
+        [1], [1], NOW.isoformat(), [1], [1]
+    ) == []
+    second_sample = NOW + timedelta(minutes=1)
+    db_session.query(models.StorageUsage).filter_by(id=1).update({"updated_at": second_sample})
+    db_session.query(models.Group).filter_by(id=1).update({"updated_at": second_sample})
+    db_session.commit()
+    event_ids = tasks.evaluate_storage_alerts(
+        [1], [1], second_sample.isoformat(), [1], [1]
+    )
+
+    assert tasks.evaluate_storage_alerts(
+        [1], [1], second_sample.isoformat(), [1], [1]
+    ) == []
+
+    events = db_session.query(models.StorageAlerts).filter(models.StorageAlerts.id.in_(event_ids)).all()
+    by_type = {event.related_type: event for event in events}
+    assert set(by_type) == {"StorageUsage", "Group", "Project"}
+    assert by_type["Project"].storage_cluster_id is None
+    assert by_type["StorageUsage"].recipient_usernames == [
+        "alice",
+        "group-cc",
+        "admin",
+        "global",
+    ]
+    assert by_type["Group"].recipient_usernames == [
+        "owner",
+        "group-cc",
+        "admin",
+        "global",
+    ]
+    assert by_type["Project"].recipient_usernames == ["owner", "admin", "global"]
+    assert all(event.alert_type == "alert" for event in events)
+    assert db_session.query(models.StorageAlertState).filter_by(target_type="storage_usage", target_id=2).first() is None
+
+    usage_text = "".join(
+        item["text"] for item in by_type["StorageUsage"].related_info["paragraphs"][0]
+    )
+    assert all(
+        value in usage_text
+        for value in (
+            "用户名：alice",
+            "集群：cluster-a",
+            "项目组标签：team",
+            "项目组：group-a",
+            "Linux路径：/data/alice",
+            "采用口径：hard",
+            "硬限额：100.00 GB",
+            "软限额：未设置",
+            "已使用：96.00 GB",
+            "硬限额使用率：96.00%",
+            "软限额使用率：未设置",
+        )
+    )
+    project_text = "".join(
+        item["text"] for item in by_type["Project"].related_info["paragraphs"][0]
+    )
+    assert "项目：project-a" in project_text
+    assert "集群：cluster-a, cluster-b" in project_text
+    recovery_text = "".join(
+        item["text"]
+        for item in tasks._paragraphs(
+            db_session.get(models.Project, 1),
+            DEFAULT_RULE,
+            79,
+            "recovery",
+            {"project": "project-a"},
+            "serious",
+        )[0]
+    )
+    assert "恢复前等级：serious" in recovery_text
+
+
+def test_group_alert_cc_users_are_deduplicated_and_must_exist(db_session):
+    import models
+    from crud import groupCrud
+    from schemas.groupSchema import GroupBindingCreate
+
+    db_session.add_all(
+        [
+            models.User(id=1, rd_username="cc-user"),
+            models.Project(id=1, name="project-a"),
+            models.StorageCluster(id=1, name="cluster-a", storage_type="netapp"),
+            models.GroupTag(id=1, name="team"),
+            models.Volume(id=1, storage_cluster_id=1, name="volume-a"),
+        ]
+    )
+    db_session.commit()
+    with pytest.raises(HTTPException) as error:
+        groupCrud.create_group(
+            db_session,
+            GroupBindingCreate(
+                name="invalid",
+                project_id=1,
+                storage_cluster_id=1,
+                group_tag_id=1,
+                volume_id=1,
+                alert_cc_user_ids=[999],
+            ),
+        )
+    assert error.value.status_code == 422
+    group = groupCrud.create_group(
+        db_session,
+        GroupBindingCreate(
+            name="valid",
+            project_id=1,
+            storage_cluster_id=1,
+            group_tag_id=1,
+            volume_id=1,
+            alert_cc_user_ids=[1, 1],
+        ),
+    )
+    assert group.alert_cc_user_ids == [1]
+
+
+def test_delivery_marks_failed_after_initial_attempt_and_three_retries(
+    db_session, session_factory, monkeypatch
+):
+    import models
+
+    tasks = _module("celery_tasks.tasks.storage_alerts")
+    monkeypatch.setattr(tasks, "SessionLocal", session_factory)
+    monkeypatch.setattr(
+        tasks.base_config,
+        "get",
+        lambda key, default=None: {
+            "feishu_notification": {
+                "enabled": True,
+                "base_url": "https://notify.example/api",
+                "app": "bot",
+                "app_key": "secret",
+            }
+        }.get(key, default),
+    )
+    event = models.StorageAlerts(
+        source="diskpulse",
+        severity="important",
+        alert_level="important",
+        alert_type="usage",
+        description="test",
+        threshold=80,
+        avg_use_ratio=81,
+        related_type="group",
+        event_type="trigger",
+        quota_basis="hard",
+        delivery_status="pending",
+        recipient_usernames=["alice"],
+        next_attempt_at=NOW,
+        related_info={"title": "告警", "paragraphs": []},
+    )
+    db_session.add(event)
+    db_session.commit()
+
+    with patch.object(tasks.FeishuNotificationService, "send", side_effect=RuntimeError("down")):
+        for _ in range(4):
+            tasks.deliver_storage_alert_task.run(event.id)
+
+    db_session.refresh(event)
+    assert event.delivery_attempts == 4
+    assert event.delivery_status == "failed"
+    assert event.next_attempt_at is None
+    assert event.delivery_error == "down"

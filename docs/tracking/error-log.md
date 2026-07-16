@@ -1,5 +1,41 @@
 # 错误记录
 
+### 2026-07-16：存储告警 Alembic 检查使用了错误配置路径
+
+- 触发：在 `backend` 执行 `python -m alembic -c migrate\alembic.ini heads` 或 `history`。
+- 现象：Alembic 报 `No 'script_location' key found in configuration`，未读取项目实际配置。
+- 根因：仓库的 Alembic 配置入口由 `backend` 当前目录和项目默认配置解析，不应把版本目录中的路径当成 ini 文件传给 `-c`。
+- 修复：在 `backend` 目录执行 `D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic heads` 和 `... -m alembic history`。
+- 验证：命令返回唯一 head `000000000006`，history 从 `000000000001` 至 `000000000006` 连续。
+- 风险：从错误目录或继续传入 `migrate\alembic.ini` 会复现；部署脚本应固定工作目录。
+
+### 2026-07-16：Worktree 缺少忽略配置导致 Celery 静态导入失败
+
+- 触发：在独立 Worktree 的 `backend` 直接导入 `celery_worker` 检查任务注册和 Beat 配置。
+- 现象：首次报 `FileNotFoundError: Configuration file not found: ...\backend\config.yml`；把 `base_config.path` 直接赋为字符串后又报 `AttributeError: 'str' object has no attribute 'read_text'`。
+- 根因：包含环境配置的 `backend/config.yml` 被 Git 忽略，Worktree 不会自动带入；`base_config.path` 的类型是 `pathlib.Path`。
+- 修复：不复制或提交配置，验证命令在导入前只读注入 `Path(r'D:\dev\DiskPulse\backend\config.yml')`，复用主工作区现有本地配置。
+- 验证：静态导入确认 `evaluate_storage_alerts_task=True`、`deliver_storage_alert_task=True`，且 Beat 中 `retry_storage_alerts_task=True`。
+- 风险：该检查只证明任务注册和调度表加载，不代表真实 Redis broker、worker 或 Beat 能消费任务；配置输出还会显示现有数据库连接摘要，交付日志不得包含密钥。
+
+### 2026-07-16：存储告警迁移离线 SQL 的规则 JSON 被误解析为绑定参数
+
+- 触发：为 `000000000006_storage_alert_rules` 生成 PostgreSQL/MySQL/SQLite 离线 SQL，并检查默认规则 JSON。
+- 现象：JSON 中冒号后的内容被 SQLAlchemy `text()` 识别为绑定参数，离线 SQL 出现缺失或损坏的阈值/频次值。
+- 根因：Alembic 离线模式仍会解析文本 SQL 的冒号，直接内联 JSON 未转义。
+- 修复：离线 JSON 中的冒号按 Alembic 文本绑定规则转义；SQLite 离线模式使用显式方言分支生成可执行的 upgrade/downgrade DDL。
+- 验证：自动化测试逐项检查默认值 `80/24/90/6/95/1`；SQLite 离线 SQL 已实际执行升降级，PostgreSQL/MySQL 离线 SQL 生成通过。
+- 风险：PostgreSQL/MySQL 本轮只生成离线 SQL，未连接真实数据库执行在线迁移。
+
+### 2026-07-16：最终全局覆盖率未达到存储告警计划的 90% 目标
+
+- 触发：执行后端 `coverage run -m pytest backend\test`/`coverage report` 和前端 `npm run test:coverage`。
+- 现象：后端全局为 `84%`；前端 Statements/Lines 为 `92.62%`，Branches 为 `81.96%`，Functions 为 `70.29%`，未满足计划中的四项 90%。
+- 根因：仓库现有门禁为后端 80%，前端 Vitest 也未对四项统一执行 90% 门禁；大量既有分支和函数不在本功能测试范围，后端标准配置还排除了 Celery 任务和迁移。
+- 处理：不为抬高数字扩展到无关模块；补充存储规则、状态机、飞书、outbox、迁移与前端入口的聚焦测试。后端规则 schema/规则服务/飞书服务选择性统计为 `92%`。
+- 验证：后端 `312 passed` 并通过仓库 80% 门禁；前端 40 个测试文件、`205 passed`，现有 coverage 命令成功退出。
+- 风险：用户计划中的全局 90% 验收条件仍未满足；Celery 评估/outbox 的标准 coverage 未计入，需后续专项治理而非把当前结果描述为达标。
+
 ### 2026-07-16：存储告警实施基线存在三个既有回归失败
 
 - 触发：在独立 Worktree 开始功能实施前执行 `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend\test -q` 和 `npm test`。
@@ -7,7 +43,7 @@
 - 根因：后端测试按迁移文件名取最后一个迁移，新增 `000000000005` 后不再执行待测的 `000000000004` 回填；前端两个术语断言已与当前页面删除的列和详情摘要不一致。三项均可在功能代码改动前稳定复现。
 - 处理：按存储告警实施计划的基线门禁暂停；用户确认继续后，后端测试改为按明确 revision 定位待测迁移，前端术语测试同步当前页面契约，修复提交为 `d16e8f1`。
 - 验证：修复后后端全量 `284 passed`；前端全量 39 个测试文件、`196 passed`。`npm ci` 成功，Alembic `heads/history` 成功且唯一 head 为 `000000000005`，CodeGraph 索引为最新。
-- 风险：本条只确认既有基线恢复；存储告警接口、迁移、任务和页面仍处于待实现状态，必须按本功能 RED/GREEN 验证单独验收。
+- 风险：本条只确认既有基线恢复；存储告警功能后续 RED/GREEN 与最终验证结果见 `docs/features/storage-alerts/design.md` 和 `docs/tracking/current-release.md`。
 
 ### 2026-07-16：Worktree 前置检查对空 Git 输出调用 Trim 失败
 

@@ -24,9 +24,13 @@ router = APIRouter(
 @handle_exceptions
 async def read_storage_alerts(page: int | None = 1, size: int | None = 20, nameLike: str | None = None,
                               prop: str | None = None, alert_type: str | None = None,
+                              event_type: str | None = None, quota_basis: str | None = None,
+                              delivery_status: str | None = None,
                               order: str | None = None, related_type: str | None = None, related_id: int | None = None,
                               db: Session = Depends(get_db)):
     storage_alerts, total = storageAlertCrud.get_storage_alerts(db=db, page=page, size=size, nameLike=nameLike,
                                                                 prop=prop, order=order, related_type=related_type,
-                                                                related_id=related_id,alert_type=alert_type)
+                                                                related_id=related_id, alert_type=alert_type,
+                                                                event_type=event_type, quota_basis=quota_basis,
+                                                                delivery_status=delivery_status)
     return commonSchema.ResponseModel[storageAlertsSchema.StorageAlert](content=storage_alerts, total=total)

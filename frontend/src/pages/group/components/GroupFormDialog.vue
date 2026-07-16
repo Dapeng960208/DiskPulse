@@ -1,10 +1,12 @@
 <script setup>
 import { computed, ref } from 'vue';
 import {
-  ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElMessage,
+  ElAlert, ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElMessage,
   ElOption, ElSelect, ElSwitch,
 } from 'element-plus';
 import groupApi from '@/api/group-api';
+import projectApi from '@/api/project-api';
+import configApi from '@/api/config-api';
 import storageClusterApi from '@/api/storage-cluster-api';
 import GroupTagSelect from '@/components/form/GroupTagSelect.vue';
 import MailSelect from '@/components/form/MailSelect.vue';
@@ -13,12 +15,18 @@ import QtreeSelect from '@/components/form/QtreeSelect.vue';
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import VolumeSelect from '@/components/form/VolumeSelect.vue';
+import StorageAlertRuleForm from '@/components/form/StorageAlertRuleForm.vue';
 import { useDialog } from '@/composables/dialog';
 import { useForm } from '@/composables/form';
+import { defaultStorageAlertRule } from '@/utils/storage-alert-rule';
 
 const emit = defineEmits(['submitted']);
 const { visible, open, close } = useDialog();
 const selectedCluster = ref(null);
+const selectedProject = ref(null);
+const systemRule = ref(defaultStorageAlertRule());
+const customAlertRule = ref(false);
+const alertRuleValid = ref(true);
 
 function initialModel() {
   return {
@@ -26,6 +34,7 @@ function initialModel() {
     target_type: null, volume_id: null, qtree_id: null, linux_path: null,
     back_path: null, enable_monitoring: true, associate_multiple_groups: false,
     in_charge_user_id: null, monitor_host_id: null, associated_mail_groups: [],
+    storage_alert_rule: null, alert_cc_user_ids: [],
   };
 }
 
@@ -67,6 +76,35 @@ const { formRef, mode, model, modelRules, submitting, edit: editForm, submit } =
 });
 
 const isNetApp = computed(() => selectedCluster.value?.storage_type === 'netapp');
+const inheritedRule = computed(() => selectedProject.value?.storage_alert_rule || systemRule.value);
+const inheritedRuleSource = computed(() => selectedProject.value?.storage_alert_rule ? '项目规则' : '系统规则');
+
+async function loadSystemRule() {
+  try {
+    const config = await configApi.fetch();
+    systemRule.value = config.storage_alert_rule || defaultStorageAlertRule();
+  } catch {
+    systemRule.value = defaultStorageAlertRule();
+  }
+}
+
+async function changeProject(projectId) {
+  model.value.project_id = projectId;
+  await loadProject(projectId);
+}
+
+async function loadProject(projectId, fallback = null) {
+  try {
+    selectedProject.value = projectId ? await projectApi.fetchById(projectId) : null;
+  } catch {
+    selectedProject.value = fallback;
+  }
+}
+
+function changeCustomAlertRule(enabled) {
+  customAlertRule.value = enabled;
+  model.value.storage_alert_rule = enabled ? defaultStorageAlertRule() : null;
+}
 
 async function changeCluster(clusterId) {
   model.value.storage_cluster_id = clusterId;
@@ -83,11 +121,15 @@ function changeTargetType(value) {
 }
 
 defineExpose({
-  async edit(existing) {
+  edit(existing) {
+    void loadSystemRule();
     if (!existing) {
       selectedCluster.value = null;
+      selectedProject.value = null;
+      customAlertRule.value = false;
       editForm();
     } else {
+      customAlertRule.value = existing.storage_alert_rule != null;
       editForm({
         ...initialModel(), ...existing,
         project_id: existing.project_id ?? existing.project?.id,
@@ -97,8 +139,12 @@ defineExpose({
           ?? (existing.volume_id != null ? 'volume' : 'qtree'),
       });
       selectedCluster.value = existing.storage_cluster ?? null;
+      selectedProject.value = null;
+      void loadProject(model.value.project_id, existing.project ?? null);
       if (!selectedCluster.value && model.value.storage_cluster_id) {
-        selectedCluster.value = await storageClusterApi.fetchById(model.value.storage_cluster_id);
+        storageClusterApi.fetchById(model.value.storage_cluster_id)
+          .then((cluster) => { selectedCluster.value = cluster; })
+          .catch(() => { selectedCluster.value = null; });
       }
     }
     open();
@@ -120,7 +166,9 @@ defineExpose({
         prop="name"><ElInput v-model="model.name" /></ElFormItem>
       <ElFormItem
         label="关联项目"
-        prop="project_id"><ProjectSelect v-model="model.project_id" /></ElFormItem>
+        prop="project_id"><ProjectSelect
+          :model-value="model.project_id"
+          @update:model-value="changeProject" /></ElFormItem>
       <ElFormItem
         label="存储集群"
         prop="storage_cluster_id">
@@ -176,6 +224,32 @@ defineExpose({
         type="distribution"
         multiple /></ElFormItem>
       <ElFormItem label="是否监控"><ElSwitch v-model="model.enable_monitoring" /></ElFormItem>
+      <ElFormItem label="自定义告警规则">
+        <ElSwitch
+          :model-value="customAlertRule"
+          @update:model-value="changeCustomAlertRule" />
+      </ElFormItem>
+      <template v-if="model.enable_monitoring">
+        <ElAlert
+          v-if="!customAlertRule"
+          :title="`继承${inheritedRuleSource}`"
+          type="info"
+          :closable="false" />
+        <StorageAlertRuleForm
+          v-if="customAlertRule"
+          v-model="model.storage_alert_rule"
+          @validity-change="alertRuleValid = $event" />
+        <StorageAlertRuleForm
+          v-else
+          :model-value="inheritedRule"
+          disabled />
+      </template>
+      <ElFormItem label="飞书个人抄送">
+        <RdUserSelect
+          v-model="model.alert_cc_user_ids"
+          clearable
+          multiple />
+      </ElFormItem>
       <ElFormItem label="是否已结项"><ElSwitch v-model="model.completed" /></ElFormItem>
       <ElFormItem
         v-if="false"
@@ -185,6 +259,7 @@ defineExpose({
       <ElButton @click="close">取消</ElButton><ElButton
         type="primary"
         :loading="submitting"
+        :disabled="customAlertRule && !alertRuleValid"
         @click="submit">提交</ElButton>
     </template>
   </ElDialog>

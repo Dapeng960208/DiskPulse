@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from pydantic import BaseModel
+from schemas.storageAlertRuleSchema import DEFAULT_STORAGE_ALERT_RULE, StorageAlertRule
 
 
 class StorageConf(BaseModel):
@@ -31,6 +32,7 @@ class StorageConf(BaseModel):
     back_up_dir: str | None = None
     back_up_duration: int | None = 60
     back_up_quit_days: int | None = 30
+    storage_alert_rule: StorageAlertRule = StorageAlertRule.model_validate(DEFAULT_STORAGE_ALERT_RULE)
 
     class Config:
         from_attributes = True
@@ -61,6 +63,7 @@ class StorageConfPublic(BaseModel):
     back_up_dir: str | None = None
     back_up_duration: int | None = 60
     back_up_quit_days: int | None = 30
+    storage_alert_rule: StorageAlertRule = StorageAlertRule.model_validate(DEFAULT_STORAGE_ALERT_RULE)
 
     class Config:
         from_attributes = True

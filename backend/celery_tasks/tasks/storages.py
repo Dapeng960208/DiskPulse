@@ -157,10 +157,13 @@ def run_collection_round(
     monitor_factory=StoragePulseMonitor,
     questdb_writer=None,
     logger=logger,
+    collected_at=None,
 ):
     cluster_results = {}
     succeeded_clusters = []
     failed_clusters = []
+    refreshed_storage_usage_ids = []
+    refreshed_group_ids = []
     for cluster in _cluster_snapshots(snapshot):
         cluster_id = cluster["storage_cluster_id"]
         db = None
@@ -174,10 +177,14 @@ def run_collection_round(
                         logger,
                         storage_cluster_id=cluster["storage_cluster_id"],
                         snapshot=cluster,
+                        collected_at=collected_at,
                     )
                 else:
                     monitor = monitor_factory(db, logger, cluster)
                 metrics = monitor.collect_postgres()
+                if isinstance(metrics, dict):
+                    refreshed_storage_usage_ids.extend(metrics.get("storage_usage_ids", ()))
+                    refreshed_group_ids.extend(metrics.get("group_ids", ()))
             cluster_results[cluster_id] = True
             succeeded_clusters.append(cluster_id)
             try:
@@ -228,6 +235,8 @@ def run_collection_round(
         "succeeded_clusters": tuple(succeeded_clusters),
         "failed_clusters": tuple(failed_clusters),
         "cluster_results": cluster_results,
+        "refreshed_storage_usage_ids": tuple(refreshed_storage_usage_ids),
+        "refreshed_group_ids": tuple(refreshed_group_ids),
     }
 
 
@@ -246,6 +255,7 @@ def storages_schedule_fetching_task(storage_cluster_id=None):
                 summary = run_collection_round(
                     snapshot,
                     session_factory=SessionLocal,
+                    collected_at=collected_at,
                 )
                 logger.info(
                     "Storage collection round completed: succeeded=%s failed=%s",
@@ -254,11 +264,20 @@ def storages_schedule_fetching_task(storage_cluster_id=None):
                 )
                 with SessionLocal() as db:
                     with db.begin():
-                        finalize_project_totals(
+                        refreshed_project_ids = finalize_project_totals(
                             db,
                             cluster_results=summary["cluster_results"],
                             collected_at=collected_at,
                         )
+                from celery_tasks.tasks.storage_alerts import evaluate_storage_alerts_task
+
+                evaluate_storage_alerts_task.delay(
+                    summary["succeeded_clusters"],
+                    tuple(refreshed_project_ids),
+                    collected_at.isoformat(),
+                    summary["refreshed_storage_usage_ids"],
+                    summary["refreshed_group_ids"],
+                )
             else:
                 logger.info("Storages schedule fetching task is already running.")
     except Exception as e:

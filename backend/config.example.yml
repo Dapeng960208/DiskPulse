@@ -65,3 +65,13 @@ ldap:
 
 super_admin_usernames:
   - admin
+
+feishu_notification:
+  enabled: false
+  base_url: https://feishu-notifier.example.com/api
+  app: feishu_bot
+  app_key: replace-with-secret
+  timeout_seconds: 5
+  tls_verify: true
+  debug: false
+  cc_usernames: []

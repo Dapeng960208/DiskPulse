@@ -20,6 +20,9 @@ class StorageAlert(BaseModel):
     related_id: Optional[int] = None
     related_type: str
     related_info: Optional[dict] | None = None
+    event_type: str = "trigger"
+    quota_basis: str = "hard"
+    delivery_status: str = "legacy"
 
     class Config:
         from_attributes = True

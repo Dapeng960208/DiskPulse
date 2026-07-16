@@ -1,5 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { flushPromises, shallowMount } from '@vue/test-utils';
+import { vi } from 'vitest';
+
+const projectApi = vi.hoisted(() => ({ fetchById: vi.fn() }));
+const configApi = vi.hoisted(() => ({ fetch: vi.fn() }));
+vi.mock('@/api/project-api', () => ({ default: projectApi }));
+vi.mock('@/api/config-api', () => ({ default: configApi }));
+vi.mock('@/api/users-api', () => ({
+  default: { fetch: vi.fn(() => Promise.resolve({ content: [] })), fetchById: vi.fn() },
+}));
 
 function source(path) {
   return readFileSync(resolve(process.cwd(), path), 'utf8');
@@ -21,6 +31,25 @@ describe('storage alert rule UI contract', () => {
     expect(form).toContain(':max="100"');
     expect(form).toContain('重要阈值必须小于严重阈值');
     expect(form).toContain('严重阈值必须小于紧急阈值');
+  });
+
+  it('reports an invalid cross-level threshold order', async () => {
+    const { default: StorageAlertRuleForm } = await import(
+      '@/components/form/StorageAlertRuleForm.vue'
+    );
+    const rule = {
+      quota_basis: 'hard',
+      important: { threshold: 80, repeat_hours: 24 },
+      serious: { threshold: 90, repeat_hours: 6 },
+      emergency: { threshold: 95, repeat_hours: 1 },
+    };
+    const wrapper = shallowMount(StorageAlertRuleForm, { props: { modelValue: rule } });
+
+    await wrapper.setProps({
+      modelValue: { ...rule, important: { threshold: 90, repeat_hours: 24 } },
+    });
+
+    expect(wrapper.emitted('validity-change').at(-1)).toEqual([false]);
   });
 
   it('adds the system rule to superadmin-only storage settings', () => {
@@ -57,9 +86,57 @@ describe('storage alert rule UI contract', () => {
     expect(group).toMatch(/groupApi\.(create|replace)\([\s\S]*alert_cc_user_ids|alert_cc_user_ids[\s\S]*groupApi\.(create|replace)\(/);
   });
 
+  it('loads the full project before previewing an inherited project rule', async () => {
+    const systemRule = {
+      quota_basis: 'hard',
+      important: { threshold: 80, repeat_hours: 24 },
+      serious: { threshold: 90, repeat_hours: 6 },
+      emergency: { threshold: 95, repeat_hours: 1 },
+    };
+    const projectRule = {
+      ...systemRule,
+      important: { threshold: 70, repeat_hours: 12 },
+    };
+    configApi.fetch.mockResolvedValue({ storage_alert_rule: systemRule });
+    projectApi.fetchById.mockResolvedValue({ id: 7, name: 'Project 7', storage_alert_rule: projectRule });
+    const { default: GroupFormDialog } = await import(
+      '@/pages/group/components/GroupFormDialog.vue'
+    );
+    const wrapper = shallowMount(GroupFormDialog, {
+      global: { renderStubDefaultSlot: true },
+    });
+
+    wrapper.vm.$.exposed.edit({
+      id: 3,
+      name: 'Group 3',
+      project_id: 7,
+      project: { id: 7, name: 'Project 7' },
+      storage_cluster_id: 2,
+      storage_cluster: { id: 2, name: 'Cluster 2', storage_type: 'netapp' },
+      group_tag_id: 4,
+      enable_monitoring: true,
+      storage_alert_rule: null,
+    });
+    await flushPromises();
+
+    expect(projectApi.fetchById).toHaveBeenCalledWith(7);
+    expect(wrapper.find('el-alert-stub').attributes('title')).toBe('继承项目规则');
+    expect(wrapper.findComponent('storage-alert-rule-form-stub').props('modelValue')).toEqual(projectRule);
+  });
+
   it('filters and displays storage alert event, quota, and delivery fields', () => {
     const alerts = source('src/pages/alert/AlertListPage.vue');
 
+    expect(alerts).toContain("case 'alert':");
+    expect(alerts).toContain("'用户目录': 'StorageUsage'");
+    expect(alerts).toContain("'项目组': 'Group'");
+    expect(alerts).toContain("'项目': 'Project'");
+    expect(alerts).toContain(
+      "row.related_info?.context?.project || row.related_info?.project?.name || '-'",
+    );
+    expect(alerts).toContain(
+      "row.related_info?.context?.group_tag || row.related_info?.group_tag?.name || '-'",
+    );
     for (const field of ['event_type', 'quota_basis', 'delivery_status']) {
       expect(alerts).toContain(field);
       expect(alerts).toContain(`prop="${field}"`);

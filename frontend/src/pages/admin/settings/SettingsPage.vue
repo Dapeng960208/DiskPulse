@@ -2,8 +2,11 @@
 import { ElButton, ElCol, ElTabs,ElTabPane, ElForm, ElFormItem, ElInput, ElOption, ElRow, ElSelect, ElStatistic, ElTable, ElTableColumn, ElCard, ElAlert,ElMessage,ElSwitch, ElInputNumber } from 'element-plus';
 import { ref } from 'vue';
 import configApi from '@/api/config-api';
+import StorageAlertRuleForm from '@/components/form/StorageAlertRuleForm.vue';
+import { defaultStorageAlertRule } from '@/utils/storage-alert-rule';
 
-const form =ref({});
+const form = ref({ storage_alert_rule: defaultStorageAlertRule() });
+const alertRuleValid = ref(true);
 function fetchConfig(){
     configApi.fetch().then((result)=>{
       form.value = result;
@@ -21,6 +24,7 @@ fetchConfig();
   <ElRow class="mt-5">
     <ElCol><ElButton
       type="primary"
+      :disabled="!alertRuleValid"
       @click="updateConfig">保存</ElButton></ElCol>
   </ElRow>
   <ElTabs
@@ -119,6 +123,14 @@ fetchConfig();
           </ElForm>
         </ElCol>
       </ElRow>
+    </ElTabPane>
+    <ElTabPane label="存储告警规则">
+      <ElForm label-width="auto">
+        <StorageAlertRuleForm
+          v-if="form.storage_alert_rule"
+          v-model="form.storage_alert_rule"
+          @validity-change="alertRuleValid = $event" />
+      </ElForm>
     </ElTabPane>
     <ElTabPane
       v-if="false"

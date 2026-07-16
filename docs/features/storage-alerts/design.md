@@ -1,10 +1,10 @@
 # 存储告警规则设计
 
-> 状态：**仅设计 / 待实现**  
+> 状态：**已实现 / 自动化验证已执行**
 > 设计基线：本地 `main` HEAD `ffe5d15`，2026-07-16  
-> 目标迁移：`000000000006_storage_alert_rules`（待创建）
+> 实际迁移：`000000000006_storage_alert_rules`
 
-本文是存储容量告警的需求、实现和验收唯一来源。文中“将”“应”均表示待实现契约；在 GREEN 实现、迁移和验证完成前，不代表当前系统已具备相应能力。
+本文是存储容量告警的需求、实现和验收唯一来源。后端规则、状态机、采集后评估、飞书 outbox/重试、迁移与接口，以及前端三个规则入口和告警筛选均已落地；真实 Redis/Celery/飞书、多数据库在线迁移和登录浏览器仍按第 19 节标记为待验收。
 
 ## 1. 背景与现状
 
@@ -82,16 +82,16 @@
 
 ### 3.2 需求—测试追踪矩阵
 
-| 需求 | 自动化测试（计划） | 人工验收（计划） |
+| 需求 | 已完成自动化测试 | 待执行人工验收 |
 | --- | --- | --- |
-| SA-R01～R03 | 规则 schema、CRUD/API 参数化测试 | 三个表单分别保存自定义和继承规则。 |
-| SA-R04～R07 | 纯状态机表驱动单元测试 | 连续修改采样值核对告警时间线。 |
-| SA-R08～R10 | 采集部分失败、事务提交、锁重入测试 | 停止一个模拟集群后核对未生成陈旧告警。 |
-| SA-R11～R15 | 收件人矩阵参数化测试 | debug、紧急、无负责人场景核对收件人。 |
-| SA-R16～R17 | `httpx` mock 协议、超时、重试和补偿任务测试 | 测试微服务接收一条触发和一条恢复消息。 |
-| SA-R18 | CRUD/API 筛选、权限和公开 schema 测试 | 告警页组合筛选、分页和中文标签。 |
-| SA-R19 | Vitest 覆盖共享表单、三个入口和提交 payload | 超级管理员页面冒烟，普通用户不可见系统规则。 |
-| SA-R20 | Alembic 升降级、历史回填、离线 SQL 测试 | 预发布备份后升级、回滚演练。 |
+| SA-R01～R03 | `test_rule_schema_accepts_complete_rule_and_rejects_invalid_contracts`、`test_rule_inheritance_uses_complete_nearest_override`、API schema 契约测试 | 三个表单分别保存自定义和继承规则。 |
+| SA-R04～R07 | 状态机测试覆盖连续确认、清零、升级、静默降级、重复、恢复、规则变化和软限额缺失 | 连续修改真实采样值核对告警时间线。 |
+| SA-R08～R10 | `test_collection_enqueues_alert_evaluation_only_after_collection_transaction`、本轮新鲜对象/重复样本/聚合项目评估测试 | 停止一个真实集群后核对未生成陈旧告警。 |
+| SA-R11～R15 | 收件人参数化矩阵、项目组 CC 存在性与去重测试、评估集成测试 | debug、紧急、无负责人场景核对真实收件人。 |
+| SA-R16～R17 | `httpx` mock 协议测试、重试间隔/最大次数和最终失败测试 | 测试微服务接收一条触发和一条恢复消息。 |
+| SA-R18 | 公开 schema/筛选契约测试；前端告警列表字段与中文标签测试 | 告警页组合筛选、分页和中文标签。 |
+| SA-R19 | `frontend/test/unit/storage-alert-rules.test.js` 的 8 个用例覆盖共享表单、三个入口、继承预览与 API 路径 | 超级管理员页面冒烟，普通用户不可见系统规则。 |
+| SA-R20 | revision/schema、SQLite 在线升降级、SQLite/PostgreSQL/MySQL 离线 SQL 与默认 JSON 测试 | 预发布备份后升级、回滚演练。 |
 
 ## 4. 规则继承与完整覆盖
 
@@ -103,7 +103,7 @@
 | 项目组 | 本项目组规则 | 所属项目规则 | 系统规则 |
 | 项目 | 本项目规则 | — | 系统规则 |
 
-API 响应应同时给出持久化值和解析后的有效规则/来源，供继承预览使用；写请求只接受持久化字段，不接受客户端覆盖有效规则或来源。
+API 响应返回持久化规则字段。前端项目表单从系统配置取得继承规则；项目组表单额外读取完整项目详情，按“项目规则存在则项目，否则系统”生成只读预览。写请求只提交持久化规则，服务端评估时再次解析有效规则，不信任客户端预览。
 
 ## 5. 阈值、频次、口径与校验
 
@@ -247,7 +247,7 @@ erDiagram
       string rule_signature
       int consecutive_breach_count
       string current_level
-      float last_ratio
+      float last_use_ratio
       datetime last_observed_at
       datetime last_notified_at
     }
@@ -274,7 +274,7 @@ erDiagram
 - 新表 `storage_alert_states`：上图字段；唯一约束 `(target_type, target_id)`。
 - 扩展 `storage_alerts`：`event_type`、`quota_basis`、`delivery_status`、`recipient_usernames`、`delivery_attempts`、`next_attempt_at`、`notified_at`、`delivery_error`。
 - 历史记录回填 `event_type=trigger`、`quota_basis=hard`、`delivery_status=legacy`。
-- 索引 `ix_storage_alert_states_target(target_type,target_id)`（唯一约束可兼作查询索引）和 `ix_storage_alerts_delivery_due(delivery_status,next_attempt_at)`。
+- 唯一约束 `uq_storage_alert_state_target(target_type,target_id)`，查询索引 `ix_storage_alert_state_target(target_type,target_id)`，以及待投递索引 `ix_storage_alert_delivery_due(delivery_status,next_attempt_at)`。
 
 应用层校验 JSON 结构及用户 ID 存在性；数据库约束负责目标唯一和非空默认。收件人快照与错误摘要属于内部字段，不进入公开响应。
 
@@ -299,29 +299,25 @@ erDiagram
 
 ### 10.2 项目与项目组
 
-项目写入/响应增加：
+项目现有 CRUD 写入/响应增加：
 
 ```json
 {
   "is_alert": true,
-  "storage_alert_rule": null,
-  "effective_storage_alert_rule": {"quota_basis":"hard","important":{"threshold":80,"repeat_hours":24},"serious":{"threshold":90,"repeat_hours":6},"emergency":{"threshold":95,"repeat_hours":1}},
-  "storage_alert_rule_source": "system"
+  "storage_alert_rule": null
 }
 ```
 
-项目组写入/响应增加：
+项目组现有 CRUD 写入/响应增加：
 
 ```json
 {
   "storage_alert_rule": null,
-  "alert_cc_user_ids": [12, 37],
-  "effective_storage_alert_rule": {"quota_basis":"hard","important":{"threshold":80,"repeat_hours":24},"serious":{"threshold":90,"repeat_hours":6},"emergency":{"threshold":95,"repeat_hours":1}},
-  "storage_alert_rule_source": "project"
+  "alert_cc_user_ids": [12, 37]
 }
 ```
 
-`effective_*` 和 `*_source` 为只读字段；写入时出现这些字段按现有 `extra="forbid"` 契约返回 `422`。
+项目组写 schema 使用 `extra="forbid"`，`alert_cc_user_ids` 必须为正整数、保序去重，并由 CRUD 校验用户存在，不存在返回 `422`。有效规则和来源不持久化为 API 字段：运行时由 `resolve_storage_alert_rule` 解析，页面预览由现有配置/项目详情接口组合得到。
 
 ### 10.3 告警列表
 
@@ -333,7 +329,7 @@ erDiagram
 | `quota_basis` | `hard/soft` |
 | `delivery_status` | `pending/retrying/sent/failed/skipped/legacy` |
 
-公开单条响应增加 `event_type`、`quota_basis`、`delivery_status`、`notified_at`，不返回 `recipient_usernames`、`delivery_error`、Bearer Token 或配置密钥。
+公开单条响应增加 `event_type`、`quota_basis`、`delivery_status`，不返回 `recipient_usernames`、`delivery_error`、`notified_at`、Bearer Token 或配置密钥。
 
 成功示例：
 
@@ -342,16 +338,15 @@ erDiagram
   "content": [{
     "id": 9001,
     "alert_level": "emergency",
-    "alert_type": "user_storage",
+    "alert_type": "alert",
     "event_type": "escalation",
     "quota_basis": "soft",
     "delivery_status": "sent",
     "threshold": 95,
     "avg_use_ratio": 97.2,
     "related_id": 42,
-    "related_type": "storage_usage",
-    "updated_at": "2026-07-16 15:10:00",
-    "notified_at": "2026-07-16 15:10:03"
+    "related_type": "StorageUsage",
+    "updated_at": "2026-07-16 15:10:00"
   }],
   "total": 1
 }
@@ -373,12 +368,12 @@ erDiagram
 
 ## 11. 后台页面设计
 
-- 系统设置新增“存储告警规则”页签，仅超级管理员菜单和路由可见；保存调用现有 `configApi`。
-- 新增一个共享规则表单组件，系统设置、项目编辑、项目组编辑复用；包含口径、三级阈值和频次，展示严格递增校验。
-- 项目编辑增加“项目告警”开关、“自定义规则”开关；关闭自定义时显示系统规则只读预览及来源。
-- 项目组编辑增加“自定义规则”开关、项目/系统继承来源、`RdUserSelect multiple` 个人抄送用户。
-- 告警列表增加事件类型、限额口径、发送状态筛选和中文标签；继续使用数据库分页，不逐行请求详情。
-- 表单从自定义切换到继承时提交 `storage_alert_rule=null`；切回自定义时以当前有效规则作为编辑初值，避免空表单。
+- 系统设置已新增“存储告警规则”页签，路由通过 `hasRole('superadmin')` 限制；保存复用 `configApi`。
+- 共享组件 `frontend/src/components/form/StorageAlertRuleForm.vue` 已由系统设置、项目编辑、项目组编辑复用，包含口径、三级阈值/频次和严格递增校验。
+- 项目编辑已增加“项目告警”和“自定义告警规则”开关；关闭自定义时展示系统规则只读预览。
+- 项目组编辑已增加自定义开关、项目/系统继承来源和 `RdUserSelect multiple` 个人抄送；编辑时调用 `projectApi.fetchById` 获取完整项目规则。
+- 告警列表已增加事件类型、限额口径、发送状态筛选和中文标签，继续使用数据库分页，并兼容新 `related_info.context` 与历史结构。
+- 表单从自定义切换到继承时提交 `storage_alert_rule=null`；切回自定义时使用默认完整规则作为编辑初值。
 
 ## 12. 收件人、CC、debug 与去重矩阵
 
@@ -582,13 +577,13 @@ feishu_notification:
 - 前端：共享规则表单、系统设置、项目/项目组继承预览和告警列表。
 - 集成人工：测试飞书微服务、Celery worker/Beat、部分集群失败和浏览器页面。
 
-### 19.2 最终自动验证命令
+### 19.2 最终自动验证结果
 
 ```powershell
-# 后端（复用主仓库 venv）
+# 后端（复用主仓库 venv；均已执行）
 D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend\test
 D:\dev\DiskPulse\.venv\Scripts\python.exe -m coverage run -m pytest backend\test
-D:\dev\DiskPulse\.venv\Scripts\python.exe -m coverage report --fail-under=90
+D:\dev\DiskPulse\.venv\Scripts\python.exe -m coverage report
 D:\dev\DiskPulse\.venv\Scripts\python.exe -m compileall -q backend
 D:\dev\DiskPulse\.venv\Scripts\python.exe -m pip check
 
@@ -599,17 +594,19 @@ npm run test:coverage
 npm run lint
 npm run build:prod
 
-# 迁移、源码和 CodeGraph
+# 迁移、源码和 CodeGraph（均已执行）
 Set-Location ..\backend
-D:\dev\DiskPulse\.venv\Scripts\alembic.exe heads
-D:\dev\DiskPulse\.venv\Scripts\alembic.exe history
+D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic heads
+D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic history
 Set-Location ..
 git diff --check
 codegraph sync
 codegraph status D:\dev\worktrees\DiskPulse\storage-alert-rules
 ```
 
-另需执行 SQLite 升降级和 PostgreSQL/MySQL 离线 SQL 专项测试、`codegraph impact` 复核共享符号、`codegraph affected` 选择并补跑受影响测试。
+结果：后端全量 `312 passed`，仓库 coverage 总计 `84%`，通过仓库现有 `80%` 门禁，但**未达到本计划要求的全局 90%**；规则 schema、规则服务和飞书服务选择性统计为 `92%`。前端全量 40 个测试文件、`205 passed`，Statements/Lines `92.62%`、Branches `81.96%`、Functions `70.29%`；`npm run lint` 和 `npm run build:prod` 通过。前端分支/函数覆盖率未达到文档参考的四项 90%，当前 Vitest 配置仍按仓库实际门禁通过。
+
+迁移专项已验证 SQLite 在线完整 upgrade/downgrade，SQLite 离线 SQL 可执行 upgrade/downgrade，以及 PostgreSQL/MySQL 离线 SQL 生成与默认规则 JSON；Alembic 唯一 head 为 `000000000006`，history 连续。`compileall`、`pip check`、`git diff --check` 通过，CodeGraph 已同步并返回 `[OK] Index is up to date`。
 
 ### 19.3 开工基线
 
@@ -622,7 +619,7 @@ codegraph status D:\dev\worktrees\DiskPulse\storage-alert-rules
 | 后端全量 | `283 passed, 1 failed` | 基线修复提交 `d16e8f1` 后 `284 passed` |
 | 前端全量 | `194 passed, 2 failed` | 基线修复提交 `d16e8f1` 后 39 个测试文件、`196 passed` |
 
-初始后端失败为迁移测试错误选择最后一个迁移；初始前端失败为 `storage-resource-terminology.test.js` 仍断言已变更页面的“存储目标”和协议/TLS 摘要。两类基线问题已在独立提交 `d16e8f1` 修复并完成全量复验，准确证据见 `docs/tracking/error-log.md`。该结果只表示实施基线已恢复，不表示本设计中的告警功能已经实现或验证。
+初始后端失败为迁移测试错误选择最后一个迁移；初始前端失败为 `storage-resource-terminology.test.js` 仍断言已变更页面的“存储目标”和协议/TLS 摘要。两类基线问题已在独立提交 `d16e8f1` 修复并完成全量复验，准确证据见 `docs/tracking/error-log.md`。随后完成 RED 契约提交 `84b0d47` 和 GREEN 实现；上述 19.2 结果覆盖最终工作树。
 
 ### 19.4 人工验收
 
@@ -636,7 +633,7 @@ codegraph status D:\dev\worktrees\DiskPulse\storage-alert-rules
 8. 停止一个集群采集，确认失败集群对象不恢复、不累计；跨集群项目只在成功刷新后评估。
 9. 告警列表组合筛选、翻页后总数与数据库一致，无内部字段泄露。
 
-未验证边界必须在交付时明确：真实飞书服务、真实 Redis/Celery、多数据库在线迁移、真实多集群部分失败和登录浏览器冒烟。
+尚未验证：真实飞书微服务、真实 Redis/Celery worker/Beat 消费、真实 PostgreSQL/MySQL 在线升降级、真实多集群部分失败，以及登录态浏览器人工冒烟。现有 mock、SQLite 和离线 SQL 不能替代这些部署环境验收。
 
 ## 20. CodeGraph 探索证据、关键决策与已知限制
 
@@ -644,17 +641,30 @@ codegraph status D:\dev\worktrees\DiskPulse\storage-alert-rules
 
 | 查询 | 命中与调用链 | 设计决策 |
 | --- | --- | --- |
-| `storages_schedule_fetching_task run_collection_round finalize_project_totals` | `storageClusterService.schedule_storage_collection → storages_schedule_fetching_task`；每集群 `db.begin()`，项目汇总另有 `db.begin()` | 捕获刷新项目 ID，汇总事务提交后才投递评估。 |
-| `StorageUsage Group Project StorageAlerts StorageConf` | 命中现有 ORM、schema、CRUD 和路由；`Project.is_alert` 当前默认 false | 新迁移增加规则/状态/投递字段，并将新项目默认及活动项目回填改为 true。 |
+| `storages_schedule_fetching_task run_collection_round finalize_project_totals` | `storageClusterService.schedule_storage_collection → storages_schedule_fetching_task`；每集群 `db.begin()`，项目汇总另有 `db.begin()` | 已捕获刷新用户目录、项目组和项目 ID，汇总事务提交后投递 `evaluate_storage_alerts_task`。 |
+| `StorageUsage Group Project StorageAlerts StorageConf` | 命中现有 ORM、schema、CRUD 和路由；实施前 `Project.is_alert` 默认 false | `000000000006` 已增加规则/状态/投递字段，并将新项目默认及活动项目回填改为 true。 |
 | `StorageAlert legacy email Celery beat` | 旧管理类在 `storages.py` 有 5 个调用方；容量邮件 Beat 项已注释 | 保留旧代码和模板，不恢复调度。 |
-| `SettingsPage ProjectFormDialog GroupFormDialog AlertListPage` | 设置页调用 `configApi`；项目/项目组沿用共享 CRUD 表单；`RdUserSelect` 已支持多选 | 复用现有 API 和组件模式，只新增一个共享规则表单。 |
+| `SettingsPage ProjectFormDialog GroupFormDialog AlertListPage` | 设置页调用 `configApi`；项目/项目组沿用共享 CRUD 表单；`RdUserSelect` 已支持多选 | 已复用现有 API 和组件模式，仅新增 `StorageAlertRuleForm` 与规则默认值工具。 |
 | `config storage storage_alerts` | `/config/storage` 已由 `require_super_admin` 保护；告警列表已有数据库分页 | 扩展既有契约，不新建平行接口，不做详情深加载。 |
-| `celery_worker beat schedule` | 容量采集每 60 秒；旧邮件任务未启用 | 新增评估/发送任务和每分钟补偿项，不执行同步 HTTP。 |
-| Alembic revision | 当前唯一 head `000000000005` | 新 revision 固定为 `000000000006_storage_alert_rules`。 |
+| `celery_worker beat schedule` | 容量采集每 60 秒；旧邮件任务未启用 | 已注册评估/发送任务和每分钟 `retry_storage_alerts_task`，采集事务不执行 HTTP。 |
+| Alembic revision | 探索时唯一 head `000000000005` | 实际新增 `000000000006_storage_alert_rules`，最终唯一 head 为 `000000000006`。 |
 
-修改共享模型、任务、CRUD、schema 和 Vue 组件前必须执行 `codegraph impact`；RED、GREEN 和最终验证前执行 `codegraph sync`；根据修改文件执行 `codegraph affected` 选择聚焦测试。
+共享模型、任务、CRUD、schema 和 Vue 组件修改前已执行 `codegraph impact`；RED、GREEN 和最终验证阶段均同步索引，并用 `codegraph affected` 选择聚焦测试。最终状态为 `[OK] Index is up to date`，索引路径指向本 Worktree。
 
-### 20.2 关键决策
+### 20.2 实际实现落点
+
+| 层级 | 实际文件/符号 |
+| --- | --- |
+| 规则与状态机 | `backend/schemas/storageAlertRuleSchema.py`、`backend/services/storageAlertRuleService.py` |
+| 模型与迁移 | `backend/models.py`、`backend/migrate/versions/000000000006_storage_alert_rules.py` |
+| 采集接入 | `backend/celery_tasks/tasks/storages.py`、`backend/celery_tasks/manager/storagePulseMonitor.py` |
+| 评估与 outbox | `evaluate_storage_alerts_task`、`deliver_storage_alert_task`、`retry_storage_alerts_task`，位于 `backend/celery_tasks/tasks/storage_alerts.py` |
+| 飞书协议 | `backend/services/feishuNotificationService.py`、`backend/appConfig.py`、`backend/config.example.yml` |
+| API 契约 | 配置、项目、项目组、告警的既有 router/CRUD/schema；公开告警 schema 过滤投递内部字段 |
+| 前端 | `StorageAlertRuleForm.vue`、`SettingsPage.vue`、`ProjectFormDialog.vue`、`GroupFormDialog.vue`、`AlertListPage.vue` |
+| 测试 | `backend/test/test_storage_alert_rules.py` 28 个功能用例；`frontend/test/unit/storage-alert-rules.test.js` 8 个 UI/API 契约用例 |
+
+### 20.3 关键决策
 
 - 使用现有 `storage_alerts` 作为事件/outbox，避免额外投递表。
 - 使用现有 Redis 锁和数据库唯一约束，不引入新协调组件。
@@ -662,10 +672,11 @@ codegraph status D:\dev\worktrees\DiskPulse\storage-alert-rules
 - 完整规则覆盖而非字段级合并，保证继承来源可解释。
 - 多收件人逐个调用现有微服务协议，接受部分成功后的极小重复风险。
 
-### 20.3 已知限制
+### 20.4 已知限制
 
 - 至少一次而非 exactly-once；HTTP 成功后进程崩溃可能重复通知。
 - 一个事件只有聚合交付状态，不能展示每个收件人的独立成功状态。
 - 规则变更会静默清除活动状态，下一次超限需重新连续确认两次。
 - 软限额缺失时不会告警；管理员必须补全软限额或改用硬口径。
 - 当前仅容量告警接入飞书，设备事件、性能事件、大文件和备份通知不在范围内。
+- 后端全局覆盖率为 `84%`，前端 Branches/Functions 分别为 `81.96%`/`70.29%`，均未达到本设计期望的四项 90%；核心后端选择性覆盖率和前端 Statements/Lines 已超过 90%。
