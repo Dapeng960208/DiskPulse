@@ -1,5 +1,5 @@
 <script setup>
-import { ElButton, ElFormItem, ElInput, ElLink, ElTableColumn, ElTag, ElCard, ElSelect, ElDescriptions, ElDescriptionsItem,ElMessageBox,ElMessage,ElDatePicker, ElSwitch } from 'element-plus';
+import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElFormItem, ElInput, ElLink, ElTableColumn, ElTag, ElCard, ElSelect, ElDescriptions, ElDescriptionsItem,ElMessageBox,ElMessage,ElDatePicker, ElSwitch } from 'element-plus';
 import { computed, ref } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import groupApi from '@/api/group-api.js';
@@ -390,9 +390,10 @@ function confirmDelete(row) {
       </ElTableColumn>
       <ElTableColumn
         align="right"
-        min-width="120">
+        width="132">
         <template #header>
           <ElButton
+            v-if="hasRole('disk-monitor:admin')"
             size="small"
             plain
             type="primary"
@@ -401,36 +402,44 @@ function confirmDelete(row) {
           </ElButton>
         </template>
         <template #default="{ row }">
-          <ElButton
-            v-if="hasRole('disk-monitor:admin')"
-            size="small"
-            plain
-            type="primary"
-            :disabled="row.associate_multiple_groups"
-            :title="row.associate_multiple_groups ? '共享存储目标不能单独调整项目组配额' : ''"
-            @click="quotaAdjustmentDialogRef.open(row)">
-            调整配额
-          </ElButton>
-          <ElButton
-            size="small"
-            plain
-            @click="router.push({path: `/group/${row.id}`})">
-            详情
-          </ElButton>
-          <ElButton
-            size="small"
-            plain
-            @click="groupFormDialogRef.edit(row)">
-            编辑
-          </ElButton>
-          <ElButton
-            type="danger"
-            size="small"
-            plain
-            @click="confirmDelete(row)"
-          >
-            删除
-          </ElButton>
+          <div class="list-row-actions">
+            <ElButton
+              size="small"
+              plain
+              @click="router.push({path: `/group/${row.id}`})">
+              详情
+            </ElButton>
+            <ElDropdown
+              v-if="hasRole('disk-monitor:admin')"
+              trigger="click"
+              placement="bottom-end">
+              <ElButton
+                class="list-row-actions__more"
+                size="small"
+                plain
+                aria-label="更多操作">
+                ···
+              </ElButton>
+              <template #dropdown>
+                <ElDropdownMenu>
+                  <ElDropdownItem
+                    :disabled="row.associate_multiple_groups"
+                    :title="row.associate_multiple_groups ? '共享存储目标不能单独调整项目组配额' : ''"
+                    @click="quotaAdjustmentDialogRef.open(row)">
+                    调整配额
+                  </ElDropdownItem>
+                  <ElDropdownItem @click="groupFormDialogRef.edit(row)">
+                    编辑
+                  </ElDropdownItem>
+                  <ElDropdownItem
+                    class="list-row-actions__danger"
+                    @click="confirmDelete(row)">
+                    删除
+                  </ElDropdownItem>
+                </ElDropdownMenu>
+              </template>
+            </ElDropdown>
+          </div>
         </template>
       </ElTableColumn>
     </DataTable>
@@ -449,6 +458,23 @@ function confirmDelete(row) {
 
 .group-list-page {
   @include page-container;
+}
+
+.list-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  white-space: nowrap;
+}
+
+.list-row-actions__more {
+  width: 32px;
+  padding: 0;
+}
+
+:global(.list-row-actions__danger) {
+  color: var(--danger-color);
 }
 
 </style>

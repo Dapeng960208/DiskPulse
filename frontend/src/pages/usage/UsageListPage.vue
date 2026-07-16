@@ -1,5 +1,5 @@
 <script setup>
-import { ElButton, ElFormItem, ElInput, ElLink, ElTableColumn, ElTag,ElMessage, ElDescriptions, ElDescriptionsItem,ElMessageBox,ElDatePicker } from 'element-plus';
+import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElFormItem, ElInput, ElLink, ElTableColumn, ElTag, ElDescriptions, ElDescriptionsItem, ElDatePicker } from 'element-plus';
 import { computed, ref } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import storageUsageApi from '@/api/storage-usage-api.js';
@@ -94,25 +94,6 @@ const removeGroupFilter = () => {
   refreshAfterFilterRemoval();
 };
 const openExport = () => exportRef.value?.open?.();
-function confirmBackUp(row) {
-  ElMessageBox.confirm(`确认移动用户目录「${row.linux_path}」至备份目录？此操作不可撤销。`, '移动用户目录', {
-    type: 'warning',
-    confirmButtonText: '移动目录',
-    cancelButtonText: '取消',
-    beforeClose: (action, instance, done) => {
-      if (action === 'confirm') {
-        instance.confirmButtonLoading = true;
-        storageUsageApi.backUpStorageUsageById(row.id).then(() => {
-          done();
-          ElMessage.success('移动目录至备份目录成功');
-          query();
-        }).finally(() => instance.confirmButtonLoading = false);
-      } else {
-        done();
-      }
-    },
-  }).then(() => {}).catch(() => {});
-}
 query();
 </script>
 
@@ -420,11 +401,9 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
-        align="center"
-        min-width="50">
-        <template
-          v-if="hasRole('disk-monitor:admin')"
-          #header>
+        align="right"
+        width="132">
+        <template #header>
           <ElButton
             v-if="hasRole('disk-monitor:admin')"
             size="small"
@@ -435,31 +414,33 @@ query();
           </ElButton>
         </template>
         <template #default="{ row }">
-          <ElButton
-            v-if="hasRole('disk-monitor:admin')"
-            size="small"
-            plain
-            type="primary"
-            @click="quotaAdjustmentDialogRef.open(row)">
-            调整配额
-          </ElButton>
-          <ElButton
-            size="small"
-            plain
-            @click="router.push({path: `/usage/${row.id}`})">
-            详情
-          </ElButton>
-          <!-- <ElButton size="small" plain @click="storageUsageFormDialogRef.edit(row)" v-if="hasRole('disk-monitor:admin')">
-          编辑
-          </ElButton> -->
-          <ElButton
-            v-if="hasRole('disk-monitor:admin') && false"
-            size="small"
-            type="danger"
-            plain
-            @click="confirmBackUp(row)">
-            移至备份
-          </ElButton>
+          <div class="list-row-actions">
+            <ElButton
+              size="small"
+              plain
+              @click="router.push({path: `/usage/${row.id}`})">
+              详情
+            </ElButton>
+            <ElDropdown
+              v-if="hasRole('disk-monitor:admin')"
+              trigger="click"
+              placement="bottom-end">
+              <ElButton
+                class="list-row-actions__more"
+                size="small"
+                plain
+                aria-label="更多操作">
+                ···
+              </ElButton>
+              <template #dropdown>
+                <ElDropdownMenu>
+                  <ElDropdownItem @click="quotaAdjustmentDialogRef.open(row)">
+                    调整配额
+                  </ElDropdownItem>
+                </ElDropdownMenu>
+              </template>
+            </ElDropdown>
+          </div>
         </template>
       </ElTableColumn>
     </DataTable>
@@ -482,5 +463,18 @@ query();
 
 .usage-list-page {
   @include page-container;
+}
+
+.list-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  white-space: nowrap;
+}
+
+.list-row-actions__more {
+  width: 32px;
+  padding: 0;
 }
 </style>
