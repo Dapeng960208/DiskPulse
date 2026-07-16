@@ -255,11 +255,52 @@ def test_public_alert_schema_and_filter_contract_hide_delivery_internals():
     crud = _module("crud.storageAlertCrud")
     public_fields = set(schema.model_fields)
 
-    assert {"event_type", "quota_basis", "delivery_status"} <= public_fields
+    assert {"event_type", "quota_basis", "delivery_status", "cluster_name", "project_name"} <= public_fields
     assert {"recipient_usernames", "delivery_error"}.isdisjoint(public_fields)
     assert {"event_type", "quota_basis", "delivery_status"} <= set(
         inspect.signature(crud.get_storage_alerts).parameters
     )
+
+
+def test_alert_list_resolves_cluster_and_project_for_historical_directory_events(db_session):
+    import models
+
+    db_session.add_all(
+        [
+            models.StorageCluster(id=1, name="cluster-a", storage_type="netapp"),
+            models.Project(id=1, name="project-a"),
+            models.GroupTag(id=1, name="team"),
+            models.Volume(id=1, storage_cluster_id=1, name="volume-a"),
+            models.Group(
+                id=1,
+                project_id=1,
+                storage_cluster_id=1,
+                group_tag_id=1,
+                volume_id=1,
+                name="group-a",
+            ),
+            models.StorageUsage(id=1, storage_cluster_id=1, group_id=1, linux_path="/data/alice"),
+            models.StorageAlerts(
+                storage_cluster_id=1,
+                source="diskpulse",
+                severity="important",
+                alert_level="important",
+                alert_type="alert",
+                description="legacy summary",
+                threshold=80,
+                avg_use_ratio=85,
+                related_id=1,
+                related_type="StorageUsage",
+                related_info={"context": {"cluster": "cluster-a", "linux_path": "/data/alice"}},
+            ),
+        ]
+    )
+    db_session.commit()
+
+    rows, total = _module("crud.storageAlertCrud").get_storage_alerts(db_session, 1, 20)
+
+    assert total == 1
+    assert (rows[0].cluster_name, rows[0].project_name) == ("cluster-a", "project-a")
 
 
 def test_storage_rule_api_schemas_expose_rules_without_secrets_or_internal_delivery_fields():

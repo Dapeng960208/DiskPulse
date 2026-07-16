@@ -132,9 +132,9 @@ describe('storage alert rule UI contract', () => {
     expect(alerts).toContain("'用户目录': 'StorageUsage'");
     expect(alerts).toContain("'项目组': 'Group'");
     expect(alerts).toContain("'项目': 'Project'");
-    expect(alerts).toContain(
-      "row.related_info?.context?.project || row.related_info?.project?.name || '-'",
-    );
+    expect(alerts).toContain("row.project_name || row.related_info?.context?.project || '-'");
+    expect(alerts).toContain("row.cluster_name || row.related_info?.context?.cluster");
+    expect(alerts).toContain('label="集群"');
     expect(alerts).toContain(
       "row.related_info?.context?.group_tag || row.related_info?.group_tag?.name || '-'",
     );
