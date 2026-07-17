@@ -93,3 +93,55 @@ def test_immutable_audit_rows_keep_logical_actor_and_project_ids_when_subjects_a
             connection.execute(sa.text("UPDATE audit_events SET action = 'changed'"))
         with pytest.raises(IntegrityError, match="append-only"):
             connection.execute(sa.text("DELETE FROM audit_events"))
+
+
+def test_sqlite_upgrade_and_downgrade_keep_existing_project_dependents_valid():
+    """A live SQLite database can rebuild projects while groups already reference it."""
+    migration = _migration()
+    metadata = sa.MetaData()
+    users = sa.Table("users", metadata, sa.Column("id", sa.Integer(), primary_key=True))
+    projects = sa.Table(
+        "projects",
+        metadata,
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column(
+            "in_charge_user_id",
+            sa.Integer(),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+        ),
+        sa.Column(
+            "pt_user_id",
+            sa.Integer(),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+        ),
+    )
+    groups = sa.Table(
+        "groups",
+        metadata,
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column(
+            "project_id",
+            sa.Integer(),
+            sa.ForeignKey("projects.id", name="fk_group_project"),
+            nullable=False,
+        ),
+    )
+    engine = sa.create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        metadata.create_all(connection)
+        connection.execute(users.insert(), [{"id": 1}, {"id": 2}])
+        connection.execute(
+            projects.insert(),
+            {"id": 1, "in_charge_user_id": 1, "pt_user_id": 2},
+        )
+        connection.execute(groups.insert(), {"id": 1, "project_id": 1})
+        migration.op = Operations(MigrationContext.configure(connection))
+
+        migration.upgrade()
+        assert connection.execute(sa.select(groups.c.project_id)).scalar_one() == 1
+        assert connection.execute(sa.text("PRAGMA foreign_key_check")).all() == []
+
+        migration.downgrade()
+        assert connection.execute(sa.select(groups.c.project_id)).scalar_one() == 1
+        assert connection.execute(sa.text("PRAGMA foreign_key_check")).all() == []
