@@ -63,7 +63,13 @@ describe('role-aware list actions', () => {
 
     expect(usageSource).toContain('function canAdjustQuota(row)');
     expect(usageSource).toContain('row?.capabilities?.adjust_quota === true');
-    expect(actions).toContain('v-if="canAdjustQuota(row)"');
+    expect(actions).toMatch(/v-if="hasRole\('disk-monitor:admin'\) \|\| canAdjustQuota\(row\)"/);
+  });
+
+  it('does not render user-directory quota adjustment for an admin without resource capability', () => {
+    const actions = actionColumn(usageSource);
+
+    expect(actions).toMatch(/<ElDropdownItem\s+v-if="canAdjustQuota\(row\)"[\s\S]*?>\s*调整配额/);
   });
 
   it('keeps only quota adjustment in the usage admin menu', () => {
