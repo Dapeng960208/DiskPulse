@@ -6,6 +6,41 @@ from sqlalchemy.orm import Session
 
 from crud import aiCrud
 from models import AIAuditLog
+from services.audit_service import redact_audit_payload
+
+
+_AI_SENSITIVE_KEY_PARTS = (
+    "password",
+    "secret",
+    "token",
+    "api_key",
+    "apikey",
+    "authorization",
+    "credential",
+    "prompt",
+    "request",
+    "response",
+    "raw",
+    "path",
+    "directory",
+    "filename",
+    "content",
+    "message",
+)
+
+
+def _redact_ai_payload(value, *, key: str | None = None):
+    key_name = (key or "").casefold()
+    if any(part in key_name for part in _AI_SENSITIVE_KEY_PARTS):
+        return "[REDACTED]"
+    if isinstance(value, dict):
+        return {
+            str(item_key): _redact_ai_payload(item, key=str(item_key))
+            for item_key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_ai_payload(item, key=key) for item in value]
+    return redact_audit_payload(value, key=key)
 
 
 def serialize_audit(item: AIAuditLog, *, include_detail: bool = False) -> dict:
@@ -27,11 +62,13 @@ def serialize_audit(item: AIAuditLog, *, include_detail: bool = False) -> dict:
     if include_detail:
         data.update(
             {
-                "request": _json_value(item.request_payload),
-                "response": _json_value(item.response_payload),
-                "detail": _json_value(item.detail_payload),
+                "request": _redact_ai_payload(_json_value(item.request_payload)),
+                "response": _redact_ai_payload(_json_value(item.response_payload)),
+                "detail": _redact_ai_payload(_json_value(item.detail_payload)),
             }
         )
+        if item.error_message:
+            data["error_message"] = "AI 操作失败"
     return data
 
 
