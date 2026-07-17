@@ -4,7 +4,7 @@ import logging
 from services.audit_service import AuditContext
 
 
-logger = logging.getLogger("uvicorn.error")
+logger = logging.getLogger(__name__)
 
 
 def schedule_storage_collection(
