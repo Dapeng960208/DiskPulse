@@ -99,6 +99,7 @@ const row = {
   storage_target: { type: 'volume', name: '卷 A' },
   in_charge_user: { rd_username: 'owner', username: 'Owner', avatar_url: '' },
   associate_multiple_groups: false,
+  capabilities: { adjust_quota: true },
 };
 
 let tableRows = [row];
@@ -467,6 +468,7 @@ describe('list page coverage gaps', () => {
 
   it('keeps admin-only group and usage actions hidden without permission', async () => {
     mocks.hasRole.mockReturnValue(false);
+    tableRows = [{ ...row, capabilities: { adjust_quota: false } }];
     const groupWrapper = await mountPage(GroupListPage);
     const usageWrapper = await mountPage(UsageListPage);
 

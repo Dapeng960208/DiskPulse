@@ -35,7 +35,11 @@ describe('role-aware list actions', () => {
     expect(actions).toContain('width="132"');
     expect(actions).toContain('class="list-row-actions"');
     expect(actions.indexOf('详情')).toBeLessThan(actions.indexOf('<ElDropdown'));
-    expect(actions).toMatch(/<ElDropdown[\s\S]*?v-if="hasRole\('disk-monitor:admin'\)"/);
+    if (source === groupSource) {
+      expect(actions).toMatch(/<ElDropdown[\s\S]*?v-if="hasRole\('disk-monitor:admin'\) \|\| canAdjustQuota\(row\)"/);
+    } else {
+      expect(actions).toMatch(/<ElDropdown[\s\S]*?v-if="hasRole\('disk-monitor:admin'\)"/);
+    }
     expect(actions).toContain('aria-label="更多操作"');
   });
 
@@ -46,6 +50,14 @@ describe('role-aware list actions', () => {
     expect(actions).toContain('编辑');
     expect(actions).toContain('删除');
     expect(actions).toContain('class="list-row-actions__danger"');
+  });
+
+  it('shows group quota adjustment only when the resource capability is granted', () => {
+    const actions = actionColumn(groupSource);
+
+    expect(groupSource).toContain('function canAdjustQuota(row)');
+    expect(groupSource).toContain('row?.capabilities?.adjust_quota === true');
+    expect(actions).toContain('v-if="canAdjustQuota(row)"');
   });
 
   it('keeps only quota adjustment in the usage admin menu', () => {
