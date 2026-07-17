@@ -1,5 +1,17 @@
 # 当前交付记录
 
+## 2026-07-17：全站存储趋势图重设计
+
+- 新增共享 `StorageTrendChart` 和统一 option 构建器，替换实时趋势、Dashboard 容量趋势和存储集群容量分析中的旧存储趋势组件；旧 `LineCharts`、`MultipleLineCharts` 已退出生产使用。
+- 单对象曲线按有效规则分为蓝 `#446AEE`、金黄 `#D69B1E`、橙 `#EF5923`、红 `#D3372F` 四段，阈值交点通过插值准确换色；百分比纵轴固定 `0–100%`、水平网格使用虚点线，三级标签位于对应阈值线上方。
+- 实时趋势新增 `indicator=alert_ratio`；`trend_meta` 明确硬/软口径、系统/项目/项目组规则来源、三级阈值、容量限额和实际历史使用率列。现有 `used`、`use_ratio`、`file_used` 保持兼容，非法指标返回 `422`。
+- Dashboard 全局趋势和存储集群物理容量固定采用系统规则与硬容量；项目 Dashboard 使用项目有效规则；多对象容量不显示阈值，多对象使用率按系统阈值对比。
+- QuestDB 复用现有 `000000000002_add_soft_quota_metrics.sql`、模型和采集写入中的可空 `soft_limit`、`soft_use_ratio`，未新增迁移；迁移前历史为空时保留数据缺口。
+- TDD RED 提交为 `5d38a7a`，GREEN 提交为 `e3083f6`。最终后端全量 `392 passed`；前端全量 `58 files / 351 passed`，Statements/Lines `98.29%`、Branches `88.60%`、Functions `84.13%`，lint、生产构建、Python `compileall` 和 `git diff --check` 通过。构建仅保留既有大 chunk 提示，前端测试仅保留既有负向网络日志。
+- Mock API 浏览器验收覆盖 `1440×900` 和 `390×844`、亮色/暗色、Tooltip 与三级阈值：桌面无横向溢出，移动端折叠导航后阈值标签完整且趋势图自身未越界；既有顶部用户操作区在 `390px` 仍造成约 `39px` 应用壳横向溢出，本轮未扩展为全局头部重构。
+- 浏览器验收曾发现单对象固定线色覆盖 `visualMap`，按 TDD 增加失败断言后修复并复验为真实四色分段；记录见 [错误日志](./error-log.md)。真实 PostgreSQL、QuestDB 历史和登录态 API 尚未验证。
+- 完整设计与接口口径见 [全站存储趋势图设计](../features/storage-trends/design.md)。
+
 ## 2026-07-17：Dashboard 图表化总览
 
 - Dashboard 已拆分为 `/summary`、`/capacity-trend`、`/capacity-items`、`/alert-levels` 和项目必选的 `/top-users`，旧 `/overview` 与 `/alert-trend` 返回 `404`。
