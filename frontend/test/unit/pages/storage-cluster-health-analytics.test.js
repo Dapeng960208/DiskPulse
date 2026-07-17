@@ -336,19 +336,34 @@ describe('storage cluster health analytics page', () => {
   it('filters performance row count and shows multiple standardized metrics with p95 by default', async () => {
     storageClusterApi.fetchTopLatency.mockResolvedValue({
       supported: true,
-      data: [{
-        object_id: 'volume-1',
-        object_name: 'vol-a',
-        object_type: 'volume',
-        p95_latency: 9.5,
-        avg_latency: 5,
-        max_latency: 12,
-        avg_read_latency: 3,
-        avg_write_latency: 7,
-        avg_iops: 125,
-        avg_throughput: 4096,
-        sample_count: 8,
-      }],
+      data: [
+        {
+          object_id: 'volume-1',
+          object_name: 'vol-a',
+          object_type: 'volume',
+          p95_latency: 9.5,
+          avg_latency: 5,
+          max_latency: 12,
+          avg_read_latency: 3,
+          avg_write_latency: 7,
+          avg_iops: 125,
+          avg_throughput: 4096,
+          sample_count: 8,
+        },
+        {
+          object_id: 'volume-2',
+          object_name: 'vol-b',
+          object_type: 'volume',
+          p95_latency: 3.5,
+          avg_latency: 2,
+          max_latency: 4,
+          avg_read_latency: 1,
+          avg_write_latency: 3,
+          avg_iops: 88,
+          avg_throughput: 2048,
+          sample_count: 6,
+        },
+      ],
     });
     const wrapper = await mountPage();
 
@@ -362,12 +377,24 @@ describe('storage cluster health analytics page', () => {
     });
     expect(wrapper.get('.performance-limit').findComponent({ name: 'ElSelect' }).props('modelValue')).toBe(10);
     expect(wrapper.get('.performance-metrics').findComponent({ name: 'ElSelect' }).props('modelValue')).toEqual(['p95_latency']);
+    expect(wrapper.get('.performance-objects').findComponent({ name: 'ElSelect' }).props('modelValue')).toEqual([]);
     expect(wrapper.findAllComponents({ name: 'BarStackChart' })).toHaveLength(1);
     expect(wrapper.findComponent({ name: 'BarStackChart' }).props()).toMatchObject({
-      data: [[9.5]],
+      categories: ['vol-a', 'vol-b'],
+      data: [[9.5, 3.5]],
       seriesNames: ['p95_latency'],
       unit: 'ms',
     });
+
+    await wrapper.get('.performance-objects').findComponent({ name: 'ElSelect' })
+      .vm.$emit('update:modelValue', ['volume-2']);
+    await flushPromises();
+    expect(wrapper.findComponent({ name: 'BarStackChart' }).props()).toMatchObject({
+      categories: ['vol-b'],
+      data: [[3.5]],
+    });
+    expect(wrapper.get('[data-tab="performance"]').findComponent({ name: 'ElTable' }).props('data'))
+      .toEqual([expect.objectContaining({ object_id: 'volume-2' })]);
 
     await wrapper.get('.performance-metrics').findComponent({ name: 'ElSelect' })
       .vm.$emit('update:modelValue', ['p95_latency', 'avg_iops']);
@@ -389,6 +416,7 @@ describe('storage cluster health analytics page', () => {
     await flushPromises();
     expect(wrapper.get('.performance-limit').findComponent({ name: 'ElSelect' }).props('modelValue')).toBe(10);
     expect(wrapper.get('.performance-metrics').findComponent({ name: 'ElSelect' }).props('modelValue')).toEqual(['p95_latency']);
+    expect(wrapper.get('.performance-objects').findComponent({ name: 'ElSelect' }).props('modelValue')).toEqual([]);
   });
 
   it('shows vendor events as system events inside fault analysis', async () => {

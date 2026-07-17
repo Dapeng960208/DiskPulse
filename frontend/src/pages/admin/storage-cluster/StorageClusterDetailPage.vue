@@ -39,6 +39,7 @@ const activeTab = ref('capacity');
 const capacity = ref({ data: [] });
 const latency = ref({ supported: true, data: [] });
 const performanceLimit = ref(10);
+const selectedPerformanceObjects = ref([]);
 const selectedPerformanceMetrics = ref(['p95_latency']);
 const severity = ref({ counts: {}, total: 0, sources: {} });
 const faults = ref({ data: [] });
@@ -81,13 +82,29 @@ const systemEventQueryParams = () => ({
 const capacityData = computed(() => capacity.value?.data || []);
 const capacityChartData = computed(() => capacityData.value.map((item) => [item.updated_at, Number(item.used)]));
 const latencyData = computed(() => latency.value?.data || []);
-const latencyCategories = computed(() => latencyData.value.map((item) => item.object_name || item.object_id || '-'));
+const performanceObjectOptions = computed(() => {
+  const uniqueOptions = new Map();
+  latencyData.value.forEach((item) => {
+    const value = item.object_id || item.object_name;
+    if (value && !uniqueOptions.has(value)) {
+      uniqueOptions.set(value, { value, label: item.object_name || item.object_id });
+    }
+  });
+  return [...uniqueOptions.values()];
+});
+const filteredLatencyData = computed(() => {
+  if (selectedPerformanceObjects.value.length === 0) return latencyData.value;
+  return latencyData.value.filter((item) => selectedPerformanceObjects.value.includes(
+    item.object_id || item.object_name,
+  ));
+});
+const latencyCategories = computed(() => filteredLatencyData.value.map((item) => item.object_name || item.object_id || '-'));
 const selectedPerformanceMetricOptions = computed(() => performanceMetricOptions.filter(
   ({ key }) => selectedPerformanceMetrics.value.includes(key),
 ));
 const performanceCharts = computed(() => selectedPerformanceMetricOptions.value.map((metric) => ({
   ...metric,
-  data: [latencyData.value.map((item) => Number(item[metric.key]) || 0)],
+  data: [filteredLatencyData.value.map((item) => Number(item[metric.key]) || 0)],
 })));
 const faultData = computed(() => faults.value?.data || []);
 const systemEventData = computed(() => systemEvents.value?.data || []);
@@ -237,6 +254,7 @@ function searchActiveTab() {
 function resetRange() {
   if (activeTab.value === 'performance') {
     performanceLimit.value = 10;
+    selectedPerformanceObjects.value = [];
     selectedPerformanceMetrics.value = ['p95_latency'];
   }
   dateRange.value = getDefaultTime(8);
@@ -302,6 +320,13 @@ watch(clusterId, () => {
   loadActiveTab(true);
 });
 
+watch(performanceObjectOptions, (options) => {
+  const availableValues = new Set(options.map((option) => option.value));
+  selectedPerformanceObjects.value = selectedPerformanceObjects.value.filter(
+    (value) => availableValues.has(value),
+  );
+});
+
 onBeforeMount(() => {
   const routeClusterId = Number.parseInt(route.params?.id, 10);
   if (Number.isInteger(routeClusterId)) clusterId.value = routeClusterId;
@@ -360,6 +385,25 @@ onBeforeMount(() => {
                 :key="metric.key"
                 :label="metric.label"
                 :value="metric.key" />
+            </ElSelect>
+          </ElFormItem>
+          <ElFormItem
+            v-if="activeTab === 'performance'"
+            label="对象"
+            class="performance-objects">
+            <ElSelect
+              v-model="selectedPerformanceObjects"
+              multiple
+              clearable
+              collapse-tags
+              collapse-tags-tooltip
+              filterable
+              placeholder="选择对象进行对比">
+              <ElOption
+                v-for="object in performanceObjectOptions"
+                :key="object.value"
+                :label="object.label"
+                :value="object.value" />
             </ElSelect>
           </ElFormItem>
           <template #actions>
@@ -467,7 +511,7 @@ onBeforeMount(() => {
                 height="360px" />
             </div>
             <div class="table-wrap">
-              <ElTable :data="latencyData">
+              <ElTable :data="filteredLatencyData">
                 <ElTableColumn
                   label="对象"
                   prop="object_name"
