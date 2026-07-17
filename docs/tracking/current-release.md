@@ -1126,6 +1126,39 @@ npm test -- --coverage.enabled=false
 
 - 未在登录态浏览器中逐页检查标签的最终视觉效果。
 
+## 2026-07-17：LDAP 周期同步与用户存储小时快照
+
+### 主题
+
+在不改变人工 LDAP 同步和每分钟全量存储采集的前提下，增加每 8 小时 LDAP 自动同步，以及每小时从 PostgreSQL 当前 `StorageUsage` 生成 QuestDB 用户维度时序样本。
+
+### 实现状态
+
+- 状态：本地实现完成。RED 测试提交为 `b82d94e`（周期调度、LDAP 任务、用户聚合和 QuestDB migration 契约）与 `57a9d29`（任务可观测失败路径）；GREEN 实现提交为 `9bc840d`。
+- LDAP 自动任务已复用 `usersService.sync_ldap_users`，使用独立 PostgreSQL 会话和 Redis 非阻塞锁，保持原有提交、回滚和失败行为；Beat/Worker 启动时不立即执行，人工同步接口继续保留。
+- 现有 `storages_schedule_fetching_task` 的每 60 秒全量采集保持不变。用户统计任务每小时整点读取 PostgreSQL 当前值，按非空 `user_id` 汇总 `limit`、`soft_limit`、`used`、`file_used`，基于汇总值计算两类使用率，并以同一采样时间写入 QuestDB `user_storage_usages`。
+- PostgreSQL 无有效来源行时成功返回 `count=0`；QuestDB 写入或提交失败时回滚并让 Celery 任务失败。此次未新增前端或 API。
+- QuestDB 新增前向 revision `000000000004_user_storage_usages.sql`，当前 schema head 为 `000000000004`。
+
+### 验证状态
+
+- 状态：本地自动化验证完成。
+- RED 阶段确认新增测试在缺少实现时按预期失败；GREEN 后执行以下聚焦测试，共 `64 passed`：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest backend\test\test_scheduled_user_tasks.py backend\test\test_questdb_migrations.py backend\test\test_user_management_ldap_sync.py backend\test\test_celery_app_contract.py backend\test\test_storage_collection_trigger.py -q
+```
+
+- 全量后端覆盖率验证：先执行 `.\.venv\Scripts\python.exe -m coverage run -m pytest backend\test -q`，再执行 `.\.venv\Scripts\python.exe -m coverage report`；结果为 `386 passed`，`TOTAL 91%`，满足 `.coveragerc` 的 `85%` 门禁。
+- `.\.venv\Scripts\python.exe -m compileall -q backend`：通过。
+- `git diff --check`：通过。
+
+### 风险与部署边界
+
+- 当前只确认代码和本地自动化测试通过，尚未连接真实 LDAP、Redis、PostgreSQL、QuestDB，也未验证部署环境中的 Celery Beat/Worker 实际投递、锁竞争和周期执行。
+- 部署时仍需先将 QuestDB 升级到 `000000000004`，再重启或启用新增 Beat 调度；否则小时任务会因目标表不存在而失败。
+- 小时聚合读取执行时 PostgreSQL 已提交的当前值，不保证与某个存储设备采集轮次严格绑定；同一 `updated_at` 表示聚合采样时间。
+
 ## 2026-07-17：存储集群与存储类型展示统一
 
 ### 已完成

@@ -120,6 +120,15 @@ isi statistics workload --dataset path
 
 每个 DiskPulse “Isilon Directory Quota”路径都需要执行一次 `workloads pin`；固定后至少等待 30 秒再检查统计。`path` 维度只覆盖 SMB/NFS 访问，不能把未固定路径的节点总延迟推算成目录延迟。
 
+## 存储采集与用户小时快照
+
+- 现有 `storages_schedule_fetching_task` 继续每 60 秒执行一次全量存储采集，设备读取、PostgreSQL 当前值更新和既有 QuestDB 明细写入流程不变。
+- 独立的 `user_storage_statistics_schedule_task` 在每个整点读取 PostgreSQL 当前 `StorageUsage`，按非空 `user_id` 跨项目组、存储集群和用户目录汇总，不直接访问存储设备。
+- 每个用户在同一轮最多生成一条 QuestDB `user_storage_usages` 样本；同轮样本共用一个 `updated_at`，记录 `user_id`、硬限额 `limit`、软限额 `soft_limit`、已用容量 `used`、硬限额使用率 `use_ratio`、软限额使用率 `soft_use_ratio` 和已用文件数 `file_used`。
+- 容量和文件数字段按用户求和，空值按 `0` 处理；使用率基于聚合后的 `used` 与相应限额计算，分母小于等于 `0` 时为 `0`。
+- PostgreSQL 没有可归属用户的 `StorageUsage` 行时任务成功并返回 `count=0`，不写 QuestDB；QuestDB 写入或提交失败时任务回滚、记录异常并以失败状态结束，不能静默返回成功。
+- 用户小时快照使用独立 PostgreSQL、QuestDB 会话和专用 Redis 非阻塞锁。该能力不新增前端页面或查询 API，也不改变现有存储集群接口。
+
 ## 文档索引
 
 | 文档 | 说明 |
@@ -139,4 +148,4 @@ isi statistics workload --dataset path
 - 新增或删除集群字段时，需要同步 `StoragePulseMonitor`、相关 CRUD、前端表单和本文档。
 - `protocol` 只允许 `http` 或 `https`；`tls_verify` 仅对 HTTPS 生效。新建集群默认 `https/true`，已有集群由迁移回填为 `https/false`。
 - PostgreSQL 从空库依次执行 root baseline `000000000001`、集群传输配置 `000000000002`、AI 中心 `000000000003`、存储健康分析 `000000000004` 和 Isilon Session 缓存配置 `000000000005`；当前 head 为 `000000000005`。已有集群升级后默认使用 `none`，需要在管理表单中明确选择文件或 Redis。使用已删除旧 revision 链的数据库不支持伪造版本接续。
-- QuestDB 使用独立前向 revision 和 checksum 账本，存储性能表由 `000000000003_storage_performance_metrics.sql` 创建，当前 head 为 `000000000003`。
+- QuestDB 使用独立前向 revision 和 checksum 账本，存储性能表由 `000000000003_storage_performance_metrics.sql` 创建，用户小时快照表 `user_storage_usages` 由 `000000000004_user_storage_usages.sql` 创建；当前 head 为 `000000000004`。

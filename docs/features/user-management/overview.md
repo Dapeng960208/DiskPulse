@@ -32,18 +32,25 @@
 - LDAP 返回的非空姓名、邮箱和部门可覆盖现有资料；空邮箱或空部门保留系统原值。
 - 超级管理员把公共用户改为离职或在职后，该用户从下一次同步开始遵循对应生命周期。
 
+### Celery 自动同步
+
+- Celery Beat 每 8 小时投递一次 `ldap_users_sync_schedule_task`，任务继续复用 `usersService.sync_ldap_users`，因此自动同步与人工同步使用相同的快照、匹配、生命周期和事务规则。
+- 自动任务使用独立 PostgreSQL 会话和 Redis 非阻塞锁；同一同步仍在运行时，后续实例跳过，避免并发应用同一份用户快照。
+- Worker 或 Beat 启动时不立即执行同步，首次执行由正常的 8 小时周期触发。
+- 自动任务失败时保留原有回滚语义并向 Celery 暴露失败状态；人工 `POST /storage-pulse/api/users/sync-ldap` 入口继续保留，不改变权限和响应契约。
+
 ## 配置与安全边界
 
 - LDAP 用户搜索范围和字段映射继续使用本地 `backend/config.yml`；可提交结构参考 `backend/config.example.yml`。
 - `ldap.user_department_attribute` 指定部门属性，默认值为 `department`。目录使用其他属性时，部署侧必须在真实 `backend/config.yml` 中显式修改；真实配置保持本地，不提交到仓库。
 - 任一 LDAP 搜索范围查询不完整、目录查询失败或完整快照为空时，同步返回 `503` 且不写入数据库，避免误把全部在职用户标记为离职。
 - LDAP 快照或本地数据存在忽略大小写的用户名冲突时，同步拒绝并回滚整个事务。
-- 同步不删除用户，不提供定时同步、同步历史表、预演接口或后台任务。
+- 同步不删除用户，不提供同步历史表或预演接口；后台自动同步只复用现有全量同步服务，不引入第二套 LDAP 规则。
 
 ## 验证
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest backend\test\test_user_management_ldap_sync.py -q
+.\.venv\Scripts\python.exe -m pytest backend\test\test_user_management_ldap_sync.py backend\test\test_scheduled_user_tasks.py -q
 cd frontend
 npx vitest run test/unit/user-management-ldap-sync.test.js test/unit/router/routes.test.js --coverage.enabled=false
 ```
