@@ -59,13 +59,33 @@ def list_collection_runs(
 def list_latest_success_runs(db: Session, active_cluster_ids: tuple[int, ...]) -> list[TelemetryCollectionRun]:
     if not active_cluster_ids:
         return []
-    return db.execute(
-        select(TelemetryCollectionRun)
+    latest_success = (
+        select(
+            TelemetryCollectionRun.id.label("run_id"),
+            func.row_number()
+            .over(
+                partition_by=(
+                    TelemetryCollectionRun.component,
+                    TelemetryCollectionRun.storage_cluster_id,
+                ),
+                order_by=(
+                    TelemetryCollectionRun.finished_at.desc(),
+                    TelemetryCollectionRun.id.desc(),
+                ),
+            )
+            .label("row_number"),
+        )
         .where(
             TelemetryCollectionRun.storage_cluster_id.in_(active_cluster_ids),
             TelemetryCollectionRun.outcome == "success",
             TelemetryCollectionRun.finished_at.is_not(None),
         )
+        .subquery()
+    )
+    return db.execute(
+        select(TelemetryCollectionRun)
+        .join(latest_success, TelemetryCollectionRun.id == latest_success.c.run_id)
+        .where(latest_success.c.row_number == 1)
         .order_by(
             TelemetryCollectionRun.component,
             TelemetryCollectionRun.storage_cluster_id,
