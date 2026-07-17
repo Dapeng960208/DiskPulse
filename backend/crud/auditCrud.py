@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session
 from models import AuditEvent
 
 
+def get_audit_event(db: Session, event_id: str) -> AuditEvent | None:
+    return db.get(AuditEvent, event_id)
+
+
 def list_audit_events(
     db: Session,
     *,

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from models import LargeFiles
+from models import Group, LargeFiles
 from sqlalchemy import or_, desc, asc
 from sqlalchemy.orm import Session
 from schemas import largeFileSchema
@@ -10,7 +10,8 @@ from utils.query import get_sort_column
 
 def get_large_files(db: Session, page: int | None = None, size: int | None = None, nameLike: str | None = None,
                     prop: str | None = None,
-                    order: str | None = None, user_id: int | None = None, group_id: int | None = None):
+                    order: str | None = None, user_id: int | None = None, group_id: int | None = None,
+                    accessible_project_ids: set[int] | None = None):
     query = db.query(LargeFiles)
     conditions = []
     if nameLike and len(nameLike.strip()) > 0:
@@ -19,6 +20,9 @@ def get_large_files(db: Session, page: int | None = None, size: int | None = Non
         conditions.append(LargeFiles.user_id == user_id)
     if group_id:
         conditions.append(LargeFiles.group_id == group_id)
+    if accessible_project_ids is not None:
+        query = query.join(Group, Group.id == LargeFiles.group_id)
+        conditions.append(Group.project_id.in_(accessible_project_ids))
     query = query.filter(*conditions)
     total = query.count()
     sort_column = get_sort_column(LargeFiles, prop)
@@ -36,9 +40,11 @@ def get_large_files(db: Session, page: int | None = None, size: int | None = Non
 
 
 def export_large_files(db: Session, nameLike: str | None = None, user_id: int | None = None,
-                       group_id: int | None = None):
+                       group_id: int | None = None,
+                       accessible_project_ids: set[int] | None = None):
     large_files_dbs, _ = get_large_files(db=db, nameLike=nameLike, user_id=user_id,
-                                         group_id=group_id)
+                                         group_id=group_id,
+                                         accessible_project_ids=accessible_project_ids)
 
     # 手动构建每条记录的字典，显式提取嵌套字段
     records = []

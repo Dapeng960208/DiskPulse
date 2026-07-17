@@ -82,7 +82,13 @@ def redact_audit_payload(value: Any, *, key: str | None = None) -> Any:
     if isinstance(value, (datetime, date)):
         return value.isoformat()
     if isinstance(value, str):
-        if value.startswith(("/", "\\")) or ":\\" in value:
+        is_windows_path = (
+            len(value) >= 3
+            and value[0].isalpha()
+            and value[1] == ":"
+            and value[2] in {"/", "\\"}
+        )
+        if value.startswith(("/", "\\")) or is_windows_path:
             return _REDACTED
         return value[:512]
     if value is None or isinstance(value, (bool, int, float)):
@@ -167,6 +173,18 @@ def list_visible_audit_events(
         start_time=start_time,
         end_time=end_time,
     )
+
+
+def get_visible_audit_event(db: Session, *, current_user, event_id: str) -> AuditEvent:
+    event = auditCrud.get_audit_event(db, event_id)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="audit event was not found")
+    if is_super_admin(current_user):
+        return event
+    if event.project_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="project permission required")
+    require_project_permission(db, current_user, event.project_id, "project_admin")
+    return event
 
 
 def serialize_audit_event(event: AuditEvent) -> dict:

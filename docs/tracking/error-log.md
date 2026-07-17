@@ -1,5 +1,50 @@
 # 错误记录
 
+### 2026-07-18：Alembic 执行后 pytest 无法捕获采集调度日志
+
+- 触发：执行 `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test -q`。
+- 现象：`test_storage_collection_trigger.py` 两条断言在单文件通过、全量运行失败，`caplog.text` 为空。
+- 根因：Alembic `env.py` 的 `fileConfig()` 替换了 root handlers，移除了 pytest 的捕获 handler。
+- 修复：仅在 root 尚无 handler 时加载 Alembic INI 日志配置；CLI 仍获得默认日志配置，宿主应用和测试保留自身 handler。
+- 验证：新增 RED/GREEN 后，迁移日志回归与采集调度组合 `12 passed`，后端全量 `490 passed`。
+- 风险：生产 CLI 日志行为未在真实 PostgreSQL 变更窗口验证。
+
+### 2026-07-18：合并 RBAC 审计迁移会丢失项目告警规则
+
+- 触发：在 SQLite 执行 `000000000007 → 000000000008 → 000000000007`。
+- 现象：batch `copy_from` 未包含 `projects.storage_alert_rule`，升级或降级后列/JSON 值可能丢失。
+- 根因：合并后的 SQLite 迁移只复制了部分旧项目列。
+- 修复：在迁移的 SQLite 批处理结构中保留 `storage_alert_rule`，并补唯一 head、三方言 DDL 与实际升级/降级测试。
+- 验证：迁移专题测试 `6 passed`；SQLite、PostgreSQL、MySQL 离线 DDL 均编译通过。
+- 风险：删除的 `pt_user_id` 历史值仍不可由 downgrade 恢复，升级前必须备份。
+
+### 2026-07-18：配额测试意外连接真实 Kombu broker
+
+- 触发：执行 `backend/test/test_quota_adjustment.py -q`。
+- 现象：前三项后阻塞在 Kombu broker 投递；中断后显示 `3 passed in 85.59s`，栈落在 `kombu.utils.functional.py:332`。
+- 根因：配额成功路径默认向 Celery 投递通知，测试没有隔离异步 enqueue。
+- 修复：测试文件默认将 enqueue 替换为 no-op；需要断言入队的用例显式 monkeypatch，生产投递逻辑未改。
+- 验证：配额聚焦测试 `19 passed in 1.74s`；服务层无认证主体调用另有 RED/GREEN，现返回 `401`。
+- 风险：真实 broker、设备与通知投递仍需部署环境联调。
+
+### 2026-07-18：AI 历史和审计详情可能暴露过期或敏感工具数据
+
+- 触发：撤销项目成员关系后读取同一创建者的 AI 历史，或读取包含旧 prompt/path/response 的 AI 审计详情。
+- 现象：历史助手消息和工具结果仍可返回；AI 审计详情可返回完整路径、prompt、token 或原始 response。
+- 根因：会话只检查创建者，历史轨迹没有范围再授权；AI 专项审计读取没有二次脱敏。
+- 修复：每个工具轨迹保存脱敏可见范围，读取时按当前成员权限重新判定；范围失效/不可证明时隐藏整轮内容；AI 专项审计读取再次脱敏并继承请求 trace。
+- 验证：AI 权限、脱敏与既有 AI 平台/服务回归 `48 passed`，后端全量 `490 passed`。
+- 风险：生产环境需按真实权限撤销和 Provider 响应进行脱敏抽检。
+
+### 2026-07-18：前端全量 coverage 被过期测试隔离契约阻断
+
+- 触发：执行 `npm run test:coverage`。
+- 现象：布局、应用壳、告警路由和组件烟测共 5 条失败；其中出现 CRLF 下样式选择器失效、未激活 Pinia、路由元数据顺序假设和深层 API 基类为 `undefined`。
+- 根因：测试依赖了平台行尾、实现字段相邻顺序，或在 smoke 场景加载了不属于当前包装页边界的 store/API/异步子树。
+- 修复：使用跨行尾选择器并放宽非语义元数据顺序；为 AppLayout 补齐 breadcrumbs/router Pinia 隔离，为详情烟测 mock 深层依赖和 Element Plus 子组件。未修改生产页面、路由或样式。
+- 验证：四个目标文件共 `28 passed`；全量 coverage 无失败，Lines/Statements `97.67%`、Functions `82.26%`、Branches `87.40%`；`npm run build:prod` 通过。
+- 风险：构建仍保留 `%VITE_APP_TITLE%` 未定义和大 chunk 警告；两者不影响本轮功能正确性。
+
 ### 2026-07-17：AI 工具轮次和参数格式错误被泛化为服务不可用
 
 - 触发：AI 对话连续调用只读工具达到 `ai.max_tool_iterations`，或 Provider 输出非 JSON/非对象的工具参数。

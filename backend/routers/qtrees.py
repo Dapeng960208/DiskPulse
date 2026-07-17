@@ -14,6 +14,7 @@ router = APIRouter(
     prefix="/qtrees",
     tags=["qtrees"],
     responses={404: {"description": "Not found"}},
+    dependencies=[Depends(require_super_admin)],
 )
 
 

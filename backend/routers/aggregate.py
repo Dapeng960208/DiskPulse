@@ -12,6 +12,7 @@ router = APIRouter(
     prefix="/aggregates",
     tags=["aggregates"],
     responses={404: {"description": "Not found"}},
+    dependencies=[Depends(require_super_admin)],
 )
 
 

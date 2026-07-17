@@ -267,7 +267,12 @@ def test_dashboard_router_validates_project_id(
     monkeypatch.setattr(dashboard.dashboardService, "get_alert_levels", lambda _db, project_id=None: [])
     monkeypatch.setattr(dashboard.dashboardService, "get_top_users", lambda _db, project_id: [])
     base_config.set("super_admin_usernames", ["dashboard-admin"])
-    db_session.add(User(id=1, username="dashboard-user", rd_username="dashboard-admin"))
+    db_session.add_all(
+        [
+            User(id=1, username="dashboard-user", rd_username="dashboard-admin"),
+            Project(id=1, name="dashboard-project"),
+        ]
+    )
     db_session.commit()
     client = api_client_factory([dashboard.router], headers=auth_headers)
 

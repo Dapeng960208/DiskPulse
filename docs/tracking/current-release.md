@@ -1,19 +1,20 @@
 # 当前交付记录
 
-## 2026-07-18：项目级 RBAC 与统一操作审计（部分实施）
+## 2026-07-18：项目级 RBAC 与统一操作审计（本地收口）
 
 ### 已完成
 
-- 已提交项目成员模型/迁移、项目负责人 `project_admin` 补齐和 `pt_user` 移除；成员 Router 已注册到主应用并以 `7` 项聚焦测试覆盖路由合同。AI 会话保持创建者隔离且不保存项目归属；项目详情成员/项目审计页签及系统管理统一审计页面已在当前 worktree 中实现。
+- 已提交项目成员模型/迁移、项目负责人 `project_admin` 补齐和 `pt_user` 移除；成员 Router 已注册到主应用。项目、项目组、用户目录、告警、大文件、Dashboard、导出和趋势在分页/统计前进入项目过滤；项目组负责人仅可调整其负责项目组及用户目录，普通 `editor` 保持拒绝。
+- AI 会话保持创建者隔离且不保存项目归属；工具使用当前用户身份调用受授权的 HTTP 路由，并为每次调用保存脱敏的最小项目范围。历史读取重新核验当前成员资格，权限失效或旧范围不可证明时隐藏助手内容和工具结果。
 - 已提交 `audit_events` 模型、`000000000008_project_rbac_unified_audit.py`、关联 ID 中间件、脱敏审计服务、查询 API 及 SQLite/PostgreSQL/MySQL 不可变触发器定义。
 - 已接入认证与成员审计：登录成功/拒绝、登出以及项目成员新增、更新、删除写入脱敏 `result` 事件，并保留请求关联 ID。
-- 已接入 AI 与配额审计：AI 会话创建/删除和消息 attempt/result 不保存标题或消息内容；项目组与用户目录配额调整在设备调用前后以同一 `operation_id` 写入 attempt/result，且不保存设备路径、凭据或令牌。
+- 已接入 AI 与配额审计：AI 会话创建/删除和消息 attempt/result 不保存标题或消息内容，`AIAuditLog.trace_id` 继承请求上下文；AI 模型创建、更新、删除、连接测试也写入统一审计。项目组与用户目录配额调整在设备调用前后以同一 `operation_id` 写入 attempt/result，且不保存设备路径、凭据或令牌。
 - 已接入服务操作审计：存储采集轮次按集群写入服务身份的成功/失败结果；Feishu 告警投递在真实发送前后写入同一 `operation_id` 的 attempt/result，摘要不保存通知标题、收件人或凭据。
-- 审计 RED/GREEN 检查点已提交。聚焦验证覆盖统一审计、配额、项目负责人权限和 AI 平台，共 `54 passed`；认证 API 聚焦验证另有 `11 passed`。
+- 审计、迁移、配额和 AI RED/GREEN 检查点已提交。后端全量为 `490 passed`；迁移 `6 passed`、配额 `19 passed`、AI 权限/脱敏 `48 passed`、关联和模型审计组合 `51 passed`；前端全量 coverage 无失败（Lines/Statements `97.67%`、Functions `82.26%`、Branches `87.40%`），生产构建通过。
 
 ### 风险与待完成
 
-- 生产 PostgreSQL 的备份恢复、Alembic `stamp`/upgrade、触发器和应用运行账号/审计只读账号授权未验证；真实 NetApp/Isilon 设备写入、采集和 Feishu 投递也尚未在变更窗口完成联调验证。
+- 生产 PostgreSQL 的备份恢复、Alembic `stamp`/upgrade、触发器和应用运行账号/审计只读账号授权未验证；真实 NetApp/Isilon 设备写入、采集和 Feishu 投递也尚未在变更窗口完成联调验证。仓库没有 Playwright 配置/依赖且当前无可用浏览器运行时，浏览器 E2E 未执行。前端构建保留既有 `%VITE_APP_TITLE%` 未定义和大 chunk 警告。
 - 升级前必须备份：`000000000008` 会删除 `projects.pt_user_id`，downgrade 仅重建空列，历史 PT 负责人数据不可恢复，不能将 downgrade 作为该数据的回滚方案。
 
 ## 2026-07-17：企业级 AI 存储智能运维调研基线

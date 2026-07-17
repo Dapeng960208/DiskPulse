@@ -27,6 +27,7 @@ router = APIRouter(
     prefix="/storage-clusters",
     tags=["storage-clusters"],
     responses={404: {"description": "Not found"}},
+    dependencies=[Depends(require_super_admin)],
 )
 
 

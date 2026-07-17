@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel, ConfigDict, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from datetime import datetime
 from schemas import usersSchema, groupSchema
 
@@ -47,6 +47,7 @@ class ProjectSummary(BaseModel):
 
 class StorageUsage(StorageUsageBase):
     id: int
+    capabilities: dict[str, bool] = Field(default_factory=dict)
 
     size: int | None = 0
     blocks: float | None = 0

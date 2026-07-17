@@ -37,6 +37,7 @@ class ProjectBase(ProjectBaseInfo):
 
 class Project(ProjectBase):
     id: int
+    capabilities: dict[str, bool] = Field(default_factory=dict)
 
     model_config = ConfigDict(from_attributes=True)
 

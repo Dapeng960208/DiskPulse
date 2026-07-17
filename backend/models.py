@@ -140,11 +140,13 @@ class AuditEvent(Base):
     phase = Column(String(16), nullable=False)
     occurred_at = Column(DateTime, nullable=False, default=datetime.now)
     actor_type = Column(String(32), nullable=False)
-    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Audit rows retain historical logical IDs even after the referenced subject is removed.
+    # Foreign-key SET NULL would mutate this append-only table and be rejected by its trigger.
+    actor_user_id = Column(Integer, nullable=True)
     action = Column(String(128), nullable=False)
     resource_type = Column(String(64), nullable=False)
     resource_id = Column(Integer, nullable=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    project_id = Column(Integer, nullable=True)
     outcome = Column(String(16), nullable=False)
     reason_code = Column(String(128), nullable=True)
     before_summary = Column(JSON, nullable=True)

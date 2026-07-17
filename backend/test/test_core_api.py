@@ -264,9 +264,11 @@ class TestCoreApi:
                     return_value=str(image_path),
                 ),
             ):
+                current_user = session.get(models.User, 1)
                 response = group.get_storage_usage_image_by_id(
                     1,
                     role="cad",
+                    current_user=current_user,
                     db=session,
                 )
         finally:
@@ -289,9 +291,11 @@ class TestCoreApi:
                     return_value=str(image_path),
                 ),
             ):
+                current_user = session.get(models.User, 1)
                 response = storage_usage.get_storage_usage_image_by_id(
                     1,
                     role="cad",
+                    current_user=current_user,
                     db=session,
                 )
         finally:

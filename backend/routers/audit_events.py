@@ -43,3 +43,13 @@ def list_audit_events(
         content=[audit_service.serialize_audit_event(event) for event in events],
         total=total,
     )
+
+
+@router.get("/{event_id}", response_model=auditSchema.AuditEventOut)
+def get_audit_event(event_id: str, current_user: CurrentUserDep, db: DBDep):
+    event = audit_service.get_visible_audit_event(
+        db,
+        current_user=current_user,
+        event_id=event_id,
+    )
+    return audit_service.serialize_audit_event(event)

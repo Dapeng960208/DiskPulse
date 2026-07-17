@@ -22,7 +22,7 @@ from services import project_access_service, project_membership_service
 
 
 def _membership_migration():
-    path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000008_project_memberships.py"
+    path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000008_project_rbac_unified_audit.py"
     spec = importlib.util.spec_from_file_location(path.stem, path)
     assert spec is not None and spec.loader is not None
     migration = importlib.util.module_from_spec(spec)

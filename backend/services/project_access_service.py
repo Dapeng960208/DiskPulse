@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from fastapi import HTTPException, status
 
-from models import Project, ProjectMembership
+from models import Group, Project, ProjectMembership, StorageUsage
 from utils.auth_service import is_super_admin
 
 
@@ -106,6 +106,8 @@ def require_project_permission(db, current_user, project_id: int, minimum_role: 
     _validate_role(minimum_role)
     if db.get(Project, project_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project was not found")
+    if current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
     if is_super_admin(current_user):
         return
 
@@ -121,8 +123,44 @@ def require_project_permission(db, current_user, project_id: int, minimum_role: 
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="project permission required")
 
 
+def require_group_permission(db, current_user, group_id: int, minimum_role: str = "reader") -> Group:
+    """Return a group only after enforcing access through its owning project."""
+    group = db.get(Group, group_id)
+    if group is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="group was not found")
+    require_project_permission(db, current_user, group.project_id, minimum_role)
+    return group
+
+
+def require_storage_usage_permission(
+    db,
+    current_user,
+    storage_usage_id: int,
+    minimum_role: str = "reader",
+) -> StorageUsage:
+    """Enforce the StorageUsage -> Group -> Project authorization path.
+
+    A directory without a valid project group is intentionally unscoped and is
+    therefore visible only to a super administrator.
+    """
+    storage_usage = db.get(StorageUsage, storage_usage_id)
+    if storage_usage is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="StorageUsage not found")
+    if current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+    group = db.get(Group, storage_usage.group_id) if storage_usage.group_id is not None else None
+    if group is None:
+        if not is_super_admin(current_user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="project permission required")
+        return storage_usage
+    require_project_permission(db, current_user, group.project_id, minimum_role)
+    return storage_usage
+
+
 def accessible_project_ids(db, current_user) -> set[int] | None:
     """Return all project scopes visible to a user, or None for a super admin."""
+    if current_user is None:
+        return set()
     if is_super_admin(current_user):
         return None
     return {
@@ -131,3 +169,51 @@ def accessible_project_ids(db, current_user) -> set[int] | None:
         .filter(ProjectMembership.user_id == current_user.id)
         .all()
     }
+
+
+def project_capabilities(db, current_user, project_id: int) -> dict[str, bool]:
+    """Return only UI hints; the route and service authorization stay authoritative."""
+    if current_user is None:
+        return {
+            "manage_members": False,
+            "view_audit_events": False,
+            "manage_project_admins": False,
+        }
+    if is_super_admin(current_user):
+        return {
+            "manage_members": True,
+            "view_audit_events": True,
+            "manage_project_admins": True,
+        }
+    membership = (
+        db.query(ProjectMembership)
+        .filter(
+            ProjectMembership.project_id == project_id,
+            ProjectMembership.user_id == current_user.id,
+        )
+        .one_or_none()
+    )
+    is_project_admin = membership is not None and membership.role == "project_admin"
+    return {
+        "manage_members": is_project_admin,
+        "view_audit_events": is_project_admin,
+        "manage_project_admins": False,
+    }
+
+
+def group_capabilities(current_user, group: Group | None) -> dict[str, bool]:
+    """Expose the same quota affordance enforced by quotaService."""
+    return {
+        "adjust_quota": bool(
+            group is not None
+            and current_user is not None
+            and (
+                is_super_admin(current_user)
+                or group.in_charge_user_id == current_user.id
+            )
+        )
+    }
+
+
+def storage_usage_capabilities(current_user, storage_usage: StorageUsage) -> dict[str, bool]:
+    return group_capabilities(current_user, storage_usage.group)
