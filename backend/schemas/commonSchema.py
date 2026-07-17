@@ -4,6 +4,8 @@ from typing import TypeVar, Generic
 
 from pydantic import BaseModel
 
+from schemas.storageTrendSchema import StorageTrendMeta
+
 T = TypeVar('T')
 
 
@@ -39,6 +41,7 @@ class ResponseResourceSummaryModel(BaseModel, Generic[T]):
 class ResponseStorageUsageModel(BaseModel, Generic[T]):
     info: T | None = None
     data: List = None
+    trend_meta: StorageTrendMeta | None = None
 
 
 class ResponseSummaryModel(BaseModel):

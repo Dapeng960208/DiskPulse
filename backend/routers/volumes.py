@@ -3,9 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
-from schemas import volumeSchema, commonSchema
+from schemas import volumeSchema, commonSchema, storageTrendSchema
 from crud import volumeCrud
 from dependencies import get_db, require_super_admin
+from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 
 router = APIRouter(
     prefix="/volumes",
@@ -42,16 +43,18 @@ def read_volume(volume_id: int, db: Session = Depends(get_db)):
 @router.get("/{volume_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_volume_realtime", "ai_description": "查询存储空间实时容量趋势"})
 def read_volume_realtime_data(volume_id: int, start_time: datetime | None = None,
                               end_time: datetime | None = None,
-                              indicator: str = 'used', db: Session = Depends(get_db)):
+                              indicator: storageTrendSchema.TrendIndicator = 'used', db: Session = Depends(get_db)):
     db_volume = volumeCrud.get_volume_by_id(db, volume_id=volume_id)
     if db_volume is None:
         raise HTTPException(status_code=404, detail="Volume not found")
+    trend_meta = build_storage_trend_meta(db, target_type="volume", target=db_volume)
     real_time_data = volumeCrud.get_volume_real_time_data_by_id(db=db, start_time=start_time,
                                                                 end_time=end_time,
                                                                 volume_id=volume_id,
-                                                                indicator=indicator)
+                                                                indicator=resolve_trend_indicator(indicator, trend_meta))
     return commonSchema.ResponseStorageUsageModel[volumeSchema.Volume](data=real_time_data,
-                                                                       info=db_volume)
+                                                                       info=db_volume,
+                                                                       trend_meta=trend_meta)
 
 
 @router.put("/{volume_id}", response_model=volumeSchema.Volume)

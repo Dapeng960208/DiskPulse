@@ -16,7 +16,7 @@ ALLOWED_TABLE_PREFIXES = {
     "project",
     "group",
 }
-ALLOWED_INDICATORS = {"used", "used_ratio", "file_used"}
+ALLOWED_INDICATORS = {"used", "used_ratio", "soft_use_ratio", "file_used"}
 
 
 def _normalize_indicator(indicator: str) -> str:
@@ -204,7 +204,7 @@ def get_project_storage_usage(storage_config: Any, start_time: datetime | None =
 
 def get_storage_cluster_real_time(db: Session, storage_cluster_id: int, start_time: datetime | None = None,
                                   end_time: datetime | None = None, indicator: str = 'used'):
-    indicator = _normalize_indicator(indicator)
+    indicator = "use_ratio" if indicator in {"use_ratio", "used_ratio"} else _normalize_indicator(indicator)
     if start_time is None and end_time is None:
         end_time = datetime.now()
         start_time = end_time - timedelta(hours=24)

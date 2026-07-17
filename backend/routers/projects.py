@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from crud import projectsCrud
 from dependencies import get_db, require_super_admin
-from schemas import commonSchema, projectsSchema
+from schemas import commonSchema, projectsSchema, storageTrendSchema
+from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 
 router = APIRouter(
     prefix="/projects",
@@ -69,20 +70,25 @@ def read_project_storage_usage_by_id(
     project_id: int,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-    indicator: str = "used",
+    indicator: storageTrendSchema.TrendIndicator = "used",
     db: Session = Depends(get_db),
 ):
     project_db = projectsCrud.get_project_by_id(db=db, id=project_id)
     if project_db is None:
         raise HTTPException(status_code=404, detail="The project was not found")
+    trend_meta = build_storage_trend_meta(db, target_type="project", target=project_db)
     real_time_data = projectsCrud.get_project_storage_usages_real_time_data_by_id(
         db=db,
         project_id=project_id,
         start_time=start_time,
         end_time=end_time,
-        indicator=indicator,
+        indicator=resolve_trend_indicator(indicator, trend_meta),
     )
-    return commonSchema.ResponseStorageUsageModel[projectsSchema.ProjectBaseInfo](data=real_time_data, info=project_db)
+    return commonSchema.ResponseStorageUsageModel[projectsSchema.ProjectBaseInfo](
+        data=real_time_data,
+        info=project_db,
+        trend_meta=trend_meta,
+    )
 
 
 @router.get("/{project_id}", response_model=projectsSchema.Project, openapi_extra={"ai_exposed": True, "ai_name": "get_project", "ai_description": "查询指定项目"})

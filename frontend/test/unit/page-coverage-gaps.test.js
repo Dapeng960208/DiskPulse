@@ -50,6 +50,12 @@ vi.mock('@/api/aggregate-api.js', () => ({ default: mocks.aggregateApi }));
 vi.mock('@/utils/authorization', () => ({ hasRole: mocks.hasRole }));
 vi.mock('@/utils/common.js', () => ({ exportReport: mocks.exportReport }));
 vi.mock('@/stores/current-user', () => ({ useCurrentUser: () => mocks.currentUser }));
+vi.mock('@/stores/storage-alert-thresholds', () => ({
+  useStorageAlertThresholds: () => ({
+    thresholds: { important: 80, serious: 90, emergency: 95 },
+    load: vi.fn(),
+  }),
+}));
 vi.mock('@/composables/common', () => ({ getDefaultTime: () => ['2026-07-01 00:00:00', '2026-07-02 00:00:00'] }));
 vi.mock('vue-router', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -321,6 +327,11 @@ const commonStubs = {
   Progress: passthrough('Progress'),
   LineCharts: passthrough('LineCharts'),
   MultipleLineCharts: passthrough('MultipleLineCharts'),
+  StorageTrendChart: defineComponent({
+    name: 'StorageTrendChart',
+    props: { series: Array, indicator: String, trendMeta: Object, systemThresholds: Object, unit: String, ariaLabel: String },
+    template: '<div class="storage-trend-chart-stub" />',
+  }),
   AnimatedTextChart: passthrough('AnimatedTextChart'),
   LoadingCharts: passthrough('LoadingCharts'),
   DiskUsage: passthrough('DiskUsage'),
@@ -366,7 +377,11 @@ beforeEach(() => {
   mocks.groupTagApi.deleteById.mockResolvedValue({});
   mocks.storageUsageApi.fetch.mockResolvedValue({ content: [row], total: 1 });
   mocks.storageUsageApi.exportStorageUsages.mockResolvedValue({ data: new Blob(['usage']), headers: { filename: 'usage.xlsx' } });
-  mocks.storageUsageApi.fetchStorageRealTimeDataById.mockResolvedValue({ info: { linux_path: '/data/a', limit: 100, used: 20, use_ratio: 20 }, data: [] });
+  mocks.storageUsageApi.fetchStorageRealTimeDataById.mockResolvedValue({
+    info: { linux_path: '/data/a', limit: 100, used: 20, use_ratio: 20 },
+    data: [],
+    trend_meta: { quota_basis: 'hard', rule_source: 'system', thresholds: { important: 80, serious: 90, emergency: 95 }, quota_limit_gb: 100, ratio_indicator: 'used_ratio' },
+  });
   mocks.qtreeApi.fetchStorageRealTimeDataById.mockResolvedValue({ info: { name: 'qtree-a', limit: 100, used: 20, use_ratio: 20 }, data: [] });
   mocks.volumeApi.fetchStorageRealTimeDataById.mockResolvedValue({ info: { name: 'volume-a', limit: 100, used: 20, use_ratio: 20 }, data: [] });
   mocks.projectApi.fetchStorageRealTimeDataById.mockResolvedValue({ info: { name: 'project-a', limit: 100, used: 20, use_ratio: 20 }, data: [] });
@@ -633,8 +648,8 @@ describe('alert and user page coverage gaps', () => {
 describe('real-time page coverage gaps', () => {
   it('loads storage usage data, alerts, indicator changes, range reset, and multi-target charts', async () => {
     mocks.storageUsageApi.fetchStorageRealTimeDataById
-      .mockResolvedValueOnce({ info: { linux_path: '/data/a', limit: 100, used: 20, use_ratio: 20 }, data: [{ value: 1 }] })
-      .mockResolvedValueOnce({ info: { linux_path: '/data/b', limit: 200, used: 40, use_ratio: 20 }, data: [{ value: 2 }] });
+      .mockResolvedValueOnce({ info: { linux_path: '/data/a', limit: 100, used: 20, use_ratio: 20 }, data: [['2026-07-17', 20]], trend_meta: { quota_basis: 'hard', rule_source: 'system', thresholds: { important: 80, serious: 90, emergency: 95 }, quota_limit_gb: 100, ratio_indicator: 'used_ratio' } })
+      .mockResolvedValueOnce({ info: { linux_path: '/data/b', limit: 200, used: 40, use_ratio: 20 }, data: [['2026-07-17', 40]], trend_meta: { quota_basis: 'hard', rule_source: 'system', thresholds: { important: 80, serious: 90, emergency: 95 }, quota_limit_gb: 200, ratio_indicator: 'used_ratio' } });
     mocks.alertApi.fetch.mockResolvedValueOnce({ content: [
       { updated_at: '2026-07-02', description: 'new' },
       { updated_at: '2026-07-01', description: 'old' },
@@ -645,18 +660,23 @@ describe('real-time page coverage gaps', () => {
 
     expect(wrapper.text()).toContain('/data/a');
     expect(wrapper.findComponent({ name: 'StorageUsageSelect' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'StorageTrendChart' }).props()).toMatchObject({
+      indicator: 'used',
+      ariaLabel: '用户目录容量趋势',
+    });
     expect(wrapper.findComponent({ name: 'ElTable' }).props('data')).toEqual([
       { updated_at: '2026-07-02', description: 'new' },
       { updated_at: '2026-07-01', description: 'old' },
     ]);
 
-    await wrapper.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'use_ratio');
+    await wrapper.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'alert_ratio');
     await wrapper.findComponent({ name: 'StorageUsageSelect' }).vm.$emit('update:modelValue', [1, 2]);
     await wrapper.findComponent({ name: 'FilterForm' }).vm.$emit('query');
     await wrapper.findComponent({ name: 'FilterForm' }).vm.$emit('reset');
     await wrapper.findComponent({ name: 'ElDatePicker' }).vm.$emit('update:modelValue', ['2026-07-03', '2026-07-04']);
     await flushPromises();
     expect(mocks.storageUsageApi.fetchStorageRealTimeDataById).toHaveBeenCalledWith(2, expect.objectContaining({ indicator: 'used' }));
+    expect(mocks.storageUsageApi.fetchStorageRealTimeDataById).toHaveBeenCalledWith(1, expect.objectContaining({ indicator: 'alert_ratio' }));
     expect(mocks.storageUsageApi.fetchStorageRealTimeDataById).toHaveBeenCalled();
   });
 

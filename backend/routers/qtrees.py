@@ -3,9 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException,status,Response
 from sqlalchemy.orm import Session
 from typing import List
 
-from schemas import qtreeSchema, commonSchema
+from schemas import qtreeSchema, commonSchema, storageTrendSchema
 from crud import qtreeCrud
 from dependencies import get_db, require_super_admin
+from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 from datetime import datetime
 import logging
 logger = logging.getLogger('app:qtrees')
@@ -45,15 +46,17 @@ def read_qtree(qtree_id: int, db: Session = Depends(get_db)):
 @router.get("/{qtree_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_qtree_realtime", "ai_description": "查询 Qtree 实时容量趋势"})
 def read_qtree_realtime_data(qtree_id: int, start_time: datetime | None = None,
                              end_time: datetime | None = None,
-                             indicator: str = 'used', db: Session = Depends(get_db)):
+                             indicator: storageTrendSchema.TrendIndicator = 'used', db: Session = Depends(get_db)):
     db_qtree = qtreeCrud.get_qtree_by_id(db, qtree_id=qtree_id)
     if db_qtree is None:
         raise HTTPException(status_code=404, detail="Qtree not found")
+    trend_meta = build_storage_trend_meta(db, target_type="qtree", target=db_qtree)
     real_time_data = qtreeCrud.get_qtree_real_time_data_by_id(db=db, qtree_id=qtree_id,
                                                               start_time=start_time, end_time=end_time,
-                                                              indicator=indicator)
+                                                              indicator=resolve_trend_indicator(indicator, trend_meta))
     return commonSchema.ResponseStorageUsageModel[qtreeSchema.Qtree](data=real_time_data,
-                                                                     info=db_qtree)
+                                                                     info=db_qtree,
+                                                                     trend_meta=trend_meta)
 
 
 @router.put("/{qtree_id}", response_model=qtreeSchema.Qtree)

@@ -5,7 +5,7 @@ import os.path
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
-from schemas import storageUsageSchema, commonSchema, quotaSchema
+from schemas import storageUsageSchema, commonSchema, quotaSchema, storageTrendSchema
 from crud import storageUsageCrud, usersCrud, groupCrud
 from dependencies import get_db, require_super_admin
 from datetime import datetime, timedelta
@@ -14,6 +14,7 @@ from utils.common import convert_timestamp_to_datetime
 import logging
 from routers.common import handle_exceptions
 from services import quotaService
+from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 from utils.storageTarget import resolve_group_storage_target
 from fastapi.responses import StreamingResponse
 import urllib.parse
@@ -132,15 +133,18 @@ def back_up_storage_usage(storage_usage_id: int, background_tasks: BackgroundTas
 @router.get("/{storage_usage_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_storage_usage_realtime", "ai_description": "查询用户目录实时容量趋势"})
 def read_storage_usage_realtime_data(storage_usage_id: int, start_time: datetime | None = None,
                                      end_time: datetime | None = None,
-                                     indicator: str = 'used', db: Session = Depends(get_db)):
+                                     indicator: storageTrendSchema.StorageUsageTrendIndicator = 'used',
+                                     db: Session = Depends(get_db)):
     db_storage_usage = storageUsageCrud.get_storage_usage_by_id(db, storage_usage_id=storage_usage_id)
     if db_storage_usage is None:
         raise HTTPException(status_code=404, detail="StorageUsage not found")
+    trend_meta = build_storage_trend_meta(db, target_type="storage_usage", target=db_storage_usage)
     real_time_data = storageUsageCrud.get_storage_usages_real_time_data_by_id(db=db, storage_usage_id=storage_usage_id,
                                                                               start_time=start_time, end_time=end_time,
-                                                                              indicator=indicator)
+                                                                              indicator=resolve_trend_indicator(indicator, trend_meta))
     return commonSchema.ResponseStorageUsageModel[storageUsageSchema.StorageUsage](data=real_time_data,
-                                                                                   info=storageUsageCrud.serialize_storage_usage(db_storage_usage))
+                                                                                   info=storageUsageCrud.serialize_storage_usage(db_storage_usage),
+                                                                                   trend_meta=trend_meta)
 
 
 @router.patch("/{storage_usage_id}/quota", response_model=quotaSchema.QuotaAdjustmentResponse)

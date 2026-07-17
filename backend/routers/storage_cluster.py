@@ -6,11 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
-from schemas import storageClusterSchema, commonSchema
+from schemas import storageClusterSchema, commonSchema, storageTrendSchema
 from crud import storageClusterCrud
 from crud.questDbCrud import get_storage_cluster_real_time
 from dependencies import get_db, require_super_admin
 from services.storageClusterService import schedule_storage_collection as _schedule_storage_collection
+from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 from services.storageHealthAnalyticsService import (
     export_storage_health,
     get_capacity_change,
@@ -116,22 +117,24 @@ def read_storage_cluster_realtime(
     storage_cluster_id: int,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-    indicator: str = 'used',
+    indicator: storageTrendSchema.TrendIndicator = 'used',
     db: Session = Depends(get_db)
 ):
     db_cluster = storageClusterCrud.get_storage_cluster(db, storage_cluster_id=storage_cluster_id)
     if db_cluster is None:
         raise HTTPException(status_code=404, detail="StorageCluster not found")
+    trend_meta = build_storage_trend_meta(db, target_type="storage_cluster", target=db_cluster)
     real_time_data = get_storage_cluster_real_time(
         db=db,
         storage_cluster_id=storage_cluster_id,
         start_time=start_time,
         end_time=end_time,
-        indicator=indicator
+        indicator=resolve_trend_indicator(indicator, trend_meta)
     )
     return commonSchema.ResponseStorageUsageModel[storageClusterSchema.StorageCluster](
         data=real_time_data,
-        info=db_cluster
+        info=db_cluster,
+        trend_meta=trend_meta,
     )
 
 
@@ -141,8 +144,18 @@ def read_capacity_change(
     time_range: AnalyticsTimeRange,
     db: Session = Depends(get_db),
 ) -> dict:
-    _require_storage_cluster(db, storage_cluster_id)
-    return get_capacity_change(db, storage_cluster_id, *time_range)
+    db_cluster = storageClusterCrud.get_storage_cluster(db, storage_cluster_id)
+    if db_cluster is None:
+        raise HTTPException(status_code=404, detail="StorageCluster not found")
+    result = get_capacity_change(db, storage_cluster_id, *time_range)
+    return {
+        **result,
+        "trend_meta": build_storage_trend_meta(
+            db,
+            target_type="storage_cluster",
+            target=db_cluster,
+        ).model_dump(),
+    }
 
 
 @router.get("/{storage_cluster_id}/analytics/error-severity", response_model=dict)

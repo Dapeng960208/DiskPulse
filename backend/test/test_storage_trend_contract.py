@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 from types import SimpleNamespace
 
+from datetime import datetime
+from unittest.mock import Mock
+
 
 SYSTEM_RULE = {
     "quota_basis": "hard",
@@ -147,3 +150,54 @@ def test_questdb_query_whitelist_and_models_include_soft_history_snapshots():
     ):
         assert {"soft_limit", "soft_use_ratio"} <= set(model.__table__.columns.keys())
 
+def test_realtime_api_validates_indicator_and_uses_effective_soft_history(
+    api_client_factory, auth_headers, db_session, monkeypatch
+):
+    import models
+    from routers import volumes
+
+    db_session.add_all(
+        [
+            models.User(id=1, username="trend-user"),
+            models.StorageConf(
+                id=1,
+                name="storage conf",
+                storage_alert_rule=PROJECT_RULE,
+            ),
+            models.Volume(
+                id=1,
+                name="volume-a",
+                vserver="svm-a",
+                aggregate="aggr-a",
+                type="rw",
+                state="online",
+                limit=100,
+                soft_limit=90,
+                used=81,
+                use_ratio=81,
+                soft_use_ratio=90,
+                updated_at=datetime(2026, 7, 17, 10, 0),
+            ),
+        ]
+    )
+    db_session.commit()
+    realtime = Mock(return_value=[["2026-07-17 10:00:00", 90]])
+    monkeypatch.setattr(
+        volumes.volumeCrud,
+        "get_volume_real_time_data_by_id",
+        realtime,
+    )
+    client = api_client_factory([volumes.router], headers=auth_headers)
+
+    response = client.get("/storage-pulse/api/volumes/1/realtime?indicator=alert_ratio")
+
+    assert response.status_code == 200
+    assert response.json()["trend_meta"] == {
+        "quota_basis": "soft",
+        "rule_source": "system",
+        "thresholds": {"important": 72, "serious": 86, "emergency": 94},
+        "quota_limit_gb": 90.0,
+        "ratio_indicator": "soft_use_ratio",
+    }
+    assert realtime.call_args.kwargs["indicator"] == "soft_use_ratio"
+    assert client.get("/storage-pulse/api/volumes/1/realtime?indicator=unknown").status_code == 422

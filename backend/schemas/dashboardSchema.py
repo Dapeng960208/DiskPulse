@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from schemas.storageTrendSchema import StorageTrendMeta
+
 
 class DashboardScope(BaseModel):
     mode: Literal["global", "project"]
@@ -46,6 +48,7 @@ class AlertLevelItem(BaseModel):
 class DashboardSummaryResponse(BaseModel):
     scope: DashboardScope
     summary: DashboardSummary
+    trend_meta: StorageTrendMeta
 
 
 class TopUser(BaseModel):

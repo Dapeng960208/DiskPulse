@@ -2,10 +2,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from schemas import groupSchema, commonSchema, quotaSchema
+from schemas import groupSchema, commonSchema, quotaSchema, storageTrendSchema
 from crud import groupCrud
 from dependencies import get_db, require_super_admin
 from services import quotaService
+from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 import logging
 from utils.common import convert_timestamp_to_datetime
 from utils.plot import plot_real_time_line
@@ -57,15 +58,17 @@ def read_group(group_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{group_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_group_realtime", "ai_description": "查询项目组实时容量趋势"})
 def read_group_realtime_data(group_id: int, start_time: datetime | None = None, end_time: datetime | None = None,
-                             indicator: str = 'used', db: Session = Depends(get_db)):
+                             indicator: storageTrendSchema.TrendIndicator = 'used', db: Session = Depends(get_db)):
     db_group = groupCrud.get_group_by_id(db, group_id=group_id)
     if db_group is None:
         raise HTTPException(status_code=404, detail="Group not found")
+    trend_meta = build_storage_trend_meta(db, target_type="group", target=db_group)
     real_time_data = groupCrud.get_group_real_time_data_by_id(db=db, group_id=group_id,
                                                               start_time=start_time, end_time=end_time,
-                                                              indicator=indicator)
+                                                              indicator=resolve_trend_indicator(indicator, trend_meta))
     return commonSchema.ResponseStorageUsageModel[groupSchema.Group](data=real_time_data,
-                                                                     info=groupCrud.serialize_group(db_group))
+                                                                     info=groupCrud.serialize_group(db_group),
+                                                                     trend_meta=trend_meta)
 
 
 @router.put("/{group_id}", response_model=groupSchema.Group)

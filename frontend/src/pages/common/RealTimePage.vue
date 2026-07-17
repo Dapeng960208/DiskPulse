@@ -1,8 +1,7 @@
 <script setup>
 import { ElDatePicker, ElFormItem, ElOption, ElRow, ElSelect, ElCol, ElDescriptions, ElDescriptionsItem, ElCard, ElTable, ElTableColumn, ElTag } from 'element-plus';
 import { ref, watch, computed } from 'vue';
-import MultipleLineCharts from '@/common/charts/MultipleLineCharts.vue';
-import LineCharts from '@/common/charts/LineCharts.vue';
+import StorageTrendChart from '@/components/dashboard/StorageTrendChart.vue';
 import FilterForm from '@/components/form/QueryForm.vue';
 import LoadingCharts from '@/common/charts/LoadingCharts.vue';
 import QtreeSelect from '@/components/form/QtreeSelect.vue';
@@ -22,6 +21,7 @@ import projectApi from '@/api/project-api.js';
 import storageUsageApi from '@/api/storage-usage-api.js';
 import { getDefaultTime } from '@/composables/common';
 import { useQuery, useQueryParams } from '@/composables/query';
+import { useStorageAlertThresholds } from '@/stores/storage-alert-thresholds';
 
 const props = defineProps({
   apiType: {
@@ -78,6 +78,8 @@ const relatedTypeMap = {
 const selectedApi = computed(() => apiMap[props.apiType]);
 const selectedSelect = computed(() => selectMap[props.apiType]);
 const relatedType = computed(() => relatedTypeMap[props.apiType]);
+const alertThresholds = useStorageAlertThresholds();
+alertThresholds.load();
 const { queryParams, reset } = useQueryParams(() => ({
   start_time: dateRange.value[0],
   end_time: dateRange.value[1],
@@ -85,7 +87,8 @@ const { queryParams, reset } = useQueryParams(() => ({
 }));
 
 const indicatorOptions = computed(() => {
-  return props.apiType === 'storage-usage' ? { used: '实时使用量', use_ratio: '实时使用率', file_used: '实时文件数量' } : { used: '实时使用量', use_ratio: '实时使用率' };
+  const common = { used: '实时使用量', alert_ratio: '告警口径使用率', use_ratio: '硬限额使用率' };
+  return props.apiType === 'storage-usage' ? { ...common, file_used: '实时文件数量' } : common;
 });
 
 const fetchData = async () => {
@@ -105,7 +108,7 @@ const fetchData = async () => {
   }, {});
   const info = results[0]?.info ?? {};
 
-  return { data, info };
+  return { data, info, trend_meta: results[0]?.trend_meta ?? null };
 };
 
 const { result, querying, query } = useQuery(fetchData, {
@@ -158,8 +161,12 @@ watch(() => props.attributeId, (value) => {
   attributeId.value = Array.isArray(value) ? value : [value];
 }, { deep: true });
 const yAxisUnit = computed(() => {
-  return queryParams.value.indicator === 'used' ? 'G' : queryParams.value.indicator === 'use_ratio' ? '%' : '';
+  return queryParams.value.indicator === 'used'
+    ? 'G'
+    : ['use_ratio', 'alert_ratio'].includes(queryParams.value.indicator) ? '%' : '';
 });
+const trendSeries = computed(() => Object.entries(result.value.data || {}).map(([name, data]) => ({ name, data })));
+const systemThresholds = computed(() => attributeId.value.length > 1 ? alertThresholds.thresholds : null);
 
 </script>
 <template>
@@ -249,34 +256,15 @@ const yAxisUnit = computed(() => {
               :width="'100%'"
               :height="'100%'" />
           </div>
-          <div
-            v-else-if="attributeId.length === 1"
-            class="h-full">
-            <LineCharts
-              :data="Object.values(result.data)[0]"
-              :title="''"
-              :is-count="false"
-              :width="'100%'"
-              :height="'100%'"
-              :show-stats="true"
-              :y-axis-unit="yAxisUnit"
-              :threshold="queryParams.indicator === 'used' ? result.info?.limit * 0.8 : queryParams.indicator === 'use_ratio' ? 80 : null"
-              :legend-name="result.info.linux_path ? result.info.linux_path :result.info.name"
-            />
-          </div>
-
-          <div
+          <StorageTrendChart
             v-else
-            class="h-full">
-            <MultipleLineCharts
-              :data="result.data"
-              :title="''"
-              :is-count="false"
-              :width="'100%'"
-              :height="'100%'"
-              :y-axis-unit="yAxisUnit"
-            />
-          </div>
+            :series="trendSeries"
+            :indicator="queryParams.indicator"
+            :trend-meta="result.trend_meta"
+            :system-thresholds="systemThresholds"
+            :unit="yAxisUnit"
+            :aria-label="`${props.label}容量趋势`"
+            height="100%" />
         </ElCard>
       </div>
 

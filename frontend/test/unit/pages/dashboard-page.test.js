@@ -45,6 +45,12 @@ const DashboardChart = defineComponent({
   template: '<div class="dashboard-chart-stub" />',
 });
 
+const StorageTrendChart = defineComponent({
+  name: 'StorageTrendChart',
+  props: { series: Array, indicator: String, trendMeta: Object, ariaLabel: String, height: String },
+  template: '<div class="storage-trend-chart-stub" />',
+});
+
 const summaryResponse = (mode = 'global') => ({
   scope: {
     mode,
@@ -59,6 +65,13 @@ const summaryResponse = (mode = 'global') => ({
     use_ratio: mode === 'project' ? 66.67 : 62.5,
     storage_cluster_count: mode === 'project' ? 1 : 6,
     alert_count: 3,
+  },
+  trend_meta: {
+    quota_basis: 'hard',
+    rule_source: mode === 'project' ? 'project' : 'system',
+    thresholds: { important: 80, serious: 90, emergency: 95 },
+    quota_limit_gb: mode === 'project' ? 300 : 1024,
+    ratio_indicator: 'used_ratio',
   },
 });
 const capacityTrend = [
@@ -82,6 +95,7 @@ async function mountPage({ flush = true } = {}) {
         ProjectSelect,
         PieCharts,
         DashboardChart,
+        StorageTrendChart,
         ElSkeleton: defineComponent({ name: 'ElSkeleton', template: '<div class="skeleton" />' }),
         ElEmpty: defineComponent({ name: 'ElEmpty', props: { description: String }, template: '<div class="empty">{{ description }}</div>' }),
       },
@@ -116,7 +130,12 @@ describe('DashboardPage', () => {
       variant: 'dashboard',
       centerLabel: '62.5%',
     });
-    expect(wrapper.findAllComponents(DashboardChart)).toHaveLength(3);
+    expect(wrapper.findAllComponents(DashboardChart)).toHaveLength(2);
+    expect(wrapper.findComponent(StorageTrendChart).props()).toMatchObject({
+      indicator: 'used',
+      trendMeta: summaryResponse().trend_meta,
+      ariaLabel: '近 30 天容量趋势',
+    });
   });
 
   it('reloads the same workspace as a project drill-down', async () => {
@@ -140,7 +159,8 @@ describe('DashboardPage', () => {
     expect(wrapper.text()).toContain('项目组容量对比');
     expect(wrapper.text()).toContain('用户使用 Top 10');
     expect(wrapper.text()).toContain('告警级别');
-    expect(wrapper.findAllComponents(DashboardChart)).toHaveLength(4);
+    expect(wrapper.findAllComponents(DashboardChart)).toHaveLength(3);
+    expect(wrapper.findComponent(StorageTrendChart).props('trendMeta').rule_source).toBe('project');
     const chartRow = wrapper.find('.dashboard-grid-secondary');
     expect(chartRow.findAll('article')).toHaveLength(3);
     expect(chartRow.attributes('style')).toContain('--dashboard-columns: 2fr 2fr 1fr');

@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from crud import dashboardCrud
+from services.storageTrendService import build_dashboard_trend_meta
 
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,11 @@ def get_summary(db: Session, project_id: int | None = None):
             "storage_cluster_count": cluster_count,
             "alert_count": alert_count,
         },
+        "trend_meta": build_dashboard_trend_meta(
+            db,
+            project=project,
+            quota_limit_gb=limit_gb,
+        ),
     }
 
 

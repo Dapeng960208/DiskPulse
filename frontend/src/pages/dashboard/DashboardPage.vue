@@ -4,6 +4,7 @@ import { ElEmpty, ElMessage, ElSkeleton } from 'element-plus';
 import dashboardApi from '@/api/dashboard-api.js';
 import PieCharts from '@/common/charts/PieCharts.vue';
 import DashboardChart from '@/components/dashboard/DashboardChart.vue';
+import StorageTrendChart from '@/components/dashboard/StorageTrendChart.vue';
 import ProjectSelect from '@/components/form/ProjectSelect.vue';
 import { getCssColor } from '@/lib/echarts.js';
 
@@ -43,37 +44,10 @@ function formatCapacity(value) {
   return `${number.toFixed(2)} GB`;
 }
 
-function dateLabel(value) {
-  return String(value).slice(5, 10).replace('-', '/');
-}
-
-const lineOption = computed(() => ({
-  animationDuration: 500,
-  tooltip: { trigger: 'axis', valueFormatter: (value) => formatCapacity(value) },
-  grid: { left: 16, right: 16, top: 24, bottom: 12, containLabel: true },
-  xAxis: {
-    type: 'category',
-    boundaryGap: false,
-    data: capacityTrend.value.map((item) => dateLabel(item.timestamp)),
-    axisLine: { lineStyle: { color: gridColor() } },
-    axisTick: { show: false },
-    axisLabel: { color: axisColor(), hideOverlap: true },
-  },
-  yAxis: {
-    type: 'value',
-    axisLabel: { color: axisColor(), formatter: (value) => formatCapacity(value) },
-    splitLine: { lineStyle: { color: gridColor(), type: 'dashed' } },
-  },
-  series: [{
-    name: '已使用',
-    type: 'line',
-    smooth: true,
-    showSymbol: false,
-    lineStyle: { width: 3, color: primary() },
-    areaStyle: { color: primaryLight(), opacity: 0.22 },
-    data: capacityTrend.value.map((item) => item.used_gb),
-  }],
-}));
+const trendSeries = computed(() => [{
+  name: '已使用',
+  data: capacityTrend.value.map((item) => [item.timestamp, item.used_gb]),
+}]);
 
 const comparisonOption = computed(() => ({
   tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => formatCapacity(value) },
@@ -249,10 +223,14 @@ onMounted(loadDashboard);
           v-if="loading.trend"
           :rows="5"
           animated />
-        <DashboardChart
+        <StorageTrendChart
           v-else-if="capacityTrend.length"
-          :option="lineOption"
-          aria-label="近 30 天容量趋势" />
+          :series="trendSeries"
+          indicator="used"
+          unit="G"
+          :trend-meta="summaryResponse?.trend_meta"
+          aria-label="近 30 天容量趋势"
+          height="280px" />
         <ElEmpty
           v-else
           description="暂无容量趋势" />

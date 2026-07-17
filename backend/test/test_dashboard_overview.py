@@ -251,6 +251,13 @@ def test_dashboard_router_validates_project_id(
             "storage_cluster_count": 0,
             "alert_count": 0,
         },
+        "trend_meta": {
+            "quota_basis": "hard",
+            "rule_source": "system",
+            "thresholds": {"important": 80, "serious": 90, "emergency": 95},
+            "quota_limit_gb": 0,
+            "ratio_indicator": "used_ratio",
+        },
     }
     monkeypatch.setattr(dashboard.dashboardService, "get_summary", lambda _db, project_id=None: summary)
     monkeypatch.setattr(dashboard.dashboardService, "get_capacity_trend", lambda _db, project_id=None: [])

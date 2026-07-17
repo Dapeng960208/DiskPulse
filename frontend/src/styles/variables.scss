@@ -49,6 +49,10 @@
 
   // ==================== 图表色 ====================
   --chart-color-primary: var(--primary-color);
+  --chart-color-normal: #446AEE;
+  --chart-color-important: #D69B1E;
+  --chart-color-serious: #EF5923;
+  --chart-color-emergency: #D3372F;
   --chart-color-success: var(--success-color);
   --chart-color-warning: var(--warning-color);
   --chart-color-danger: var(--danger-color);
@@ -136,6 +140,10 @@ html.dark {
   --tag-info-bg: #2E1065;
 
   --chart-color-muted: var(--text-secondary);
+  --chart-color-normal: #6789FF;
+  --chart-color-important: #EFB83E;
+  --chart-color-serious: #FF7A45;
+  --chart-color-emergency: #FF635B;
 
   --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
   --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4);

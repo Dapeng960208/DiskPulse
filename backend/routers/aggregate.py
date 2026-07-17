@@ -3,9 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Annotated, List
 from datetime import datetime
-from schemas import aggregateSchema, commonSchema
+from schemas import aggregateSchema, commonSchema, storageTrendSchema
 from crud import aggregateCrud
 from dependencies import get_db, require_super_admin
+from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 
 router = APIRouter(
     prefix="/aggregates",
@@ -42,16 +43,18 @@ def read_aggregate(aggregate_id: int, db: Session = Depends(get_db)):
 @router.get("/{aggregate_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_aggregate_realtime", "ai_description": "查询容量池实时容量趋势"})
 def read_aggregate_realtime_data(aggregate_id: int, start_time: datetime | None = None,
                                  end_time: datetime | None = None,
-                                 indicator: str = 'used', db: Session = Depends(get_db)):
+                                 indicator: storageTrendSchema.TrendIndicator = 'used', db: Session = Depends(get_db)):
     db_aggregate = aggregateCrud.get_aggregate_by_id(db, aggregate_id=aggregate_id)
     if db_aggregate is None:
         raise HTTPException(status_code=404, detail="Aggregate not found")
+    trend_meta = build_storage_trend_meta(db, target_type="aggregate", target=db_aggregate)
     real_time_data = aggregateCrud.get_aggregate_real_time_data_by_id(db=db, start_time=start_time,
                                                                       end_time=end_time,
                                                                       aggregate_id=aggregate_id,
-                                                                      indicator=indicator)
+                                                                      indicator=resolve_trend_indicator(indicator, trend_meta))
     return commonSchema.ResponseStorageUsageModel[aggregateSchema.Aggregate](data=real_time_data,
-                                                                             info=db_aggregate)
+                                                                             info=db_aggregate,
+                                                                             trend_meta=trend_meta)
 
 
 @router.put("/{aggregate_id}", response_model=aggregateSchema.Aggregate)

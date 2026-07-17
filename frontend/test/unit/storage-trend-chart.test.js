@@ -72,6 +72,12 @@ describe('storage trend option', () => {
       '紧急 95%',
     ]);
     expect(option.series[0].markLine.data.every((line) => line.label.offset[1] < 0)).toBe(true);
+    expect(option.tooltip.formatter([{
+      axisValue: '2026-07-17T10:10:00',
+      data: { value: ['2026-07-17T10:10:00', 93.2] },
+      marker: '●',
+      seriesName: '/home/alice',
+    }])).toContain('当前等级：严重 · 软限额 · 项目组规则');
   });
 
   it('maps capacity thresholds to the effective quota and keeps multi-capacity uncluttered', () => {

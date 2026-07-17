@@ -22,7 +22,7 @@ import {
 import { computed, onBeforeMount, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import FilterForm from '@/components/form/QueryForm.vue';
-import LineCharts from '@/common/charts/LineCharts.vue';
+import StorageTrendChart from '@/components/dashboard/StorageTrendChart.vue';
 import PieCharts from '@/common/charts/PieCharts.vue';
 import BarStackChart from '@/common/charts/BarStackChart.vue';
 import DiskUsage from '@/common/charts/DiskUsage.vue';
@@ -103,6 +103,10 @@ const fetchClusterInfo = async () => {
   return storageClusterApi.fetchById(clusterId.value);
 };
 const { result: infoResult, query: queryInfo } = useQuery(fetchClusterInfo, {});
+const capacitySeries = computed(() => [{
+  name: infoResult.value?.name || '已使用',
+  data: capacityChartData.value,
+}]);
 const {
   result: storageDistribution,
   querying: distributionLoading,
@@ -406,14 +410,13 @@ onBeforeMount(() => {
               <ElDescriptionsItem label="变化量">{{ capacity.change ?? '-' }}</ElDescriptionsItem>
               <ElDescriptionsItem label="变化率">{{ capacity.change_percent == null ? '-' : `${capacity.change_percent}%` }}</ElDescriptionsItem>
             </ElDescriptions>
-            <LineCharts
-              :data="capacityChartData"
-              title="已使用容量变化"
-              width="100%"
+            <StorageTrendChart
+              :series="capacitySeries"
+              indicator="used"
+              :trend-meta="capacity.trend_meta"
+              aria-label="存储集群已使用容量趋势"
               height="520px"
-              :show-stats="true"
-              y-axis-unit="G"
-              :legend-name="infoResult.name" />
+              unit="G" />
           </div>
         </ElTabPane>
 

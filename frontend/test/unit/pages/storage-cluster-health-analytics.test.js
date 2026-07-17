@@ -175,7 +175,11 @@ async function mountPage() {
         ElDropdownMenu: passthrough('ElDropdownMenu'),
         ElDropdownItem: passthrough('ElDropdownItem', 'button'),
         ElButton: passthrough('ElButton', 'button'),
-        LineCharts: passthrough('LineCharts'),
+        StorageTrendChart: defineComponent({
+          name: 'StorageTrendChart',
+          props: { series: Array, indicator: String, trendMeta: Object, unit: String, ariaLabel: String, height: String },
+          template: '<div class="storage-trend-chart-stub" />',
+        }),
         PieCharts: passthrough('PieCharts'),
         BarStackChart,
         DiskUsage,
@@ -254,6 +258,13 @@ describe('storage cluster health analytics page', () => {
   it('keeps the time filter inside supported tabs and gives the primary charts enough room', async () => {
     storageClusterApi.fetchCapacityChange.mockResolvedValue({
       data: [{ updated_at: initialRange[0], used: 100 }],
+      trend_meta: {
+        quota_basis: 'hard',
+        rule_source: 'system',
+        thresholds: { important: 80, serious: 90, emergency: 95 },
+        quota_limit_gb: 1000,
+        ratio_indicator: 'used_ratio',
+      },
     });
     const wrapper = await mountPage();
     const tabs = wrapper.get('[data-testid="analytics-tabs"]');
@@ -263,7 +274,12 @@ describe('storage cluster health analytics page', () => {
     expect(datePicker.attributes('format')).toBe('YYYY-MM-DD HH:mm:ss');
     expect(datePicker.attributes('start-placeholder')).toBe('开始日期时间');
     expect(datePicker.attributes('end-placeholder')).toBe('结束日期时间');
-    expect(wrapper.findComponent({ name: 'LineCharts' }).attributes('height')).toBe('520px');
+    expect(wrapper.findComponent({ name: 'StorageTrendChart' }).props()).toMatchObject({
+      indicator: 'used',
+      unit: 'G',
+      ariaLabel: '存储集群已使用容量趋势',
+      height: '520px',
+    });
 
     await selectTab(wrapper, 'distribution');
 
