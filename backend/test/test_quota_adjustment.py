@@ -255,7 +255,7 @@ def test_quota_adjustment_writes_correlated_attempt_and_result_events(
     )
     monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
     monkeypatch.setattr(quotaService, "_send_adjustment_email", lambda *args, **kwargs: None)
-    monkeypatch.setattr(quotaService, "_enqueue_adjustment_feishu", lambda _event_id: None)
+    monkeypatch.setattr(quotaService, "_enqueue_adjustment_feishu", lambda _event_id, **_kwargs: None)
 
     adjust(db_session, context)
 
@@ -268,6 +268,42 @@ def test_quota_adjustment_writes_correlated_attempt_and_result_events(
         [(event.before_summary, event.after_summary, event.event_metadata) for event in events],
         ensure_ascii=False,
     )
+
+
+def test_quota_adjustment_propagates_correlation_to_notification_task(db_session, monkeypatch):
+    seed_quota_target(db_session)
+    group = db_session.get(models.Group, 1)
+    group.in_charge_user_id = 1
+    db_session.commit()
+    client = FakeQuotaClient()
+    enqueue = MagicMock()
+    context = AuditContext(
+        request_id="3efc3f58-4342-4c4d-97ee-c498087cb655",
+        trace_id="70e1b4cd-e97a-4725-a750-fbd6f0e91f5f",
+        operation_id="10a021fb-c3cd-4299-8947-93c9f52fd540",
+        actor_user_id=1,
+    )
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+    monkeypatch.setattr(quotaService, "_send_adjustment_email", lambda *args, **kwargs: None)
+    monkeypatch.setattr(quotaService, "_enqueue_adjustment_feishu", enqueue, raising=False)
+    monkeypatch.setattr(
+        quotaService.base_config,
+        "get",
+        lambda key, default=None: {
+            "feishu_notification": {"enabled": True, "debug": False, "cc_usernames": ["auditor"]},
+            "super_admin_usernames": ["admin"],
+        }.get(key, default),
+    )
+
+    quotaService.adjust_group_quota(
+        db_session,
+        group_id=1,
+        request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        audit_context=context,
+    )
+
+    alert = db_session.query(models.StorageAlerts).filter_by(alert_type="quota_adjustment").one()
+    enqueue.assert_called_once_with(alert.id, audit_context=context)
 
 
 def test_quota_adjustments_queue_feishu_for_group_owner_and_directory_user(db_session, monkeypatch):
