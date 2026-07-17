@@ -1,10 +1,12 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElAside, ElBreadcrumb, ElBreadcrumbItem, ElContainer, ElMain, ElScrollbar, ElSpace } from 'element-plus';
 import AppFooter from './components/AppFooter.vue';
 import AppHeader from './components/AppHeader.vue';
 import RouteMenu from './components/RouteMenu.vue';
 import { useAppSettings } from '@/stores/app-settings';
+import { buildBreadcrumbItems } from '@/utils/breadcrumbs';
 
 defineProps({
   showAside: {
@@ -14,8 +16,10 @@ defineProps({
 });
 
 const appSettings = useAppSettings();
+const route = useRoute();
 const headerHeight = ref('60px');
 const footerHeight = ref('40px');
+const breadcrumbItems = computed(() => buildBreadcrumbItems(route.matched));
 </script>
 
 <template>
@@ -65,10 +69,10 @@ const footerHeight = ref('40px');
               </button>
               <ElBreadcrumb>
                 <ElBreadcrumbItem
-                  v-for="route of $route.matched"
-                  :key="route.name"
+                  v-for="breadcrumbItem of breadcrumbItems"
+                  :key="breadcrumbItem"
                 >
-                  {{ route.meta.title }}
+                  {{ breadcrumbItem }}
                 </ElBreadcrumbItem>
               </ElBreadcrumb>
             </ElSpace>

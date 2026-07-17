@@ -35,6 +35,7 @@ describe('router/routes and app shell', () => {
       meta: expect.objectContaining({
         title: '存储集群详情',
         isHidden: true,
+        breadcrumb: ['系统管理', '存储集群', '存储集群详情'],
       }),
     }));
     expect(adminRoute.children.map((route) => route.name)).toEqual(
@@ -98,6 +99,27 @@ describe('router/routes and app shell', () => {
       'AI 中心',
     ]));
     expect([...rootTitles, ...adminTitles]).not.toEqual(expect.arrayContaining(['用户', 'Volume', 'Qtree']));
+  });
+
+  it('declares complete breadcrumb hierarchies for every detail route', () => {
+    const adminRoute = routes.find((route) => route.path === '/admin');
+    const detailBreadcrumbs = [
+      ...routes.flatMap((route) => route.children || []),
+      ...adminRoute.children,
+    ]
+      .filter((route) => route.meta?.isHidden && route.name?.endsWith('Detail'))
+      .map((route) => [route.name, route.meta.breadcrumb]);
+
+    expect(Object.fromEntries(detailBreadcrumbs)).toEqual({
+      UsagesDetail: ['用户目录', '使用详情'],
+      ProjectDetail: ['项目', '项目详情'],
+      GroupDetail: ['项目组', '项目组详情'],
+      StorageClusterDetail: ['系统管理', '存储集群', '存储集群详情'],
+      AggregateDetail: ['系统管理', '容量池', '容量池详情'],
+      VolumeDetail: ['系统管理', '存储空间', '存储空间详情'],
+      QtreeDetail: ['系统管理', 'Qtree（NetApp）', 'Qtree（NetApp）详情'],
+      AIAuditDetail: ['系统管理', 'AI 中心', 'AI 审计详情'],
+    });
   });
 
   it('mounts the root app shell', () => {

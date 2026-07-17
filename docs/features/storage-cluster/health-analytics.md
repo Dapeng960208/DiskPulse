@@ -52,7 +52,7 @@ OneFS event list 外层记录中的 `events[]` 按单条设备事件展开；eve
 | 系统事件 | `GET /storage-clusters/{storage_cluster_id}/analytics/system-events` |
 | 导出 | `GET /storage-clusters/{storage_cluster_id}/analytics/export` |
 
-除存储分布外，所有健康分析接口要求 `start_time` 和 `end_time`，开始时间必须早于结束时间，范围不得超过 180 天。性能接口支持对象类型和 `limit` 参数，数量默认 10、最多 100；页面提供 10、20、50、100 四档，并可多选 P95、平均、最大、读、写延迟、IOPS 和吞吐量，默认只选 P95。系统事件接口支持 `keyword`（事件代码、对象标识/名称或内容）、`severity=critical|error|warning|info`、`page` 和 `page_size`；默认 `page=1&page_size=20`，单页最多 100 条，返回 `data`、`total`、`page`、`page_size`。过滤条件在数据库分页和 `total` 统计前生效。无数据时返回空集合和可空汇总值，不把无数据表示成故障。
+除存储分布外，所有健康分析接口要求 `start_time` 和 `end_time`，开始时间必须早于结束时间，范围不得超过 180 天。性能接口支持对象类型和 `limit` 参数，数量默认 10、最多 100；页面提供 10、20、50、100 四档，并可多选 P95、平均、最大、读、写延迟、IOPS 和吞吐量，默认只选 P95。页面还提供“对象”多选，用于在当前已返回的 Top-N 存储空间内本地对比；未选对象时显示全部返回结果，选择对象后图表与表格同步收窄，不增加接口参数或跨 Top-N 查询。性能图对长对象名截断横轴标签并保留悬停提示，图表标题与标签区域保留独立空间。系统事件接口支持 `keyword`（事件代码、对象标识/名称或内容）、`severity=critical|error|warning|info`、`page` 和 `page_size`；默认 `page=1&page_size=20`，单页最多 100 条，返回 `data`、`total`、`page`、`page_size`。过滤条件在数据库分页和 `total` 统计前生效。无数据时返回空集合和可空汇总值，不把无数据表示成故障。
 
 导出接口接受：
 
@@ -80,7 +80,7 @@ section=capacity|severity|latency|faults|all
 
 ## 测试与验证边界
 
-自动化验证覆盖厂商响应解析、PowerScale 资源版本、path dataset、workload 映射、延迟/IOPS/吞吐量统一映射、NetApp 延迟单位和嵌套指标转换、性能条数上限与多指标筛选、系统本地事件时间与 UTC `since`、来源白名单、严重级别映射、事件去重、系统事件先过滤后分页、可读事件对象、统计口径、180 天参数校验、导出摘要与公式转义，以及前端搜索、翻页、空态和不支持状态。
+自动化验证覆盖厂商响应解析、PowerScale 资源版本、path dataset、workload 映射、延迟/IOPS/吞吐量统一映射、NetApp 延迟单位和嵌套指标转换、性能条数上限、多指标与本地多对象筛选、图表长横轴标签布局、系统本地事件时间与 UTC `since`、来源白名单、严重级别映射、事件去重、系统事件先过滤后分页、可读事件对象、统计口径、180 天参数校验、导出摘要与公式转义，以及前端搜索、翻页、空态和不支持状态。
 
 真实 NetApp、PowerScale、PostgreSQL、MySQL、QuestDB 和登录浏览器的冒烟仍需在部署环境执行，重点确认设备权限、实际资源版本、事件字段、对象名称、延迟单位、指标可用性、QuestDB TTL、数据库迁移和浏览器下载行为。在这些验证完成前，不能把外部系统兼容性描述为已验证。
 

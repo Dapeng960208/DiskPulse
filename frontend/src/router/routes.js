@@ -51,6 +51,7 @@ export default [
         meta: {
           title: '使用详情',
           isHidden: true,
+          breadcrumb: ['用户目录', '使用详情'],
         },
       },
     ],
@@ -75,8 +76,9 @@ export default [
         name: 'ProjectDetail',
         component: () => import('@/pages/project/ProjectDetailPage.vue'),
         meta: {
-          title: '项目组详情',
+          title: '项目详情',
           isHidden: true,
+          breadcrumb: ['项目', '项目详情'],
         },
       },
     ],
@@ -103,6 +105,7 @@ export default [
         meta: {
           title: '项目组详情',
           isHidden: true,
+          breadcrumb: ['项目组', '项目组详情'],
         },
       },
     ],
@@ -162,6 +165,7 @@ export default [
         meta: {
           title: '存储集群详情',
           isHidden: true,
+          breadcrumb: ['系统管理', '存储集群', '存储集群详情'],
         },
       },
       {
@@ -180,6 +184,7 @@ export default [
         meta: {
           title: '容量池详情',
           isHidden: true,
+          breadcrumb: ['系统管理', '容量池', '容量池详情'],
         },
       },
       {
@@ -198,6 +203,7 @@ export default [
         meta: {
           title: '存储空间详情',
           isHidden: true,
+          breadcrumb: ['系统管理', '存储空间', '存储空间详情'],
         },
       },
       {
@@ -225,6 +231,7 @@ export default [
         meta: {
           title: 'Qtree（NetApp）详情',
           isHidden: true,
+          breadcrumb: ['系统管理', 'Qtree（NetApp）', 'Qtree（NetApp）详情'],
         },
       },
       {
@@ -273,6 +280,7 @@ export default [
         meta: {
           title: 'AI 审计详情',
           isHidden: true,
+          breadcrumb: ['系统管理', 'AI 中心', 'AI 审计详情'],
           isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },
