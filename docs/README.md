@@ -33,7 +33,7 @@ docs/
 | 专题 | 文档 |
 | --- | --- |
 | LDAP 认证 | [features/authentication/backend.md](./features/authentication/backend.md) |
-| 应用壳布局 | [features/app-shell/design.md](./features/app-shell/design.md) |
+| 应用壳布局 | [页脚固定设计](./features/app-shell/design.md) · [内容区统一间距设计](./features/app-shell/content-spacing.md) |
 | 用户信息管理 | [features/user-management/overview.md](./features/user-management/overview.md) |
 | 项目组标签 | [features/group-tag/design.md](./features/group-tag/design.md) |
 | 写入表单体验 | [features/form-experience/design.md](./features/form-experience/design.md) |
