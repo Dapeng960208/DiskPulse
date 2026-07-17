@@ -182,8 +182,9 @@ class TelemetryCollectionRun(Base):
             name="ck_telemetry_run_scope",
         ),
         CheckConstraint(
-            "outcome IS NULL OR "
-            "(finished_at IS NOT NULL AND ((outcome = 'success' AND data_state IS NOT NULL "
+            "(outcome IS NULL AND finished_at IS NULL AND data_state IS NULL "
+            "AND records_written IS NULL AND error_code IS NULL) OR "
+            "(outcome IS NOT NULL AND finished_at IS NOT NULL AND ((outcome = 'success' AND data_state IS NOT NULL "
             "AND records_written IS NOT NULL AND error_code IS NULL) OR "
             "(outcome IN ('failed', 'skipped') AND data_state IS NULL "
             "AND records_written IS NULL AND error_code IS NULL)))",
