@@ -15,7 +15,16 @@ router = APIRouter(
 )
 
 
-@router.post("/", response_model=aggregateSchema.Aggregate)
+@router.post(
+    "/",
+    response_model=aggregateSchema.Aggregate,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "create_aggregate",
+        "ai_description": "创建容量池",
+    },
+)
 def create_aggregate(
     aggregate: aggregateSchema.AggregateCreate,
     _admin: None = Depends(require_super_admin),
@@ -24,7 +33,16 @@ def create_aggregate(
     return aggregateCrud.create_aggregate(db=db, aggregate=aggregate)
 
 
-@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_aggregates", "ai_description": "分页查询容量池"})
+@router.get(
+    "/",
+    response_model=commonSchema.ResponseModel,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "list_aggregates",
+        "ai_description": "分页查询容量池",
+    },
+)
 def read_aggregates(page: int | None = 1, size: int | None = 20, nameLike: str | None = None, prop: str | None = None,
                     order: str | None = None, storage_cluster_id: int | None = None, db: Session = Depends(get_db)):
     aggregates, total = aggregateCrud.get_aggregates(db=db, page=page, size=size, nameLike=nameLike, prop=prop,
@@ -32,7 +50,16 @@ def read_aggregates(page: int | None = 1, size: int | None = 20, nameLike: str |
     return commonSchema.ResponseModel[aggregateSchema.Aggregate](content=aggregates, total=total)
 
 
-@router.get("/{aggregate_id}", response_model=aggregateSchema.Aggregate, openapi_extra={"ai_exposed": True, "ai_name": "get_aggregate", "ai_description": "查询指定容量池"})
+@router.get(
+    "/{aggregate_id}",
+    response_model=aggregateSchema.Aggregate,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "get_aggregate",
+        "ai_description": "查询指定容量池",
+    },
+)
 def read_aggregate(aggregate_id: int, db: Session = Depends(get_db)):
     db_aggregate = aggregateCrud.get_aggregate_by_id(db, aggregate_id=aggregate_id)
     if db_aggregate is None:
@@ -57,7 +84,16 @@ def read_aggregate_realtime_data(aggregate_id: int, start_time: datetime | None 
                                                                              trend_meta=trend_meta)
 
 
-@router.put("/{aggregate_id}", response_model=aggregateSchema.Aggregate)
+@router.put(
+    "/{aggregate_id}",
+    response_model=aggregateSchema.Aggregate,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "update_aggregate",
+        "ai_description": "更新容量池",
+    },
+)
 def update_aggregate(
     aggregate_id: int,
     aggregate: aggregateSchema.AggregateUpdate,
@@ -70,7 +106,16 @@ def update_aggregate(
     return aggregateCrud.update_aggregate(db=db, aggregate_id=aggregate_id, aggregate=aggregate)
 
 
-@router.delete("/{aggregate_id}", response_model=aggregateSchema.Aggregate)
+@router.delete(
+    "/{aggregate_id}",
+    response_model=aggregateSchema.Aggregate,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "delete_aggregate",
+        "ai_description": "删除容量池",
+    },
+)
 def delete_aggregate(
     aggregate_id: int,
     _admin: None = Depends(require_super_admin),

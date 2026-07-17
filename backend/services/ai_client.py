@@ -78,7 +78,7 @@ def _decode_arguments(
         return raw
     if isinstance(raw, str):
         try:
-            parsed = json.loads(raw or "{}")
+            parsed = json.loads(raw)
         except json.JSONDecodeError as error:
             raise AIClientToolArgumentsError(
                 tool_id=tool_id,
@@ -181,7 +181,7 @@ def chat_completion(
                     tool_id=str(block.get("id") or ""),
                     name=str(block.get("name") or ""),
                     arguments=_decode_arguments(
-                        block.get("input") or {},
+                        block.get("input", {}),
                         tool_id=str(block.get("id") or ""),
                         tool_name=str(block.get("name") or ""),
                     ),
@@ -204,7 +204,7 @@ def chat_completion(
                     tool_id=str(item.get("id") or ""),
                     name=str(item.get("function", {}).get("name") or ""),
                     arguments=_decode_arguments(
-                        item.get("function", {}).get("arguments") or "{}",
+                        (item.get("function") or {}).get("arguments", "{}"),
                         tool_id=str(item.get("id") or ""),
                         tool_name=str(item.get("function", {}).get("name") or ""),
                     ),
@@ -228,7 +228,7 @@ def _openai_stream(
 ) -> Iterator[AICompletionStreamEvent]:
     text_parts: list[str] = []
     # OpenAI-compatible providers split and interleave tool fields; index is the stable join key.
-    calls: dict[int, dict[str, str]] = {}
+    calls: dict[int, dict[str, Any]] = {}
     with httpx.stream(
         "POST",
         f"{_base_url(config)}/chat/completions",
@@ -252,17 +252,19 @@ def _openai_stream(
                 yield AICompletionStreamEvent(kind="delta", text=text)
             for item in delta.get("tool_calls") or []:
                 index = int(item.get("index", 0))
-                current = calls.setdefault(index, {"id": "", "name": "", "arguments": ""})
+                current = calls.setdefault(index, {"id": "", "name": "", "arguments": "", "has_arguments": False})
                 current["id"] = str(item.get("id") or current["id"])
                 function = item.get("function") or {}
                 current["name"] += str(function.get("name") or "")
-                current["arguments"] += str(function.get("arguments") or "")
+                if "arguments" in function:
+                    current["arguments"] += str(function["arguments"])
+                    current["has_arguments"] = True
     tool_calls = [
         AIClientToolCall(
             tool_id=value["id"] or f"tool_{index}",
             name=value["name"],
             arguments=_decode_arguments(
-                value["arguments"] or "{}",
+                value["arguments"] if value["has_arguments"] else "{}",
                 tool_id=value["id"] or f"tool_{index}",
                 tool_name=value["name"],
             ),
@@ -283,7 +285,7 @@ def _claude_stream(
     tools: list[dict[str, Any]],
 ) -> Iterator[AICompletionStreamEvent]:
     text_parts: list[str] = []
-    calls: dict[int, dict[str, str]] = {}
+    calls: dict[int, dict[str, Any]] = {}
     with httpx.stream(
         "POST",
         f"{_base_url(config)}/v1/messages",
@@ -300,12 +302,15 @@ def _claude_stream(
             if event_type == "content_block_start":
                 block = data.get("content_block") or {}
                 if block.get("type") == "tool_use":
+                    has_initial_input = "input" in block
                     initial_input = block.get("input")
                     # Empty input must stay empty or later input_json_delta fragments would follow "{}".
+                    has_arguments = has_initial_input and initial_input != {}
                     calls[int(data.get("index", 0))] = {
                         "id": str(block.get("id") or ""),
                         "name": str(block.get("name") or ""),
-                        "arguments": json.dumps(initial_input) if initial_input else "",
+                        "arguments": json.dumps(initial_input) if has_arguments else "",
+                        "has_arguments": has_arguments,
                     }
             elif event_type == "content_block_delta":
                 delta = data.get("delta") or {}
@@ -314,8 +319,13 @@ def _claude_stream(
                     text_parts.append(text)
                     yield AICompletionStreamEvent(kind="delta", text=text)
                 elif delta.get("type") == "input_json_delta":
-                    current = calls.setdefault(int(data.get("index", 0)), {"id": "", "name": "", "arguments": ""})
-                    current["arguments"] += str(delta.get("partial_json") or "")
+                    current = calls.setdefault(
+                        int(data.get("index", 0)),
+                        {"id": "", "name": "", "arguments": "", "has_arguments": False},
+                    )
+                    if "partial_json" in delta:
+                        current["arguments"] += str(delta["partial_json"])
+                        current["has_arguments"] = True
             elif event_type == "message_stop":
                 break
     tool_calls = [
@@ -323,7 +333,7 @@ def _claude_stream(
             tool_id=value["id"] or f"tool_{index}",
             name=value["name"],
             arguments=_decode_arguments(
-                value["arguments"] or "{}",
+                value["arguments"] if value["has_arguments"] else "{}",
                 tool_id=value["id"] or f"tool_{index}",
                 tool_name=value["name"],
             ),

@@ -1319,3 +1319,24 @@ npm test -- --coverage.enabled=false
 
 - 按用户后续要求跳过完整浏览器验证，未执行缩短视口后的内容滚动稳定性和最后一段内容可见性验收；自动化测试只锁定 DOM 结构与高度合同。
 - 既有窄屏固定侧栏溢出不属于本次页脚修复范围。
+
+## 2026-07-17：AI 对话恢复与系统管理工具权限加固
+
+### 已完成
+
+- 工具参数显式空字符串、数组和其他非对象不再被归一化为可执行的 `{}`；编排层继续使用安全错误类别完成最多两次修复或降级。
+- SSE 客户端要求先收到 `accepted`，终态后拒绝任何已知事件，避免页面遗留 `streaming` 助手消息。
+- 仅对同时声明 `ai_exposed=true` 与 `ai_system_management=true` 的 38 条系统管理 CRUD、设置和备份记录路由生成额外工具；普通用户不暴露，执行端以当前认证用户再次校验超级管理员身份。
+- 管理写请求使用 Pydantic `body` 信封并携带当前用户令牌调用原 API；成功 `204 No Content` 删除返回成功空结果。
+
+### 验证状态
+
+- 后端聚焦验证：`.\.venv\Scripts\python.exe -m pytest backend\test\test_ai_platform.py backend\test\test_ai_services.py -q -p no:cacheprovider`，`39 passed`。
+- 受影响后端服务和路由执行 `.\.venv\Scripts\python.exe -m compileall -q` 通过，`git diff --check` 通过。
+- 前端 AI 聚焦用例由工作进程完成，`23 passed`；主线程同一命令在当前受限 shell 被 `esbuild spawn EPERM` 阻断，详见错误复盘。
+- 按用户要求跳过浏览器与页面检查。
+
+### 风险与阻塞
+
+- 未连接真实 Provider、Redis、数据库或真实超级管理员身份完成端到端对话；部署前仍需验证这些外部边界。
+- 当前环境拒绝创建 `.git/index.lock`，无法暂存或创建本轮 TDD 检查点提交；工作区改动已保留，待具备 Git 写权限后再提交。

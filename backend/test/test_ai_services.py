@@ -13,7 +13,7 @@ from appConfig import base_config
 from models import AIConfig, AIConversation, AIAuditLog, AIMessage, User
 from routers import ai, ai_admin
 from services import ai_chat_service, ai_client
-from services.ai_client import AIClientError, AIClientToolCall, AICompletionStreamEvent
+from services.ai_client import AIClientError, AIClientToolArgumentsError, AIClientToolCall, AICompletionStreamEvent
 from services.ai_security import encrypt_secret
 from services.ai_security import decrypt_secret, mask_secret
 from services.ai_tool_service import build_tool_registry, execute_tool, tool_definitions, _unwrap
@@ -200,6 +200,37 @@ def test_openai_and_claude_stream_parsing(monkeypatch):
     events = list(ai_client.chat_completion_stream(model("claude"), [{"role": "user", "content": "q"}], tools=[]))
     assert events[0].text == "完成"
     assert events[-1].tool_calls[0].arguments == {"id": 3}
+
+
+@pytest.mark.parametrize(
+    ("provider", "lines", "reason"),
+    [
+        (
+            "openai",
+            [
+                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"empty-openai","function":{"name":"lookup","arguments":""}}]}}]}',
+                "data: [DONE]",
+            ],
+            "invalid_json",
+        ),
+        (
+            "claude",
+            [
+                'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"empty-claude","name":"lookup","input":[]}}',
+                'data: {"type":"message_stop"}',
+            ],
+            "non_object",
+        ),
+    ],
+)
+def test_stream_rejects_falsey_invalid_tool_arguments(monkeypatch, provider, lines, reason):
+    """Explicit empty payloads must not be normalized into executable empty objects."""
+    monkeypatch.setattr(ai_client.httpx, "stream", lambda *_args, **_kwargs: FakeResponse(lines=lines))
+
+    with pytest.raises(AIClientToolArgumentsError) as error:
+        list(ai_client.chat_completion_stream(model(provider), [{"role": "user", "content": "q"}], tools=[]))
+
+    assert error.value.reason == reason
 
 
 def test_tool_loop_sync_endpoints_and_audit_filters(api_client_factory, db_session, monkeypatch):

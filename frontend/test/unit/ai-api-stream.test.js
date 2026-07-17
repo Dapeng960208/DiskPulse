@@ -93,6 +93,22 @@ describe('AI API and SSE stream', () => {
     await expect(streamConversationMessage(8, 'question', { onEvent: vi.fn() })).rejects.toThrow();
   });
 
+  it('rejects a terminal event that arrives before accepted', async () => {
+    global.fetch = vi.fn().mockResolvedValue(streamResponse([
+      'event: completed\ndata: {"turn_id":"turn-terminal-first","message":{"id":3,"role":"assistant"}}\n\nevent: accepted\ndata: {"turn_id":"turn-terminal-first","message":{"id":3,"role":"assistant"}}',
+    ]));
+
+    await expect(streamConversationMessage(8, 'question', { onEvent: vi.fn() })).rejects.toThrow();
+  });
+
+  it('rejects a known event received after a terminal event', async () => {
+    global.fetch = vi.fn().mockResolvedValue(streamResponse([
+      'event: accepted\ndata: {"turn_id":"turn-after-terminal","message":{"id":4,"role":"assistant"}}\n\nevent: completed\ndata: {"turn_id":"turn-after-terminal","message":{"id":4,"role":"assistant"}}\n\nevent: delta\ndata: {"turn_id":"turn-after-terminal","text":"不应继续追加"}',
+    ]));
+
+    await expect(streamConversationMessage(8, 'question', { onEvent: vi.fn() })).rejects.toThrow();
+  });
+
   it('surfaces JSON HTTP errors and missing stream support', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,

@@ -53,12 +53,30 @@ def sync_ldap_users(_admin: AdminDep, db: DBDep):
     return usersService.sync_ldap_users(db)
 
 
-@router.post("/", response_model=usersSchema.User)
+@router.post(
+    "/",
+    response_model=usersSchema.User,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "create_user",
+        "ai_description": "创建用户",
+    },
+)
 def create_user(user: usersSchema.UserCreate, _admin: AdminDep, db: DBDep):
     return usersService.create_user(db, user)
 
 
-@router.get("/", response_model=commonSchema.ResponseModel)
+@router.get(
+    "/",
+    response_model=commonSchema.ResponseModel,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "list_users",
+        "ai_description": "分页查询用户",
+    },
+)
 async def read_users(
     db: DBDep,
     page: int = 1,
@@ -83,12 +101,30 @@ async def read_users(
     return commonSchema.ResponseModel[usersSchema.User](content=users, total=total)
 
 
-@router.get("/{user_id}", response_model=usersSchema.User)
+@router.get(
+    "/{user_id}",
+    response_model=usersSchema.User,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "get_user",
+        "ai_description": "查询指定用户",
+    },
+)
 def read_user(user_id: int, db: DBDep):
     return usersService.get_user(db, user_id)
 
 
-@router.put("/{user_id}", response_model=usersSchema.User)
+@router.put(
+    "/{user_id}",
+    response_model=usersSchema.User,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "update_user",
+        "ai_description": "更新用户",
+    },
+)
 def update_user(
     user_id: int,
     user: usersSchema.UserUpdate,
@@ -98,7 +134,16 @@ def update_user(
     return usersService.update_user(db, user_id, user)
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "delete_user",
+        "ai_description": "删除用户",
+    },
+)
 def delete_user(user_id: int, _admin: AdminDep, db: DBDep):
     usersService.delete_user(db, user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

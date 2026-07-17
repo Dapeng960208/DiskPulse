@@ -16,17 +16,42 @@ router = APIRouter(
 )
 
 
-@router.get("/ai-models")
+@router.get(
+    "/ai-models",
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "list_ai_models",
+        "ai_description": "查询 AI 模型配置",
+    },
+)
 def models(_current_user: CurrentUserDep, db: Session = Depends(get_db)):
     return ai_config_service.list_models(db)
 
 
-@router.post("/ai-models", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/ai-models",
+    status_code=status.HTTP_201_CREATED,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "create_ai_model",
+        "ai_description": "创建 AI 模型配置",
+    },
+)
 def create_model(payload: AIModelCreate, current_user: CurrentUserDep, db: Session = Depends(get_db)):
     return ai_config_service.create_model(db, payload, current_user.id)
 
 
-@router.patch("/ai-models/{model_id}")
+@router.patch(
+    "/ai-models/{model_id}",
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "update_ai_model",
+        "ai_description": "更新 AI 模型配置",
+    },
+)
 def update_model(
     model_id: int,
     payload: AIModelPatch,
@@ -36,7 +61,16 @@ def update_model(
     return ai_config_service.update_model(db, model_id, payload, current_user.id)
 
 
-@router.delete("/ai-models/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/ai-models/{model_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "delete_ai_model",
+        "ai_description": "删除 AI 模型配置",
+    },
+)
 def delete_model(model_id: int, _current_user: CurrentUserDep, db: Session = Depends(get_db)):
     ai_config_service.delete_model(db, model_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

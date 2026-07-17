@@ -15,7 +15,16 @@ router = APIRouter(
 )
 
 
-@router.post("/", response_model=volumeSchema.Volume)
+@router.post(
+    "/",
+    response_model=volumeSchema.Volume,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "create_volume",
+        "ai_description": "创建存储空间",
+    },
+)
 def create_volume(
     volume: volumeSchema.VolumeCreate,
     _admin: None = Depends(require_super_admin),
@@ -24,7 +33,16 @@ def create_volume(
     return volumeCrud.create_volume(db=db, volume=volume)
 
 
-@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_volumes", "ai_description": "分页查询存储空间"})
+@router.get(
+    "/",
+    response_model=commonSchema.ResponseModel,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "list_volumes",
+        "ai_description": "分页查询存储空间",
+    },
+)
 def read_volumes(page: int | None = 1, size: int | None = 20, nameLike: str | None = None, prop: str | None = None,
                  order: str | None = None, storage_cluster_id: int | None = None, db: Session = Depends(get_db)):
     volumes, total = volumeCrud.get_volumes(db=db, page=page, size=size, nameLike=nameLike, prop=prop, order=order,
@@ -32,7 +50,16 @@ def read_volumes(page: int | None = 1, size: int | None = 20, nameLike: str | No
     return commonSchema.ResponseModel[volumeSchema.Volume](content=volumes, total=total)
 
 
-@router.get("/{volume_id}", response_model=volumeSchema.Volume, openapi_extra={"ai_exposed": True, "ai_name": "get_volume", "ai_description": "查询指定存储空间"})
+@router.get(
+    "/{volume_id}",
+    response_model=volumeSchema.Volume,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "get_volume",
+        "ai_description": "查询指定存储空间",
+    },
+)
 def read_volume(volume_id: int, db: Session = Depends(get_db)):
     db_volume = volumeCrud.get_volume_by_id(db, volume_id=volume_id)
     if db_volume is None:
@@ -57,7 +84,16 @@ def read_volume_realtime_data(volume_id: int, start_time: datetime | None = None
                                                                        trend_meta=trend_meta)
 
 
-@router.put("/{volume_id}", response_model=volumeSchema.Volume)
+@router.put(
+    "/{volume_id}",
+    response_model=volumeSchema.Volume,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "update_volume",
+        "ai_description": "更新存储空间",
+    },
+)
 def update_volume(
     volume_id: int,
     volume: volumeSchema.VolumeUpdate,
@@ -70,7 +106,16 @@ def update_volume(
     return volumeCrud.update_volume(db=db, volume_id=volume_id, volume=volume)
 
 
-@router.delete("/{volume_id}", response_model=volumeSchema.Volume)
+@router.delete(
+    "/{volume_id}",
+    response_model=volumeSchema.Volume,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "delete_volume",
+        "ai_description": "删除存储空间",
+    },
+)
 def delete_volume(
     volume_id: int,
     _admin: None = Depends(require_super_admin),

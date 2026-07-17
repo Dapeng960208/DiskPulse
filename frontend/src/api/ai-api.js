@@ -43,8 +43,14 @@ function dispatchSseEvent(parsed, state, onEvent) {
     if (!isValidSsePayload(parsed.event, parsed.data)) {
       throw new Error('AI 流式事件数据无效');
     }
+    if (state.terminal) {
+      throw new Error('AI 流式响应已结束，不能接收后续事件');
+    }
     if (parsed.event === 'accepted') state.accepted = true;
-    if (TERMINAL_SSE_EVENTS.has(parsed.event)) state.terminal = true;
+    if (TERMINAL_SSE_EVENTS.has(parsed.event)) {
+      if (!state.accepted) throw new Error('AI 流式响应在确认前结束');
+      state.terminal = true;
+    }
   }
   onEvent(parsed);
 }

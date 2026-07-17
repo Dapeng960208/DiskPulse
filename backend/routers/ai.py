@@ -54,6 +54,7 @@ def message(
         db=db,
         conversation_id=conversation_id,
         user_id=current_user.id,
+        current_user=current_user,
         content=payload.content,
     )
 
@@ -78,6 +79,7 @@ def stream_message(
             db=db,
             conversation_id=conversation_id,
             user_id=current_user.id,
+            current_user=current_user,
             content=payload.content,
         )
         try:

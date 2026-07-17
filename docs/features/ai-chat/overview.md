@@ -11,7 +11,7 @@
 - 侧边栏“AI 助手”固定显示在“项目组”之后、“告警”之前。
 - 会话只按 `user_id` 隔离，不绑定项目；跨用户读取、删除或发送消息统一返回 `404`。
 - “系统管理 > AI 中心”只允许 `backend/config.yml` 中 `super_admin_usernames` 配置的超级管理员访问，其他用户返回 `403`。
-- 首版不包含项目级 AI 设置、上传总结、项目绑定、写工具和审计自动清理。
+- 不包含项目级 AI 设置、上传总结、项目绑定和审计自动清理；仅有显式标记并经超级管理员双层校验的系统管理写工具属于例外。
 
 ## 2. 数据与安全
 
@@ -59,21 +59,21 @@ ai:
 - `POST /ai/conversations/{id}/messages`
 - `POST /ai/conversations/{id}/messages/stream`
 
-流式接口事件顺序由下列固定事件组成：`accepted`、`user_message`、`status`、`tool_call_started`、`tool_call_finished`、`delta`、`completed`、`error`、`cancelled`。服务端保存最近 20 条历史；首条用户消息会自动生成最多 32 字的会话标题。前端可中止当前流、恢复失败输入，并忽略已切换旧会话的迟到事件。
+流式接口事件顺序由下列固定事件组成：`accepted`、`user_message`、`status`、`tool_call_started`、`tool_call_finished`、`delta`、`completed`、`error`、`cancelled`。客户端必须先收到 `accepted`，终态必须是最后一个已知事件；违反该顺序或截断时保留部分输出并进入可重试失败态。服务端保存最近 20 条历史；首条用户消息会自动生成最多 32 字的会话标题。
 
 工具轮次达到 `max_tool_iterations` 后不会直接把已有数据丢弃为服务故障：当前回合禁止再调用工具并总结已获得信息，助手消息标记为 `degraded`，附带“继续查询”操作。工具参数不是 JSON 对象时，系统最多两次要求模型按工具契约修复；原始非法参数不会展示或持久化。只有用户点击恢复操作才会开始新的受限查询回合。
 
-## 6. 动态只读工具
+## 6. 动态工具与系统管理工具
 
-只有同时满足以下条件的路由会注册为 AI 工具：
+常规 AI 工具必须是 FastAPI `GET` 路由且显式声明 `openapi_extra.ai_exposed=true`；它们对所有登录用户保持只读。
 
-1. FastAPI `GET` 路由；
-2. 显式声明 `openapi_extra.ai_exposed=true`；
-3. 返回 JSON。
+系统管理工具必须额外声明 `openapi_extra.ai_system_management=true`，并且当前用户命中 `backend/config.yml` 的 `super_admin_usernames`。只有超级管理员可见这组 `GET`、`POST`、`PUT`、`PATCH`、`DELETE` 工具；普通用户不会从工具定义中获知它们。
 
-工具参数由路由 Path/Query 参数动态生成 Pydantic 校验模型。执行时使用当前用户的 Bearer Token 通过内部 ASGI 请求调用原业务 API，因此继承原接口权限和数据范围。首批覆盖项目、项目组、项目组标签、存储集群、容量池、存储空间、Qtree（NetApp）、用户目录、告警、大文件和实时趋势；配置、用户管理、离职备份、导出和图片接口不开放。
+当前系统管理范围包括存储集群、容量池、存储空间、Qtree（NetApp）、项目组标签、用户和 AI 模型配置的 CRUD，以及存储设置与离职备份记录的受限操作。登录、LDAP 同步、实时/分析/导出、模型测试、审计查询和回滚保持关闭。
 
-新增工具时必须显式补充唯一的 `ai_name` 和清晰的 `ai_description`，不得开放写路由或返回文件/图片的路由。
+工具参数由路由 Path/Query 参数和写请求的 Pydantic `body` 信封动态校验。执行阶段再次校验超级管理员身份，再携带当前用户 Bearer Token 通过内部 ASGI 调用原业务 API；因此旧注册表不能绕过权限。删除接口的 `204 No Content` 视为成功空结果。
+
+新增工具必须显式补充唯一的 `ai_name` 和清晰的 `ai_description`；不得按路由路径猜测权限，也不得开放文件或图片响应。
 
 ## 7. 管理 API
 

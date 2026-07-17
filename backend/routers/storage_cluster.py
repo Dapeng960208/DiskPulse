@@ -48,7 +48,16 @@ def _require_storage_cluster(db: Session, storage_cluster_id: int) -> None:
         raise HTTPException(status_code=404, detail="StorageCluster not found")
 
 
-@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_storage_clusters", "ai_description": "分页查询存储集群"})
+@router.get(
+    "/",
+    response_model=commonSchema.ResponseModel,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "list_storage_clusters",
+        "ai_description": "分页查询存储集群",
+    },
+)
 def read_storage_clusters(
         page: int | None = 1,
         size: int | None = 20,
@@ -62,7 +71,16 @@ def read_storage_clusters(
     return commonSchema.ResponseModel[storageClusterSchema.StorageCluster](content=storage_clusters, total=total)
 
 
-@router.post("/", response_model=storageClusterSchema.StorageCluster)
+@router.post(
+    "/",
+    response_model=storageClusterSchema.StorageCluster,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "create_storage_cluster",
+        "ai_description": "创建存储集群",
+    },
+)
 def create_storage_cluster(
     storage_cluster: storageClusterSchema.StorageClusterCreate,
     _admin: None = Depends(require_super_admin),
@@ -74,7 +92,16 @@ def create_storage_cluster(
     return db_cluster
 
 
-@router.get("/{storage_cluster_id}", response_model=storageClusterSchema.StorageCluster, openapi_extra={"ai_exposed": True, "ai_name": "get_storage_cluster", "ai_description": "查询指定存储集群"})
+@router.get(
+    "/{storage_cluster_id}",
+    response_model=storageClusterSchema.StorageCluster,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "get_storage_cluster",
+        "ai_description": "查询指定存储集群",
+    },
+)
 def read_storage_cluster(storage_cluster_id: int, db: Session = Depends(get_db)):
     db_cluster = storageClusterCrud.get_storage_cluster(db, storage_cluster_id=storage_cluster_id)
     if db_cluster is None:
@@ -82,7 +109,16 @@ def read_storage_cluster(storage_cluster_id: int, db: Session = Depends(get_db))
     return db_cluster
 
 
-@router.put("/{storage_cluster_id}", response_model=storageClusterSchema.StorageCluster)
+@router.put(
+    "/{storage_cluster_id}",
+    response_model=storageClusterSchema.StorageCluster,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "update_storage_cluster",
+        "ai_description": "更新存储集群",
+    },
+)
 def update_storage_cluster(
     storage_cluster_id: int,
     storage_cluster: storageClusterSchema.StorageClusterUpdate,
@@ -99,7 +135,15 @@ def update_storage_cluster(
     return db_cluster
 
 
-@router.delete("/{storage_cluster_id}")
+@router.delete(
+    "/{storage_cluster_id}",
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "delete_storage_cluster",
+        "ai_description": "删除存储集群",
+    },
+)
 def delete_storage_cluster(
     storage_cluster_id: int,
     _admin: None = Depends(require_super_admin),

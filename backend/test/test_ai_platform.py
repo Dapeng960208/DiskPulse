@@ -8,13 +8,25 @@ import pytest
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Response
 from fastapi.testclient import TestClient
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from appConfig import base_config
 from models import AIConfig, AIConversation, AIAuditLog, AIMessage, User
-from routers import ai, ai_admin
+from routers import (
+    aggregate,
+    ai,
+    ai_admin,
+    config,
+    group_tag,
+    qtrees,
+    storage_back_up_records,
+    storage_cluster,
+    users,
+    volumes,
+)
 from services import ai_chat_service
 from services import ai_config_service
 from services.ai_client import AIClientError, AIClientToolCall, AICompletionResult
@@ -142,6 +154,377 @@ def test_dynamic_tool_registry_only_exposes_marked_get_routes():
         tool_name="get_visible",
         arguments={"item_id": "not-an-integer"},
     )["error"] == "工具参数无效"
+
+
+def test_system_management_tools_require_super_admin_for_registry_and_execution(monkeypatch):
+    app = FastAPI()
+    router = APIRouter()
+    executed = []
+
+    @router.get(
+        "/capacity",
+        openapi_extra={"ai_exposed": True, "ai_name": "get_capacity", "ai_description": "查询容量"},
+    )
+    def get_capacity():
+        return {"data": {"used": 10}}
+
+    @router.get(
+        "/system/settings",
+        openapi_extra={
+            "ai_exposed": True,
+            "ai_system_management": True,
+            "ai_name": "list_system_settings",
+            "ai_description": "读取系统设置",
+        },
+    )
+    def list_system_settings():
+        return {"data": []}
+
+    @router.post(
+        "/system/settings",
+        openapi_extra={
+            "ai_exposed": True,
+            "ai_system_management": True,
+            "ai_name": "create_system_setting",
+            "ai_description": "创建系统设置",
+        },
+    )
+    def create_system_setting():
+        executed.append("create")
+        return {"data": {"created": True}}
+
+    @router.patch(
+        "/system/settings/{setting_id}",
+        openapi_extra={
+            "ai_exposed": True,
+            "ai_system_management": True,
+            "ai_name": "update_system_setting",
+            "ai_description": "更新系统设置",
+        },
+    )
+    def update_system_setting(setting_id: int):
+        executed.append(f"update:{setting_id}")
+        return {"data": {"updated": setting_id}}
+
+    @router.delete(
+        "/system/settings/{setting_id}",
+        openapi_extra={
+            "ai_exposed": True,
+            "ai_system_management": True,
+            "ai_name": "delete_system_setting",
+            "ai_description": "删除系统设置",
+        },
+    )
+    def delete_system_setting(setting_id: int):
+        executed.append(f"delete:{setting_id}")
+        return {"data": {"deleted": setting_id}}
+
+    app.include_router(router)
+    original_get = base_config.get
+
+    def configured_get(key, default=None):
+        return ["ai-admin"] if key == "super_admin_usernames" else original_get(key, default)
+
+    monkeypatch.setattr(base_config, "get", configured_get)
+    reader = User(id=101, username="reader", rd_username="reader", email="reader@example.com")
+    admin = User(id=102, username="ai-admin", rd_username="ai-admin", email="admin@example.com")
+
+    reader_registry = build_tool_registry(app, current_user=reader)
+    admin_registry = build_tool_registry(app, current_user=admin)
+
+    assert set(reader_registry) == {"get_capacity"}
+    assert set(admin_registry) == {
+        "get_capacity",
+        "list_system_settings",
+        "create_system_setting",
+        "update_system_setting",
+        "delete_system_setting",
+    }
+
+    # A registry constructed for an admin is untrusted at execution time: the current user is authoritative.
+    result = execute_tool(
+        app=app,
+        registry=admin_registry,
+        tool_name="create_system_setting",
+        arguments={},
+        current_user=reader,
+    )
+
+    assert result == {"ok": False, "error": "系统管理工具仅限超级管理员"}
+    assert executed == []
+
+
+def test_registered_system_management_crud_tools_are_admin_only(monkeypatch):
+    app = FastAPI()
+    for router in (
+        storage_cluster.router,
+        aggregate.router,
+        volumes.router,
+        qtrees.router,
+        group_tag.router,
+        users.router,
+        config.router,
+        ai_admin.router,
+        storage_back_up_records.router,
+    ):
+        app.include_router(router)
+
+    original_get = base_config.get
+
+    def configured_get(key, default=None):
+        return ["ai-admin"] if key == "super_admin_usernames" else original_get(key, default)
+
+    monkeypatch.setattr(base_config, "get", configured_get)
+    reader = User(id=101, username="reader", rd_username="reader", email="reader@example.com")
+    admin = User(id=102, username="ai-admin", rd_username="ai-admin", email="admin@example.com")
+
+    expected = {
+        "list_storage_clusters": ("/storage-clusters/", "GET"),
+        "create_storage_cluster": ("/storage-clusters/", "POST"),
+        "get_storage_cluster": ("/storage-clusters/{storage_cluster_id}", "GET"),
+        "update_storage_cluster": ("/storage-clusters/{storage_cluster_id}", "PUT"),
+        "delete_storage_cluster": ("/storage-clusters/{storage_cluster_id}", "DELETE"),
+        "list_aggregates": ("/aggregates/", "GET"),
+        "create_aggregate": ("/aggregates/", "POST"),
+        "get_aggregate": ("/aggregates/{aggregate_id}", "GET"),
+        "update_aggregate": ("/aggregates/{aggregate_id}", "PUT"),
+        "delete_aggregate": ("/aggregates/{aggregate_id}", "DELETE"),
+        "list_volumes": ("/volumes/", "GET"),
+        "create_volume": ("/volumes/", "POST"),
+        "get_volume": ("/volumes/{volume_id}", "GET"),
+        "update_volume": ("/volumes/{volume_id}", "PUT"),
+        "delete_volume": ("/volumes/{volume_id}", "DELETE"),
+        "list_qtrees": ("/qtrees/", "GET"),
+        "create_qtree": ("/qtrees/", "POST"),
+        "get_qtree": ("/qtrees/{qtree_id}", "GET"),
+        "update_qtree": ("/qtrees/{qtree_id}", "PUT"),
+        "delete_qtree": ("/qtrees/{qtree_id}", "DELETE"),
+        "list_group_tags": ("/group-tags", "GET"),
+        "create_group_tag": ("/group-tags", "POST"),
+        "get_group_tag": ("/group-tags/{group_tag_id}", "GET"),
+        "update_group_tag": ("/group-tags/{group_tag_id}", "PUT"),
+        "delete_group_tag": ("/group-tags/{group_tag_id}", "DELETE"),
+        "list_users": ("/users/", "GET"),
+        "create_user": ("/users/", "POST"),
+        "get_user": ("/users/{user_id}", "GET"),
+        "update_user": ("/users/{user_id}", "PUT"),
+        "delete_user": ("/users/{user_id}", "DELETE"),
+        "list_ai_models": ("/admin/ai-models", "GET"),
+        "create_ai_model": ("/admin/ai-models", "POST"),
+        "update_ai_model": ("/admin/ai-models/{model_id}", "PATCH"),
+        "delete_ai_model": ("/admin/ai-models/{model_id}", "DELETE"),
+        "get_storage_config": ("/config/storage", "GET"),
+        "update_storage_config": ("/config/storage", "PUT"),
+        "list_storage_backup_records": ("/storage-back-up-records/", "GET"),
+        "delete_storage_backup_record": ("/storage-back-up-records/{storage_back_up_record_id}", "DELETE"),
+    }
+    admin_registry = build_tool_registry(app, current_user=admin)
+    reader_registry = build_tool_registry(app, current_user=reader)
+
+    assert {
+        name: (definition.route_path, definition.method)
+        for name, definition in admin_registry.items()
+        if definition.system_management
+    } == expected
+    assert not (set(expected) & set(reader_registry))
+    assert not any(
+        definition.system_management and (definition.route_path, definition.method) in {
+            ("/users/login", "POST"),
+            ("/users/logout", "POST"),
+            ("/users/current/profile", "GET"),
+            ("/users/sync-ldap", "POST"),
+            ("/storage-clusters/{storage_cluster_id}/realtime", "GET"),
+            ("/storage-clusters/{storage_cluster_id}/analytics/capacity-change", "GET"),
+            ("/storage-clusters/{storage_cluster_id}/analytics/error-severity", "GET"),
+            ("/storage-clusters/{storage_cluster_id}/analytics/top-latency", "GET"),
+            ("/storage-clusters/{storage_cluster_id}/analytics/repeated-faults", "GET"),
+            ("/storage-clusters/{storage_cluster_id}/analytics/system-events", "GET"),
+            ("/storage-clusters/{storage_cluster_id}/analytics/export", "GET"),
+            ("/aggregates/{aggregate_id}/realtime", "GET"),
+            ("/volumes/{volume_id}/realtime", "GET"),
+            ("/qtrees/{qtree_id}/realtime", "GET"),
+            ("/admin/ai-models/{model_id}/test", "POST"),
+            ("/admin/ai-audits", "GET"),
+            ("/admin/ai-audits/conversations/{conversation_id}", "GET"),
+            ("/admin/ai-audits/{audit_id}", "GET"),
+            ("/storage-back-up-records/{storage_back_up_record_id}/rollback", "POST"),
+        }
+        for definition in admin_registry.values()
+    )
+
+
+def test_system_management_tool_validates_and_forwards_pydantic_body(monkeypatch):
+    class SettingPayload(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        name: str
+        enabled: bool
+
+    app = FastAPI()
+    router = APIRouter()
+    executed = []
+
+    @router.post(
+        "/system/settings",
+        openapi_extra={
+            "ai_exposed": True,
+            "ai_system_management": True,
+            "ai_name": "create_system_setting",
+            "ai_description": "创建系统设置",
+        },
+    )
+    def create_system_setting(payload: SettingPayload):
+        executed.append(payload)
+        return {"data": payload.model_dump()}
+
+    app.include_router(router)
+    original_get = base_config.get
+
+    def configured_get(key, default=None):
+        return ["ai-admin"] if key == "super_admin_usernames" else original_get(key, default)
+
+    monkeypatch.setattr(base_config, "get", configured_get)
+    admin = User(id=102, username="ai-admin", rd_username="ai-admin", email="admin@example.com")
+    registry = build_tool_registry(app, current_user=admin)
+
+    result = execute_tool(
+        app=app,
+        registry=registry,
+        tool_name="create_system_setting",
+        arguments={"body": {"name": "retention", "enabled": True}},
+        current_user=admin,
+    )
+    invalid = execute_tool(
+        app=app,
+        registry=registry,
+        tool_name="create_system_setting",
+        arguments={"body": {"name": "retention", "enabled": True, "unexpected": "blocked"}},
+        current_user=admin,
+    )
+
+    assert result == {"ok": True, "data": {"name": "retention", "enabled": True}}
+    assert invalid["error"] == "工具参数无效"
+    assert [payload.name for payload in executed] == ["retention"]
+
+
+def test_system_management_delete_no_content_is_successful(monkeypatch):
+    app = FastAPI()
+    router = APIRouter()
+
+    @router.delete(
+        "/system/settings/{setting_id}",
+        openapi_extra={
+            "ai_exposed": True,
+            "ai_system_management": True,
+            "ai_name": "delete_system_setting",
+            "ai_description": "删除系统设置",
+        },
+    )
+    def delete_system_setting(setting_id: int):
+        assert setting_id == 7
+        return Response(status_code=204)
+
+    app.include_router(router)
+    original_get = base_config.get
+
+    def configured_get(key, default=None):
+        return ["ai-admin"] if key == "super_admin_usernames" else original_get(key, default)
+
+    monkeypatch.setattr(base_config, "get", configured_get)
+    admin = User(id=102, username="ai-admin", rd_username="ai-admin", email="admin@example.com")
+    registry = build_tool_registry(app, current_user=admin)
+
+    assert execute_tool(
+        app=app,
+        registry=registry,
+        tool_name="delete_system_setting",
+        arguments={"setting_id": 7},
+        current_user=admin,
+    ) == {"ok": True, "data": None}
+
+
+def test_chat_adds_system_management_instruction_only_when_admin_tools_are_authorized(
+    db_session,
+    monkeypatch,
+):
+    reader = _seed_user(db_session, user_id=1, rd_username="reader")
+    admin = _seed_user(db_session, user_id=2, rd_username="ai-admin")
+    configured = _seed_model(db_session)
+    reader_conversation = AIConversation(user_id=reader.id, model_id=configured.id, title="普通用户")
+    admin_conversation = AIConversation(user_id=admin.id, model_id=configured.id, title="超级管理员")
+    db_session.add_all([reader_conversation, admin_conversation])
+    db_session.commit()
+    db_session.refresh(reader_conversation)
+    db_session.refresh(admin_conversation)
+
+    app = FastAPI()
+    router = APIRouter()
+
+    @router.get(
+        "/capacity",
+        openapi_extra={"ai_exposed": True, "ai_name": "get_capacity", "ai_description": "查询容量"},
+    )
+    def get_capacity():
+        return {"data": {"used": 10}}
+
+    @router.post(
+        "/system/settings",
+        openapi_extra={
+            "ai_exposed": True,
+            "ai_system_management": True,
+            "ai_name": "create_system_setting",
+            "ai_description": "创建系统设置",
+        },
+    )
+    def create_system_setting():
+        return {"data": {"created": True}}
+
+    app.include_router(router)
+    original_get = base_config.get
+
+    def configured_get(key, default=None):
+        return ["ai-admin"] if key == "super_admin_usernames" else original_get(key, default)
+
+    monkeypatch.setattr(base_config, "get", configured_get)
+    provider_requests = []
+
+    def provider_stream(_model, messages, *, tools=None):
+        provider_requests.append({"messages": messages, "tools": tools})
+        yield AICompletionStreamEvent(kind="delta", text="已收到")
+        yield AICompletionStreamEvent(kind="completed", text="已收到", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=reader_conversation.id,
+            user_id=reader.id,
+            current_user=reader,
+            content="查看容量",
+        )
+    )
+    list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=admin_conversation.id,
+            user_id=admin.id,
+            current_user=admin,
+            content="创建系统设置",
+        )
+    )
+
+    reader_request, admin_request = provider_requests
+    reader_tool_names = [tool["function"]["name"] for tool in reader_request["tools"]]
+    admin_tool_names = [tool["function"]["name"] for tool in admin_request["tools"]]
+    reader_prompts = [str(item["content"]) for item in reader_request["messages"] if item["role"] == "system"]
+    admin_prompts = [str(item["content"]) for item in admin_request["messages"] if item["role"] == "system"]
+
+    assert reader_tool_names == ["get_capacity"]
+    assert admin_tool_names == ["get_capacity", "create_system_setting"]
+    assert not any("系统管理工具" in prompt for prompt in reader_prompts)
+    assert any("仅在用户明确要求时执行" in prompt and "删除或更新" in prompt for prompt in admin_prompts)
 
 
 def test_non_super_admin_cannot_manage_ai_models(api_client_factory, db_session):

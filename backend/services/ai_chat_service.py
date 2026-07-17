@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from appConfig import base_config
 from crud import aiCrud
-from models import AIConversation, AIAuditLog, AIMessage
+from models import AIConversation, AIAuditLog, AIMessage, User
 from services.ai_client import AIClientError, AIClientToolArgumentsError, AIClientToolCall, chat_completion_stream
 from services.ai_config_service import serialize_model
 from services.ai_tool_service import build_tool_registry, execute_tool, tool_definitions
@@ -33,6 +33,9 @@ _DEGRADED_FALLBACKS = {
     "tool_iteration_limit": "本轮已达到工具查询上限。我已保留已完成的查询结果；如需补充信息，请授权继续查询。",
     "invalid_tool_arguments": "本轮工具参数多次无效，无法继续执行查询。我已保留当前可用信息；请重新查询。",
 }
+_SYSTEM_MANAGEMENT_PROMPT = """你当前已获得系统管理工具授权；这是上述只读工具限制的受控例外。
+仅在用户明确要求时执行系统管理 CRUD 工具；不要将其用于普通查询。
+删除或更新前，先简短说明将影响的资源和结果；如果请求范围不明确，先向用户澄清。"""
 
 
 def _json_safe(value: object) -> object:
@@ -383,6 +386,7 @@ def stream_message(
     conversation_id: int,
     user_id: int,
     content: str,
+    current_user: User | None = None,
 ) -> Iterator[tuple[str, dict]]:
     conversation = _conversation_or_404(db, conversation_id, user_id)
     model = aiCrud.get_model(db, conversation.model_id)
@@ -446,9 +450,12 @@ def stream_message(
         }
         yield "status", {"turn_id": turn_id, "status": "thinking"}
         # Build from live routes inside the failure boundary so setup failures retain a terminal reply.
-        registry = build_tool_registry(app)
+        registry = build_tool_registry(app, current_user=current_user)
         tools = tool_definitions(registry, model.provider)
-        messages = [{"role": "system", "content": model.system_prompt or SYSTEM_PROMPT}, *_history(db, conversation.id)]
+        system_messages = [{"role": "system", "content": model.system_prompt or SYSTEM_PROMPT}]
+        if any(item.system_management for item in registry.values()):
+            system_messages.append({"role": "system", "content": _SYSTEM_MANAGEMENT_PROMPT})
+        messages = [*system_messages, *_history(db, conversation.id)]
         # Bound recursive model/tool turns independently of the number of tools per turn.
         max_iterations = int(base_config.get("ai.max_tool_iterations", 4))
         for iteration in range(1, max_iterations + 1):
@@ -522,6 +529,7 @@ def stream_message(
                     tool_name=call.name,
                     arguments=call.arguments,
                     user_id=user_id,
+                    current_user=current_user,
                 )
                 elapsed_ms = max(0, round((monotonic() - started_at) * 1000))
                 if not result.get("ok"):

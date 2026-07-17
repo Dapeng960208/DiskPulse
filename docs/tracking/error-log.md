@@ -795,3 +795,39 @@
 - 验证：RED `11 tests | 9 failed, 2 passed`；GREEN `11/11`；目标 ESLint 通过；覆盖率 `61 files / 370 tests passed`（Statements `98.3%`、Branches `88.74%`、Functions `84.17%`、Lines `98.3%`）；生产构建与 `git diff --check` 通过。13 个可加载路由在 `1383x994`、`936x994` 及 `/usage` 移动宽度代表值完成浏览器间距检查。
 - 补充环境故障与恢复：旧依赖预构建缓存导致 Vite `504 Outdated Optimize Dep`，停止旧 `5173` 进程后以 `npx vite --host 0.0.0.0 --port 5173 --force` 重启，输出 `Forced re-optimization`；`/ai/chat` 当前桌面已恢复渲染，`.ai-workspace` 存在、gutter 为 `16px`、无 Vite overlay，整页刷新后 console errors 为 `0`。
 - 风险：真实 ID 详情页、`320px` viewport 未验证；`375/414` 固定侧栏水平溢出为既有问题。
+
+### 2026-07-17：显式空工具参数被错误归一化为可执行对象
+
+- 触发：模拟 OpenAI 工具 `arguments=""` 与 Claude 工具 `input=[]` 的流式响应。
+- 现象：客户端没有抛出参数格式错误，空值被 `or "{}"` 分支替换后可能进入工具执行。
+- 根因：代码没有区分“参数字段缺失”与“参数字段显式提供但值为空/非对象”。
+- 修复：仅在字段缺失时兼容空对象；显式空字符串进入 `invalid_json`，数组等非对象进入 `non_object`，原始参数不写入审计。
+- 验证：后端 AI 聚焦组合测试 `39 passed`，覆盖 OpenAI 和 Claude 两类输入。
+- 风险：真实 Provider 的异常流格式仍需部署环境验证。
+
+### 2026-07-17：SSE 终态顺序异常可能遗留生成中消息
+
+- 触发：向前端流模拟 `completed → accepted` 或 `accepted → completed → delta`。
+- 现象：旧状态机只统计是否出现过确认和终态，错误顺序仍会 resolve，页面可能留下 `streaming` 助手消息。
+- 根因：协议校验没有约束确认必须先到，也没有拒绝终态后的已知事件。
+- 修复：客户端要求先收到 `accepted`，终态后任一已知事件立即作为可重试协议错误抛出，页面保留部分内容并清理流状态。
+- 验证：工作进程执行前端 AI 聚焦用例 `23 passed`。
+- 风险：当前主线程 shell 无法复跑 Vitest，见本日志末条环境限制。
+
+### 2026-07-17：系统管理 DELETE 的 204 响应被误判为工具失败
+
+- 触发：超级管理员调用返回 `204 No Content` 的系统管理删除工具。
+- 现象：内部 ASGI 调用成功后 JSON 解析失败，工具返回“工具返回了非 JSON 响应”。
+- 根因：工具执行器把所有成功响应都假定为 JSON，未处理 HTTP 204 的无内容语义。
+- 修复：仅将 `204` 映射为 `{ok: true, data: null}`，其他非 JSON `2xx` 仍保持原有错误边界。
+- 验证：新增删除空响应用例通过，后端 AI 聚焦组合测试 `39 passed`。
+- 风险：其他非 JSON 成功响应未被放宽，后续如新增此类接口须显式评估。
+
+### 2026-07-17：受限本地环境阻断 Git 暂存与 Vitest 子进程
+
+- 触发：执行 `git add` 创建 `.git/index.lock`，以及在主线程执行 AI 前端 Vitest 聚焦命令。
+- 现象：Git 返回 `Permission denied`；Vitest 在加载配置时因 esbuild 子进程返回 `spawn EPERM`。
+- 根因：当前 Windows 受限 shell 不允许相应的 Git 索引写入和子进程创建，不是代码或测试断言失败。
+- 修复：后端测试以禁用 pytest cache 的方式完成；前端结果使用工作进程已成功的同一聚焦命令作为验证证据，改动未丢失。
+- 验证：后端 `39 passed`、工作进程前端 `23 passed`；Git 工作区仍保留本轮未提交改动。
+- 风险：需要具备正常 `.git` 写权限和 esbuild 进程权限的环境才能创建提交并独立复跑前端测试。

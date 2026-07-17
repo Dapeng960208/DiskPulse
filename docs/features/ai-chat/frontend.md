@@ -21,7 +21,7 @@
 2. 按空行切分完整 SSE block，最后一个不完整 block 留到下一次读取。
 3. 每个 block 提取 `event:` 和允许多行的 `data:`。
 4. 已知事件的 `data` 必须为符合事件最小契约的 JSON 对象；非法载荷立即作为协议错误处理，不把字符串传给页面状态。
-5. 流结束后再处理 buffer 中剩余的最后一个事件，并确认已收到 `accepted` 和 `completed`、`error`、`cancelled` 之一；缺失确认或终态时抛出可重试的协议错误。
+5. 流结束后再处理 buffer 中剩余的最后一个事件，并确认先收到 `accepted`、再收到 `completed`、`error`、`cancelled` 之一；终态前缺失确认、终态后出现任一已知事件或缺失终态时，均抛出可重试的协议错误。
 
 非 `2xx` 响应优先读取后端 `detail` 或 `message`；非 JSON 响应回退为包含 HTTP 状态码的错误。
 
@@ -39,7 +39,7 @@
 | `completed` | 用服务端正式消息替换临时消息，并同步会话时间和标题；`status=degraded` 时保留工具轨迹和恢复元数据。 |
 | `error` | 抛给发送流程，保留原输入并标记临时消息失败。 |
 
-停止生成由当前请求的 `AbortController` 完成。`AbortError` 不弹出失败提示；其他错误会把原输入写入 `failedContent`，用户点击“重试”后重新发送。流结束时统一清理连接状态和控制器。降级消息下方显示“继续查询”或“重新查询”：点击后会先产生可见的用户授权消息，再开启一个遵循既有限流和工具上限的新回合。
+停止生成由当前请求的 `AbortController` 完成。`AbortError` 不弹出失败提示；其他错误（包括 SSE 截断、终态顺序和已知事件载荷错误）保留已有文本/工具轨迹、把原输入写入 `failedContent` 并清理 `streaming` 状态，用户点击“重试”后重新发送。降级消息下方显示“继续查询”或“重新查询”：点击后会先产生可见的用户授权消息，再开启一个遵循既有限流和工具上限的新回合。
 
 ## 4. 聊天工作区布局
 
@@ -76,7 +76,7 @@
 
 新增 SSE 事件时，应同时更新 `parseSseBlock` 的契约测试、事件最小载荷校验、`applyEvent` 状态映射和本专题文档。新增 Markdown 能力时先确认 DOMPurify 允许范围，不直接开启 `markdown-it` 的原始 HTML。
 
-- AI 前端聚焦测试：`npx vitest run test/unit/ai-api-stream.test.js test/unit/ai-pages.test.js test/unit/ai-platform.test.js`
+- AI 前端聚焦测试：`npx vitest run test/unit/ai-api-stream.test.js test/unit/ai-pages.test.js --coverage.enabled=false`，覆盖降级恢复、截断保留、终态顺序和终态后事件拒绝。
 - 静态检查：`npx eslint src/api/ai-api.js src/pages/ai src/pages/admin/ai src/services/ai-markdown.js`
 - 生产构建：`npm run build:prod`
-- 部署环境仍需在登录浏览器验证断流、会话切换、超级管理员菜单和真实长响应滚动体验。
+- 部署环境仍需在登录浏览器验证断流、会话切换、超级管理员菜单和真实长响应滚动体验；本轮按用户要求未执行浏览器/页面检查。
