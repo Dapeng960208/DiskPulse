@@ -60,7 +60,7 @@ describe('storage alert rule UI contract', () => {
     expect(settings).toContain('<h2>系统设置</h2>');
     expect(settings).not.toContain('<ElTabs');
     expect(settings).toContain('v-model="form.storage_alert_rule"');
-    expect(routes).toMatch(/path: 'settings',[\s\S]*?meta: \{\s*title: '系统设置',\s*isAccessible: \(\) => hasRole\('superadmin'\) \? 200 : 403,?\s*\}/);
+    expect(routes).toMatch(/path: 'settings',[\s\S]*?meta: \{[^}]*title: '系统设置',[^}]*isAccessible: \(\) => hasRole\('superadmin'\) \? 200 : 403,?[^}]*\}/);
   });
 
   it('submits project alert enablement and an optional complete override', () => {

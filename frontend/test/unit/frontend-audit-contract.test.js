@@ -12,6 +12,25 @@ vi.mock('@/stores/app-settings', () => ({
   }),
 }));
 
+vi.mock('@/stores/breadcrumbs', () => ({
+  useBreadcrumbs: () => ({
+    detailTitleFor: vi.fn(() => ''),
+    setDetailTitle: vi.fn(),
+  }),
+}));
+
+vi.mock('vue-router', async () => {
+  const actual = await vi.importActual('vue-router');
+
+  return {
+    ...actual,
+    useRoute: () => ({
+      matched: [{ name: 'Dashboard', meta: { title: '概览' } }],
+      name: 'Dashboard',
+    }),
+  };
+});
+
 vi.mock('@/stores/current-user', () => ({
   useCurrentUser: () => ({
     avatarUrl: '',
@@ -60,6 +79,19 @@ vi.mock('element-plus', () => ({
   ElTable: commonStubs.ElTable,
 }));
 
+const RouterViewStub = defineComponent({
+  name: 'RouterView',
+  props: {
+    name: {
+      type: String,
+      default: 'default',
+    },
+  },
+  setup(_, { slots }) {
+    return () => (slots.default ? slots.default({ Component: null, route: { name: 'Dashboard', meta: {} } }) : h('div'));
+  },
+});
+
 describe('frontend audit implementation contract', () => {
   it('renders the aside collapse trigger as an accessible stateful button', async () => {
     const { default: AppLayout } = await import('@/layouts/AppLayout.vue');
@@ -72,12 +104,7 @@ describe('frontend audit implementation contract', () => {
           AppHeader: true,
           AppFooter: true,
           RouteMenu: true,
-          RouterView: defineComponent({
-            name: 'RouterView',
-            setup(_, { slots }) {
-              return () => (slots.default ? slots.default({ Component: null, route: { name: 'Dashboard', meta: {} } }) : h('div'));
-            },
-          }),
+          RouterView: RouterViewStub,
         },
         mocks: {
           $route: {
@@ -115,12 +142,7 @@ describe('frontend audit implementation contract', () => {
           AppHeader: true,
           AppFooter: true,
           RouteMenu: true,
-          RouterView: defineComponent({
-            name: 'RouterView',
-            setup(_, { slots }) {
-              return () => (slots.default ? slots.default({ Component: null, route: { name: 'Dashboard', meta: {} } }) : h('div'));
-            },
-          }),
+          RouterView: RouterViewStub,
         },
         mocks: {
           $route: {

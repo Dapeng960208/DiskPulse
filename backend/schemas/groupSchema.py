@@ -150,6 +150,7 @@ class GroupBase(BaseModel):
 
 class Group(GroupBase):
     id: int
+    capabilities: dict[str, bool] = Field(default_factory=dict)
     project_id: int
     storage_cluster_id: int
     group_tag_id: int

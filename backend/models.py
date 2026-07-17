@@ -121,7 +121,6 @@ class Project(Base):
     is_alert = Column(Boolean, default=True)
     storage_alert_rule = Column(JSON, nullable=True)
     in_charge_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    pt_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     limit = Column(Float, default=0)
     soft_limit = Column(Float, nullable=True)
     used = Column(Float, default=0)
@@ -131,7 +130,59 @@ class Project(Base):
 
     groups = relationship("Group", back_populates="project", lazy=True)
     in_charge_user = relationship("User", foreign_keys=[in_charge_user_id], lazy=True)
-    pt_user = relationship("User", foreign_keys=[pt_user_id], lazy=True)
+
+
+class ProjectMembership(Base):
+    __tablename__ = "project_memberships"
+    __table_args__ = (
+        UniqueConstraint("project_id", "user_id", name="uq_project_membership_user"),
+        CheckConstraint(
+            "role IN ('reader', 'editor', 'project_admin')",
+            name="ck_project_membership_role",
+        ),
+        Index("ix_project_membership_user_project", "user_id", "project_id"),
+        Index("ix_project_membership_project_role", "project_id", "role"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String(16), nullable=False, default="reader")
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+    __table_args__ = (
+        CheckConstraint("phase IN ('attempt', 'result')", name="ck_audit_event_phase"),
+        CheckConstraint("outcome IN ('success', 'denied', 'failure')", name="ck_audit_event_outcome"),
+        Index("ix_audit_events_project_occurred_id", "project_id", "occurred_at", "id"),
+        Index("ix_audit_events_actor_occurred_id", "actor_user_id", "occurred_at", "id"),
+        Index("ix_audit_events_operation_occurred", "operation_id", "occurred_at"),
+    )
+
+    id = Column(String(36), primary_key=True)
+    operation_id = Column(String(36), nullable=False)
+    phase = Column(String(16), nullable=False)
+    occurred_at = Column(DateTime, nullable=False, default=datetime.now)
+    actor_type = Column(String(32), nullable=False)
+    # Audit rows retain historical logical IDs even after the referenced subject is removed.
+    # Foreign-key SET NULL would mutate this append-only table and be rejected by its trigger.
+    actor_user_id = Column(Integer, nullable=True)
+    action = Column(String(128), nullable=False)
+    resource_type = Column(String(64), nullable=False)
+    resource_id = Column(Integer, nullable=True)
+    project_id = Column(Integer, nullable=True)
+    outcome = Column(String(16), nullable=False)
+    reason_code = Column(String(128), nullable=True)
+    before_summary = Column(JSON, nullable=True)
+    after_summary = Column(JSON, nullable=True)
+    event_metadata = Column("metadata", JSON, nullable=True)
+    request_id = Column(String(36), nullable=False)
+    trace_id = Column(String(36), nullable=False)
 
 
 class StorageCluster(Base):

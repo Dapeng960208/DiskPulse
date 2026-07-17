@@ -11,7 +11,9 @@ from urllib3.exceptions import InsecureRequestWarning
 from appConfig import base_config
 from models import Group, Qtree, StorageAlerts, StorageUsage, Volume
 from schemas.quotaSchema import QuotaAdjustmentRequest, QuotaAdjustmentResponse
+from services.audit_service import AuditContext, append_audit_event
 from services.storageAlertRuleService import resolve_recipient_usernames
+from utils.auth_service import is_super_admin
 from utils.isilonClient import IsilonClient
 from utils.mailTools.emailNotification import EmailNotification
 from utils.netAppClient import NetAppClient
@@ -72,10 +74,22 @@ def _display_limit(value: float | None) -> str:
     return "未设置" if value is None else f"{value:.2f} GiB"
 
 
-def _enqueue_adjustment_feishu(event_id: int) -> None:
+def _enqueue_adjustment_feishu(event_id: int, *, audit_context: AuditContext | None = None) -> None:
     from celery_tasks.tasks.storage_alerts import deliver_storage_alert_task
 
-    deliver_storage_alert_task.delay(event_id)
+    if audit_context is None:
+        deliver_storage_alert_task.delay(event_id)
+        return
+    deliver_storage_alert_task.delay(
+        event_id,
+        audit_context_payload={
+            "request_id": audit_context.request_id,
+            "trace_id": audit_context.trace_id,
+            "operation_id": audit_context.operation_id,
+            "actor_type": audit_context.actor_type,
+            "actor_user_id": audit_context.actor_user_id,
+        },
+    )
 
 
 def _record_adjustment(
@@ -184,6 +198,7 @@ def _execute_adjustment(
     target,
     volume,
     request: QuotaAdjustmentRequest,
+    audit_context: AuditContext | None = None,
 ) -> QuotaAdjustmentResponse:
     cluster = resource.storage_cluster if isinstance(resource, Group) else resource.group.storage_cluster
     storage_type = (cluster.storage_type or "").lower()
@@ -207,6 +222,24 @@ def _execute_adjustment(
     client = None
     old_hard_limit = resource.limit
     old_soft_limit = resource.soft_limit
+    project_id = resource.project_id if isinstance(resource, Group) else resource.group.project_id
+    resource_id = resource.id
+    audit_resource_type = "group" if resource_type == "Group" else "storage_usage"
+    if audit_context is not None:
+        append_audit_event(
+            db,
+            context=audit_context,
+            phase="attempt",
+            action="quota.adjust",
+            resource_type=audit_resource_type,
+            resource_id=resource_id,
+            project_id=project_id,
+            outcome="success",
+            before_summary={"hard_limit": old_hard_limit, "soft_limit": old_soft_limit},
+            metadata={"storage_type": storage_type},
+        )
+        # Keep a durable pre-device record even if the target is unavailable.
+        db.commit()
     try:
         client = _build_client(cluster)
         if resource_type == "Group" and storage_type == "netapp" and isinstance(target, Volume):
@@ -234,9 +267,35 @@ def _execute_adjustment(
                 soft_grace=request.soft_grace_seconds,
             )
     except HTTPException:
+        if audit_context is not None:
+            append_audit_event(
+                db,
+                context=audit_context,
+                phase="result",
+                action="quota.adjust",
+                resource_type=audit_resource_type,
+                resource_id=resource_id,
+                project_id=project_id,
+                outcome="failure",
+                reason_code="quota_adjustment_rejected",
+            )
+            db.commit()
         raise
     except requests.HTTPError as error:
         native_response = device_error_response(error)
+        if audit_context is not None:
+            append_audit_event(
+                db,
+                context=audit_context,
+                phase="result",
+                action="quota.adjust",
+                resource_type=audit_resource_type,
+                resource_id=resource_id,
+                project_id=project_id,
+                outcome="failure",
+                reason_code="quota_device_rejected",
+            )
+            db.commit()
         if native_response is None:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -251,6 +310,19 @@ def _execute_adjustment(
         )
         return native_response
     except Exception as error:
+        if audit_context is not None:
+            append_audit_event(
+                db,
+                context=audit_context,
+                phase="result",
+                action="quota.adjust",
+                resource_type=audit_resource_type,
+                resource_id=resource_id,
+                project_id=project_id,
+                outcome="failure",
+                reason_code="quota_device_unavailable",
+            )
+            db.commit()
         logger.error(
             "Quota device update failed cluster_id=%s resource_type=%s resource_id=%s error_type=%s",
             cluster.id,
@@ -304,6 +376,20 @@ def _execute_adjustment(
         soft_limit=soft_limit,
         soft_grace_seconds=result.soft_grace_seconds,
     )
+    if audit_context is not None:
+        append_audit_event(
+            db,
+            context=audit_context,
+            phase="result",
+            action="quota.adjust",
+            resource_type=audit_resource_type,
+            resource_id=resource_id,
+            project_id=project_id,
+            outcome="success",
+            before_summary={"hard_limit": old_hard_limit, "soft_limit": old_soft_limit},
+            after_summary={"hard_limit": hard_limit, "soft_limit": soft_limit},
+            metadata={"storage_type": storage_type},
+        )
     try:
         db.commit()
     except Exception:
@@ -318,7 +404,7 @@ def _execute_adjustment(
 
     if alert.delivery_status == "pending":
         try:
-            _enqueue_adjustment_feishu(alert.id)
+            _enqueue_adjustment_feishu(alert.id, audit_context=audit_context)
         except Exception as error:
             logger.error(
                 "Quota adjustment Feishu enqueue failed resource_type=%s resource_id=%s error_type=%s",
@@ -344,10 +430,17 @@ def adjust_group_quota(
     *,
     group_id: int,
     request: QuotaAdjustmentRequest,
+    current_user=None,
+    audit_context: AuditContext | None = None,
 ) -> QuotaAdjustmentResponse:
     group = db.get(Group, group_id)
     if group is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+    require_group_quota_adjustment_permission(
+        db=db,
+        group_id=group_id,
+        current_user=current_user,
+    )
     resolved = resolve_group_storage_target(group)
     target = resolved["target"]
     if target is None:
@@ -365,6 +458,7 @@ def adjust_group_quota(
         target=target,
         volume=resolved["volume"],
         request=request,
+        audit_context=audit_context,
     )
 
 
@@ -373,6 +467,8 @@ def adjust_storage_usage_quota(
     *,
     storage_usage_id: int,
     request: QuotaAdjustmentRequest,
+    current_user=None,
+    audit_context: AuditContext | None = None,
 ) -> QuotaAdjustmentResponse:
     storage_usage = db.get(StorageUsage, storage_usage_id)
     if storage_usage is None:
@@ -385,6 +481,11 @@ def adjust_storage_usage_quota(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Storage usage relations not found",
         )
+    require_group_quota_adjustment_permission(
+        db=db,
+        group_id=storage_usage.group_id,
+        current_user=current_user,
+    )
     resolved = resolve_group_storage_target(storage_usage.group)
     return _execute_adjustment(
         db,
@@ -393,4 +494,19 @@ def adjust_storage_usage_quota(
         target=resolved["target"],
         volume=resolved["volume"],
         request=request,
+        audit_context=audit_context,
     )
+
+
+def require_group_quota_adjustment_permission(*, db: Session, group_id: int, current_user) -> Group:
+    """Only the responsible group owner may use the non-admin quota exception."""
+    if current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+    if is_super_admin(current_user):
+        return None
+    group = db.get(Group, group_id)
+    if group is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+    if group.in_charge_user_id == current_user.id:
+        return group
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="quota adjustment permission required")

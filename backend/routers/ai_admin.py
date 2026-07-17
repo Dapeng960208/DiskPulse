@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from dependencies import CurrentUserDep, get_db, require_super_admin
 from schemas.aiSchema import AIModelCreate, AIModelPatch
-from services import ai_audit_service, ai_config_service
+from services import ai_audit_service, ai_config_service, audit_service
 
 
 router = APIRouter(
@@ -39,8 +39,21 @@ def models(_current_user: CurrentUserDep, db: Session = Depends(get_db)):
         "ai_description": "创建 AI 模型配置",
     },
 )
-def create_model(payload: AIModelCreate, current_user: CurrentUserDep, db: Session = Depends(get_db)):
-    return ai_config_service.create_model(db, payload, current_user.id)
+def create_model(
+    payload: AIModelCreate,
+    request: Request,
+    current_user: CurrentUserDep,
+    db: Session = Depends(get_db),
+):
+    return ai_config_service.create_model(
+        db,
+        payload,
+        current_user.id,
+        audit_context=audit_service.audit_context_for_request(
+            request,
+            actor_user_id=current_user.id,
+        ),
+    )
 
 
 @router.patch(
@@ -55,24 +68,58 @@ def create_model(payload: AIModelCreate, current_user: CurrentUserDep, db: Sessi
 def update_model(
     model_id: int,
     payload: AIModelPatch,
+    request: Request,
     current_user: CurrentUserDep,
     db: Session = Depends(get_db),
 ):
-    return ai_config_service.update_model(db, model_id, payload, current_user.id)
+    return ai_config_service.update_model(
+        db,
+        model_id,
+        payload,
+        current_user.id,
+        audit_context=audit_service.audit_context_for_request(
+            request,
+            actor_user_id=current_user.id,
+        ),
+    )
 
 
 @router.delete(
     "/ai-models/{model_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def delete_model(model_id: int, _current_user: CurrentUserDep, db: Session = Depends(get_db)):
-    ai_config_service.delete_model(db, model_id)
+def delete_model(
+    model_id: int,
+    request: Request,
+    current_user: CurrentUserDep,
+    db: Session = Depends(get_db),
+):
+    ai_config_service.delete_model(
+        db,
+        model_id,
+        audit_context=audit_service.audit_context_for_request(
+            request,
+            actor_user_id=current_user.id,
+        ),
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/ai-models/{model_id}/test")
-def test_model(model_id: int, _current_user: CurrentUserDep, db: Session = Depends(get_db)):
-    return ai_config_service.test_model(db, model_id)
+def test_model(
+    model_id: int,
+    request: Request,
+    current_user: CurrentUserDep,
+    db: Session = Depends(get_db),
+):
+    return ai_config_service.test_model(
+        db,
+        model_id,
+        audit_context=audit_service.audit_context_for_request(
+            request,
+            actor_user_id=current_user.id,
+        ),
+    )
 
 
 @router.get("/ai-audits")

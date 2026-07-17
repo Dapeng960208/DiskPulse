@@ -97,6 +97,9 @@ const removeGroupFilter = () => {
   refreshAfterFilterRemoval();
 };
 const openExport = () => exportRef.value?.open?.();
+function canAdjustQuota(row) {
+  return row?.capabilities?.adjust_quota === true;
+}
 query();
 </script>
 
@@ -430,7 +433,7 @@ query();
               详情
             </ElButton>
             <ElDropdown
-              v-if="hasRole('disk-monitor:admin')"
+              v-if="hasRole('disk-monitor:admin') || canAdjustQuota(row)"
               trigger="click"
               placement="bottom-end">
               <ElButton
@@ -442,7 +445,9 @@ query();
               </ElButton>
               <template #dropdown>
                 <ElDropdownMenu>
-                  <ElDropdownItem @click="quotaAdjustmentDialogRef.open(row)">
+                  <ElDropdownItem
+                    v-if="canAdjustQuota(row)"
+                    @click="quotaAdjustmentDialogRef.open(row)">
                     调整配额
                   </ElDropdownItem>
                 </ElDropdownMenu>

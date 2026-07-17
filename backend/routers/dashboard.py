@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from dependencies import CurrentUserDep, get_db
 from schemas import dashboardSchema
 from services import dashboardService
+from services import project_access_service
+from utils.auth_service import is_super_admin
 
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -15,46 +17,62 @@ OptionalProjectId = Annotated[int | None, Query(gt=0)]
 ProjectId = Annotated[int, Query(gt=0)]
 
 
+def _require_dashboard_scope(db: Session, current_user, project_id: int | None) -> None:
+    if project_id is None:
+        if not is_super_admin(current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="project scope is required",
+            )
+        return
+    project_access_service.require_project_permission(db, current_user, project_id, "reader")
+
+
 @router.get("/summary", response_model=dashboardSchema.DashboardSummaryResponse)
 def summary(
-    _current_user: CurrentUserDep,
+    current_user: CurrentUserDep,
     db: DBDep,
     project_id: OptionalProjectId = None,
 ):
+    _require_dashboard_scope(db, current_user, project_id)
     return dashboardService.get_summary(db, project_id=project_id)
 
 
 @router.get("/capacity-trend", response_model=list[dashboardSchema.CapacityTrendPoint])
 def capacity_trend(
-    _current_user: CurrentUserDep,
+    current_user: CurrentUserDep,
     db: DBDep,
     project_id: OptionalProjectId = None,
 ):
+    _require_dashboard_scope(db, current_user, project_id)
     return dashboardService.get_capacity_trend(db, project_id=project_id)
 
 
 @router.get("/capacity-items", response_model=list[dashboardSchema.CapacityItem])
 def capacity_items(
-    _current_user: CurrentUserDep,
+    current_user: CurrentUserDep,
     db: DBDep,
     project_id: OptionalProjectId = None,
 ):
+    _require_dashboard_scope(db, current_user, project_id)
     return dashboardService.get_capacity_items(db, project_id=project_id)
 
 
 @router.get("/alert-levels", response_model=list[dashboardSchema.AlertLevelItem])
 def alert_levels(
-    _current_user: CurrentUserDep,
+    current_user: CurrentUserDep,
     db: DBDep,
     project_id: OptionalProjectId = None,
 ):
+    _require_dashboard_scope(db, current_user, project_id)
     return dashboardService.get_alert_levels(db, project_id=project_id)
 
 
 @router.get("/top-users", response_model=list[dashboardSchema.TopUser])
 def top_users(
-    _current_user: CurrentUserDep,
+    current_user: CurrentUserDep,
     db: DBDep,
     project_id: ProjectId,
 ):
+    _require_dashboard_scope(db, current_user, project_id)
     return dashboardService.get_top_users(db, project_id=project_id)

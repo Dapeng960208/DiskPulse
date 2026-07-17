@@ -19,7 +19,7 @@ def get_groups(db: Session, page: int | None = None, size: int | None = None, na
                prop: str | None = None,
                order: str | None = None, qtree_id: int | None = None, project_id: int | None = None,
                storage_cluster_id: int | None = None, group_tag_id: int | None = None,
-               volume_id: int | None = None):
+               volume_id: int | None = None, accessible_project_ids: set[int] | None = None):
     if volume_id is not None and qtree_id is not None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -35,6 +35,8 @@ def get_groups(db: Session, page: int | None = None, size: int | None = None, na
         conditions.append(Group.volume_id == volume_id)
     if project_id is not None:
         conditions.append(Group.project_id == project_id)
+    if accessible_project_ids is not None:
+        conditions.append(Group.project_id.in_(accessible_project_ids))
     if storage_cluster_id is not None:
         conditions.append(Group.storage_cluster_id == storage_cluster_id)
     if group_tag_id is not None:
@@ -163,7 +165,7 @@ def _validate_binding(db: Session, data: dict) -> None:
         )
 
 
-def serialize_group(group: Group) -> dict:
+def serialize_group(group: Group, *, capabilities: dict[str, bool] | None = None) -> dict:
     result = {
         column.name: getattr(group, column.name)
         for column in Group.__table__.columns
@@ -171,6 +173,7 @@ def serialize_group(group: Group) -> dict:
     result["project"] = group.project
     result["group_tag"] = group.group_tag
     result["storage_cluster"] = group.storage_cluster
+    result["capabilities"] = capabilities or {}
 
     resolved = resolve_group_storage_target(group)
     target = resolved["target"]

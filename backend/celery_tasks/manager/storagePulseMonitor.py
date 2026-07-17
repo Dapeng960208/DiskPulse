@@ -10,6 +10,7 @@ from utils.netAppClient import NetAppClient
 from utils.isilonClient import IsilonClient
 from schemas import aggregateSchema, volumeSchema, qtreeSchema, storageUsageSchema
 from models import Aggregate, Volume, Qtree, Group, StorageUsage, User, StorageCluster
+from services.project_access_service import ensure_reader_memberships
 from sqlalchemy import func, text, update
 from dependencies import QuestDBSession
 from typing import List, Dict, Any, Optional
@@ -714,11 +715,35 @@ class StoragePulseMonitor:
                     )
 
             self.db.flush()
+            if model is StorageUsage:
+                self._grant_collected_directory_readers(data)
             self.logger.info(f"{self._log_prefix} Synced {len(data)} {model.__name__} records to PostgreSQL")
             return True
         except SQLAlchemyError as e:
             self.logger.error(f"{self._log_prefix} Failed to sync {model.__name__} to PostgreSQL: {e}")
             raise
+
+    def _grant_collected_directory_readers(self, data: List[StorageUsageBase]) -> None:
+        user_group_pairs = {
+            (item.user_id, item.group_id)
+            for item in data
+            if item.user_id is not None and item.group_id is not None
+        }
+        if not user_group_pairs:
+            return
+        project_by_group = dict(
+            self.db.query(Group.id, Group.project_id)
+            .filter(Group.id.in_({group_id for _user_id, group_id in user_group_pairs}))
+            .all()
+        )
+        ensure_reader_memberships(
+            self.db,
+            pairs={
+                (project_by_group[group_id], user_id)
+                for user_id, group_id in user_group_pairs
+                if group_id in project_by_group
+            },
+        )
 
     def _process_quota_user_isilon(self, record: Dict, target_map: Dict, group_map: Dict,
                                     users_map: Dict, users_uid_map: Dict,

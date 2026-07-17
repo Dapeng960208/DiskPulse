@@ -12,10 +12,13 @@ from sqlalchemy.orm import Session
 
 from appConfig import base_config
 from crud import aiCrud
-from models import AIConversation, AIAuditLog, AIMessage, User
+from models import AIConversation, AIAuditLog, AIMessage, Group, StorageUsage, User
+from services.audit_service import AuditContext, append_audit_event, redact_audit_payload
 from services.ai_client import AIClientError, AIClientToolArgumentsError, AIClientToolCall, chat_completion_stream
 from services.ai_config_service import serialize_model
 from services.ai_tool_service import build_tool_registry, execute_tool, tool_definitions
+from services.project_access_service import accessible_project_ids
+from utils.auth_service import is_super_admin
 
 
 SYSTEM_PROMPT = """你是 DiskPulse AI 助手。你只能使用已授权的只读工具查询数据。
@@ -25,6 +28,29 @@ SYSTEM_PROMPT = """你是 DiskPulse AI 助手。你只能使用已授权的只�
 _DISPLAY_TOOL_RESULT_LIMIT_BYTES = 32 * 1024
 _FAILED_RESPONSE = "抱歉，AI 服务暂时不可用，请稍后重试。"
 _MAX_TOOL_ARGUMENT_REPAIRS = 2
+_REDACTED = "[REDACTED]"
+_HIDDEN_HISTORY_CONTENT = "该历史回复关联的项目权限已失效，内容已隐藏。"
+_TRACE_SENSITIVE_KEY_PARTS = (
+    "password",
+    "secret",
+    "token",
+    "api_key",
+    "apikey",
+    "authorization",
+    "credential",
+    "cookie",
+    "prompt",
+    "request",
+    "response",
+    "message",
+    "content",
+    "path",
+    "directory",
+    "filename",
+    "raw",
+    "device",
+    "body",
+)
 _RECOVERY_BY_REASON = {
     "tool_iteration_limit": {"reason": "tool_iteration_limit", "action": "continue", "label": "继续查询"},
     "invalid_tool_arguments": {"reason": "invalid_tool_arguments", "action": "retry", "label": "重新查询"},
@@ -46,25 +72,35 @@ def _json_safe(value: object) -> object:
         return str(value)
 
 
-def _redact_sensitive(value: object) -> object:
-    sensitive_names = {"password", "secret", "token", "api_key", "apikey", "authorization", "credential"}
+def _is_sensitive_path(value: str) -> bool:
+    return (
+        value.startswith(("/", "\\"))
+        or (len(value) >= 3 and value[0].isalpha() and value[1] == ":" and value[2] in {"/", "\\"})
+    )
+
+
+def _redact_sensitive(value: object, *, key: str | None = None) -> object:
+    key_name = (key or "").casefold()
+    if any(name in key_name for name in _TRACE_SENSITIVE_KEY_PARTS):
+        return _REDACTED
     if isinstance(value, dict):
         return {
-            str(key): (
-                "[REDACTED]"
-                if any(name in str(key).lower() for name in sensitive_names)
-                else _redact_sensitive(item)
-            )
-            for key, item in value.items()
+            str(item_key): _redact_sensitive(item, key=str(item_key))
+            for item_key, item in value.items()
         }
     if isinstance(value, list):
-        return [_redact_sensitive(item) for item in value]
+        return [_redact_sensitive(item, key=key) for item in value]
+    if isinstance(value, str):
+        return _REDACTED if _is_sensitive_path(value) else value
     return value
 
 
 def _display_tool_result(result: object) -> tuple[object, bool]:
     """Keep a bounded, valid display copy without changing provider-facing tool output."""
-    safe = _redact_sensitive(_json_safe(result))
+    payload = _json_safe(result)
+    if isinstance(payload, dict) and payload.get("ok") is False:
+        return {"ok": False, "error": "工具请求失败"}, False
+    safe = _redact_sensitive(payload)
     encoded = json.dumps(safe, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     if len(encoded) <= _DISPLAY_TOOL_RESULT_LIMIT_BYTES:
         return safe, False
@@ -75,6 +111,174 @@ def _display_tool_result(result: object) -> tuple[object, bool]:
         "original_bytes": len(encoded),
         "message": "工具结果过大，已截断展示。",
     }, True
+
+
+def _as_project_id(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        project_id = int(value)
+    except (TypeError, ValueError):
+        return None
+    return project_id if project_id > 0 else None
+
+
+def _known_visibility(
+    project_scope_ids: set[int] | tuple[int, ...] | list[int] = (),
+    *,
+    requires_super_admin: bool = False,
+) -> dict:
+    return {
+        "known": True,
+        "project_scope_ids": sorted(set(project_scope_ids)),
+        "requires_super_admin": requires_super_admin,
+    }
+
+
+def _unknown_visibility() -> dict:
+    return {"known": False, "project_scope_ids": [], "requires_super_admin": False}
+
+
+def _normalise_visibility(value: object) -> dict | None:
+    if not isinstance(value, dict) or value.get("known") is not True:
+        return None
+    raw_project_ids = value.get("project_scope_ids", [])
+    if not isinstance(raw_project_ids, list):
+        return None
+    project_ids = {_as_project_id(item) for item in raw_project_ids}
+    if None in project_ids:
+        return None
+    return _known_visibility(
+        project_ids,
+        requires_super_admin=value.get("requires_super_admin") is True,
+    )
+
+
+def _combine_visibility(left: dict, right: dict) -> dict:
+    if not left["known"] or not right["known"]:
+        return _unknown_visibility()
+    return _known_visibility(
+        set(left["project_scope_ids"]) | set(right["project_scope_ids"]),
+        requires_super_admin=left["requires_super_admin"] or right["requires_super_admin"],
+    )
+
+
+def _project_id_for_group(db: Session, group_id: object) -> int | None:
+    identifier = _as_project_id(group_id)
+    if identifier is None:
+        return None
+    group = db.get(Group, identifier)
+    return _as_project_id(group.project_id) if group is not None else None
+
+
+def _project_id_for_storage_usage(db: Session, storage_usage_id: object) -> int | None:
+    identifier = _as_project_id(storage_usage_id)
+    if identifier is None:
+        return None
+    storage_usage = db.get(StorageUsage, identifier)
+    return _project_id_for_group(db, storage_usage.group_id) if storage_usage is not None else None
+
+
+def _collect_project_scope_ids(db: Session, value: object) -> set[int]:
+    project_ids: set[int] = set()
+
+    def add_project(value: object) -> None:
+        project_id = _as_project_id(value)
+        if project_id is not None:
+            project_ids.add(project_id)
+
+    def add_related(resource_type: object, resource_id: object) -> None:
+        normalized = str(resource_type or "").replace("_", "").casefold()
+        if normalized == "project":
+            add_project(resource_id)
+        elif normalized == "group":
+            project_id = _project_id_for_group(db, resource_id)
+            if project_id is not None:
+                project_ids.add(project_id)
+        elif normalized == "storageusage":
+            project_id = _project_id_for_storage_usage(db, resource_id)
+            if project_id is not None:
+                project_ids.add(project_id)
+
+    def visit(item: object) -> None:
+        if isinstance(item, dict):
+            add_project(item.get("project_id"))
+            project = item.get("project")
+            if isinstance(project, dict):
+                add_project(project.get("id"))
+            project_id = _project_id_for_group(db, item.get("group_id"))
+            if project_id is not None:
+                project_ids.add(project_id)
+            project_id = _project_id_for_storage_usage(db, item.get("storage_usage_id"))
+            if project_id is not None:
+                project_ids.add(project_id)
+            add_related(item.get("related_type"), item.get("related_id"))
+            for child in item.values():
+                visit(child)
+        elif isinstance(item, (list, tuple, set)):
+            for child in item:
+                visit(child)
+
+    visit(value)
+    return project_ids
+
+
+def _tool_visibility(db: Session, definition, arguments: dict, result: dict) -> dict:
+    if definition.system_management:
+        return _known_visibility(requires_super_admin=True)
+    project_ids = _collect_project_scope_ids(db, arguments) | _collect_project_scope_ids(db, result)
+    if definition.name == "list_projects":
+        data = result.get("data") if isinstance(result, dict) else None
+        items = data.get("items") if isinstance(data, dict) else data
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict):
+                    project_id = _as_project_id(item.get("id"))
+                    if project_id is not None:
+                        project_ids.add(project_id)
+    # The tool has already passed its route-level authorization.  With no
+    # project reference in either request or result it is a verified global
+    # response, not an unknown project-bearing response.  Historical records
+    # without this explicit marker still fail closed below.
+    return _known_visibility(project_ids)
+
+
+def _visibility_from_trace_entries(detail: object) -> dict:
+    if not isinstance(detail, list) or not detail:
+        return _known_visibility()
+    visibility = _known_visibility()
+    for trace in detail:
+        if not isinstance(trace, dict):
+            return _unknown_visibility()
+        trace_visibility = _normalise_visibility(trace.get("visibility"))
+        if trace_visibility is None:
+            return _unknown_visibility()
+        visibility = _combine_visibility(visibility, trace_visibility)
+    return visibility
+
+
+def _visibility_for_audit(audit: AIAuditLog) -> dict:
+    response = _audit_payload(audit.response_payload, {})
+    detail = _audit_payload(audit.detail_payload, [])
+    trace_visibility = _visibility_from_trace_entries(detail)
+    response_visibility = _normalise_visibility(
+        response.get("visibility") if isinstance(response, dict) else None
+    )
+    if response_visibility is None:
+        # Historical turns without an explicit response marker are only safe
+        # when every persisted tool trace carries an explicit scope marker.
+        # A no-tool legacy turn may still summarize an earlier project lookup,
+        # so it must not become globally visible by default.
+        return trace_visibility if isinstance(detail, list) and detail else _unknown_visibility()
+    return _combine_visibility(response_visibility, trace_visibility)
+
+
+def _visibility_is_allowed(visibility: dict, current_user: User | None, project_ids: set[int] | None) -> bool:
+    if current_user is None or not visibility["known"]:
+        return False
+    if visibility["requires_super_admin"] and not is_super_admin(current_user):
+        return False
+    return project_ids is None or set(visibility["project_scope_ids"]).issubset(project_ids)
 
 
 def _audit_payload(value: str | None, fallback: object) -> object:
@@ -107,17 +311,24 @@ def _message_turn_metadata(message: AIMessage, audits_by_message: dict[int, AIAu
     return metadata
 
 
-def serialize_message(message: AIMessage, audit: AIAuditLog | None = None) -> dict:
+def serialize_message(
+    message: AIMessage,
+    audit: AIAuditLog | None = None,
+    *,
+    visible: bool = True,
+) -> dict:
     data = {
         "id": message.id,
         "conversation_id": message.conversation_id,
         "role": message.role,
-        "content": message.content,
+        "content": message.content if visible or message.role != "assistant" else _HIDDEN_HISTORY_CONTENT,
         "created_at": message.created_at,
         "updated_at": message.updated_at,
     }
     if message.role == "assistant":
-        if audit is None:
+        if not visible:
+            data.update({"status": "restricted", "tool_calls": []})
+        elif audit is None:
             data.update({"status": "succeeded", "tool_calls": []})
         else:
             data.update(_message_turn_metadata(message, {message.id: audit}))
@@ -129,6 +340,7 @@ def serialize_conversation(
     *,
     include_messages: bool = False,
     audits_by_message: dict[int, AIAuditLog] | None = None,
+    visibility_by_message: dict[int, bool] | None = None,
 ) -> dict:
     data = {
         "id": conversation.id,
@@ -140,11 +352,13 @@ def serialize_conversation(
     }
     if include_messages:
         audits_by_message = audits_by_message or {}
+        visibility_by_message = visibility_by_message or {}
         data["messages"] = [
-            {
-                **serialize_message(message),
-                **(_message_turn_metadata(message, audits_by_message) if message.role == "assistant" else {}),
-            }
+            serialize_message(
+                message,
+                audit=audits_by_message.get(message.id),
+                visible=visibility_by_message.get(message.id, True),
+            )
             for message in conversation.messages
         ]
     return data
@@ -158,14 +372,36 @@ def list_conversations(db: Session, user_id: int) -> list[dict]:
     return [serialize_conversation(item) for item in aiCrud.list_conversations(db, user_id)]
 
 
-def create_conversation(db: Session, user_id: int, title: str, model_id: int) -> dict:
+def create_conversation(
+    db: Session,
+    user_id: int,
+    title: str,
+    model_id: int,
+    audit_context: AuditContext | None = None,
+) -> dict:
     model = aiCrud.get_model(db, model_id)
     if model is None or not model.enabled or not model.enable_chat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="可用 AI 模型不存在")
     conversation = aiCrud.add_conversation(
         db,
-        AIConversation(user_id=user_id, model_id=model_id, title=title.strip() or "新对话"),
+        AIConversation(
+            user_id=user_id,
+            model_id=model_id,
+            title=title.strip() or "新对话",
+        ),
     )
+    if audit_context is not None:
+        db.flush()
+        append_audit_event(
+            db,
+            context=audit_context,
+            phase="result",
+            action="ai.conversation.create",
+            resource_type="ai_conversation",
+            resource_id=conversation.id,
+            outcome="success",
+            after_summary={"model_id": model_id},
+        )
     db.commit()
     db.refresh(conversation)
     return serialize_conversation(conversation)
@@ -173,21 +409,46 @@ def create_conversation(db: Session, user_id: int, title: str, model_id: int) ->
 
 def get_conversation(db: Session, conversation_id: int, user_id: int) -> dict:
     conversation = _conversation_or_404(db, conversation_id, user_id)
-    audits_by_message = {}
-    for audit in aiCrud.list_conversation_audits(db, conversation.id):
-        response = _audit_payload(audit.response_payload, {})
-        message_id = response.get("message_id") if isinstance(response, dict) else None
-        if isinstance(message_id, int):
-            audits_by_message[message_id] = audit
+    audits_by_message = _audits_by_message(db, conversation.id)
+    # An assistant response without an audit record has no verifiable scope.
+    # Keep legacy rows fail-closed until an explicit visibility marker exists.
+    visibility_by_message = {
+        message.id: False for message in conversation.messages if message.role == "assistant"
+    }
+    current_user = db.get(User, user_id)
+    current_project_ids = accessible_project_ids(db, current_user)
+    for message_id, audit in audits_by_message.items():
+        visibility_by_message[message_id] = _visibility_is_allowed(
+            _visibility_for_audit(audit),
+            current_user,
+            current_project_ids,
+        )
     return serialize_conversation(
         conversation,
         include_messages=True,
         audits_by_message=audits_by_message,
+        visibility_by_message=visibility_by_message,
     )
 
 
-def delete_conversation(db: Session, conversation_id: int, user_id: int) -> None:
+def delete_conversation(
+    db: Session,
+    conversation_id: int,
+    user_id: int,
+    audit_context: AuditContext | None = None,
+) -> None:
     conversation = _conversation_or_404(db, conversation_id, user_id)
+    if audit_context is not None:
+        append_audit_event(
+            db,
+            context=audit_context,
+            phase="result",
+            action="ai.conversation.delete",
+            resource_type="ai_conversation",
+            resource_id=conversation.id,
+            outcome="success",
+            before_summary={"model_id": conversation.model_id},
+        )
     db.delete(conversation)
     db.commit()
 
@@ -199,7 +460,31 @@ def _conversation_or_404(db: Session, conversation_id: int, user_id: int) -> AIC
     return conversation
 
 
-def _history(db: Session, conversation_id: int) -> list[dict]:
+def _audits_by_message(db: Session, conversation_id: int) -> dict[int, AIAuditLog]:
+    audits_by_message = {}
+    for audit in aiCrud.list_conversation_audits(db, conversation_id):
+        response = _audit_payload(audit.response_payload, {})
+        message_id = response.get("message_id") if isinstance(response, dict) else None
+        if isinstance(message_id, int):
+            audits_by_message[message_id] = audit
+    return audits_by_message
+
+
+def _historical_visibility(
+    db: Session,
+    conversation_id: int,
+    *,
+    exclude_audit_id: int | None = None,
+) -> dict:
+    visibility = _known_visibility()
+    for audit in aiCrud.list_conversation_audits(db, conversation_id):
+        if audit.id == exclude_audit_id:
+            continue
+        visibility = _combine_visibility(visibility, _visibility_for_audit(audit))
+    return visibility
+
+
+def _history(db: Session, conversation_id: int, *, current_user: User | None) -> list[dict]:
     # Fetch the newest bounded window cheaply, then restore provider-facing chronology.
     rows = list(
         db.scalars(
@@ -209,12 +494,22 @@ def _history(db: Session, conversation_id: int) -> list[dict]:
             .limit(20)
         )
     )
-    return [
-        {"role": item.role, "content": item.content}
-        for item in reversed(rows)
+    audits_by_message = _audits_by_message(db, conversation_id)
+    project_ids = accessible_project_ids(db, current_user) if current_user is not None else set()
+    history = []
+    for item in reversed(rows):
         # The current turn reserves an empty assistant row before streaming; it is not provider history.
-        if item.role != "assistant" or item.content.strip()
-    ]
+        if item.role == "assistant" and not item.content.strip():
+            continue
+        content = item.content
+        if item.role == "assistant":
+            audit = audits_by_message.get(item.id)
+            if audit is None or not _visibility_is_allowed(
+                _visibility_for_audit(audit), current_user, project_ids
+            ):
+                content = _HIDDEN_HISTORY_CONTENT
+        history.append({"role": item.role, "content": content})
+    return history
 
 
 def _provider_tool_messages(provider: str, call: AIClientToolCall, result: dict) -> list[dict]:
@@ -259,9 +554,13 @@ def _finish_audit(
     response: dict | None = None,
     detail: list[dict] | None = None,
     error_message: str | None = None,
+    visibility: dict | None = None,
 ) -> None:
+    response_payload = dict(response or {})
+    if visibility is not None:
+        response_payload["visibility"] = visibility
     audit.status = status_value
-    audit.response_payload = json.dumps(response or {}, ensure_ascii=False)
+    audit.response_payload = json.dumps(response_payload, ensure_ascii=False)
     audit.detail_payload = json.dumps(detail or [], ensure_ascii=False)
     audit.error_message = error_message
     audit.finished_at = datetime.now()
@@ -286,6 +585,7 @@ def _terminal_message(
     tool_trace: list[dict],
     error_message: str | None = None,
     recovery: dict | None = None,
+    visibility: dict | None = None,
 ) -> tuple[dict, dict]:
     assistant.content = text
     assistant.updated_at = datetime.now()
@@ -301,10 +601,36 @@ def _terminal_message(
         response=response,
         detail=tool_trace,
         error_message=error_message,
+        visibility=visibility,
     )
     db.refresh(assistant)
     db.refresh(conversation)
     return serialize_message(assistant, audit), serialize_conversation(conversation)
+
+
+def _append_message_lifecycle_result(
+    db: Session,
+    *,
+    context: AuditContext | None,
+    conversation: AIConversation,
+    model_id: int,
+    outcome: str,
+    status_value: str,
+    reason_code: str | None = None,
+) -> None:
+    if context is None:
+        return
+    append_audit_event(
+        db,
+        context=context,
+        phase="result",
+        action="ai.message.send",
+        resource_type="ai_conversation",
+        resource_id=conversation.id,
+        outcome=outcome,
+        reason_code=reason_code,
+        after_summary={"model_id": model_id, "status": status_value},
+    )
 
 
 def _safe_audit_error(error: Exception) -> str:
@@ -344,6 +670,7 @@ def _invalid_tool_trace(
         "status": "failed",
         "elapsed_ms": 0,
         "truncated": False,
+        "visibility": _known_visibility(),
         "result": {"ok": False, "error": "AI 工具参数格式无效"},
     }
     started = {
@@ -387,6 +714,7 @@ def stream_message(
     user_id: int,
     content: str,
     current_user: User | None = None,
+    audit_context: AuditContext | None = None,
 ) -> Iterator[tuple[str, dict]]:
     conversation = _conversation_or_404(db, conversation_id, user_id)
     model = aiCrud.get_model(db, conversation.model_id)
@@ -415,9 +743,20 @@ def stream_message(
             request_payload=json.dumps({"content": "[REDACTED]", "length": len(content)}, ensure_ascii=False),
             response_payload=json.dumps({"message_id": assistant.id}, ensure_ascii=False),
             status="running",
-            trace_id=uuid4().hex,
+            trace_id=(audit_context.trace_id if audit_context is not None else uuid4().hex),
         ),
     )
+    if audit_context is not None:
+        append_audit_event(
+            db,
+            context=audit_context,
+            phase="attempt",
+            action="ai.message.send",
+            resource_type="ai_conversation",
+            resource_id=conversation.id,
+            outcome="success",
+            metadata={"model_id": model.id},
+        )
     # Persist the recoverable user turn and audit before any SSE bytes leave the process.
     db.commit()
     db.refresh(user_message)
@@ -425,6 +764,11 @@ def stream_message(
     db.refresh(conversation)
     db.refresh(audit)
 
+    turn_visibility = _historical_visibility(
+        db,
+        conversation.id,
+        exclude_audit_id=audit.id,
+    )
     tool_trace: list[dict] = []
     emitted_text: list[str] = []
     final_text = ""
@@ -455,7 +799,7 @@ def stream_message(
         system_messages = [{"role": "system", "content": model.system_prompt or SYSTEM_PROMPT}]
         if any(item.system_management for item in registry.values()):
             system_messages.append({"role": "system", "content": _SYSTEM_MANAGEMENT_PROMPT})
-        messages = [*system_messages, *_history(db, conversation.id)]
+        messages = [*system_messages, *_history(db, conversation.id, current_user=current_user)]
         # Bound recursive model/tool turns independently of the number of tools per turn.
         max_iterations = int(base_config.get("ai.max_tool_iterations", 4))
         for iteration in range(1, max_iterations + 1):
@@ -532,15 +876,17 @@ def stream_message(
                     current_user=current_user,
                 )
                 elapsed_ms = max(0, round((monotonic() - started_at) * 1000))
-                if not result.get("ok"):
+                if result.get("ok") is False:
                     audit.tool_failed_count += 1
                 display_result, truncated = _display_tool_result(result)
+                visibility = _tool_visibility(db, registry[call.name], call.arguments, result)
                 trace_entry.update(
                     {
-                        "status": "succeeded" if result.get("ok") else "failed",
+                        "status": "failed" if result.get("ok") is False else "succeeded",
                         "elapsed_ms": elapsed_ms,
                         "result": display_result,
                         "truncated": truncated,
+                        "visibility": visibility,
                     }
                 )
                 _persist_running_audit(db, audit, tool_trace)
@@ -577,6 +923,15 @@ def stream_message(
             except Exception:
                 degraded_error_message = f"{degraded_error_message}；无工具总结调用失败"
             final_text = "".join(summary_text).strip() or _DEGRADED_FALLBACKS[recovery["reason"]]
+            _append_message_lifecycle_result(
+                db,
+                context=audit_context,
+                conversation=conversation,
+                model_id=model.id,
+                outcome="failure",
+                status_value="degraded",
+                reason_code=recovery["reason"],
+            )
             message_data, conversation_data = _terminal_message(
                 db,
                 assistant=assistant,
@@ -587,6 +942,7 @@ def stream_message(
                 tool_trace=tool_trace,
                 error_message=degraded_error_message,
                 recovery=recovery,
+                visibility=_combine_visibility(turn_visibility, _visibility_from_trace_entries(tool_trace)),
             )
             terminal = True
             yield "completed", {
@@ -599,6 +955,14 @@ def stream_message(
 
         if not final_text.strip():
             raise AIClientError("AI 服务返回空内容")
+        _append_message_lifecycle_result(
+            db,
+            context=audit_context,
+            conversation=conversation,
+            model_id=model.id,
+            outcome="success",
+            status_value="succeeded",
+        )
         message_data, conversation_data = _terminal_message(
             db,
             assistant=assistant,
@@ -607,6 +971,7 @@ def stream_message(
             text=final_text.strip(),
             status_value="succeeded",
             tool_trace=tool_trace,
+            visibility=_combine_visibility(turn_visibility, _visibility_from_trace_entries(tool_trace)),
         )
         terminal = True
         yield "completed", {
@@ -617,6 +982,15 @@ def stream_message(
         }
     except GeneratorExit:
         if not terminal:
+            _append_message_lifecycle_result(
+                db,
+                context=audit_context,
+                conversation=conversation,
+                model_id=model.id,
+                outcome="failure",
+                status_value="cancelled",
+                reason_code="cancelled",
+            )
             _terminal_message(
                 db,
                 assistant=assistant,
@@ -626,9 +1000,19 @@ def stream_message(
                 status_value="cancelled",
                 tool_trace=tool_trace,
                 error_message="用户取消生成",
+                visibility=_combine_visibility(turn_visibility, _visibility_from_trace_entries(tool_trace)),
             )
         raise
     except asyncio.CancelledError:
+        _append_message_lifecycle_result(
+            db,
+            context=audit_context,
+            conversation=conversation,
+            model_id=model.id,
+            outcome="failure",
+            status_value="cancelled",
+            reason_code="cancelled",
+        )
         message_data, conversation_data = _terminal_message(
             db,
             assistant=assistant,
@@ -638,6 +1022,7 @@ def stream_message(
             status_value="cancelled",
             tool_trace=tool_trace,
             error_message="用户取消生成",
+            visibility=_combine_visibility(turn_visibility, _visibility_from_trace_entries(tool_trace)),
         )
         terminal = True
         yield "cancelled", {
@@ -653,6 +1038,15 @@ def stream_message(
         assistant = db.get(AIMessage, assistant_id)
         conversation = aiCrud.get_conversation(db, conversation_id, user_id)
         if audit is not None and assistant is not None and conversation is not None:
+            _append_message_lifecycle_result(
+                db,
+                context=audit_context,
+                conversation=conversation,
+                model_id=model.id,
+                outcome="failure",
+                status_value="failed",
+                reason_code="ai_message_failed",
+            )
             message_data, conversation_data = _terminal_message(
                 db,
                 assistant=assistant,
@@ -662,6 +1056,7 @@ def stream_message(
                 status_value="failed",
                 tool_trace=tool_trace,
                 error_message=_safe_audit_error(error),
+                visibility=_combine_visibility(turn_visibility, _visibility_from_trace_entries(tool_trace)),
             )
             terminal = True
             yield "error", {

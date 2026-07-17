@@ -1,5 +1,14 @@
 # 错误记录
 
+### 2026-07-18：并行分支复用了 Alembic revision `000000000008`
+
+- 触发：将遥测可观测与项目 RBAC/统一审计分支合并，并执行迁移唯一 head 与 SQLite 升降级回归。
+- 现象：Alembic 报告 revision `000000000008` 重复；RBAC 测试虽然指定 r8，但实际只执行遥测表，`pt_user_id` 未删除。
+- 根因：两个独立工作包都以 r7 为上游并分配了 r8，不能在已存在 r8 的主线中继续复用 revision ID。
+- 修复：保留 `000000000008_telemetry_collection_runs.py` 不变，RBAC/审计迁移改为显式前向 `000000000009_project_rbac_unified_audit.py`，并更新所有迁移契约。
+- 验证：新唯一 head 预期 RED；修复后 `alembic heads` 为 `000000000009 (head)`，遥测/RBAC 迁移回归 `38 passed`，完整后端回归 `526 passed`。
+- 风险：生产仍需在备份和变更窗口内验证 r8 已执行环境到 r9 的真实 upgrade；r9 的 `pt_user_id` 数据恢复限制不变。
+
 ### 2026-07-18：metrics 抓取复用了应用数据库连接池
 
 - 触发：对 `/storage-pulse/api/v1/metrics` 进行 CodeGraph 实现复查，并新增路由和专用连接生命周期回归测试。
@@ -17,6 +26,69 @@
 - 修复：未创建或复制真实配置；本次改用 SQLite 实际 upgrade/downgrade 与 SQLite/PostgreSQL/MySQL 离线 DDL 编译测试验证 `000000000008`。
 - 验证：新增迁移测试通过，`alembic heads` 显示唯一 `000000000008`。
 - 风险：真实 PostgreSQL 的升级、回退、外键 `ON DELETE SET NULL` 和连接超时行为仍需由部署环境使用受控运行时配置验收。
+
+### 2026-07-18：AI 会话续聊可重新暴露已撤销项目权限的数据
+
+- 触发：对“不绑定项目 ID 的 AI 会话”执行合并前权限复查；先创建含项目工具结果的回合，再撤销成员资格并继续对话或读取历史。
+- 现象：服务端把原助手正文直接交给模型续聊；后续没有工具调用的总结回合也没有继承先前的项目可见范围，可能在新 SSE 或历史 API 中泄露失权数据。
+- 根因：历史读取只用单回合审计 trace 判定可见性；无工具或 legacy 回合被默认视为全局可见，模型输入路径没有按当前权限过滤。
+- 修复：无权助手正文在模型输入和历史响应中替换为受限占位；新回合合并会话历史范围和当前工具范围；缺少 audit/visibility 的旧助手消息 fail-closed。
+- 验证：RED 提交 `187aa4c` 覆盖撤权续聊、跨回合范围继承与 legacy 场景；GREEN 提交 `eaecab7` 后 AI 历史/服务/平台及关联审计组合 `81 passed`。
+- 风险：真实 Provider 对受限占位的回答质量需在不含生产数据的测试会话中抽检。
+
+### 2026-07-18：统一审计未覆盖原始响应字段别名
+
+- 触发：对审计脱敏名单进行合并前安全复查，输入 `response`、`raw_response`、`device_response` 和 `body` 字段。
+- 现象：原实现只识别部分 `response_payload` 命名，别名字段可能以截断文本写入审计摘要。
+- 根因：通用敏感字段匹配未包含 `response` 与 `body` 词根。
+- 修复：将两者加入统一脱敏名单，覆盖上述响应别名的递归脱敏。
+- 验证：RED 提交 `6da29b5` 预期失败；GREEN 提交 `7be0180` 后统一审计文件 `13 passed`。
+- 风险：后续新增外部 Provider 字段仍须随接入添加脱敏回归。
+
+### 2026-07-18：Alembic 执行后 pytest 无法捕获采集调度日志
+
+- 触发：执行 `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test -q`。
+- 现象：`test_storage_collection_trigger.py` 两条断言在单文件通过、全量运行失败，`caplog.text` 为空。
+- 根因：Alembic `env.py` 的 `fileConfig()` 替换了 root handlers，移除了 pytest 的捕获 handler。
+- 修复：仅在 root 尚无 handler 时加载 Alembic INI 日志配置；CLI 仍获得默认日志配置，宿主应用和测试保留自身 handler。
+- 验证：新增 RED/GREEN 后，迁移日志回归与采集调度组合 `12 passed`，后端全量 `490 passed`。
+- 风险：生产 CLI 日志行为未在真实 PostgreSQL 变更窗口验证。
+
+### 2026-07-18：合并 RBAC 审计迁移会丢失项目告警规则
+
+- 触发：在 SQLite 执行 `000000000007 → 000000000008 → 000000000007`。
+- 现象：batch `copy_from` 未包含 `projects.storage_alert_rule`，升级或降级后列/JSON 值可能丢失。
+- 根因：合并后的 SQLite 迁移只复制了部分旧项目列。
+- 修复：在迁移的 SQLite 批处理结构中保留 `storage_alert_rule`，并补唯一 head、三方言 DDL 与实际升级/降级测试。
+- 验证：迁移专题测试 `6 passed`；SQLite、PostgreSQL、MySQL 离线 DDL 均编译通过。
+- 风险：删除的 `pt_user_id` 历史值仍不可由 downgrade 恢复，升级前必须备份。
+
+### 2026-07-18：配额测试意外连接真实 Kombu broker
+
+- 触发：执行 `backend/test/test_quota_adjustment.py -q`。
+- 现象：前三项后阻塞在 Kombu broker 投递；中断后显示 `3 passed in 85.59s`，栈落在 `kombu.utils.functional.py:332`。
+- 根因：配额成功路径默认向 Celery 投递通知，测试没有隔离异步 enqueue。
+- 修复：测试文件默认将 enqueue 替换为 no-op；需要断言入队的用例显式 monkeypatch，生产投递逻辑未改。
+- 验证：配额聚焦测试 `19 passed in 1.74s`；服务层无认证主体调用另有 RED/GREEN，现返回 `401`。
+- 风险：真实 broker、设备与通知投递仍需部署环境联调。
+
+### 2026-07-18：AI 历史和审计详情可能暴露过期或敏感工具数据
+
+- 触发：撤销项目成员关系后读取同一创建者的 AI 历史，或读取包含旧 prompt/path/response 的 AI 审计详情。
+- 现象：历史助手消息和工具结果仍可返回；AI 审计详情可返回完整路径、prompt、token 或原始 response。
+- 根因：会话只检查创建者，历史轨迹没有范围再授权；AI 专项审计读取没有二次脱敏。
+- 修复：每个工具轨迹保存脱敏可见范围，读取时按当前成员权限重新判定；范围失效/不可证明时隐藏整轮内容；AI 专项审计读取再次脱敏并继承请求 trace。
+- 验证：AI 权限、脱敏与既有 AI 平台/服务回归 `48 passed`，后端全量 `490 passed`。
+- 风险：生产环境需按真实权限撤销和 Provider 响应进行脱敏抽检。
+
+### 2026-07-18：前端全量 coverage 被过期测试隔离契约阻断
+
+- 触发：执行 `npm run test:coverage`。
+- 现象：布局、应用壳、告警路由和组件烟测共 5 条失败；其中出现 CRLF 下样式选择器失效、未激活 Pinia、路由元数据顺序假设和深层 API 基类为 `undefined`。
+- 根因：测试依赖了平台行尾、实现字段相邻顺序，或在 smoke 场景加载了不属于当前包装页边界的 store/API/异步子树。
+- 修复：使用跨行尾选择器并放宽非语义元数据顺序；为 AppLayout 补齐 breadcrumbs/router Pinia 隔离，为详情烟测 mock 深层依赖和 Element Plus 子组件。未修改生产页面、路由或样式。
+- 验证：四个目标文件共 `28 passed`；全量 coverage 无失败，Lines/Statements `97.67%`、Functions `82.26%`、Branches `87.40%`；`npm run build:prod` 通过。
+- 风险：构建仍保留 `%VITE_APP_TITLE%` 未定义和大 chunk 警告；两者不影响本轮功能正确性。
 
 ### 2026-07-17：AI 工具轮次和参数格式错误被泛化为服务不可用
 

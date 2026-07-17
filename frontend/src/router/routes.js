@@ -284,6 +284,27 @@ export default [
           isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },
+      {
+        path: 'audit-events',
+        name: 'AuditEvents',
+        component: () => import('@/pages/admin/audit/AuditEventListPage.vue'),
+        meta: {
+          title: '统一操作审计',
+          icon: 'i-ri-file-search-line',
+          isAccessible: () => hasRole('superadmin') ? 200 : 403,
+        },
+      },
+      {
+        path: 'audit-events/:id',
+        name: 'AuditEventDetail',
+        component: () => import('@/pages/admin/audit/AuditEventDetailPage.vue'),
+        meta: {
+          title: '审计事件详情',
+          isHidden: true,
+          breadcrumb: ['系统管理', '统一操作审计', '审计事件详情'],
+          isAccessible: () => hasRole('superadmin') ? 200 : 403,
+        },
+      },
     ],
   },
 

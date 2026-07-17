@@ -25,7 +25,7 @@ AdminDep = Annotated[None, Depends(require_super_admin)]
     },
 )
 def list_group_tags(
-    _current_user: CurrentUserDep,
+    _admin: AdminDep,
     db: DBDep,
     page: Annotated[int, Query(ge=1)] = 1,
     size: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -58,7 +58,7 @@ def create_group_tag(data: groupTagSchema.GroupTagWrite, _admin: AdminDep, db: D
         "ai_description": "查询指定项目组标签",
     },
 )
-def get_group_tag(group_tag_id: int, _current_user: CurrentUserDep, db: DBDep):
+def get_group_tag(group_tag_id: int, _admin: AdminDep, db: DBDep):
     return groupTagService.get_group_tag(db, group_tag_id=group_tag_id)
 
 

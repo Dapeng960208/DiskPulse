@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 from celery.utils.log import get_task_logger
 from sqlalchemy import func
@@ -20,6 +21,7 @@ from models import (
     User,
 )
 from schemas.storageAlertRuleSchema import DEFAULT_STORAGE_ALERT_RULE
+from services.audit_service import AuditContext, append_audit_event
 from services.feishuNotificationService import FeishuNotificationService
 from services.storageAlertRuleService import (
     canonical_rule_signature,
@@ -32,6 +34,7 @@ from services.storageAlertRuleService import (
 logger = get_task_logger(__name__)
 RETRY_DELAYS_SECONDS = (60, 300, 900)
 MAX_DELIVERY_ATTEMPTS = 4
+DELIVERY_ATTEMPT_LEASE_SECONDS = 60
 TARGET_TYPE_LABELS = {"storage_usage": "用户目录", "group": "项目组", "project": "项目"}
 EVENT_TYPE_LABELS = {
     "trigger": "首次告警",
@@ -398,28 +401,61 @@ def storage_alerts_schedule_task():
     return event_ids
 
 
-@diskpulse_app.task(soft_time_limit=30, time_limit=45)
-def deliver_storage_alert_task(event_id):
+def _delivery_audit_context(audit_context_payload=None) -> AuditContext:
+    if audit_context_payload is not None:
+        return AuditContext(
+            request_id=audit_context_payload["request_id"],
+            trace_id=audit_context_payload["trace_id"],
+            operation_id=audit_context_payload["operation_id"],
+            actor_type=audit_context_payload.get("actor_type", "service"),
+            actor_user_id=audit_context_payload.get("actor_user_id"),
+        )
+    return AuditContext(
+        request_id=uuid4(),
+        trace_id=uuid4(),
+        operation_id=uuid4(),
+        actor_type="service",
+    )
+
+
+def _prepare_delivery_attempt(event_id, *, context: AuditContext, config):
     with SessionLocal.begin() as db:
         event = db.query(StorageAlerts).filter_by(id=event_id).with_for_update().first()
         if event is None or event.delivery_status not in {"pending", "retrying"}:
-            return
+            return None
         if not event.recipient_usernames:
             event.delivery_status = "skipped"
-            return
-        config = base_config.get("feishu_notification", {}) or {}
+            return None
         if not config.get("enabled"):
             event.delivery_status = "skipped"
-            return
+            return None
         event.delivery_attempts += 1
-        try:
-            info = event.related_info or {}
-            FeishuNotificationService(config).send(
-                usernames=event.recipient_usernames,
-                title=info.get("title", "存储容量告警"),
-                paragraphs=info.get("paragraphs", []),
-            )
-        except Exception as error:
+        event.next_attempt_at = datetime.now() + timedelta(seconds=DELIVERY_ATTEMPT_LEASE_SECONDS)
+        append_audit_event(
+            db,
+            context=context,
+            phase="attempt",
+            action="notification.storage_alert.deliver",
+            resource_type="storage_alert",
+            resource_id=event.id,
+            outcome="success",
+            metadata={"delivery_attempt": event.delivery_attempts},
+        )
+        info = event.related_info or {}
+        return {
+            "attempt": event.delivery_attempts,
+            "usernames": list(event.recipient_usernames),
+            "title": info.get("title", "存储容量告警"),
+            "paragraphs": info.get("paragraphs", []),
+        }
+
+
+def _record_delivery_result(event_id, *, context: AuditContext, attempt: int, error=None):
+    with SessionLocal.begin() as db:
+        event = db.query(StorageAlerts).filter_by(id=event_id).with_for_update().first()
+        if event is None or event.delivery_attempts != attempt:
+            return
+        if error is not None:
             event.delivery_error = str(error)[:512]
             if event.delivery_attempts >= MAX_DELIVERY_ATTEMPTS:
                 event.delivery_status = "failed"
@@ -429,12 +465,67 @@ def deliver_storage_alert_task(event_id):
                 event.next_attempt_at = datetime.now() + timedelta(
                     seconds=RETRY_DELAYS_SECONDS[event.delivery_attempts - 1]
                 )
-            logger.warning("Feishu storage alert delivery failed: event=%s", event_id)
+            append_audit_event(
+                db,
+                context=context,
+                phase="result",
+                action="notification.storage_alert.deliver",
+                resource_type="storage_alert",
+                resource_id=event.id,
+                outcome="failure",
+                reason_code="notification_delivery_failed",
+                after_summary={
+                    "delivery_status": event.delivery_status,
+                    "delivery_attempt": attempt,
+                },
+            )
         else:
             event.delivery_status = "sent"
             event.notified_at = datetime.now()
             event.next_attempt_at = None
             event.delivery_error = None
+            append_audit_event(
+                db,
+                context=context,
+                phase="result",
+                action="notification.storage_alert.deliver",
+                resource_type="storage_alert",
+                resource_id=event.id,
+                outcome="success",
+                after_summary={
+                    "delivery_status": event.delivery_status,
+                    "delivery_attempt": attempt,
+                },
+            )
+
+
+@diskpulse_app.task(soft_time_limit=30, time_limit=45)
+def deliver_storage_alert_task(event_id, audit_context_payload=None):
+    audit_context = _delivery_audit_context(audit_context_payload)
+    config = base_config.get("feishu_notification", {}) or {}
+    delivery = _prepare_delivery_attempt(event_id, context=audit_context, config=config)
+    if delivery is None:
+        return
+    try:
+        FeishuNotificationService(config).send(
+            usernames=delivery["usernames"],
+            title=delivery["title"],
+            paragraphs=delivery["paragraphs"],
+        )
+    except Exception as error:
+        _record_delivery_result(
+            event_id,
+            context=audit_context,
+            attempt=delivery["attempt"],
+            error=error,
+        )
+        logger.warning("Feishu storage alert delivery failed: event=%s", event_id)
+    else:
+        _record_delivery_result(
+            event_id,
+            context=audit_context,
+            attempt=delivery["attempt"],
+        )
 
 
 @diskpulse_app.task(soft_time_limit=50, time_limit=55)

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import json
 from unittest.mock import patch
 
 import redis
@@ -160,12 +161,17 @@ def test_business_api_accepts_bearer_token_and_logout_returns_null_result(api_cl
         "/storage-pulse/api/users/",
         headers={"Authorization": f"Bearer {token}"},
     )
+    projects_response = client.get(
+        "/storage-pulse/api/projects/",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     logout_response = client.post(
         "/storage-pulse/api/users/logout",
         headers={"Authorization": f"Bearer {token}"},
     )
 
-    assert users_response.status_code == 200
+    assert users_response.status_code == 403
+    assert projects_response.status_code == 200
     assert logout_response.status_code == 200
     assert logout_response.json()["result"] is None
 
@@ -200,3 +206,45 @@ def test_logout_revokes_current_access_token(api_client_factory):
 
     assert logout_response.status_code == 200
     assert profile_after_logout.status_code == 401
+
+
+def test_login_and_logout_append_safe_unified_audit_results(api_client_factory, session_factory):
+    base_config.set("jwt.secret_key", "test-secret")
+    client = api_client_factory([users.router], authenticated=False)
+
+    with patch("utils.auth_service.ldap_authenticate", return_value=_profile("bob", "Bob Li", "bob@example.com")):
+        login_response = client.post(
+            "/storage-pulse/api/users/login",
+            json={"username": "bob", "password": "private-password"},
+        )
+    with patch("utils.auth_service.ldap_authenticate", return_value=None):
+        rejected_response = client.post(
+            "/storage-pulse/api/users/login",
+            json={"username": "nobody", "password": "private-password"},
+        )
+    token = login_response.json()["result"]["token"]
+    logout_response = client.post(
+        "/storage-pulse/api/users/logout",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert (login_response.status_code, rejected_response.status_code, logout_response.status_code) == (200, 401, 200)
+    db = session_factory()
+    try:
+        events = db.query(models.AuditEvent).order_by(models.AuditEvent.occurred_at, models.AuditEvent.id).all()
+    finally:
+        db.close()
+    assert [(event.action, event.outcome) for event in events] == [
+        ("auth.login", "success"),
+        ("auth.login", "denied"),
+        ("auth.logout", "success"),
+    ]
+    assert all(event.phase == "result" for event in events)
+    assert events[0].actor_user_id is not None
+    assert events[1].actor_user_id is None
+    serialized = json.dumps(
+        [(event.before_summary, event.after_summary, event.event_metadata) for event in events],
+        ensure_ascii=False,
+    )
+    assert "private-password" not in serialized
+    assert token not in serialized

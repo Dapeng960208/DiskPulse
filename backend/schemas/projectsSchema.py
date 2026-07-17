@@ -29,8 +29,6 @@ class ProjectBase(ProjectBaseInfo):
     descriptions: str | None = None
     in_charge_user_id: int | None = None
     in_charge_user: usersSchema.OnlyUser | None = None
-    pt_user_id: int | None = None
-    pt_user: usersSchema.OnlyUser | None = None
 
     @computed_field
     def recipient_ids(self) -> list[int]:
@@ -39,6 +37,7 @@ class ProjectBase(ProjectBaseInfo):
 
 class Project(ProjectBase):
     id: int
+    capabilities: dict[str, bool] = Field(default_factory=dict)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -61,7 +60,6 @@ class ProjectUpdate(BaseModel):
     descriptions: str | None = None
     name: str
     in_charge_user_id: int | None = None
-    pt_user_id: int | None = None
     is_common: bool | None = False
     status: int | None = 1
     project_process_code: str | None = None

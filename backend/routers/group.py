@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Response
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from schemas import groupSchema, commonSchema, quotaSchema, storageTrendSchema
 from crud import groupCrud
-from dependencies import get_db, require_super_admin
-from services import quotaService
+from dependencies import CurrentUserDep, get_db, require_super_admin
+from services import audit_service, quotaService
+from services import project_access_service
 from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 import logging
 from utils.common import convert_timestamp_to_datetime
 from utils.plot import plot_real_time_line
 from utils.storageTarget import resolve_group_storage_target
+from utils.auth_service import is_super_admin
 from fastapi.responses import FileResponse
 
 logger = logging.getLogger('app:groups')
@@ -35,40 +37,56 @@ def read_groups(page: int | None = 1, size: int | None = 20, nameLike: str | Non
                 order: str | None = None, qtree_id: int | None = None,
                 volume_id: int | None = None, project_id: int | None = None,
                 storage_cluster_id: int | None = None, group_tag_id: int | None = None,
+                current_user: CurrentUserDep = None,
                 db: Session = Depends(get_db)):
+    if project_id is not None:
+        project_access_service.require_project_permission(db, current_user, project_id, "reader")
     groups, total = groupCrud.get_groups(db=db, page=page, size=size, nameLike=nameLike, prop=prop, order=order,
                                          qtree_id=qtree_id, volume_id=volume_id,
                                          project_id=project_id,
                                          storage_cluster_id=storage_cluster_id,
-                                         group_tag_id=group_tag_id)
+                                         group_tag_id=group_tag_id,
+                                         accessible_project_ids=project_access_service.accessible_project_ids(db, current_user))
     return commonSchema.ResponseModel[groupSchema.Group](
-        content=[groupCrud.serialize_group(group) for group in groups],
+        content=[
+            groupCrud.serialize_group(
+                group,
+                capabilities=project_access_service.group_capabilities(current_user, group),
+            )
+            for group in groups
+        ],
         total=total,
     )
 
 
 @router.get("/{group_id}", response_model=groupSchema.Group, openapi_extra={"ai_exposed": True, "ai_name": "get_group", "ai_description": "查询指定项目组"})
-def read_group(group_id: int, db: Session = Depends(get_db)):
-    db_group = groupCrud.get_group_by_id(db, group_id=group_id)
-    if db_group is None:
-        raise HTTPException(status_code=404, detail="Group not found")
+def read_group(group_id: int, current_user: CurrentUserDep, db: Session = Depends(get_db)):
+    db_group = project_access_service.require_group_permission(db, current_user, group_id)
 
-    return groupCrud.serialize_group(db_group)
+    return groupCrud.serialize_group(
+        db_group,
+        capabilities=project_access_service.group_capabilities(current_user, db_group),
+    )
 
 
 @router.get("/{group_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_group_realtime", "ai_description": "查询项目组实时容量趋势"})
 def read_group_realtime_data(group_id: int, start_time: datetime | None = None, end_time: datetime | None = None,
-                             indicator: storageTrendSchema.TrendIndicator = 'used', db: Session = Depends(get_db)):
-    db_group = groupCrud.get_group_by_id(db, group_id=group_id)
-    if db_group is None:
-        raise HTTPException(status_code=404, detail="Group not found")
+                             indicator: storageTrendSchema.TrendIndicator = 'used', current_user: CurrentUserDep = None,
+                             db: Session = Depends(get_db)):
+    db_group = project_access_service.require_group_permission(db, current_user, group_id)
     trend_meta = build_storage_trend_meta(db, target_type="group", target=db_group)
     real_time_data = groupCrud.get_group_real_time_data_by_id(db=db, group_id=group_id,
                                                               start_time=start_time, end_time=end_time,
                                                               indicator=resolve_trend_indicator(indicator, trend_meta))
     return commonSchema.ResponseStorageUsageModel[groupSchema.Group](data=real_time_data,
-                                                                     info=groupCrud.serialize_group(db_group),
-                                                                     trend_meta=trend_meta)
+                                                                      info=groupCrud.serialize_group(
+                                                                          db_group,
+                                                                          capabilities=project_access_service.group_capabilities(
+                                                                              current_user,
+                                                                              db_group,
+                                                                          ),
+                                                                      ),
+                                                                      trend_meta=trend_meta)
 
 
 @router.put("/{group_id}", response_model=groupSchema.Group)
@@ -99,10 +117,23 @@ def update_group(
 def adjust_group_quota(
     group_id: int,
     payload: quotaSchema.QuotaAdjustmentRequest,
-    _admin: None = Depends(require_super_admin),
+    request: Request,
+    current_user: CurrentUserDep,
     db: Session = Depends(get_db),
 ):
-    return quotaService.adjust_group_quota(db, group_id=group_id, request=payload)
+    if not is_super_admin(current_user):
+        quotaService.require_group_quota_adjustment_permission(
+            db=db,
+            group_id=group_id,
+            current_user=current_user,
+        )
+    return quotaService.adjust_group_quota(
+        db,
+        group_id=group_id,
+        request=payload,
+        current_user=current_user,
+        audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
+    )
 
 
 @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -120,14 +151,12 @@ def delete_group(
 
 @router.get("/{group_id}/image")
 def get_storage_usage_image_by_id(group_id: int, end_time: str | None = None, role: str = 'manager',
-                                  db: Session = Depends(get_db)):
+                                  current_user: CurrentUserDep = None, db: Session = Depends(get_db)):
     if end_time is None:
         end_time = datetime.now()
     else:
         end_time = convert_timestamp_to_datetime(end_time)
-    group_db = groupCrud.get_group_by_id(db, group_id)
-    if group_db is None:
-        raise HTTPException(status_code=404, detail="Group not found")
+    group_db = project_access_service.require_group_permission(db, current_user, group_id)
     start_time = end_time - timedelta(days=31)
     result = groupCrud.get_group_real_time_data_by_id(db=db, group_id=group_id, start_time=start_time,
                                                       end_time=end_time)

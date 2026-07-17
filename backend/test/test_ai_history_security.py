@@ -1,0 +1,509 @@
+# -*- coding: utf-8 -*-
+import json
+from uuid import uuid4
+
+from fastapi import APIRouter, FastAPI
+
+import models
+from services import ai_audit_service, ai_chat_service
+from services.ai_client import AIClientToolCall, AICompletionStreamEvent
+from services.audit_service import AuditContext
+
+
+HIDDEN_HISTORY_CONTENT = "该历史回复关联的项目权限已失效，内容已隐藏。"
+
+
+def _seed_conversation(db_session):
+    user = models.User(id=1, rd_username="reader", username="Reader")
+    model = models.AIConfig(id=1, name="test-model", model="test-model", enabled=True)
+    conversation = models.AIConversation(id=1, user_id=user.id, model_id=model.id, title="历史会话")
+    db_session.add_all([user, model, conversation])
+    db_session.commit()
+    return user, model, conversation
+
+
+def _add_assistant_turn(db_session, conversation, *, response_payload, detail_payload, content):
+    message = models.AIMessage(conversation_id=conversation.id, role="assistant", content=content)
+    db_session.add(message)
+    db_session.flush()
+    audit = models.AIAuditLog(
+        model_id=conversation.model_id,
+        conversation_id=conversation.id,
+        user_id=conversation.user_id,
+        source="chat",
+        source_ref=str(conversation.id),
+        request_payload=json.dumps({"content": "[REDACTED]"}),
+        response_payload=json.dumps({"message_id": message.id, **response_payload}),
+        detail_payload=json.dumps(detail_payload),
+        status="succeeded",
+        trace_id="audit-trace",
+    )
+    db_session.add(audit)
+    db_session.commit()
+    return message, audit
+
+
+def test_revoked_project_membership_hides_persisted_ai_turn_and_tool_result(db_session):
+    user, _model, conversation = _seed_conversation(db_session)
+    project = models.Project(id=1, name="revoked-project")
+    membership = models.ProjectMembership(project_id=project.id, user_id=user.id, role="reader")
+    db_session.add_all([project, membership])
+    db_session.commit()
+    _add_assistant_turn(
+        db_session,
+        conversation,
+        content="revoked-project 的用量为 42 GiB",
+        response_payload={
+            "visibility": {
+                "known": True,
+                "project_scope_ids": [project.id],
+                "requires_super_admin": False,
+            }
+        },
+        detail_payload=[
+            {
+                "tool_name": "get_project",
+                "visibility": {
+                    "known": True,
+                    "project_scope_ids": [project.id],
+                    "requires_super_admin": False,
+                },
+                "result": {"ok": True, "data": {"id": project.id, "name": "revoked-project"}},
+            }
+        ],
+    )
+    db_session.delete(membership)
+    db_session.commit()
+
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+    assistant = history["messages"][-1]
+
+    assert assistant["status"] == "restricted"
+    assert assistant["content"] == HIDDEN_HISTORY_CONTENT
+    assert assistant["tool_calls"] == []
+
+
+def test_revoked_membership_never_reaches_provider_history_or_sse(db_session, monkeypatch):
+    user, _model, conversation = _seed_conversation(db_session)
+    project = models.Project(id=1, name="revoked-project")
+    membership = models.ProjectMembership(project_id=project.id, user_id=user.id, role="reader")
+    db_session.add_all([project, membership])
+    db_session.commit()
+    secret = "revoked-project 的私密用量为 42 GiB"
+    _add_assistant_turn(
+        db_session,
+        conversation,
+        content=secret,
+        response_payload={
+            "visibility": {
+                "known": True,
+                "project_scope_ids": [project.id],
+                "requires_super_admin": False,
+            }
+        },
+        detail_payload=[
+            {
+                "tool_name": "get_project",
+                "visibility": {
+                    "known": True,
+                    "project_scope_ids": [project.id],
+                    "requires_super_admin": False,
+                },
+                "result": {"ok": True, "data": {"id": project.id}},
+            }
+        ],
+    )
+    db_session.delete(membership)
+    db_session.commit()
+    provider_messages = []
+
+    def provider_stream(_model, messages, **_kwargs):
+        provider_messages.extend(messages)
+        text = secret if secret in json.dumps(messages, ensure_ascii=False) else "无可用的项目历史数据"
+        yield AICompletionStreamEvent(kind="delta", text=text)
+        yield AICompletionStreamEvent(kind="completed", text=text, tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    events = list(
+        ai_chat_service.stream_message(
+            app=FastAPI(),
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=user.id,
+            current_user=user,
+            content="请总结上一条",
+        )
+    )
+
+    assert secret not in json.dumps(provider_messages, ensure_ascii=False)
+    assert all(secret not in data.get("text", "") for event, data in events if event == "delta")
+
+
+def test_sensitive_tool_turn_propagates_visibility_to_a_follow_up_summary(db_session, monkeypatch):
+    user, _model, conversation = _seed_conversation(db_session)
+    project = models.Project(id=1, name="restricted-project")
+    membership = models.ProjectMembership(project_id=project.id, user_id=user.id, role="reader")
+    db_session.add_all([project, membership])
+    db_session.commit()
+    app = FastAPI()
+    router = APIRouter()
+
+    @router.get(
+        "/projects/{project_id}",
+        openapi_extra={"ai_exposed": True, "ai_name": "get_project", "ai_description": "查询项目"},
+    )
+    def get_project(project_id: int):
+        return {"id": project_id, "project_id": project_id, "used": 42}
+
+    app.include_router(router)
+    calls = {"count": 0}
+
+    def provider_stream(*_args, **_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[
+                    AIClientToolCall(
+                        tool_id="project-tool",
+                        name="get_project",
+                        arguments={"project_id": project.id},
+                    )
+                ],
+                stop_reason="tool_calls",
+            )
+            return
+        text = "该项目的私密容量摘要"
+        yield AICompletionStreamEvent(kind="delta", text=text)
+        yield AICompletionStreamEvent(kind="completed", text=text, tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=user.id,
+            current_user=user,
+            content="查询项目容量",
+        )
+    )
+    list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=user.id,
+            current_user=user,
+            content="请总结上一条",
+        )
+    )
+
+    audits = db_session.query(models.AIAuditLog).filter_by(conversation_id=conversation.id).order_by(models.AIAuditLog.id).all()
+    assert json.loads(audits[-1].response_payload)["visibility"]["project_scope_ids"] == [project.id]
+
+    db_session.delete(membership)
+    db_session.commit()
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+    assistants = [message for message in history["messages"] if message["role"] == "assistant"]
+
+    assert [message["status"] for message in assistants] == ["restricted", "restricted"]
+    assert [message["content"] for message in assistants] == [HIDDEN_HISTORY_CONTENT, HIDDEN_HISTORY_CONTENT]
+
+
+def test_legacy_ai_trace_without_visibility_metadata_is_hidden_safely(db_session):
+    user, _model, conversation = _seed_conversation(db_session)
+    _add_assistant_turn(
+        db_session,
+        conversation,
+        content="历史项目数据",
+        response_payload={},
+        detail_payload=[
+            {
+                "tool_name": "list_groups",
+                "result": {"ok": True, "data": {"items": [{"project_id": 1, "name": "secret"}]}},
+            }
+        ],
+    )
+
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+    assistant = history["messages"][-1]
+
+    assert assistant["status"] == "restricted"
+    assert assistant["content"] == HIDDEN_HISTORY_CONTENT
+    assert assistant["tool_calls"] == []
+
+
+def test_legacy_ai_turn_without_visibility_or_tool_trace_is_hidden_safely(db_session):
+    user, _model, conversation = _seed_conversation(db_session)
+    _add_assistant_turn(
+        db_session,
+        conversation,
+        content="可能包含无权项目的历史文本",
+        response_payload={},
+        detail_payload=[],
+    )
+
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+    assistant = history["messages"][-1]
+
+    assert assistant["status"] == "restricted"
+    assert assistant["content"] == HIDDEN_HISTORY_CONTENT
+    assert assistant["tool_calls"] == []
+
+
+def test_legacy_assistant_without_an_audit_record_is_hidden_safely(db_session):
+    user, _model, conversation = _seed_conversation(db_session)
+    db_session.add(
+        models.AIMessage(
+            conversation_id=conversation.id,
+            role="assistant",
+            content="没有审计来源的历史项目数据",
+        )
+    )
+    db_session.commit()
+
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+    assistant = history["messages"][-1]
+
+    assert assistant["status"] == "restricted"
+    assert assistant["content"] == HIDDEN_HISTORY_CONTENT
+    assert assistant["tool_calls"] == []
+
+
+def test_unknown_current_ai_trace_visibility_is_hidden_fail_closed(db_session):
+    user, _model, conversation = _seed_conversation(db_session)
+    _add_assistant_turn(
+        db_session,
+        conversation,
+        content="可能包含无权项目的数据",
+        response_payload={},
+        detail_payload=[
+            {
+                "tool_name": "unknown_project_source",
+                "visibility": {
+                    "known": False,
+                    "project_scope_ids": [],
+                    "requires_super_admin": False,
+                },
+                "result": {"ok": True, "data": {"project_name": "private"}},
+            }
+        ],
+    )
+
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+    assistant = history["messages"][-1]
+
+    assert assistant["status"] == "restricted"
+    assert assistant["content"] == HIDDEN_HISTORY_CONTENT
+    assert assistant["tool_calls"] == []
+
+
+def test_successful_tool_payload_without_ok_flag_is_preserved_and_redacted():
+    display, truncated = ai_chat_service._display_tool_result(
+        {"data": {"used": 7, "token": "must-not-be-visible"}}
+    )
+
+    assert truncated is False
+    assert display == {"data": {"used": 7, "token": "[REDACTED]"}}
+
+
+def test_global_tool_turn_remains_visible_to_its_creator(db_session, monkeypatch):
+    user, _model, conversation = _seed_conversation(db_session)
+    app = FastAPI()
+    router = APIRouter()
+
+    @router.get(
+        "/global-capacity",
+        openapi_extra={"ai_exposed": True, "ai_name": "get_global_capacity", "ai_description": "查询公共容量"},
+    )
+    def get_global_capacity():
+        return {"data": {"used": 7}}
+
+    app.include_router(router)
+    calls = {"count": 0}
+
+    def provider_stream(*_args, **_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[
+                    AIClientToolCall(
+                        tool_id="global-capacity-tool",
+                        name="get_global_capacity",
+                        arguments={},
+                    )
+                ],
+                stop_reason="tool_calls",
+            )
+            return
+        yield AICompletionStreamEvent(kind="delta", text="公共容量为 7 GiB")
+        yield AICompletionStreamEvent(kind="completed", text="公共容量为 7 GiB", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=user.id,
+            current_user=user,
+            content="查询公共容量",
+        )
+    )
+
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+    assistant = history["messages"][-1]
+    audit = db_session.query(models.AIAuditLog).filter_by(conversation_id=conversation.id).one()
+    trace = json.loads(audit.detail_payload)[0]
+
+    assert assistant["status"] == "succeeded"
+    assert assistant["content"] == "公共容量为 7 GiB"
+    assert trace["visibility"] == {
+        "known": True,
+        "project_scope_ids": [],
+        "requires_super_admin": False,
+    }
+
+
+def test_ai_audit_trace_inherits_request_trace_id_before_generating_a_new_one(db_session, monkeypatch):
+    user, _model, conversation = _seed_conversation(db_session)
+
+    def completed_stream(*_args, **_kwargs):
+        yield AICompletionStreamEvent(kind="delta", text="已完成")
+        yield AICompletionStreamEvent(kind="completed", text="已完成", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", completed_stream)
+    context = AuditContext(request_id=uuid4(), trace_id=uuid4(), operation_id=uuid4(), actor_user_id=user.id)
+
+    list(
+        ai_chat_service.stream_message(
+            app=FastAPI(),
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=user.id,
+            current_user=user,
+            content="生成安全摘要",
+            audit_context=context,
+        )
+    )
+
+    audit = db_session.query(models.AIAuditLog).filter_by(conversation_id=conversation.id).one()
+    assert audit.trace_id == context.trace_id
+
+
+def test_tool_trace_persists_visibility_and_redacts_sensitive_values(db_session, monkeypatch):
+    user, _model, conversation = _seed_conversation(db_session)
+    app = FastAPI()
+    router = APIRouter()
+
+    @router.get(
+        "/projects/{project_id}",
+        openapi_extra={"ai_exposed": True, "ai_name": "get_project", "ai_description": "查询项目"},
+    )
+    def get_project(project_id: int, prompt: str = "", token: str = "", path: str = ""):
+        return {
+            "id": project_id,
+            "safe": "visible",
+            "linux_path": "/secure/project/private",
+            "token": "result-token",
+            "password": "result-password",
+            "raw_response": "device-original-response",
+            "nested": {"path": "C:\\secure\\private"},
+        }
+
+    app.include_router(router)
+    calls = {"count": 0}
+
+    def provider_stream(*_args, **_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[
+                    AIClientToolCall(
+                        tool_id="tool-1",
+                        name="get_project",
+                        arguments={
+                            "project_id": 7,
+                            "prompt": "original user prompt",
+                            "token": "argument-token",
+                            "path": "/secure/input/path",
+                        },
+                    )
+                ],
+                stop_reason="tool_calls",
+            )
+            return
+        yield AICompletionStreamEvent(kind="delta", text="查询完成")
+        yield AICompletionStreamEvent(kind="completed", text="查询完成", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=user.id,
+            current_user=user,
+            content="请查询项目",
+        )
+    )
+
+    audit = db_session.query(models.AIAuditLog).filter_by(conversation_id=conversation.id).one()
+    persisted = json.dumps(json.loads(audit.detail_payload), ensure_ascii=False)
+    for secret in (
+        "original user prompt",
+        "argument-token",
+        "/secure/input/path",
+        "/secure/project/private",
+        "result-token",
+        "result-password",
+        "device-original-response",
+        "C:\\secure\\private",
+    ):
+        assert secret not in persisted
+    trace = json.loads(audit.detail_payload)[0]
+    assert trace["visibility"] == {
+        "known": True,
+        "project_scope_ids": [7],
+        "requires_super_admin": False,
+    }
+    assert trace["result"]["data"]["safe"] == "visible"
+
+
+def test_admin_ai_audit_read_redacts_legacy_prompt_response_path_and_secret(db_session):
+    user, _model, conversation = _seed_conversation(db_session)
+    _message, audit = _add_assistant_turn(
+        db_session,
+        conversation,
+        content="安全内容",
+        response_payload={"raw_response": "provider-original-response"},
+        detail_payload=[
+            {
+                "prompt": "legacy raw prompt",
+                "path": "/legacy/private/path",
+                "token": "legacy-token",
+                "response": "device-original-response",
+            }
+        ],
+    )
+    audit.request_payload = json.dumps({"prompt": "legacy raw prompt"})
+    audit.error_message = "device-original-response"
+    db_session.commit()
+
+    result = ai_audit_service.get_audit(db_session, audit.id)
+    returned = json.dumps(result, ensure_ascii=False, default=str)
+
+    for secret in (
+        "legacy raw prompt",
+        "/legacy/private/path",
+        "legacy-token",
+        "provider-original-response",
+        "device-original-response",
+    ):
+        assert secret not in returned
+    assert result["request"]["prompt"] == "[REDACTED]"
+    assert result["response"]["raw_response"] == "[REDACTED]"
+    assert result["detail"][0]["path"] == "[REDACTED]"

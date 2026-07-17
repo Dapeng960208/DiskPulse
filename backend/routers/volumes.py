@@ -12,6 +12,7 @@ router = APIRouter(
     prefix="/volumes",
     tags=["volumes"],
     responses={404: {"description": "Not found"}},
+    dependencies=[Depends(require_super_admin)],
 )
 
 

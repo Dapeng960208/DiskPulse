@@ -119,6 +119,7 @@ describe('router/routes and app shell', () => {
       VolumeDetail: ['系统管理', '存储空间', '存储空间详情'],
       QtreeDetail: ['系统管理', 'Qtree（NetApp）', 'Qtree（NetApp）详情'],
       AIAuditDetail: ['系统管理', 'AI 中心', 'AI 审计详情'],
+      AuditEventDetail: ['系统管理', '统一操作审计', '审计事件详情'],
     });
   });
 
@@ -168,6 +169,7 @@ describe('router/routes and app shell', () => {
       'UsersManagement',
       'Settings',
       'AICenter',
+      'AuditEvents',
     ]);
     expect(Object.fromEntries(visibleRoutes.map((route) => [route.name, route.meta.icon]))).toEqual({
       StorageClusters: 'i-ri-server-line',
@@ -178,6 +180,7 @@ describe('router/routes and app shell', () => {
       UsersManagement: 'i-ri-team-line',
       Settings: 'i-ri-settings-3-line',
       AICenter: 'i-ri-robot-2-line',
+      AuditEvents: 'i-ri-file-search-line',
     });
   });
 });

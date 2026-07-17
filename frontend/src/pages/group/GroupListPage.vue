@@ -122,6 +122,10 @@ function confirmDelete(row) {
 
   }).catch(() => {});
 }
+
+function canAdjustQuota(row) {
+  return row?.capabilities?.adjust_quota === true;
+}
 </script>
 
 <template>
@@ -423,7 +427,7 @@ function confirmDelete(row) {
               详情
             </ElButton>
             <ElDropdown
-              v-if="hasRole('disk-monitor:admin')"
+              v-if="hasRole('disk-monitor:admin') || canAdjustQuota(row)"
               trigger="click"
               placement="bottom-end">
               <ElButton
@@ -436,15 +440,19 @@ function confirmDelete(row) {
               <template #dropdown>
                 <ElDropdownMenu>
                   <ElDropdownItem
+                    v-if="canAdjustQuota(row)"
                     :disabled="row.associate_multiple_groups"
                     :title="row.associate_multiple_groups ? '共享存储目标不能单独调整项目组配额' : ''"
                     @click="quotaAdjustmentDialogRef.open(row)">
                     调整配额
                   </ElDropdownItem>
-                  <ElDropdownItem @click="groupFormDialogRef.edit(row)">
+                  <ElDropdownItem
+                    v-if="hasRole('disk-monitor:admin')"
+                    @click="groupFormDialogRef.edit(row)">
                     编辑
                   </ElDropdownItem>
                   <ElDropdownItem
+                    v-if="hasRole('disk-monitor:admin')"
                     class="list-row-actions__danger"
                     @click="confirmDelete(row)">
                     删除

@@ -2,14 +2,15 @@
 from sqlalchemy.orm import Session
 from models import Group, Project, StorageAlerts, StorageCluster, StorageUsage
 from schemas import storageAlertsSchema
-from sqlalchemy import or_, desc, asc
+from sqlalchemy import and_, or_, desc, asc, select
 from utils.query import get_sort_column
 
 
 def get_storage_alerts(db: Session, page: int, size: int, nameLike: str | None = None, prop: str | None = None,
                        order: str | None = None, related_type: str | None = None, related_id: int | None = None,
                        alert_type: str | None = None, event_type: str | None = None,
-                       quota_basis: str | None = None, delivery_status: str | None = None):
+                       quota_basis: str | None = None, delivery_status: str | None = None,
+                       accessible_project_ids: set[int] | None = None):
     query = db.query(StorageAlerts).filter(StorageAlerts.source == "diskpulse")
     conditions = []
     if nameLike and len(nameLike.strip()) > 0:
@@ -27,6 +28,26 @@ def get_storage_alerts(db: Session, page: int, size: int, nameLike: str | None =
         conditions.append(StorageAlerts.quota_basis == quota_basis)
     if delivery_status:
         conditions.append(StorageAlerts.delivery_status == delivery_status)
+    if accessible_project_ids is not None:
+        project_ids = list(accessible_project_ids)
+        group_ids = select(Group.id).where(Group.project_id.in_(project_ids))
+        usage_ids = select(StorageUsage.id).join(Group).where(Group.project_id.in_(project_ids))
+        conditions.append(
+            or_(
+                and_(
+                    StorageAlerts.related_type.in_(("Project", "project")),
+                    StorageAlerts.related_id.in_(project_ids),
+                ),
+                and_(
+                    StorageAlerts.related_type.in_(("Group", "group")),
+                    StorageAlerts.related_id.in_(group_ids),
+                ),
+                and_(
+                    StorageAlerts.related_type.in_(("StorageUsage", "storage_usage")),
+                    StorageAlerts.related_id.in_(usage_ids),
+                ),
+            )
+        )
     query = query.filter(*conditions)
     total = query.count()
     sort_column = get_sort_column(StorageAlerts, prop)

@@ -39,6 +39,24 @@
 - 未连接真实 PostgreSQL、Redis、QuestDB、Celery Beat/Worker 或飞书通知服务；未在真实网络策略下验证 metrics Token 文件权限、监控 CIDR 限制和 100 次抓取 P95。
 - 部署后先暗运行 7 天观察 `not_ready` 和 `stale`，再由外部 Prometheus/告警平台启用告警；Celery 队列深度与 Worker 心跳仍由独立 `celery-exporter` 提供。
 
+## 2026-07-18：项目级 RBAC 与统一操作审计（本地收口）
+
+### 已完成
+
+- 已提交项目成员模型/迁移、项目负责人 `project_admin` 补齐和 `pt_user` 移除；成员 Router 已注册到主应用。项目、项目组、用户目录、告警、大文件、Dashboard、导出和趋势在分页/统计前进入项目过滤；项目组负责人仅可调整其负责项目组及用户目录，普通 `editor` 保持拒绝。
+- AI 会话保持创建者隔离且不保存项目归属；工具使用当前用户身份调用受授权的 HTTP 路由，并为每次调用保存脱敏的最小项目范围。历史读取重新核验当前成员资格，权限失效或旧范围不可证明时隐藏助手内容和工具结果。
+- 已提交 `audit_events` 模型、显式前向 `000000000009_project_rbac_unified_audit.py`、关联 ID 中间件、脱敏审计服务、查询 API 及 SQLite/PostgreSQL/MySQL 不可变触发器定义。既有遥测账本 r8 保持不变，Alembic 唯一 head 为 r9。
+- 已接入认证与成员审计：登录成功/拒绝、登出以及项目成员新增、更新、删除写入脱敏 `result` 事件，并保留请求关联 ID。
+- 已接入 AI 与配额审计：AI 会话创建/删除和消息 attempt/result 不保存标题或消息内容，`AIAuditLog.trace_id` 继承请求上下文；AI 模型创建、更新、删除、连接测试也写入统一审计。项目组与用户目录配额调整在设备调用前后以同一 `operation_id` 写入 attempt/result，且不保存设备路径、凭据或令牌。
+- 已接入服务操作审计：存储采集轮次按集群写入服务身份的成功/失败结果；Feishu 告警投递在真实发送前后写入同一 `operation_id` 的 attempt/result，摘要不保存通知标题、收件人或凭据。
+- 合并前复查新增并修复两项 fail-closed 安全缺口：撤销成员资格后，AI 续聊输入、历史读取和其后的无工具总结不再暴露原项目数据；统一审计同时屏蔽 `response`、`raw_response`、`device_response`、`body` 等原始响应别名。
+- 审计、迁移、配额和 AI RED/GREEN 检查点已提交。合并后端全量为 `526 passed`；遥测/RBAC 迁移组合 `38 passed`、配额 `19 passed`、AI 权限/脱敏组合 `81 passed`；前端全量 coverage 为 `408 passed`（Lines/Statements `97.67%`、Functions `82.26%`、Branches `87.32%`），生产构建通过。
+
+### 风险与待完成
+
+- 生产 PostgreSQL 的备份恢复、Alembic `stamp`/upgrade、触发器和应用运行账号/审计只读账号授权未验证；真实 NetApp/Isilon 设备写入、采集和 Feishu 投递也尚未在变更窗口完成联调验证。仓库没有 Playwright 配置/依赖且当前无可用浏览器运行时，浏览器 E2E 未执行。前端构建保留既有 `%VITE_APP_TITLE%` 未定义和大 chunk 警告。
+- 升级前必须备份：`000000000009` 会删除 `projects.pt_user_id`，downgrade 仅重建空列，历史 PT 负责人数据不可恢复，不能将 downgrade 作为该数据的回滚方案。
+
 ## 2026-07-17：企业级 AI 存储智能运维调研基线
 
 ### 已完成

@@ -10,8 +10,8 @@
 | 指标专用连接 | 通过 | RED 后修复；聚焦测试 `32 passed`，断言路由不传应用 `SessionLocal`，专用 engine 会在抓取结束后释放。 |
 | 后端回归 | 通过 | `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test -q`，`442 passed`。 |
 | Python 编译 | 通过 | `D:\dev\DiskPulse\.venv\Scripts\python.exe -m compileall -q backend`。 |
-| Alembic 链 | 通过 | `D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini heads` 输出唯一 `000000000008 (head)`。 |
-| 迁移契约 | 通过 | 通用迁移契约测试 `13 passed`；并直接对 `000000000008` 执行 SQLite 升降级和 SQLite/PostgreSQL/MySQL 离线 DDL 编译。 |
+| Alembic 链 | 通过 | 遥测账本保留为 `000000000008`，项目 RBAC/审计以 r9 显式前向；`D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini heads` 输出唯一 `000000000009 (head)`。 |
+| 迁移契约 | 通过 | 遥测及 RBAC 迁移回归 `38 passed`；覆盖 r8 → r9 的 SQLite 升降级和 SQLite/PostgreSQL/MySQL 离线 DDL 编译。 |
 | 交付卫生 | 通过 | `git diff --check` 通过；没有提交运行时配置、Token 或设备凭据。 |
 
 ## 计划对应关系

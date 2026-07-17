@@ -3,6 +3,7 @@ from datetime import datetime
 
 import pytest
 from fastapi import HTTPException, BackgroundTasks
+import models
 
 from routers import aggregate, projects, qtrees, storage_usage, volumes
 from schemas.aggregateSchema import AggregateUpdate
@@ -87,10 +88,14 @@ def test_volume_and_qtree_router_error_paths(db_session):
 
 
 def test_project_and_storage_usage_router_error_paths(db_session):
-    assert projects.read_projects(prop=None, order=None, db=db_session).total == 0
+    current_user = models.User(id=1, rd_username="reader")
+    assert projects.read_projects(current_user=current_user, prop=None, order=None, db=db_session).total == 0
     assert projects.get_project_storage_summary(db=db_session).data == [["project"]]
     assert projects.get_project_groups_storage_usage(db=db_session).data == {}
-    assert projects.get_project_storage_tree_by_id(404, db=db_session).data == []
+    assert_not_found(
+        lambda: projects.get_project_storage_tree_by_id(404, current_user=current_user, db=db_session),
+        "project was not found",
+    )
 
     project_update = ProjectUpdate(name="project")
     assert_not_found(
@@ -98,7 +103,7 @@ def test_project_and_storage_usage_router_error_paths(db_session):
         "The project was not found",
     )
     assert_not_found(
-        lambda: projects.read_project_by_id(404, db=db_session),
+        lambda: projects.read_project_by_id(404, current_user=current_user, db=db_session),
         "The project was not found",
     )
     assert_not_found(
@@ -107,7 +112,7 @@ def test_project_and_storage_usage_router_error_paths(db_session):
     )
 
     assert_not_found(
-        lambda: storage_usage.read_storage_usage(404, db=db_session),
+        lambda: storage_usage.read_storage_usage(404, current_user=current_user, db=db_session),
         "StorageUsage not found",
     )
     assert_not_found(

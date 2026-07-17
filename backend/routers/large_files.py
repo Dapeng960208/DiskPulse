@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from schemas import largeFileSchema, commonSchema
 from crud import largeFilesCrud
-from dependencies import get_db
+from dependencies import CurrentUserDep, get_db
 import logging
 from routers.common import handle_exceptions
+from services import project_access_service
 from datetime import datetime
 import urllib.parse
 from fastapi.responses import StreamingResponse
@@ -24,18 +25,22 @@ router = APIRouter(
 def read_large_files(page: int | None = 1, size: int | None = 20, nameLike: str | None = None,
                      prop: str | None = None,
                      order: str | None = None, user_id: int | str = Query(None), group_id: int | None = None,
-                     db: Session = Depends(get_db)):
+                     current_user: CurrentUserDep = None, db: Session = Depends(get_db)):
     if nameLike == "":
         nameLike = None
     large_files, total = largeFilesCrud.get_large_files(db=db, page=page, size=size, nameLike=nameLike,
                                                         prop=prop, order=order, user_id=user_id,
-                                                        group_id=group_id)
+                                                        group_id=group_id,
+                                                        accessible_project_ids=project_access_service.accessible_project_ids(
+                                                            db,
+                                                            current_user,
+                                                        ))
     return commonSchema.ResponseModel[largeFileSchema.LargeFileList](content=large_files, total=total)
 
 
 @router.get("/export/")
 def export_large_files(nameLike: str | None = None, user_id: int | str = Query(None), group_id: int | None = None,
-                          db: Session = Depends(get_db)):
+                          current_user: CurrentUserDep = None, db: Session = Depends(get_db)):
     if user_id == "":
         user_id = None
     headers = {
@@ -43,7 +48,13 @@ def export_large_files(nameLike: str | None = None, user_id: int | str = Query(N
         "Access-Control-Expose-Headers": "Content-Disposition, Filename",
     }
 
-    content = largeFilesCrud.export_large_files(db, nameLike,user_id, group_id)
+    content = largeFilesCrud.export_large_files(
+        db,
+        nameLike,
+        user_id,
+        group_id,
+        project_access_service.accessible_project_ids(db, current_user),
+    )
     file_name = f"大文件_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     encoded_file_name = urllib.parse.quote(file_name)

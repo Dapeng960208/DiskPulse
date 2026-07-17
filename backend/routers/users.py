@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from dependencies import (
@@ -12,9 +12,9 @@ from dependencies import (
     require_super_admin,
 )
 from schemas import commonSchema, usersSchema
-from services import usersService
+from services import audit_service, usersService
 from utils.auth_service import build_frontend_profile, login_user
-from utils.security import revoke_token
+from utils.security import decode_token, revoke_token
 
 router = APIRouter(
     prefix="/users",
@@ -27,19 +27,53 @@ AdminDep = Annotated[None, Depends(require_super_admin)]
 
 
 @router.post("/login")
-def login(payload: usersSchema.LoginIn, db: DBDep) -> dict:
-    return {
-        "result": login_user(
+def login(payload: usersSchema.LoginIn, request: Request, db: DBDep) -> dict:
+    try:
+        result = login_user(
             db,
             username=payload.username,
             password=payload.password,
         )
-    }
+    except HTTPException:
+        audit_service.append_audit_event(
+            db,
+            context=audit_service.audit_context_for_request(request, actor_user_id=None),
+            phase="result",
+            action="auth.login",
+            resource_type="user",
+            outcome="denied",
+            reason_code="invalid_credentials",
+        )
+        db.commit()
+        raise
+
+    actor_user_id = int(decode_token(result["token"])["sub"])
+    audit_service.append_audit_event(
+        db,
+        context=audit_service.audit_context_for_request(request, actor_user_id=actor_user_id),
+        phase="result",
+        action="auth.login",
+        resource_type="user",
+        resource_id=actor_user_id,
+        outcome="success",
+    )
+    db.commit()
+    return {"result": result}
 
 
 @router.post("/logout")
-def logout(token: CurrentTokenDep) -> dict:
+def logout(token: CurrentTokenDep, request: Request, current_user: CurrentUserDep, db: DBDep) -> dict:
     revoke_token(token)
+    audit_service.append_audit_event(
+        db,
+        context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
+        phase="result",
+        action="auth.logout",
+        resource_type="user",
+        resource_id=current_user.id,
+        outcome="success",
+    )
+    db.commit()
     return {"result": None}
 
 
@@ -72,6 +106,7 @@ def create_user(user: usersSchema.UserCreate, _admin: AdminDep, db: DBDep):
     },
 )
 async def read_users(
+    _admin: AdminDep,
     db: DBDep,
     page: int = 1,
     size: int = 20,
@@ -105,7 +140,7 @@ async def read_users(
         "ai_description": "查询指定用户",
     },
 )
-def read_user(user_id: int, db: DBDep):
+def read_user(user_id: int, _admin: AdminDep, db: DBDep):
     return usersService.get_user(db, user_id)
 
 

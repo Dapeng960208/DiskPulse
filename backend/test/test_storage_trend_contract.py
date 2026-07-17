@@ -158,7 +158,7 @@ def test_realtime_api_validates_indicator_and_uses_effective_soft_history(
 
     db_session.add_all(
         [
-            models.User(id=1, username="trend-user"),
+            models.User(id=1, username="trend-user", rd_username="alice"),
             models.StorageConf(
                 id=1,
                 name="storage conf",

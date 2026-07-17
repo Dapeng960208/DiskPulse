@@ -14,6 +14,7 @@ import models
 from appConfig import base_config
 from schemas.quotaSchema import QuotaAdjustmentRequest
 from services import quotaService
+from services.audit_service import AuditContext
 from utils.isilonClient import IsilonClient
 from utils.netAppClient import NetAppClient
 from utils.security import issue_token
@@ -101,6 +102,7 @@ def seed_quota_target(db, *, storage_type="netapp", volume_target=False):
             volume_id=1 if volume_target else None,
             qtree_id=None if volume_target else 1,
             name="group-1",
+            in_charge_user_id=1,
             linux_path="/data/group-1",
             limit=100,
             used=20,
@@ -122,6 +124,20 @@ def seed_quota_target(db, *, storage_type="netapp", volume_target=False):
         )
     )
     db.commit()
+
+
+def quota_owner(db):
+    return db.get(models.User, 1)
+
+
+@pytest.fixture(autouse=True)
+def disable_external_quota_notification_enqueue(monkeypatch):
+    """Keep quota service tests deterministic without contacting a Celery broker."""
+    monkeypatch.setattr(
+        quotaService,
+        "_enqueue_adjustment_feishu",
+        lambda *_args, **_kwargs: None,
+    )
 
 
 def test_quota_request_validates_limits_and_grace_pair():
@@ -170,10 +186,29 @@ def test_group_adjustment_rejects_shared_target_before_device_call(db_session, m
             db_session,
             group_id=1,
             request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+            current_user=quota_owner(db_session),
         )
 
     assert error.value.status_code == 409
     build_client.assert_not_called()
+
+
+def test_quota_adjustment_requires_authenticated_user(db_session, monkeypatch):
+    """Direct service callers cannot bypass the quota authorization boundary."""
+    seed_quota_target(db_session)
+    client = FakeQuotaClient()
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+
+    with pytest.raises(HTTPException) as error:
+        quotaService.adjust_group_quota(
+            db_session,
+            group_id=1,
+            request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+            current_user=None,
+        )
+
+    assert error.value.status_code == 401
+    assert client.calls == []
 
 
 def test_netapp_qtree_group_adjustment_updates_device_and_local_state(db_session, monkeypatch):
@@ -190,6 +225,7 @@ def test_netapp_qtree_group_adjustment_updates_device_and_local_state(db_session
             soft_limit=100,
             unit="GiB",
         ),
+        current_user=quota_owner(db_session),
     )
 
     assert client.calls == [
@@ -216,6 +252,98 @@ def test_netapp_qtree_group_adjustment_updates_device_and_local_state(db_session
     assert client.closed is True
 
 
+@pytest.mark.parametrize(
+    ("resource_type", "adjust"),
+    [
+        (
+            "group",
+            lambda db, context: quotaService.adjust_group_quota(
+                db,
+                group_id=1,
+                request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+                current_user=quota_owner(db),
+                audit_context=context,
+            ),
+        ),
+        (
+            "storage_usage",
+            lambda db, context: quotaService.adjust_storage_usage_quota(
+                db,
+                storage_usage_id=1,
+                request=QuotaAdjustmentRequest(hard_limit=80, unit="GiB"),
+                current_user=quota_owner(db),
+                audit_context=context,
+            ),
+        ),
+    ],
+)
+def test_quota_adjustment_writes_correlated_attempt_and_result_events(
+    db_session,
+    monkeypatch,
+    resource_type,
+    adjust,
+):
+    seed_quota_target(db_session)
+    client = FakeQuotaClient()
+    context = AuditContext(
+        request_id="3efc3f58-4342-4c4d-97ee-c498087cb655",
+        trace_id="70e1b4cd-e97a-4725-a750-fbd6f0e91f5f",
+        operation_id="10a021fb-c3cd-4299-8947-93c9f52fd540",
+    )
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+    monkeypatch.setattr(quotaService, "_send_adjustment_email", lambda *args, **kwargs: None)
+    monkeypatch.setattr(quotaService, "_enqueue_adjustment_feishu", lambda _event_id, **_kwargs: None)
+
+    adjust(db_session, context)
+
+    events = db_session.query(models.AuditEvent).order_by(models.AuditEvent.occurred_at, models.AuditEvent.id).all()
+    assert [(event.phase, event.outcome) for event in events] == [("attempt", "success"), ("result", "success")]
+    assert all(event.action == "quota.adjust" and event.resource_type == resource_type for event in events)
+    assert {event.operation_id for event in events} == {context.operation_id}
+    assert all(event.project_id == 1 for event in events)
+    assert "/data/group-1" not in json.dumps(
+        [(event.before_summary, event.after_summary, event.event_metadata) for event in events],
+        ensure_ascii=False,
+    )
+
+
+def test_quota_adjustment_propagates_correlation_to_notification_task(db_session, monkeypatch):
+    seed_quota_target(db_session)
+    group = db_session.get(models.Group, 1)
+    group.in_charge_user_id = 1
+    db_session.commit()
+    client = FakeQuotaClient()
+    enqueue = MagicMock()
+    context = AuditContext(
+        request_id="3efc3f58-4342-4c4d-97ee-c498087cb655",
+        trace_id="70e1b4cd-e97a-4725-a750-fbd6f0e91f5f",
+        operation_id="10a021fb-c3cd-4299-8947-93c9f52fd540",
+        actor_user_id=1,
+    )
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+    monkeypatch.setattr(quotaService, "_send_adjustment_email", lambda *args, **kwargs: None)
+    monkeypatch.setattr(quotaService, "_enqueue_adjustment_feishu", enqueue, raising=False)
+    monkeypatch.setattr(
+        quotaService.base_config,
+        "get",
+        lambda key, default=None: {
+            "feishu_notification": {"enabled": True, "debug": False, "cc_usernames": ["auditor"]},
+            "super_admin_usernames": ["admin"],
+        }.get(key, default),
+    )
+
+    quotaService.adjust_group_quota(
+        db_session,
+        group_id=1,
+        request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        current_user=quota_owner(db_session),
+        audit_context=context,
+    )
+
+    alert = db_session.query(models.StorageAlerts).filter_by(alert_type="quota_adjustment").one()
+    enqueue.assert_called_once_with(alert.id, audit_context=context)
+
+
 def test_quota_adjustments_queue_feishu_for_group_owner_and_directory_user(db_session, monkeypatch):
     seed_quota_target(db_session)
     group = db_session.get(models.Group, 1)
@@ -240,11 +368,13 @@ def test_quota_adjustments_queue_feishu_for_group_owner_and_directory_user(db_se
         db_session,
         group_id=1,
         request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        current_user=quota_owner(db_session),
     )
     quotaService.adjust_storage_usage_quota(
         db_session,
         storage_usage_id=1,
         request=QuotaAdjustmentRequest(hard_limit=80, unit="GiB"),
+        current_user=quota_owner(db_session),
     )
 
     alerts = db_session.query(models.StorageAlerts).order_by(models.StorageAlerts.id).all()
@@ -289,6 +419,7 @@ def test_quota_adjustment_succeeds_when_feishu_enqueue_fails(db_session, monkeyp
         db_session,
         group_id=1,
         request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        current_user=quota_owner(db_session),
     )
 
     assert result.hard_limit == 120
@@ -311,6 +442,7 @@ def test_netapp_volume_group_accepts_only_hard_limit(db_session, monkeypatch):
                 soft_limit=100,
                 unit="GiB",
             ),
+            current_user=quota_owner(db_session),
         )
     assert error.value.status_code == 422
 
@@ -318,6 +450,7 @@ def test_netapp_volume_group_accepts_only_hard_limit(db_session, monkeypatch):
         db_session,
         group_id=1,
         request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        current_user=quota_owner(db_session),
     )
     assert client.calls == [
         ("volume", {"volume_name": "volume-1", "hard_limit": 120 * GiB})
@@ -341,6 +474,7 @@ def test_isilon_user_adjustment_requires_grace_and_uses_current_username(db_sess
                 soft_limit=60,
                 unit="GiB",
             ),
+            current_user=quota_owner(db_session),
         )
     assert error.value.status_code == 422
 
@@ -354,6 +488,7 @@ def test_isilon_user_adjustment_requires_grace_and_uses_current_username(db_sess
             soft_grace=2,
             soft_grace_unit="hours",
         ),
+        current_user=quota_owner(db_session),
     )
     assert client.calls == [
         (
@@ -395,6 +530,7 @@ def test_quota_adjustment_preserves_native_device_json_error(db_session, monkeyp
         db_session,
         group_id=1,
         request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        current_user=quota_owner(db_session),
     )
 
     assert isinstance(result, Response)
@@ -417,6 +553,7 @@ def test_quota_adjustment_preserves_native_device_text_error(db_session, monkeyp
         db_session,
         group_id=1,
         request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        current_user=quota_owner(db_session),
     )
 
     assert isinstance(result, Response)
@@ -612,7 +749,7 @@ def quota_api(api_client_factory, session_factory, monkeypatch):
     monkeypatch.setattr(
         quotaService,
         "adjust_group_quota",
-        lambda _db, group_id, request: {
+        lambda _db, group_id, request, current_user=None, audit_context=None: {
             "id": group_id,
             "resource_type": "group",
             "storage_type": "netapp",
@@ -625,7 +762,7 @@ def quota_api(api_client_factory, session_factory, monkeypatch):
     monkeypatch.setattr(
         quotaService,
         "adjust_storage_usage_quota",
-        lambda _db, storage_usage_id, request: {
+        lambda _db, storage_usage_id, request, current_user=None, audit_context=None: {
             "id": storage_usage_id,
             "resource_type": "storage_usage",
             "storage_type": "netapp",
