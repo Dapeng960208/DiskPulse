@@ -105,6 +105,24 @@ class Project(Base):
     pt_user = relationship("User", foreign_keys=[pt_user_id], lazy=True)
 
 
+class ProjectMembership(Base):
+    __tablename__ = "project_memberships"
+    __table_args__ = (
+        UniqueConstraint("project_id", "user_id", name="uq_project_membership_user"),
+        Index("ix_project_membership_user_project", "user_id", "project_id"),
+        Index("ix_project_membership_project_role", "project_id", "role"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String(16), nullable=False, default="reader")
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
 class StorageCluster(Base):
     __tablename__ = "storage_clusters"
 
