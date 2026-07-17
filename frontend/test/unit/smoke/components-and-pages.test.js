@@ -8,6 +8,8 @@ vi.mock('element-plus', () => ({
   ElButton: commonStubs.ElButton,
   ElCard: commonStubs.ElCard,
   ElPagination: commonStubs.ElPagination,
+  ElRow: commonStubs.ElCard,
+  ElCol: commonStubs.ElCard,
   ElTable: commonStubs.ElTable,
   ElTableColumn: commonStubs.ElCard,
   ElForm: commonStubs.ElForm,
@@ -25,6 +27,13 @@ vi.mock('@/stores/app-settings', () => ({
   useAppSettings: () => ({
     theme: 'light',
     toggleTheme: vi.fn(() => true),
+  }),
+}));
+
+vi.mock('@/stores/breadcrumbs', () => ({
+  useBreadcrumbs: () => ({
+    detailTitleFor: vi.fn(() => ''),
+    setDetailTitle: vi.fn(),
   }),
 }));
 
@@ -46,6 +55,12 @@ vi.mock('vue-router', async () => {
 vi.mock('@/api/group-api.js', () => ({
   default: {
     fetch: vi.fn(() => Promise.resolve({ content: [], total: 0 })),
+  },
+}));
+
+vi.mock('@/api/project-api.js', () => ({
+  default: {
+    fetchById: vi.fn(() => Promise.resolve(null)),
   },
 }));
 
@@ -154,7 +169,14 @@ describe('lightweight component and page smoke tests', () => {
       VolumeDetailPage,
     ].forEach((component) => {
       expect(shallowMount(component, {
-        global: { stubs: commonStubs },
+        global: {
+          stubs: {
+            ...commonStubs,
+            ProjectMembersTab: true,
+            ProjectAuditTab: true,
+            StorageTypeTag: true,
+          },
+        },
       }).exists()).toBe(true);
     });
   });
