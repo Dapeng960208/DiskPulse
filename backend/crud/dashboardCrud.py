@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from sqlalchemy import and_, func, or_, select, text
+from sqlalchemy import and_, bindparam, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from dependencies import QuestDBSession
@@ -70,14 +70,13 @@ def _project_alert_scope(project_id: int):
     )
 
 
-def get_alert_counts(db: Session, start_time, end_time, project_id: int | None):
-    alert_date = func.date(StorageAlerts.updated_at).label("alert_date")
-    statement = select(alert_date, func.count(StorageAlerts.id)).where(
+def get_alert_level_counts(db: Session, start_time, end_time, project_id: int | None):
+    statement = select(StorageAlerts.alert_level, func.count(StorageAlerts.id)).where(
         *_alert_filters(start_time, end_time)
     )
     if project_id is not None:
         statement = statement.where(_project_alert_scope(project_id))
-    return db.execute(statement.group_by(alert_date).order_by(alert_date)).all()
+    return db.execute(statement.group_by(StorageAlerts.alert_level)).all()
 
 
 def get_capacity_trend(*, db: Session, project_id: int | None, start_time, end_time):
@@ -97,17 +96,20 @@ def get_capacity_trend(*, db: Session, project_id: int | None, start_time, end_t
         cluster_ids = [cluster.id for cluster in get_active_clusters(db)]
         if not cluster_ids:
             return []
-        identifiers = ", ".join(str(cluster_id) for cluster_id in cluster_ids)
         query = text(
             "SELECT updated_at, sum(cluster_used) AS used_gb FROM ("
             "SELECT updated_at, storage_cluster_id, max(used) AS cluster_used "
             "FROM storage_cluster_storage_usages "
-            f"WHERE storage_cluster_id IN ({identifiers}) "
+            "WHERE storage_cluster_id IN :cluster_ids "
             "AND updated_at BETWEEN :start_time AND :end_time "
             "SAMPLE BY 1d ALIGN TO CALENDAR"
             ") SAMPLE BY 1d ALIGN TO CALENDAR ORDER BY updated_at"
-        )
-        params = {"start_time": start_time, "end_time": end_time}
+        ).bindparams(bindparam("cluster_ids", expanding=True))
+        params = {
+            "cluster_ids": [str(cluster_id) for cluster_id in cluster_ids],
+            "start_time": start_time,
+            "end_time": end_time,
+        }
 
     with QuestDBSession() as quest_db:
         return quest_db.execute(query, params).all()

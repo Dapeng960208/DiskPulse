@@ -42,13 +42,13 @@ def capacity_items(
     return dashboardService.get_capacity_items(db, project_id=project_id)
 
 
-@router.get("/alert-trend", response_model=list[dashboardSchema.AlertTrendPoint])
-def alert_trend(
+@router.get("/alert-levels", response_model=list[dashboardSchema.AlertLevelItem])
+def alert_levels(
     _current_user: CurrentUserDep,
     db: DBDep,
     project_id: OptionalProjectId = None,
 ):
-    return dashboardService.get_alert_trend(db, project_id=project_id)
+    return dashboardService.get_alert_levels(db, project_id=project_id)
 
 
 @router.get("/top-users", response_model=list[dashboardSchema.TopUser])

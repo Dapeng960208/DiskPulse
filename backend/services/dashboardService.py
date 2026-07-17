@@ -9,6 +9,11 @@ from crud import dashboardCrud
 
 
 logger = logging.getLogger(__name__)
+ALERT_LEVEL_LABELS = {
+    "important": "重要",
+    "serious": "严重",
+    "emergency": "紧急",
+}
 
 
 def _number(value) -> float:
@@ -43,17 +48,6 @@ def _capacity(item) -> dict:
     }
 
 
-def _fill_alert_trend(rows, start_time, days=30):
-    counts = {str(alert_date): int(count) for alert_date, count in rows}
-    return [
-        {
-            "date": (start_time.date() + timedelta(days=offset)),
-            "count": counts.get(str(start_time.date() + timedelta(days=offset)), 0),
-        }
-        for offset in range(days)
-    ]
-
-
 def get_summary(db: Session, project_id: int | None = None):
     start_time, end_time = _time_range()
     project = _project(db, project_id)
@@ -74,7 +68,7 @@ def get_summary(db: Session, project_id: int | None = None):
 
     alert_count = sum(
         int(count)
-        for _alert_date, count in dashboardCrud.get_alert_counts(
+        for _level, count in dashboardCrud.get_alert_level_counts(
             db, start_time, end_time, project_id
         )
     )
@@ -126,11 +120,28 @@ def get_capacity_items(db: Session, project_id: int | None = None):
     ]
 
 
-def get_alert_trend(db: Session, project_id: int | None = None):
+def get_alert_levels(db: Session, project_id: int | None = None):
     _project(db, project_id)
     start_time, end_time = _time_range()
-    rows = dashboardCrud.get_alert_counts(db, start_time, end_time, project_id)
-    return _fill_alert_trend(rows, start_time)
+    counts = {
+        level: int(count)
+        for level, count in dashboardCrud.get_alert_level_counts(
+            db, start_time, end_time, project_id
+        )
+    }
+    known_levels = [
+        {
+            "level": level,
+            "name": name,
+            "count": counts.pop(level),
+        }
+        for level, name in ALERT_LEVEL_LABELS.items()
+        if level in counts
+    ]
+    return known_levels + [
+        {"level": level, "name": level, "count": count}
+        for level, count in sorted(counts.items())
+    ]
 
 
 def get_top_users(db: Session, project_id: int):

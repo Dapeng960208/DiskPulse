@@ -56,7 +56,7 @@ describe('api modules', () => {
     await dashboardApi.fetchSummary({ project_id: 7 });
     await dashboardApi.fetchCapacityTrend({ project_id: 7 });
     await dashboardApi.fetchCapacityItems({ project_id: 7 });
-    await dashboardApi.fetchAlertTrend({ project_id: 7 });
+    await dashboardApi.fetchAlertLevels({ project_id: 7 });
     await dashboardApi.fetchTopUsers({ project_id: 7 });
     await departmentApi.fetchTopLevel();
     await domainGroupApi.fetch({ page: 1 });
@@ -92,7 +92,7 @@ describe('api modules', () => {
     expect(getSpy).toHaveBeenCalledWith('/summary', { project_id: 7 });
     expect(getSpy).toHaveBeenCalledWith('/capacity-trend', { project_id: 7 });
     expect(getSpy).toHaveBeenCalledWith('/capacity-items', { project_id: 7 });
-    expect(getSpy).toHaveBeenCalledWith('/alert-trend', { project_id: 7 });
+    expect(getSpy).toHaveBeenCalledWith('/alert-levels', { project_id: 7 });
     expect(getSpy).toHaveBeenCalledWith('/top-users', { project_id: 7 });
     expect(getSpy).toHaveBeenCalledWith('/top-level');
     expect(postSpy).toHaveBeenCalledWith('', { username: 'user', password: 'password' });

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import date, datetime
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -37,8 +37,9 @@ class CapacityItem(BaseModel):
     use_ratio: float
 
 
-class AlertTrendPoint(BaseModel):
-    date: date
+class AlertLevelItem(BaseModel):
+    level: str
+    name: str
     count: int
 
 

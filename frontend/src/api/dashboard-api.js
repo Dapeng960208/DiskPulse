@@ -13,8 +13,8 @@ class DashboardApi extends BaseApi {
     return this.get('/capacity-items', queryParams);
   }
 
-  fetchAlertTrend(queryParams = {}) {
-    return this.get('/alert-trend', queryParams);
+  fetchAlertLevels(queryParams = {}) {
+    return this.get('/alert-levels', queryParams);
   }
 
   fetchTopUsers(queryParams) {

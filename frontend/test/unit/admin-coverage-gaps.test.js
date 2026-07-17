@@ -7,7 +7,7 @@ const dashboardApi = {
   fetchSummary: vi.fn(),
   fetchCapacityTrend: vi.fn(),
   fetchCapacityItems: vi.fn(),
-  fetchAlertTrend: vi.fn(),
+  fetchAlertLevels: vi.fn(),
   fetchTopUsers: vi.fn(),
 };
 
@@ -25,7 +25,7 @@ describe('admin coverage gaps', () => {
     dashboardApi.fetchCapacityItems.mockResolvedValue([
       { id: 8, name: '项目组 A', limit_gb: 5, used_gb: 3, available_gb: 2, use_ratio: 60 },
     ]);
-    dashboardApi.fetchAlertTrend.mockResolvedValue([]);
+    dashboardApi.fetchAlertLevels.mockResolvedValue([]);
     dashboardApi.fetchTopUsers.mockResolvedValue([]);
 
     const { default: DashboardPage } = await import('@/pages/dashboard/DashboardPage.vue');

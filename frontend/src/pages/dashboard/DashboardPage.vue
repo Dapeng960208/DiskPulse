@@ -11,7 +11,7 @@ const projectId = ref(null);
 const summaryResponse = ref(null);
 const capacityTrend = ref([]);
 const capacityItems = ref([]);
-const alertTrend = ref([]);
+const alertLevels = ref([]);
 const topUsers = ref([]);
 const loading = reactive({ summary: true, trend: true, items: true, alerts: true, users: false });
 let requestId = 0;
@@ -20,6 +20,9 @@ const token = (name, fallback) => getCssColor(name, fallback);
 const primary = () => token('--primary-color', '#3B82F6');
 const primaryLight = () => token('--primary-lighter', '#93C5FD');
 const warning = () => token('--warning-color', '#F59E0B');
+const dangerLight = () => token('--danger-light', '#F87171');
+const danger = () => token('--danger-color', '#EF4444');
+const background = () => token('--bg-primary', '#FFFFFF');
 const gridColor = () => token('--border-light', '#F1F5F9');
 const axisColor = () => token('--text-tertiary', '#94A3B8');
 
@@ -122,27 +125,17 @@ const topUsersOption = computed(() => ({
 }));
 
 const alertOption = computed(() => ({
-  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-  grid: { left: 12, right: 12, top: 18, bottom: 12, containLabel: true },
-  xAxis: {
-    type: 'category',
-    data: alertTrend.value.map((item) => dateLabel(item.date)),
-    axisLine: { lineStyle: { color: gridColor() } },
-    axisTick: { show: false },
-    axisLabel: { color: axisColor(), hideOverlap: true },
-  },
-  yAxis: {
-    type: 'value',
-    minInterval: 1,
-    axisLabel: { color: axisColor() },
-    splitLine: { lineStyle: { color: gridColor(), type: 'dashed' } },
-  },
+  color: [warning(), dangerLight(), danger()],
+  tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+  legend: { bottom: 0, itemWidth: 10, itemHeight: 10, textStyle: { color: axisColor() } },
   series: [{
-    name: '告警',
-    type: 'bar',
-    barMaxWidth: 16,
-    itemStyle: { color: warning(), borderRadius: [4, 4, 0, 0] },
-    data: alertTrend.value.map((item) => item.count),
+    name: '告警级别',
+    type: 'pie',
+    radius: '68%',
+    center: ['50%', '44%'],
+    itemStyle: { borderColor: background(), borderWidth: 2, borderRadius: 4 },
+    label: { color: axisColor(), formatter: '{b}\n{c}' },
+    data: alertLevels.value.map((item) => ({ name: item.name, value: item.count })),
   }],
 }));
 
@@ -152,7 +145,7 @@ async function loadDashboard() {
   summaryResponse.value = null;
   capacityTrend.value = [];
   capacityItems.value = [];
-  alertTrend.value = [];
+  alertLevels.value = [];
   topUsers.value = [];
   Object.assign(loading, {
     summary: true,
@@ -166,7 +159,7 @@ async function loadDashboard() {
     ['summary', dashboardApi.fetchSummary(params), (value) => (summaryResponse.value = value)],
     ['trend', dashboardApi.fetchCapacityTrend(params), (value) => (capacityTrend.value = value)],
     ['items', dashboardApi.fetchCapacityItems(params), (value) => (capacityItems.value = value)],
-    ['alerts', dashboardApi.fetchAlertTrend(params), (value) => (alertTrend.value = value)],
+    ['alerts', dashboardApi.fetchAlertLevels(params), (value) => (alertLevels.value = value)],
   ];
   if (isProject.value) {
     requests.push(['users', dashboardApi.fetchTopUsers(params), (value) => (topUsers.value = value)]);
@@ -293,7 +286,9 @@ onMounted(loadDashboard);
       </article>
     </section>
 
-    <section class="dashboard-grid dashboard-grid-secondary">
+    <section
+      class="dashboard-grid dashboard-grid-secondary"
+      :style="{ '--dashboard-columns': isProject ? '2fr 2fr 1fr' : '1fr 1fr' }">
       <article class="dashboard-panel comparison-panel">
         <div class="panel-heading">
           <h2>{{ comparisonTitle }}</h2>
@@ -334,25 +329,23 @@ onMounted(loadDashboard);
           description="暂无用户使用数据" />
       </article>
 
-      <article
-        class="dashboard-panel alert-panel"
-        :class="{ 'alert-panel-wide': isProject }">
+      <article class="dashboard-panel alert-panel">
         <div class="panel-heading">
-          <h2>告警趋势</h2>
-          <span>每日触发数</span>
+          <h2>告警级别</h2>
+          <span>近 30 天</span>
         </div>
         <ElSkeleton
           v-if="loading.alerts"
           :rows="7"
           animated />
         <DashboardChart
-          v-else-if="alertTrend.length"
+          v-else-if="alertLevels.length"
           :option="alertOption"
-          aria-label="近 30 天告警趋势"
+          aria-label="近 30 天告警级别分布"
           height="320px" />
         <ElEmpty
           v-else
-          description="暂无告警趋势" />
+          description="暂无告警数据" />
       </article>
     </section>
   </main>
@@ -376,10 +369,9 @@ onMounted(loadDashboard);
 .summary-empty { grid-column: 1 / -1; }
 .dashboard-grid { display: grid; gap: var(--spacing-xl); min-width: 0; }
 .dashboard-grid-main { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); }
-.dashboard-grid-secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dashboard-grid-secondary { grid-template-columns: var(--dashboard-columns); }
 .dashboard-panel { min-width: 0; min-height: 380px; padding: var(--spacing-xl); border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-primary); box-shadow: var(--shadow-xs); }
 .trend-panel, .usage-panel { min-height: 330px; }
-.alert-panel-wide { grid-column: 1 / -1; }
 .panel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--spacing-md); margin-bottom: var(--spacing-md); }
 .panel-heading h2 { margin: 0; color: var(--text-primary); font-size: var(--font-size-lg); }
 .panel-heading span { color: var(--text-tertiary); font-size: var(--font-size-xs); }
@@ -390,7 +382,6 @@ onMounted(loadDashboard);
 
 @media (max-width: 1024px) {
   .dashboard-grid-main, .dashboard-grid-secondary { grid-template-columns: 1fr; }
-  .alert-panel-wide { grid-column: auto; }
 }
 @media (max-width: 768px) {
   .dashboard-page { padding: var(--spacing-lg); }
