@@ -1088,3 +1088,23 @@ npm test -- --coverage.enabled=false
 ### 风险
 
 - 未连接真实 Redis/Celery 和飞书通知服务验证实际送达；当前环境已有飞书地址 TCP 不可达记录，部署前需先恢复通知服务连通性并重启 API、Celery worker 和 Celery beat。
+
+## 2026-07-17：合并前端审计与配额响应式分支
+
+### 已完成
+
+- 将 `codex/frontend-audit-implementation` 通过合并提交 `8146e94` 纳入 `main`，保留共享 ECharts 生命周期、可访问性、主题和构建分包改进，并与当前 Dashboard、存储术语及路由实现完成冲突整合。
+- 将 `codex/quota-progress-responsive` 通过合并提交 `7d01ae5` 纳入 `main`，统一列表响应式列、固定使用率与操作列宽，并使用全局告警阈值映射四档使用率颜色。
+- 调整合并后的旧覆盖测试：组件挂载注入 Pinia，图表用例等待异步初始化并按共享生命周期断言；告警回归测试只收集其声明检查的弃用告警。
+- 确认两个分支 tip 均为 `main` 祖先后，移除两个独立 worktree，并使用安全删除删除对应本地分支；本地及远端均无其他未合入 `main` 的分支。
+
+### 验证状态
+
+- 后端全量测试 `370 passed`。
+- 前端全量测试与覆盖率测试均为 `56 files / 341 passed`，覆盖率 statements `98.32%`、branches `89.51%`、functions `83.72%`；ESLint 与生产构建通过。
+- 两个 worktree 删除前均无未提交改动，`git diff --check` 通过。
+
+### 风险
+
+- 本次仅完成本地 `main` 合并与清理，未推送远端。
+- 保留既有两个安全 stash，未自动恢复或删除，避免覆盖历史现场。

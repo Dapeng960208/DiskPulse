@@ -1,6 +1,7 @@
 /* eslint-disable vue/one-component-per-file -- this file intentionally groups Element Plus test stubs. */
 import { defineComponent, h, nextTick } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
+import { createPinia } from 'pinia';
 import { vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -163,7 +164,13 @@ function resetApiMocks() {
 }
 
 function mountComponent(component, props = {}) {
-  return mount(component, { props, global: { stubs: elementStubs } });
+  return mount(component, {
+    props,
+    global: {
+      plugins: [createPinia()],
+      stubs: elementStubs,
+    },
+  });
 }
 
 async function settle() {

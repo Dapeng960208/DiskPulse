@@ -28,7 +28,14 @@ def test_backend_module_reload_has_no_deprecation_warnings(module_name):
         warnings.simplefilter("always")
         importlib.reload(module)
 
-    assert not caught, [f"{warning.category.__name__}: {warning.message}" for warning in caught]
+    deprecations = [
+        warning for warning in caught
+        if issubclass(warning.category, DeprecationWarning)
+    ]
+    assert not deprecations, [
+        f"{warning.category.__name__}: {warning.message}"
+        for warning in deprecations
+    ]
 
 
 def test_group_filter_validation_uses_current_422_status_without_warning():

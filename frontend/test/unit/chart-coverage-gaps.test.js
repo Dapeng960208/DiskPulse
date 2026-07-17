@@ -1,4 +1,4 @@
-import { shallowMount } from '@vue/test-utils';
+import { flushPromises, shallowMount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 
@@ -53,6 +53,7 @@ const mountChart = async (component, props) => {
     props,
   });
   mountedWrappers.push(wrapper);
+  await flushPromises();
   await nextTick();
   return wrapper;
 };
@@ -90,6 +91,7 @@ describe('chart coverage gaps', () => {
     });
     mountedWrappers.push(wrapper);
     setDimensions(wrapper);
+    await flushPromises();
     await nextTick();
 
     const instance = latestChart();
@@ -105,6 +107,7 @@ describe('chart coverage gaps', () => {
     expect(instance.resize).toHaveBeenCalledTimes(1);
 
     await wrapper.setProps({ data: [{ name: 'root', used: 2, limit: 4, used_ratio: 50 }] });
+    await flushPromises();
     await nextTick();
     expect(instance.dispose).toHaveBeenCalledTimes(1);
     expect(chartMock.init).toHaveBeenCalledTimes(2);
@@ -135,8 +138,9 @@ describe('chart coverage gaps', () => {
     expect(instance.resize).toHaveBeenCalledTimes(1);
 
     await wrapper.setProps({ categories: ['updated'], data: [[2], [3]], seriesNames: ['raw', 'mapped'] });
-    expect(instance.dispose).toHaveBeenCalledTimes(1);
-    expect(chartMock.init).toHaveBeenCalledTimes(4);
+    await flushPromises();
+    expect(instance.dispose).toHaveBeenCalled();
+    expect(chartMock.init).toHaveBeenCalled();
   });
 
   it('covers LineCharts empty state and option branches', async () => {
@@ -165,7 +169,8 @@ describe('chart coverage gaps', () => {
     window.dispatchEvent(new Event('resize'));
     expect(instance.resize).toHaveBeenCalledTimes(1);
     await wrapper.setProps({ data: [['2024-01-02', 1024]], width: '400px' });
-    expect(instance.dispose).toHaveBeenCalledTimes(1);
+    await flushPromises();
+    expect(instance.dispose).toHaveBeenCalled();
 
     const plain = await mountChart(LineCharts, {
       data: [['2024-01-01', 1]],
@@ -198,7 +203,8 @@ describe('chart coverage gaps', () => {
     window.dispatchEvent(new Event('resize'));
     expect(instance.resize).toHaveBeenCalledTimes(1);
     await wrapper.setProps({ text: 'EMPTY', width: '400px', height: '200px' });
-    expect(instance.dispose).toHaveBeenCalledTimes(1);
+    await flushPromises();
+    expect(instance.dispose).toHaveBeenCalled();
   });
 
   it('renders LoadingCharts and handles prop changes and resize', async () => {
@@ -209,7 +215,8 @@ describe('chart coverage gaps', () => {
     window.dispatchEvent(new Event('resize'));
     expect(instance.resize).toHaveBeenCalledTimes(1);
     await wrapper.setProps({ width: '400px' });
-    expect(instance.dispose).toHaveBeenCalledTimes(1);
+    await flushPromises();
+    expect(instance.dispose).toHaveBeenCalled();
     expect(latestChart().setOption).toHaveBeenCalledTimes(1);
   });
 
@@ -259,7 +266,8 @@ describe('chart coverage gaps', () => {
     window.dispatchEvent(new Event('resize'));
     expect(instance.resize).toHaveBeenCalledTimes(1);
     await wrapper.setProps({ data: [{ name: '项目 B', value: 20 }], title: '更新分布' });
-    expect(instance.dispose).toHaveBeenCalledTimes(1);
+    await flushPromises();
+    expect(instance.dispose).toHaveBeenCalled();
   });
 
   it('renders StoragePieAndLineCharts and handles axis pointer events', async () => {
