@@ -95,6 +95,51 @@ describe('frontend audit implementation contract', () => {
     expect(button.attributes('aria-label')).toBe('收起侧边导航');
   });
 
+  it('renders the application footer at the compact 40px height by default', async () => {
+    const { default: AppFooter } = await import('@/layouts/components/AppFooter.vue');
+
+    const wrapper = shallowMount(AppFooter);
+
+    expect(wrapper.props('height')).toBe('40px');
+  });
+
+  it('keeps the application footer outside the scrollable main content', async () => {
+    const { default: AppLayout } = await import('@/layouts/AppLayout.vue');
+    const { default: AppFooter } = await import('@/layouts/components/AppFooter.vue');
+
+    const wrapper = shallowMount(AppLayout, {
+      props: { showAside: false },
+      global: {
+        stubs: {
+          ...commonStubs,
+          AppHeader: true,
+          AppFooter: true,
+          RouteMenu: true,
+          RouterView: defineComponent({
+            name: 'RouterView',
+            setup(_, { slots }) {
+              return () => (slots.default ? slots.default({ Component: null, route: { name: 'Dashboard', meta: {} } }) : h('div'));
+            },
+          }),
+        },
+        mocks: {
+          $route: {
+            matched: [{ name: 'Dashboard', meta: { title: '概览' } }],
+          },
+        },
+      },
+    });
+
+    const footer = wrapper.getComponent(AppFooter);
+    const workspace = wrapper.get('.app-layout__workspace');
+    const scrollbar = wrapper.get('.app-main__scrollbar');
+
+    expect(wrapper.find('#app-aside').exists()).toBe(false);
+    expect(workspace.element.lastElementChild).toBe(footer.element);
+    expect(scrollbar.element.contains(footer.element)).toBe(false);
+    expect(footer.props('height')).toBe('40px');
+  });
+
   it('keeps the theme switch accessible and silent when view transitions are unavailable', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { default: ThemeSwitch } = await import('@/components/basic/ThemeSwitch.vue');
