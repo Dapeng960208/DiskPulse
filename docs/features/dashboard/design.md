@@ -17,18 +17,19 @@
 
 ## 接口与口径
 
-新增认证接口 `GET /storage-pulse/api/dashboard/overview`，可选正整数参数 `project_id`：
+Dashboard 不使用覆盖整页的聚合接口，每个数据块使用独立认证接口：
 
-- `scope`：全局或项目范围、项目名称、时间范围、数据更新时间。
-- `summary`：容量上限、已使用、可使用、使用率、存储集群数和告警数。
-- `capacity_trend`：每日已使用容量。
-- `capacity_items`：按已使用容量降序的前 10 个项目或项目组。
-- `alert_trend`：近 30 个自然日的告警数量，缺失日期补零。
+- `GET /storage-pulse/api/dashboard/summary`：摘要和当前范围，可选正整数 `project_id`。
+- `GET /storage-pulse/api/dashboard/capacity-trend`：每日已使用容量，可选正整数 `project_id`。
+- `GET /storage-pulse/api/dashboard/capacity-items`：按已使用容量降序的前 10 个项目或项目组，可选正整数 `project_id`。
+- `GET /storage-pulse/api/dashboard/alert-trend`：近 30 个自然日告警数量，可选正整数 `project_id`，缺失日期补零。
+- `GET /storage-pulse/api/dashboard/top-users`：项目内用户已用容量 Top 10，必须传正整数 `project_id`。
 
 数据口径：
 
 - 全局摘要使用启用存储集群的物理容量快照；全局容量对比使用非公共项目配额，两者不要求相加相等。
 - 项目摘要使用项目配额；项目容量对比只包含启用监控的项目组。
+- 项目用户排行通过用户目录关联项目组和项目，按用户汇总已用容量；用户名优先显示研发用户名。
 - 告警只统计 `source=diskpulse`、`alert_type=alert`、`event_type=trigger`，排除配额调整和厂商事件。
 - 项目告警范围包含项目、所属项目组和所属用户目录。
 - QuestDB 不可用时容量趋势为空，PostgreSQL 容量快照、对比项和告警数据仍正常返回。
@@ -39,12 +40,14 @@
 - `DashboardChart`：懒加载 ECharts，接收标准 option，负责初始化、响应式 resize、更新和卸载释放。
 - `PieCharts`：保留原夜莺图默认契约，新增 `dashboard` 环图模式与中心使用率标签。
 - `ProjectSelect`：新增可选 placeholder，默认文案不变；Dashboard 使用“全部项目”。
-- 页面用请求序号忽略快速切换产生的过期响应，并提供整体骨架、整体失败空态和单图空态。
+- 页面用请求序号忽略快速切换产生的过期响应；各摘要和图表独立加载、独立显示空态，部分接口失败不阻塞其他数据块。
+- 根画布固定从顶部开始排列，项目切换期间不允许 Grid 行拉伸形成大面积空白。
+- 项目视图第二排展示“项目组容量对比 + 用户使用 Top 10”，告警趋势独占下一排；全局视图继续展示“项目容量对比 + 告警趋势”。
 
 ## 测试与验收
 
-- 后端覆盖全局/项目聚合、QuestDB 降级、项目不存在和参数校验。
-- 前端覆盖全局布局、项目下钻、失败空态，以及图表容器初始化、更新、resize 和释放。
+- 后端覆盖五个独立接口、Top 10 用户聚合、QuestDB 降级、项目不存在和参数校验。
+- 前端覆盖全局布局、项目下钻、分区加载、无拉伸留白、部分失败空态，以及图表容器初始化、更新、resize 和释放。
 - 保留既有 `PieCharts` 和 Dashboard 覆盖契约。
 - 自动化验收包含聚焦 Pytest/Vitest、目标 ESLint、生产构建、Python `compileall` 和 `git diff --check`。
 - 真实 QuestDB 查询、登录态浏览器和生产规模数据布局需在部署环境复验。
