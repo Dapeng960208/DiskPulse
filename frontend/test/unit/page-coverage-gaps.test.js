@@ -644,6 +644,24 @@ describe('alert and user page coverage gaps', () => {
 });
 
 describe('real-time page coverage gaps', () => {
+  it('removes the duplicate header range and shows alert urgency instead of the prompt', async () => {
+    tableRows = [
+      { alert_level: 'emergency', avg_use_ratio: 96, updated_at: '2026-07-17' },
+      { alert_level: 'important', avg_use_ratio: 82, updated_at: '2026-07-16' },
+    ];
+    mocks.alertApi.fetch.mockResolvedValueOnce({ content: tableRows });
+
+    const wrapper = await mountPage(RealTimePage, {
+      props: { apiType: 'storage-usage', label: '用户目录', attributeId: [1] },
+    });
+
+    expect(wrapper.find('.real-time-page__header > span').exists()).toBe(false);
+    expect(wrapper.find('[data-column="提示"]').exists()).toBe(false);
+    expect(wrapper.find('[data-column="告警紧急程度"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('紧急');
+    expect(wrapper.text()).toContain('重要');
+  });
+
   it('loads storage usage data, alerts, indicator changes, range reset, and multi-target charts', async () => {
     mocks.storageUsageApi.fetchStorageRealTimeDataById
       .mockResolvedValueOnce({ info: { linux_path: '/data/a', limit: 100, used: 20, use_ratio: 20 }, data: [['2026-07-17', 20]], trend_meta: { quota_basis: 'hard', rule_source: 'system', thresholds: { important: 80, serious: 90, emergency: 95 }, quota_limit_gb: 100, ratio_indicator: 'used_ratio' } })
