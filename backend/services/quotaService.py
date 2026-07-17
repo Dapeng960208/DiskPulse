@@ -501,7 +501,7 @@ def adjust_storage_usage_quota(
 def require_group_quota_adjustment_permission(*, db: Session, group_id: int, current_user) -> Group:
     """Only the responsible group owner may use the non-admin quota exception."""
     if current_user is None:
-        return None
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
     if is_super_admin(current_user):
         return None
     group = db.get(Group, group_id)

@@ -102,6 +102,7 @@ def seed_quota_target(db, *, storage_type="netapp", volume_target=False):
             volume_id=1 if volume_target else None,
             qtree_id=None if volume_target else 1,
             name="group-1",
+            in_charge_user_id=1,
             linux_path="/data/group-1",
             limit=100,
             used=20,
@@ -123,6 +124,20 @@ def seed_quota_target(db, *, storage_type="netapp", volume_target=False):
         )
     )
     db.commit()
+
+
+def quota_owner(db):
+    return db.get(models.User, 1)
+
+
+@pytest.fixture(autouse=True)
+def disable_external_quota_notification_enqueue(monkeypatch):
+    """Keep quota service tests deterministic without contacting a Celery broker."""
+    monkeypatch.setattr(
+        quotaService,
+        "_enqueue_adjustment_feishu",
+        lambda *_args, **_kwargs: None,
+    )
 
 
 def test_quota_request_validates_limits_and_grace_pair():
@@ -171,6 +186,7 @@ def test_group_adjustment_rejects_shared_target_before_device_call(db_session, m
             db_session,
             group_id=1,
             request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+            current_user=quota_owner(db_session),
         )
 
     assert error.value.status_code == 409
@@ -209,6 +225,7 @@ def test_netapp_qtree_group_adjustment_updates_device_and_local_state(db_session
             soft_limit=100,
             unit="GiB",
         ),
+        current_user=quota_owner(db_session),
     )
 
     assert client.calls == [
@@ -244,6 +261,7 @@ def test_netapp_qtree_group_adjustment_updates_device_and_local_state(db_session
                 db,
                 group_id=1,
                 request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+                current_user=quota_owner(db),
                 audit_context=context,
             ),
         ),
@@ -253,6 +271,7 @@ def test_netapp_qtree_group_adjustment_updates_device_and_local_state(db_session
                 db,
                 storage_usage_id=1,
                 request=QuotaAdjustmentRequest(hard_limit=80, unit="GiB"),
+                current_user=quota_owner(db),
                 audit_context=context,
             ),
         ),
@@ -317,6 +336,7 @@ def test_quota_adjustment_propagates_correlation_to_notification_task(db_session
         db_session,
         group_id=1,
         request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        current_user=quota_owner(db_session),
         audit_context=context,
     )
 
@@ -348,11 +368,13 @@ def test_quota_adjustments_queue_feishu_for_group_owner_and_directory_user(db_se
         db_session,
         group_id=1,
         request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        current_user=quota_owner(db_session),
     )
     quotaService.adjust_storage_usage_quota(
         db_session,
         storage_usage_id=1,
         request=QuotaAdjustmentRequest(hard_limit=80, unit="GiB"),
+        current_user=quota_owner(db_session),
     )
 
     alerts = db_session.query(models.StorageAlerts).order_by(models.StorageAlerts.id).all()
@@ -397,6 +419,7 @@ def test_quota_adjustment_succeeds_when_feishu_enqueue_fails(db_session, monkeyp
         db_session,
         group_id=1,
         request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        current_user=quota_owner(db_session),
     )
 
     assert result.hard_limit == 120
@@ -419,6 +442,7 @@ def test_netapp_volume_group_accepts_only_hard_limit(db_session, monkeypatch):
                 soft_limit=100,
                 unit="GiB",
             ),
+            current_user=quota_owner(db_session),
         )
     assert error.value.status_code == 422
 
@@ -426,6 +450,7 @@ def test_netapp_volume_group_accepts_only_hard_limit(db_session, monkeypatch):
         db_session,
         group_id=1,
         request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        current_user=quota_owner(db_session),
     )
     assert client.calls == [
         ("volume", {"volume_name": "volume-1", "hard_limit": 120 * GiB})
@@ -449,6 +474,7 @@ def test_isilon_user_adjustment_requires_grace_and_uses_current_username(db_sess
                 soft_limit=60,
                 unit="GiB",
             ),
+            current_user=quota_owner(db_session),
         )
     assert error.value.status_code == 422
 
@@ -462,6 +488,7 @@ def test_isilon_user_adjustment_requires_grace_and_uses_current_username(db_sess
             soft_grace=2,
             soft_grace_unit="hours",
         ),
+        current_user=quota_owner(db_session),
     )
     assert client.calls == [
         (
@@ -503,6 +530,7 @@ def test_quota_adjustment_preserves_native_device_json_error(db_session, monkeyp
         db_session,
         group_id=1,
         request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        current_user=quota_owner(db_session),
     )
 
     assert isinstance(result, Response)
@@ -525,6 +553,7 @@ def test_quota_adjustment_preserves_native_device_text_error(db_session, monkeyp
         db_session,
         group_id=1,
         request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        current_user=quota_owner(db_session),
     )
 
     assert isinstance(result, Response)
