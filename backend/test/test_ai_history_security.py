@@ -106,6 +106,102 @@ def test_legacy_ai_trace_without_visibility_metadata_is_hidden_safely(db_session
     assert assistant["tool_calls"] == []
 
 
+def test_unknown_current_ai_trace_visibility_is_hidden_fail_closed(db_session):
+    user, _model, conversation = _seed_conversation(db_session)
+    _add_assistant_turn(
+        db_session,
+        conversation,
+        content="可能包含无权项目的数据",
+        response_payload={},
+        detail_payload=[
+            {
+                "tool_name": "unknown_project_source",
+                "visibility": {
+                    "known": False,
+                    "project_scope_ids": [],
+                    "requires_super_admin": False,
+                },
+                "result": {"ok": True, "data": {"project_name": "private"}},
+            }
+        ],
+    )
+
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+    assistant = history["messages"][-1]
+
+    assert assistant["status"] == "restricted"
+    assert assistant["content"] == HIDDEN_HISTORY_CONTENT
+    assert assistant["tool_calls"] == []
+
+
+def test_successful_tool_payload_without_ok_flag_is_preserved_and_redacted():
+    display, truncated = ai_chat_service._display_tool_result(
+        {"data": {"used": 7, "token": "must-not-be-visible"}}
+    )
+
+    assert truncated is False
+    assert display == {"data": {"used": 7, "token": "[REDACTED]"}}
+
+
+def test_global_tool_turn_remains_visible_to_its_creator(db_session, monkeypatch):
+    user, _model, conversation = _seed_conversation(db_session)
+    app = FastAPI()
+    router = APIRouter()
+
+    @router.get(
+        "/global-capacity",
+        openapi_extra={"ai_exposed": True, "ai_name": "get_global_capacity", "ai_description": "查询公共容量"},
+    )
+    def get_global_capacity():
+        return {"data": {"used": 7}}
+
+    app.include_router(router)
+    calls = {"count": 0}
+
+    def provider_stream(*_args, **_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[
+                    AIClientToolCall(
+                        tool_id="global-capacity-tool",
+                        name="get_global_capacity",
+                        arguments={},
+                    )
+                ],
+                stop_reason="tool_calls",
+            )
+            return
+        yield AICompletionStreamEvent(kind="delta", text="公共容量为 7 GiB")
+        yield AICompletionStreamEvent(kind="completed", text="公共容量为 7 GiB", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=user.id,
+            current_user=user,
+            content="查询公共容量",
+        )
+    )
+
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+    assistant = history["messages"][-1]
+    audit = db_session.query(models.AIAuditLog).filter_by(conversation_id=conversation.id).one()
+    trace = json.loads(audit.detail_payload)[0]
+
+    assert assistant["status"] == "succeeded"
+    assert assistant["content"] == "公共容量为 7 GiB"
+    assert trace["visibility"] == {
+        "known": True,
+        "project_scope_ids": [],
+        "requires_super_admin": False,
+    }
+
+
 def test_ai_audit_trace_inherits_request_trace_id_before_generating_a_new_one(db_session, monkeypatch):
     user, _model, conversation = _seed_conversation(db_session)
 
