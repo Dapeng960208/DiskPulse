@@ -35,10 +35,8 @@ describe('role-aware list actions', () => {
     expect(actions).toContain('width="132"');
     expect(actions).toContain('class="list-row-actions"');
     expect(actions.indexOf('详情')).toBeLessThan(actions.indexOf('<ElDropdown'));
-    if (source === groupSource) {
+    if (source === groupSource || source === usageSource) {
       expect(actions).toMatch(/<ElDropdown[\s\S]*?v-if="hasRole\('disk-monitor:admin'\) \|\| canAdjustQuota\(row\)"/);
-    } else {
-      expect(actions).toMatch(/<ElDropdown[\s\S]*?v-if="hasRole\('disk-monitor:admin'\)"/);
     }
     expect(actions).toContain('aria-label="更多操作"');
   });
@@ -57,6 +55,14 @@ describe('role-aware list actions', () => {
 
     expect(groupSource).toContain('function canAdjustQuota(row)');
     expect(groupSource).toContain('row?.capabilities?.adjust_quota === true');
+    expect(actions).toContain('v-if="canAdjustQuota(row)"');
+  });
+
+  it('shows user-directory quota adjustment only when the resource capability is granted', () => {
+    const actions = actionColumn(usageSource);
+
+    expect(usageSource).toContain('function canAdjustQuota(row)');
+    expect(usageSource).toContain('row?.capabilities?.adjust_quota === true');
     expect(actions).toContain('v-if="canAdjustQuota(row)"');
   });
 
