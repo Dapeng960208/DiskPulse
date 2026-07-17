@@ -282,7 +282,6 @@ const stubs = {
   Progress: passthrough('Progress'),
   LoadingCharts: passthrough('LoadingCharts'),
   DiskUsage: passthrough('DiskUsage'),
-  LineCharts: passthrough('LineCharts'),
   PieCharts: passthrough('PieCharts'),
   BarStackChart: passthrough('BarStackChart'),
 };

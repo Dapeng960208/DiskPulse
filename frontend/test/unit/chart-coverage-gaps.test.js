@@ -37,9 +37,7 @@ vi.mock('echarts', () => ({
 import AnimatedTextChart from '@/common/charts/AnimatedTextChart.vue';
 import BarStackChart from '@/common/charts/BarStackChart.vue';
 import DiskUsage from '@/common/charts/DiskUsage.vue';
-import LineCharts from '@/common/charts/LineCharts.vue';
 import LoadingCharts from '@/common/charts/LoadingCharts.vue';
-import MultipleLineCharts from '@/common/charts/MultipleLineCharts.vue';
 import PieCharts from '@/common/charts/PieCharts.vue';
 import StoragePieAndLineCharts from '@/common/charts/StoragePieAndLineCharts.vue';
 
@@ -143,49 +141,6 @@ describe('chart coverage gaps', () => {
     expect(chartMock.init).toHaveBeenCalled();
   });
 
-  it('covers LineCharts empty state and option branches', async () => {
-    const empty = await mountChart(LineCharts, { data: [] });
-    expect(chartMock.init).not.toHaveBeenCalled();
-    expect(empty.findComponent({ name: 'AnimatedTextChart' }).exists()).toBe(true);
-    empty.unmount();
-
-    const wrapper = await mountChart(LineCharts, {
-      data: [['2024-01-01', 2048]],
-      legendName: '使用量',
-      showStats: true,
-      threshold: 80,
-      title: '容量趋势',
-      yAxisUnit: 'G',
-    });
-    const instance = latestChart();
-    const option = latestOption();
-    expect(option.series[0].markPoint.data).toHaveLength(2);
-    expect(option.series[0].markLine.data[0].yAxis).toBe(80);
-    expect(option.tooltip.formatter([
-      { axisValueLabel: '2024-01-01', data: ['2024-01-01', 2048], marker: '*', seriesName: '使用量' },
-    ])).toContain('2.00 T');
-    expect(option.tooltip.formatter({})).toBe('');
-
-    window.dispatchEvent(new Event('resize'));
-    expect(instance.resize).toHaveBeenCalledTimes(1);
-    await wrapper.setProps({ data: [['2024-01-02', 1024]], width: '400px' });
-    await flushPromises();
-    expect(instance.dispose).toHaveBeenCalled();
-
-    const plain = await mountChart(LineCharts, {
-      data: [['2024-01-01', 1]],
-      showStats: false,
-      threshold: null,
-      yAxisUnit: 'TB',
-    });
-    expect(latestOption().series[0].markPoint).toBeUndefined();
-    expect(latestOption().series[0].markLine).toBeUndefined();
-    expect(latestOption().tooltip.formatter([
-      { axisValueLabel: 'date', data: ['date', 1], marker: '*', seriesName: 'series' },
-    ])).toContain('1.00 TB');
-    plain.unmount();
-  });
-
   it('renders AnimatedTextChart and responds to props and resize', async () => {
     const wrapper = await mountChart(AnimatedTextChart, {
       animationDuration: 500,
@@ -218,38 +173,6 @@ describe('chart coverage gaps', () => {
     await flushPromises();
     expect(instance.dispose).toHaveBeenCalled();
     expect(latestChart().setOption).toHaveBeenCalledTimes(1);
-  });
-
-  it('builds MultipleLineCharts series and formats both units', async () => {
-    const wrapper = await mountChart(MultipleLineCharts, {
-      data: {
-        first: [['2024-01-01T00:00:00Z', 2048]],
-        second: [['2024-01-01T00:00:00Z', 1024]],
-      },
-      title: '多线趋势',
-      yAxisUnit: 'G',
-    });
-    const instance = latestChart();
-    const option = latestOption();
-    expect(option.series).toHaveLength(2);
-    expect(option.legend.data).toEqual(['first', 'second']);
-    expect(option.tooltip.formatter([
-      { axisValueLabel: '2024-01-01T00:00:00Z', data: ['time', 2048], marker: '*', seriesName: 'first' },
-    ])).toContain('2.00 T');
-    expect(option.tooltip.formatter({})).toBe('');
-
-    window.dispatchEvent(new Event('resize'));
-    expect(instance.resize).toHaveBeenCalledTimes(1);
-    await wrapper.setProps({ data: { first: [['2024-01-02T00:00:00Z', 1]] } });
-    expect(instance.dispose).toHaveBeenCalledTimes(1);
-
-    await mountChart(MultipleLineCharts, {
-      data: { first: [['2024-01-01T00:00:00Z', 1]] },
-      yAxisUnit: 'TB',
-    });
-    expect(latestOption().tooltip.formatter([
-      { axisValueLabel: '2024-01-01T00:00:00Z', data: ['time', 1], marker: '*', seriesName: 'first' },
-    ])).toContain('1.00 TB');
   });
 
   it('renders PieCharts through empty and populated data paths', async () => {

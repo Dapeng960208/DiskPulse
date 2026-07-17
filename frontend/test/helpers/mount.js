@@ -60,8 +60,6 @@ export const commonStubs = {
   LoadingCharts: createStub('LoadingCharts'),
   AnimatedTextChart: createStub('AnimatedTextChart'),
   DiskUsage: createStub('DiskUsage'),
-  LineCharts: createStub('LineCharts'),
-  MultipleLineCharts: createStub('MultipleLineCharts'),
   ICarbonUserFilled: createStub('ICarbonUserFilled'),
 };
 

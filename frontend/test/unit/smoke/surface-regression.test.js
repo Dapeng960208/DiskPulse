@@ -218,16 +218,12 @@ function resolvePropValue(path, name, definition) {
       return [[1, 2], [3, 4]];
     }
 
-    if (path.includes('LineCharts.vue') || path.includes('AnimatedTextChart.vue')) {
+    if (path.includes('AnimatedTextChart.vue')) {
       return [{ time: '2024-01-01 00:00:00', value: 1 }];
     }
 
     if (path.includes('DiskUsage.vue') || path.includes('PieCharts.vue') || path.includes('StoragePieAndLineCharts.vue')) {
       return [{ name: 'A', value: 1 }];
-    }
-
-    if (path.includes('MultipleLineCharts.vue')) {
-      return { seriesA: [{ time: '2024-01-01 00:00:00', value: 1 }] };
     }
 
     return [];

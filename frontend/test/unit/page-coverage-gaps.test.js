@@ -325,8 +325,6 @@ const commonStubs = {
   AggregateSelect: Selectable('AggregateSelect'),
   UserAvatar: passthrough('UserAvatar'),
   Progress: passthrough('Progress'),
-  LineCharts: passthrough('LineCharts'),
-  MultipleLineCharts: passthrough('MultipleLineCharts'),
   StorageTrendChart: defineComponent({
     name: 'StorageTrendChart',
     props: { series: Array, indicator: String, trendMeta: Object, systemThresholds: Object, unit: String, ariaLabel: String },
