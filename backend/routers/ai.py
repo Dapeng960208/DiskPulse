@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from dependencies import CurrentUserDep, get_db
 from schemas.aiSchema import ConversationCreate, MessageCreate
-from services import ai_chat_service
+from services import ai_chat_service, audit_service
 from services.ai_rate_limit import enforce_ai_rate_limit
 
 
@@ -25,8 +25,19 @@ def conversations(current_user: CurrentUserDep, db: Session = Depends(get_db)):
 
 
 @router.post("/conversations", status_code=status.HTTP_201_CREATED)
-def create_conversation(payload: ConversationCreate, current_user: CurrentUserDep, db: Session = Depends(get_db)):
-    return ai_chat_service.create_conversation(db, current_user.id, payload.title, payload.model_id)
+def create_conversation(
+    payload: ConversationCreate,
+    request: Request,
+    current_user: CurrentUserDep,
+    db: Session = Depends(get_db),
+):
+    return ai_chat_service.create_conversation(
+        db,
+        current_user.id,
+        payload.title,
+        payload.model_id,
+        audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
+    )
 
 
 @router.get("/conversations/{conversation_id}")
@@ -35,8 +46,18 @@ def conversation(conversation_id: int, current_user: CurrentUserDep, db: Session
 
 
 @router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_conversation(conversation_id: int, current_user: CurrentUserDep, db: Session = Depends(get_db)):
-    ai_chat_service.delete_conversation(db, conversation_id, current_user.id)
+def delete_conversation(
+    conversation_id: int,
+    request: Request,
+    current_user: CurrentUserDep,
+    db: Session = Depends(get_db),
+):
+    ai_chat_service.delete_conversation(
+        db,
+        conversation_id,
+        current_user.id,
+        audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -56,6 +77,7 @@ def message(
         user_id=current_user.id,
         current_user=current_user,
         content=payload.content,
+        audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
     )
 
 
@@ -81,6 +103,7 @@ def stream_message(
             user_id=current_user.id,
             current_user=current_user,
             content=payload.content,
+            audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
         )
         try:
             for event, data in stream:

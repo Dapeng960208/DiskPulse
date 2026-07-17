@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from appConfig import base_config
 from crud import aiCrud
 from models import AIConversation, AIAuditLog, AIMessage, User
+from services.audit_service import AuditContext, append_audit_event
 from services.ai_client import AIClientError, AIClientToolArgumentsError, AIClientToolCall, chat_completion_stream
 from services.ai_config_service import serialize_model
 from services.ai_tool_service import build_tool_registry, execute_tool, tool_definitions
@@ -158,7 +159,13 @@ def list_conversations(db: Session, user_id: int) -> list[dict]:
     return [serialize_conversation(item) for item in aiCrud.list_conversations(db, user_id)]
 
 
-def create_conversation(db: Session, user_id: int, title: str, model_id: int) -> dict:
+def create_conversation(
+    db: Session,
+    user_id: int,
+    title: str,
+    model_id: int,
+    audit_context: AuditContext | None = None,
+) -> dict:
     model = aiCrud.get_model(db, model_id)
     if model is None or not model.enabled or not model.enable_chat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="可用 AI 模型不存在")
@@ -170,6 +177,18 @@ def create_conversation(db: Session, user_id: int, title: str, model_id: int) ->
             title=title.strip() or "新对话",
         ),
     )
+    if audit_context is not None:
+        db.flush()
+        append_audit_event(
+            db,
+            context=audit_context,
+            phase="result",
+            action="ai.conversation.create",
+            resource_type="ai_conversation",
+            resource_id=conversation.id,
+            outcome="success",
+            after_summary={"model_id": model_id},
+        )
     db.commit()
     db.refresh(conversation)
     return serialize_conversation(conversation)
@@ -190,8 +209,24 @@ def get_conversation(db: Session, conversation_id: int, user_id: int) -> dict:
     )
 
 
-def delete_conversation(db: Session, conversation_id: int, user_id: int) -> None:
+def delete_conversation(
+    db: Session,
+    conversation_id: int,
+    user_id: int,
+    audit_context: AuditContext | None = None,
+) -> None:
     conversation = _conversation_or_404(db, conversation_id, user_id)
+    if audit_context is not None:
+        append_audit_event(
+            db,
+            context=audit_context,
+            phase="result",
+            action="ai.conversation.delete",
+            resource_type="ai_conversation",
+            resource_id=conversation.id,
+            outcome="success",
+            before_summary={"model_id": conversation.model_id},
+        )
     db.delete(conversation)
     db.commit()
 
@@ -311,6 +346,31 @@ def _terminal_message(
     return serialize_message(assistant, audit), serialize_conversation(conversation)
 
 
+def _append_message_lifecycle_result(
+    db: Session,
+    *,
+    context: AuditContext | None,
+    conversation: AIConversation,
+    model_id: int,
+    outcome: str,
+    status_value: str,
+    reason_code: str | None = None,
+) -> None:
+    if context is None:
+        return
+    append_audit_event(
+        db,
+        context=context,
+        phase="result",
+        action="ai.message.send",
+        resource_type="ai_conversation",
+        resource_id=conversation.id,
+        outcome=outcome,
+        reason_code=reason_code,
+        after_summary={"model_id": model_id, "status": status_value},
+    )
+
+
 def _safe_audit_error(error: Exception) -> str:
     return str(error)[:1000] if isinstance(error, AIClientError) else "AI 服务暂不可用"
 
@@ -391,6 +451,7 @@ def stream_message(
     user_id: int,
     content: str,
     current_user: User | None = None,
+    audit_context: AuditContext | None = None,
 ) -> Iterator[tuple[str, dict]]:
     conversation = _conversation_or_404(db, conversation_id, user_id)
     model = aiCrud.get_model(db, conversation.model_id)
@@ -422,6 +483,17 @@ def stream_message(
             trace_id=uuid4().hex,
         ),
     )
+    if audit_context is not None:
+        append_audit_event(
+            db,
+            context=audit_context,
+            phase="attempt",
+            action="ai.message.send",
+            resource_type="ai_conversation",
+            resource_id=conversation.id,
+            outcome="success",
+            metadata={"model_id": model.id},
+        )
     # Persist the recoverable user turn and audit before any SSE bytes leave the process.
     db.commit()
     db.refresh(user_message)
@@ -581,6 +653,15 @@ def stream_message(
             except Exception:
                 degraded_error_message = f"{degraded_error_message}；无工具总结调用失败"
             final_text = "".join(summary_text).strip() or _DEGRADED_FALLBACKS[recovery["reason"]]
+            _append_message_lifecycle_result(
+                db,
+                context=audit_context,
+                conversation=conversation,
+                model_id=model.id,
+                outcome="failure",
+                status_value="degraded",
+                reason_code=recovery["reason"],
+            )
             message_data, conversation_data = _terminal_message(
                 db,
                 assistant=assistant,
@@ -603,6 +684,14 @@ def stream_message(
 
         if not final_text.strip():
             raise AIClientError("AI 服务返回空内容")
+        _append_message_lifecycle_result(
+            db,
+            context=audit_context,
+            conversation=conversation,
+            model_id=model.id,
+            outcome="success",
+            status_value="succeeded",
+        )
         message_data, conversation_data = _terminal_message(
             db,
             assistant=assistant,
@@ -621,6 +710,15 @@ def stream_message(
         }
     except GeneratorExit:
         if not terminal:
+            _append_message_lifecycle_result(
+                db,
+                context=audit_context,
+                conversation=conversation,
+                model_id=model.id,
+                outcome="failure",
+                status_value="cancelled",
+                reason_code="cancelled",
+            )
             _terminal_message(
                 db,
                 assistant=assistant,
@@ -633,6 +731,15 @@ def stream_message(
             )
         raise
     except asyncio.CancelledError:
+        _append_message_lifecycle_result(
+            db,
+            context=audit_context,
+            conversation=conversation,
+            model_id=model.id,
+            outcome="failure",
+            status_value="cancelled",
+            reason_code="cancelled",
+        )
         message_data, conversation_data = _terminal_message(
             db,
             assistant=assistant,
@@ -657,6 +764,15 @@ def stream_message(
         assistant = db.get(AIMessage, assistant_id)
         conversation = aiCrud.get_conversation(db, conversation_id, user_id)
         if audit is not None and assistant is not None and conversation is not None:
+            _append_message_lifecycle_result(
+                db,
+                context=audit_context,
+                conversation=conversation,
+                model_id=model.id,
+                outcome="failure",
+                status_value="failed",
+                reason_code="ai_message_failed",
+            )
             message_data, conversation_data = _terminal_message(
                 db,
                 assistant=assistant,
