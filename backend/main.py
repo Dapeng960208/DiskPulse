@@ -7,6 +7,7 @@ from appConfig import base_config
 from database import SessionLocal
 from dependencies import require_authenticated_request
 from middleware.correlation import CorrelationIdMiddleware
+from middleware.operation_audit import OperationAuditMiddleware
 from questdb.migrate import upgrade as upgrade_questdb
 from routers import (
     aggregate,
@@ -70,6 +71,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(OperationAuditMiddleware)
 app.add_middleware(CorrelationIdMiddleware)
 
 
