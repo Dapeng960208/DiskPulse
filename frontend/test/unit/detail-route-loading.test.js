@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 const detailPages = [
   'src/pages/group/GroupDetailPage.vue',
   'src/pages/usage/UsageDetailPage.vue',
+  'src/pages/common/RealTimePage.vue',
 ];
 
 describe('detail route loading dependencies', () => {
@@ -12,8 +13,9 @@ describe('detail route loading dependencies', () => {
     const source = readFileSync(resolve(process.cwd(), path), 'utf8');
     const elementPlusImport = source.match(/import\s+\{([^}]+)\}\s+from 'element-plus';/);
 
-    expect(elementPlusImport?.[1].split(',').map((name) => name.trim())).toEqual([
-      'ElDescriptionsItem',
-    ]);
+    const importedComponents = elementPlusImport?.[1].split(',').map((name) => name.trim());
+
+    expect(importedComponents).not.toContain('ElRow');
+    expect(importedComponents).not.toContain('ElCol');
   });
 });
