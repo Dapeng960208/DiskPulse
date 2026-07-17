@@ -1,5 +1,6 @@
 <script setup>
-import { ElDescriptionsItem } from 'element-plus';
+// 暂时隐藏第 2–4 行扩展字段，恢复时取消以下导入与模板注释。
+// import { ElDescriptionsItem } from 'element-plus';
 import { ref,onBeforeMount} from 'vue';
 import RealTimePage from '@/pages/common/RealTimePage.vue';
 import { useRoute } from 'vue-router';
@@ -16,6 +17,7 @@ onBeforeMount(() => {
     :attribute-id="attributeId"
     :api-type="'storage-usage'"
     :label="'研发用户目录'">
+    <!-- 暂时隐藏第 2–4 行扩展字段
     <template #extra-descriptions="{ info }">
       <ElDescriptionsItem label="文件数量">{{ info?.file_used }}</ElDescriptionsItem>
       <ElDescriptionsItem label="目录权限">{{ info?.access }}</ElDescriptionsItem>
@@ -30,6 +32,7 @@ onBeforeMount(() => {
       <ElDescriptionsItem label="IO块(IO Block)">{{ info?.io_block }}</ElDescriptionsItem>
       <ElDescriptionsItem label="设备的标识号">{{ info?.device }}</ElDescriptionsItem>
     </template>
+    -->
   </RealTimePage>
 
 </template>
