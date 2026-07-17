@@ -75,6 +75,23 @@ const relatedTypeMap = {
   'storage-usage': 'StorageUsage',
 };
 
+const alertLevelLabels = {
+  important: '重要',
+  serious: '严重',
+  emergency: '紧急',
+  high: '高',
+  medium: '中',
+  low: '低',
+};
+
+const alertLevelType = (level) => {
+  if (['emergency', 'serious', 'high'].includes(level)) return 'danger';
+  if (['important', 'medium'].includes(level)) return 'warning';
+  return 'info';
+};
+
+const alertLevelLabel = (level) => alertLevelLabels[level] || level || '-';
+
 const selectedApi = computed(() => apiMap[props.apiType]);
 const selectedSelect = computed(() => selectMap[props.apiType]);
 const relatedType = computed(() => relatedTypeMap[props.apiType]);
@@ -176,7 +193,6 @@ const systemThresholds = computed(() => attributeId.value.length > 1 ? alertThre
         <h1>{{ props.label }}实时监控</h1>
         <p>查看指定时间范围内的容量指标趋势和最近告警。</p>
       </div>
-      <span>{{ queryParams.start_time }} 至 {{ queryParams.end_time }}</span>
     </section>
     <FilterForm
       @query="query();alertQuery();"
@@ -275,19 +291,20 @@ const systemThresholds = computed(() => attributeId.value.length > 1 ? alertThre
             style="width: 100%; height: 100%;"
             :loading="alertQuerying">
             <ElTableColumn
-              prop="description"
-              label="提示"
-              min-width="180"
-              :show-overflow-tooltip="true">
+              label="告警紧急程度"
+              min-width="100"
+              align="center">
               <template #default="{ row }">
-                <div class="ellipsis-text">{{ row.description }}</div>
+                <ElTag :type="alertLevelType(row.alert_level)">
+                  {{ alertLevelLabel(row.alert_level) }}
+                </ElTag>
               </template>
             </ElTableColumn>
             <ElTableColumn
               label="触发值"
               min-width="60">
               <template #default="{ row }">
-                <ElTag :type="row.alert_level==='high'?'danger':row.alert_level==='medium'?'warning':'success'">
+                <ElTag :type="alertLevelType(row.alert_level)">
                   {{ row.avg_use_ratio }}
                 </ElTag>
               </template>
@@ -334,8 +351,7 @@ const systemThresholds = computed(() => attributeId.value.length > 1 ? alertThre
     margin-bottom: var(--spacing-xs);
   }
 
-  p,
-  span {
+  p {
     color: var(--text-secondary);
     font-size: var(--font-size-sm);
   }
