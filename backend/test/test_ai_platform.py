@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from appConfig import base_config
 from dependencies import get_db, require_super_admin
-from models import AIConfig, AIConversation, AIAuditLog, AIMessage, Project, ProjectMembership, User
+from models import AIConfig, AIConversation, AIAuditLog, AIMessage, User
 from routers import (
     aggregate,
     ai,
@@ -97,7 +97,7 @@ def test_ai_models_match_global_conversation_contract():
     assert AIConversation.__tablename__ == "ai_conversations"
     assert AIMessage.__tablename__ == "ai_messages"
     assert AIAuditLog.__tablename__ == "ai_audit_logs"
-    assert "project_id" in AIConversation.__table__.columns
+    assert "project_id" not in AIConversation.__table__.columns
 
 
 def test_ai_secret_is_encrypted_and_masked():
@@ -565,18 +565,8 @@ def test_chat_adds_system_management_instruction_only_when_admin_tools_are_autho
     reader = _seed_user(db_session, user_id=1, rd_username="reader")
     admin = _seed_user(db_session, user_id=2, rd_username="ai-admin")
     configured = _seed_model(db_session)
-    reader_project = Project(name="reader-tool-project")
-    admin_project = Project(name="admin-tool-project")
-    db_session.add_all([reader_project, admin_project])
-    db_session.flush()
-    db_session.add_all(
-        [
-            ProjectMembership(project_id=reader_project.id, user_id=reader.id, role="reader"),
-            ProjectMembership(project_id=admin_project.id, user_id=admin.id, role="reader"),
-        ]
-    )
-    reader_conversation = AIConversation(user_id=reader.id, model_id=configured.id, project_id=reader_project.id, title="普通用户")
-    admin_conversation = AIConversation(user_id=admin.id, model_id=configured.id, project_id=admin_project.id, title="超级管理员")
+    reader_conversation = AIConversation(user_id=reader.id, model_id=configured.id, title="普通用户")
+    admin_conversation = AIConversation(user_id=admin.id, model_id=configured.id, title="超级管理员")
     db_session.add_all([reader_conversation, admin_conversation])
     db_session.commit()
     db_session.refresh(reader_conversation)

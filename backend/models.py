@@ -484,19 +484,10 @@ class AIConfig(Base):
 
 class AIConversation(Base):
     __tablename__ = "ai_conversations"
-    __table_args__ = (
-        Index(
-            "ix_ai_conversations_project_user_updated",
-            "project_id",
-            "user_id",
-            "updated_at",
-        ),
-    )
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     model_id = Column(Integer, ForeignKey("ai_configs.id"), nullable=False, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
     title = Column(String(255), nullable=False, default="新对话")
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
