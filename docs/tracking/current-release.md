@@ -11,6 +11,16 @@
 - 顶部用户菜单在 `avatarUrl` 为空时显示四个原创内置 Q 版 GIF 之一；通过稳定哈希按用户名或展示名称选择，避免刷新时随机切换；后端已有头像仍保持最高优先级。
 - 新增 4 个 96×96、两帧 GIF 静态资源和默认头像选择工具，不新增后端接口、数据库字段或权限；单元测试为 `2 passed`，目标 ESLint 与 `git diff --check` 通过。
 - 已检查 GIF 尺寸、帧数与首帧视觉效果；未执行真实登录态的浏览器验收，因此 LDAP profile 非空头像在本轮未做端到端确认。完整边界见 [应用壳内置默认头像](../features/app-shell/default-avatars.md)。
+
+## 2026-07-17：全站内容区统一外层间距
+
+- 根因是 `AppLayout`、共享页面样式和页面根节点重复声明外层 padding，同时 Element Plus `ElMain` 默认 `20px` 未显式清零，导致不同页面上下左右留白不一致。
+- 实现由 `AppLayout` 成为唯一 gutter 所有者：桌面四边 `16px`，`<=768px` 为 `12px`；面包屑同步对齐；页面内部 QueryForm、DataTable、卡片、表单、页签和图表间距保持不变。
+- TDD RED 为 `11 tests | 9 failed, 2 passed`，GREEN 为 `11/11`。目标 Vue 文件与合同 ESLint 通过；覆盖率 `61 files / 370 tests passed`，Statements `98.3%`、Branches `88.74%`、Functions `84.17%`、Lines `98.3%`；`build:prod` 成功但保留既有大 chunk 警告，`git diff --check` 通过。
+- 浏览器验证覆盖 13 个可加载在用路由于 `1383x994`、`936x994`，以及 `/usage` 于 `375/414/768`；确认桌面 `16px`、移动 `12px` gutter、面包屑对齐与 `ElMain` 无外层 padding。旧依赖预构建缓存刷新后，`/ai/chat` 在当前桌面额外验证通过：`.ai-workspace` 存在、gutter 为 `16px`、无 Vite overlay，整页刷新后 console errors 为 `0`。22 条路由静态矩阵覆盖详情页结构。
+- 风险：真实 ID 详情页未浏览器验证；`320px` viewport override 未生效；`375/414` 既有固定侧栏水平溢出未由本轮引入或扩展修复。
+- 完整设计与验收边界见 [应用内容区统一间距设计](../features/app-shell/content-spacing.md)。
+
 ## 2026-07-17：实时监控页删除重复时间并展示告警紧急程度
 
 - 页头不再重复显示当前开始、结束时间，时间范围筛选器和查询参数保持不变。

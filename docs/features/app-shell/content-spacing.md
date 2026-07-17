@@ -4,7 +4,11 @@
 
 ## 状态
 
-- 设计已批准，待实现/待验证。
+- 已实现并完成自动化与代表性浏览器验证（2026-07-17）。
+- RED 聚焦合同为 `11 tests | 9 failed, 2 passed`；GREEN 为 `11/11`。
+- 目标 Vue 文件与间距合同 ESLint 通过；覆盖率为 `61 files / 370 tests passed`，Statements `98.3%`、Branches `88.74%`、Functions `84.17%`、Lines `98.3%`；`build:prod` 成功，保留既有大于 `500k` chunk 警告；`git diff --check` 通过。
+- 浏览器验证覆盖 13 个可加载在用路由在 `1383x994` 与 `936x994` 的四边 `16px`、`ElMain` 无外层 padding、面包屑左右 `16px` 和无文档级横/纵溢出；`/ai/chat` 在刷新旧依赖预构建缓存后的当前桌面额外验证，`.ai-workspace` 存在、gutter 为 `16px`、无 Vite overlay，整页刷新后 console errors 为 `0`；`/usage` 在 `375/414/768` 验证移动端 `12px` gutter 与面包屑对齐。
+- 真实 ID 详情页未进行浏览器打开；`320px` 视口未生效，窄屏固定侧栏在 `375/414` 的水平溢出属于既有风险。
 - 本文只定义前端应用壳与页面外层间距，不涉及后端、API 或数据结构变化。
 
 ## 目标

@@ -767,3 +767,13 @@
 - 修复：新增右侧工作区，将 `ElMain` 与 `AppFooter` 调整为上下兄弟节点；页脚高度改为 `40px`，主内容改为占用剩余高度的独立滚动区。
 - 验证：RED 聚焦测试 `2 failed, 4 passed`，GREEN 后 `6 passed`；前端全量覆盖率测试 `60 files / 359 passed`，目标 ESLint 和生产构建通过。
 - 风险：按用户要求跳过完整浏览器滚动验收；既有窄屏固定侧栏溢出未纳入本次修复。
+
+### 2026-07-17：全站内容区外层间距不一致
+
+- 触发：对 `/usage` 及全站在用列表、管理和详情页面检查内容区上下左右留白。
+- 现象：不同页面的外层间距不一致；部分页面叠加页面根 padding、共享布局 padding 与 `ElMain` 默认 `20px`，造成内容与面包屑无法稳定对齐。
+- 根因：应用壳与页面样式同时承担外层 gutter，且 Element Plus `ElMain` 默认 padding 未显式清零。
+- 修复：将外层 gutter 收敛到 `AppLayout`，桌面统一 `16px`、`<=768px` 统一 `12px`；清除共享布局、页面根节点的重复外层 padding，并显式清零 `ElMain` 默认 padding，保留业务组件内部间距。
+- 验证：RED `11 tests | 9 failed, 2 passed`；GREEN `11/11`；目标 ESLint 通过；覆盖率 `61 files / 370 tests passed`（Statements `98.3%`、Branches `88.74%`、Functions `84.17%`、Lines `98.3%`）；生产构建与 `git diff --check` 通过。13 个可加载路由在 `1383x994`、`936x994` 及 `/usage` 移动宽度代表值完成浏览器间距检查。
+- 补充环境故障与恢复：旧依赖预构建缓存导致 Vite `504 Outdated Optimize Dep`，停止旧 `5173` 进程后以 `npx vite --host 0.0.0.0 --port 5173 --force` 重启，输出 `Forced re-optimization`；`/ai/chat` 当前桌面已恢复渲染，`.ai-workspace` 存在、gutter 为 `16px`、无 Vite overlay，整页刷新后 console errors 为 `0`。
+- 风险：真实 ID 详情页、`320px` viewport 未验证；`375/414` 固定侧栏水平溢出为既有问题。
