@@ -6,11 +6,13 @@ from sqlalchemy.exc import DisconnectionError
 from appConfig import base_config
 from database import SessionLocal
 from dependencies import require_authenticated_request
+from middleware.correlation import CorrelationIdMiddleware
 from questdb.migrate import upgrade as upgrade_questdb
 from routers import (
     aggregate,
     ai,
     ai_admin,
+    audit_events,
     config,
     dashboard,
     group,
@@ -41,6 +43,7 @@ storage_router = APIRouter(prefix="/storage-pulse/api", dependencies=[Depends(re
 storage_router.include_router(users.router)
 storage_router.include_router(ai.router)
 storage_router.include_router(ai_admin.router)
+storage_router.include_router(audit_events.router)
 storage_router.include_router(projects.router)
 storage_router.include_router(group_tag.router)
 storage_router.include_router(config.router)
@@ -65,6 +68,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(CorrelationIdMiddleware)
 
 
 @app.middleware("http")

@@ -125,6 +125,35 @@ class ProjectMembership(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
 
 
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+    __table_args__ = (
+        CheckConstraint("phase IN ('attempt', 'result')", name="ck_audit_event_phase"),
+        CheckConstraint("outcome IN ('success', 'denied', 'failure')", name="ck_audit_event_outcome"),
+        Index("ix_audit_events_project_occurred_id", "project_id", "occurred_at", "id"),
+        Index("ix_audit_events_actor_occurred_id", "actor_user_id", "occurred_at", "id"),
+        Index("ix_audit_events_operation_occurred", "operation_id", "occurred_at"),
+    )
+
+    id = Column(String(36), primary_key=True)
+    operation_id = Column(String(36), nullable=False)
+    phase = Column(String(16), nullable=False)
+    occurred_at = Column(DateTime, nullable=False, default=datetime.now)
+    actor_type = Column(String(32), nullable=False)
+    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action = Column(String(128), nullable=False)
+    resource_type = Column(String(64), nullable=False)
+    resource_id = Column(Integer, nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    outcome = Column(String(16), nullable=False)
+    reason_code = Column(String(128), nullable=True)
+    before_summary = Column(JSON, nullable=True)
+    after_summary = Column(JSON, nullable=True)
+    event_metadata = Column("metadata", JSON, nullable=True)
+    request_id = Column(String(36), nullable=False)
+    trace_id = Column(String(36), nullable=False)
+
+
 class StorageCluster(Base):
     __tablename__ = "storage_clusters"
 

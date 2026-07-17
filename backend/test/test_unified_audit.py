@@ -2,11 +2,19 @@
 """RED contract for request correlation and append-only unified audit events."""
 
 import importlib
+import importlib.util
+import io
 import json
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
+import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 
 
 def _uuid(value: str) -> str:
@@ -143,8 +151,68 @@ def test_append_audit_event_creates_a_new_redacted_event_without_committing():
     assert event.phase == "result"
     assert event.outcome == "success"
     persisted = json.dumps(
-        {"before": event.before_summary, "after": event.after_summary, "metadata": event.metadata},
+        {"before": event.before_summary, "after": event.after_summary, "metadata": event.event_metadata},
         ensure_ascii=False,
     )
     assert "/mnt/diskpulse/private/alice" not in persisted
     assert "do-not-store" not in persisted
+
+
+def _audit_migration_module():
+    migration_path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000009_unified_audit.py"
+    spec = importlib.util.spec_from_file_location("unified_audit_migration", migration_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _run_migration(migration, context, method_name):
+    with Operations.context(context):
+        getattr(migration, method_name)()
+
+
+def test_unified_audit_migration_prevents_sqlite_updates_and_deletes():
+    migration = _audit_migration_module()
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        _run_migration(migration, MigrationContext.configure(connection), "upgrade")
+        connection.execute(
+            text(
+                """
+                INSERT INTO audit_events (
+                    id, operation_id, phase, occurred_at, actor_type, action,
+                    resource_type, outcome, request_id, trace_id
+                ) VALUES (
+                    '32d85a48-2667-4ee7-b369-5c4d670eb610',
+                    '54248ded-a2cb-45b5-b464-b5c12a2dc90d',
+                    'result', CURRENT_TIMESTAMP, 'user', 'quota.adjust',
+                    'storage_usage', 'success',
+                    'c57c77c9-46ed-4c3f-92fc-bfd6d9e7eae6',
+                    'ee874b8d-e657-45eb-b6f2-c0a7c4cefb39'
+                )
+                """
+            )
+        )
+        with pytest.raises(IntegrityError, match="append-only"):
+            connection.execute(text("UPDATE audit_events SET action = 'changed'"))
+        with pytest.raises(IntegrityError, match="append-only"):
+            connection.execute(text("DELETE FROM audit_events"))
+
+
+@pytest.mark.parametrize("dialect_name", ["sqlite", "postgresql", "mysql"])
+def test_unified_audit_migration_compiles_without_online_database_access(dialect_name):
+    migration = _audit_migration_module()
+    output = io.StringIO()
+    context = MigrationContext.configure(
+        dialect_name=dialect_name,
+        opts={"as_sql": True, "output_buffer": output},
+    )
+
+    _run_migration(migration, context, "upgrade")
+
+    sql = output.getvalue()
+    assert "CREATE TABLE audit_events" in sql
+    assert "op.get_bind" not in Path(migration.__file__).read_text(encoding="utf-8")
+    if dialect_name == "sqlite":
+        assert "CREATE TRIGGER trg_audit_events_no_update" in sql
