@@ -15,7 +15,7 @@ defineProps({
 
 const appSettings = useAppSettings();
 const headerHeight = ref('60px');
-const footerHeight = ref('60px');
+const footerHeight = ref('40px');
 </script>
 
 <template>
@@ -23,7 +23,7 @@ const footerHeight = ref('60px');
     class="app-layout"
     direction="vertical">
     <AppHeader :height="headerHeight" />
-    <ElContainer>
+    <ElContainer class="app-layout__body">
       <ElAside
         v-if="showAside"
         id="app-aside"
@@ -41,63 +41,68 @@ const footerHeight = ref('60px');
           </RouterView>
         </ElScrollbar>
       </ElAside>
-      <ElMain class="app-main">
-        <div class="py-4">
-          <ElSpace align="center">
-            <button
-              v-if="showAside"
-              data-testid="aside-collapse-toggle"
-              class="aside-collapse-toggle"
-              type="button"
-              :aria-controls="'app-aside'"
-              :aria-expanded="String(!appSettings.asideCollapsed)"
-              :aria-label="appSettings.asideCollapsed ? '展开侧边导航' : '收起侧边导航'"
-              @click="appSettings.toggleAsideCollapsed()">
-              <i
-                v-if="appSettings.asideCollapsed"
-                class="i-ri-menu-unfold-fill"></i>
-              <i
-                v-else
-                class="i-ri-menu-fold-fill"></i>
-            </button>
-            <ElBreadcrumb>
-              <ElBreadcrumbItem
-                v-for="route of $route.matched"
-                :key="route.name"
-              >
-                {{ route.meta.title }}
-              </ElBreadcrumbItem>
-            </ElBreadcrumb>
-          </ElSpace>
-        </div>
-        <ElScrollbar
-          wrap-class="px-4"
-          view-class="h-full flex flex-col">
-          <div class="flex-1 flex flex-col">
-            <RouterView v-slot="{ Component, route }">
-              <template v-if="Component">
-                <KeepAlive>
+      <ElContainer
+        class="app-layout__workspace"
+        direction="vertical">
+        <ElMain class="app-main">
+          <div class="py-4">
+            <ElSpace align="center">
+              <button
+                v-if="showAside"
+                data-testid="aside-collapse-toggle"
+                class="aside-collapse-toggle"
+                type="button"
+                :aria-controls="'app-aside'"
+                :aria-expanded="String(!appSettings.asideCollapsed)"
+                :aria-label="appSettings.asideCollapsed ? '展开侧边导航' : '收起侧边导航'"
+                @click="appSettings.toggleAsideCollapsed()">
+                <i
+                  v-if="appSettings.asideCollapsed"
+                  class="i-ri-menu-unfold-fill"></i>
+                <i
+                  v-else
+                  class="i-ri-menu-fold-fill"></i>
+              </button>
+              <ElBreadcrumb>
+                <ElBreadcrumbItem
+                  v-for="route of $route.matched"
+                  :key="route.name"
+                >
+                  {{ route.meta.title }}
+                </ElBreadcrumbItem>
+              </ElBreadcrumb>
+            </ElSpace>
+          </div>
+          <ElScrollbar
+            class="app-main__scrollbar"
+            wrap-class="px-4"
+            view-class="h-full flex flex-col">
+            <div class="flex-1 flex flex-col">
+              <RouterView v-slot="{ Component, route }">
+                <template v-if="Component">
+                  <KeepAlive>
+                    <component
+                      :is="Component"
+                      v-if="route.meta.keepAlive"
+                      :key="route.name" />
+                  </KeepAlive>
                   <component
                     :is="Component"
-                    v-if="route.meta.keepAlive"
-                    :key="route.name" />
-                </KeepAlive>
-                <component
-                  :is="Component"
-                  v-if="!route.meta.keepAlive" />
-              </template>
-              <div
-                v-else
-                class="flex justify-center">
-                页面正在建设中...
-              </div>
-            </RouterView>
-          </div>
-          <AppFooter
-            class="flex-shrink-0"
-            :height="footerHeight" />
-        </ElScrollbar>
-      </ElMain>
+                    v-if="!route.meta.keepAlive" />
+                </template>
+                <div
+                  v-else
+                  class="flex justify-center">
+                  页面正在建设中...
+                </div>
+              </RouterView>
+            </div>
+          </ElScrollbar>
+        </ElMain>
+        <AppFooter
+          class="flex-shrink-0"
+          :height="footerHeight" />
+      </ElContainer>
     </ElContainer>
   </ElContainer>
 </template>
@@ -111,13 +116,26 @@ const footerHeight = ref('60px');
   background: var(--bg-secondary);
 }
 
+.app-layout__body,
+.app-layout__workspace {
+  min-width: 0;
+  min-height: 0;
+}
+
 .app-main {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   padding: 0 var(--spacing-lg);
-  height: calc(100vh - v-bind(headerHeight));
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   background: var(--bg-secondary);
+
+  .app-main__scrollbar {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
 
   // 面包屑区域
   .py-4 {

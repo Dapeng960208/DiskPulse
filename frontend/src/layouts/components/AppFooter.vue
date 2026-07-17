@@ -4,7 +4,7 @@ import { ElFooter } from 'element-plus';
 defineProps({
   height: {
     type: String,
-    default: '60px',
+    default: '40px',
   },
 });
 
@@ -26,6 +26,8 @@ const currentYear = new Date().getFullYear();
 
 .app-footer {
   height: v-bind(height);
+  flex: 0 0 v-bind(height);
+  width: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
