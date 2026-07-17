@@ -168,7 +168,9 @@ onMounted(loadOverview);
       description="暂无概览数据" />
 
     <template v-else>
-      <section class="summary-strip" aria-label="容量摘要">
+      <section
+        class="summary-strip"
+        aria-label="容量摘要">
         <div class="summary-item">
           <span>{{ limitLabel }}</span>
           <strong>{{ formatCapacity(summary.limit_gb) }}</strong>
@@ -197,7 +199,9 @@ onMounted(loadOverview);
             v-if="overview.capacity_trend.length"
             :option="lineOption"
             aria-label="近 30 天容量趋势" />
-          <ElEmpty v-else description="暂无容量趋势" />
+          <ElEmpty
+            v-else
+            description="暂无容量趋势" />
         </article>
 
         <article class="dashboard-panel usage-panel">
@@ -230,7 +234,9 @@ onMounted(loadOverview);
             :option="comparisonOption"
             :aria-label="comparisonTitle"
             height="320px" />
-          <ElEmpty v-else description="暂无容量对比数据" />
+          <ElEmpty
+            v-else
+            description="暂无容量对比数据" />
         </article>
 
         <article class="dashboard-panel alert-panel">

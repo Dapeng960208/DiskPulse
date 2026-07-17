@@ -616,3 +616,21 @@
 - 修复：测试中 mock `_enqueue_adjustment_feishu`，聚焦测试不再访问外部 Broker。
 - 验证：同一聚焦测试 `15 passed`，耗时约 2 秒。
 - 风险：仅修复测试隔离；真实 Broker 与飞书送达仍需部署环境验收。
+
+### 2026-07-17：PowerShell 无法直接解析 pytest 命令
+
+- 触发：在仓库根目录执行 `pytest -q backend/test/test_dashboard_overview.py`。
+- 现象：PowerShell 返回 `pytest : The term 'pytest' is not recognized`。
+- 根因：项目测试依赖安装在根目录 `.venv`，当前 shell 没有全局 `pytest` 可执行文件。
+- 修复：改用 `.\.venv\Scripts\python.exe -m pytest -q backend/test/test_dashboard_overview.py`。
+- 验证：Dashboard 后端聚焦测试 `4 passed`。
+- 风险：后续 PowerShell 命令应显式使用项目虚拟环境，避免误用系统 Python。
+
+### 2026-07-17：Vitest 聚焦路径重复导致找不到测试
+
+- 触发：在 `frontend` 目录执行 `npm test -- --run frontend/test/unit/components/dashboard-chart.test.js frontend/test/unit/pages/dashboard-page.test.js`。
+- 现象：Vitest 报 `No test files found`，并提示 `--run` 被 npm 解析为未知配置。
+- 根因：工作目录已经是 `frontend`，参数仍带 `frontend/` 前缀；同时项目 `test` 脚本本身已经执行 `vitest run`。
+- 修复：改用 `npm test -- test/unit/components/dashboard-chart.test.js test/unit/pages/dashboard-page.test.js`。
+- 验证：目标两个测试文件共 `4 passed`；扩展 Dashboard 与图表契约组合测试共 `13 passed`。
+- 风险：从 `frontend` 目录执行聚焦测试时必须使用 `test/...` 相对路径，不重复附加 `--run`。

@@ -1,5 +1,14 @@
 # 当前交付记录
 
+## 2026-07-17：Dashboard 图表化总览
+
+- 新增 `/storage-pulse/api/dashboard/overview`，支持全局和 `project_id` 下钻；全局按启用存储集群汇总物理容量，项目按配额与启用监控项目组汇总。
+- 告警统计限定 DiskPulse 触发告警并补齐近 30 天空日期；QuestDB 容量趋势异常时返回空趋势，不影响 PostgreSQL 快照。
+- 首页实现容量趋势折线图、使用率环图、容量横向对比和告警柱图，支持加载/失败/单图空态、过期响应忽略及 `375/768/1024/1440px` 响应式布局。
+- TDD 检查点：RED `d88d3d9`，GREEN `1a1656b`。后端 Dashboard 聚焦测试 `4 passed`；前端 Dashboard、图表及既有契约测试 `13 passed`。
+- 后端聚焦测试 `4 passed`，前端组合测试 `13 passed`；目标 ESLint 为 `0 errors`（测试桩保留 5 条既有单文件多组件 warning），生产构建、Python `compileall` 和 `git diff --check` 通过。构建保留既有大 chunk warning。
+- 未连接真实 QuestDB、真实登录后端或浏览器执行数据验收，真实趋势 SQL 与生产规模数据布局仍需部署环境复验。
+
 ## 2026-07-17：前后端覆盖率门禁与 CI 基线调整
 
 - 覆盖率规范调整为后端全局门禁 `85%`、前端四项指标门禁 `80%`；代码、项目规范和 GitHub Actions 统一使用该口径。
