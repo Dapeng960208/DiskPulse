@@ -7,6 +7,8 @@ from unittest.mock import Mock
 
 import pytest
 import sqlalchemy as sa
+from alembic import command
+from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from fastapi import HTTPException
@@ -73,35 +75,56 @@ def test_project_membership_migration_compiles_for_supported_dialects():
         assert "pt_user_id" in sql
 
 
-def test_project_membership_migration_backfills_owner_and_drops_pt_user_on_sqlite():
-    migration = _membership_migration()
-    metadata = sa.MetaData()
-    users = sa.Table("users", metadata, sa.Column("id", sa.Integer(), primary_key=True))
-    projects = sa.Table(
-        "projects",
-        metadata,
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("in_charge_user_id", sa.Integer()),
-        sa.Column("pt_user_id", sa.Integer()),
-    )
-    with sa.create_engine("sqlite://").begin() as connection:
-        metadata.create_all(connection)
-        connection.execute(users.insert(), [{"id": 1}, {"id": 2}])
-        connection.execute(projects.insert(), {"id": 1, "in_charge_user_id": 1, "pt_user_id": 2})
-        migration.op = Operations(MigrationContext.configure(connection))
+def test_project_membership_migration_backfills_owner_and_drops_pt_user_on_sqlite(
+    monkeypatch,
+    tmp_path,
+):
+    database_url = f"sqlite:///{(tmp_path / 'project-rbac.sqlite').as_posix()}"
+    alembic_config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    monkeypatch.setattr(base_config, "get_sqlalchemy_database_url", lambda: database_url)
 
-        migration.upgrade()
+    command.upgrade(alembic_config, "000000000007")
+    engine = sa.create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                sa.text("INSERT INTO users (id) VALUES (:id)"),
+                [{"id": 1}, {"id": 2}],
+            )
+            connection.execute(
+                sa.text(
+                    "INSERT INTO projects "
+                    "(id, name, in_charge_user_id, pt_user_id) "
+                    "VALUES (:id, :name, :owner_id, :pt_user_id)"
+                ),
+                {
+                    "id": 1,
+                    "name": "project-a",
+                    "owner_id": 1,
+                    "pt_user_id": 2,
+                },
+            )
 
-        membership = connection.execute(
-            sa.text("SELECT project_id, user_id, role FROM project_memberships")
-        ).one()
-        assert membership == (1, 1, "project_admin")
-        assert "pt_user_id" not in {column["name"] for column in sa.inspect(connection).get_columns("projects")}
+        command.upgrade(alembic_config, "000000000008")
+        with engine.connect() as connection:
+            membership = connection.execute(
+                sa.text("SELECT project_id, user_id, role FROM project_memberships")
+            ).one()
+            assert membership == (1, 1, "project_admin")
+            assert "pt_user_id" not in {
+                column["name"]
+                for column in sa.inspect(connection).get_columns("projects")
+            }
 
-        migration.downgrade()
-
-        assert "pt_user_id" in {column["name"] for column in sa.inspect(connection).get_columns("projects")}
-        assert "project_memberships" not in sa.inspect(connection).get_table_names()
+        command.downgrade(alembic_config, "000000000007")
+        with engine.connect() as connection:
+            assert "pt_user_id" in {
+                column["name"]
+                for column in sa.inspect(connection).get_columns("projects")
+            }
+            assert "project_memberships" not in sa.inspect(connection).get_table_names()
+    finally:
+        engine.dispose()
 
 
 def test_project_admin_can_manage_reader_and_editor_but_not_project_admin(db_session):
