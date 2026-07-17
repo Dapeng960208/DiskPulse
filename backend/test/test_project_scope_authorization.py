@@ -17,9 +17,11 @@ def _seed_scoped_resources(session):
             models.User(id=1, rd_username="reader", username="Reader"),
             models.User(id=2, rd_username="other", username="Other"),
             models.User(id=3, rd_username="admin", username="Admin"),
+            models.User(id=4, rd_username="project-admin", username="Project Admin"),
             models.Project(id=1, name="allowed-project", limit=100, used=20),
             models.Project(id=2, name="forbidden-project", limit=100, used=30),
             models.ProjectMembership(project_id=1, user_id=1, role="reader"),
+            models.ProjectMembership(project_id=1, user_id=4, role="project_admin"),
             models.StorageCluster(
                 id=1,
                 name="cluster-a",
@@ -34,6 +36,7 @@ def _seed_scoped_resources(session):
                 project_id=1,
                 storage_cluster_id=1,
                 group_tag_id=1,
+                in_charge_user_id=1,
                 name="allowed-group",
                 enable_monitoring=False,
             ),
@@ -225,3 +228,60 @@ def test_unscoped_device_resource_routes_are_limited_to_super_admin(
 
     assert reader.get(f"{API_PREFIX}/storage-clusters/").status_code == 403
     assert super_admin.get(f"{API_PREFIX}/storage-clusters/").status_code == 200
+
+
+def test_project_capabilities_are_calculated_from_the_current_user_role(
+    api_client_factory,
+    session_factory,
+):
+    from routers import projects
+
+    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("super_admin_usernames", ["admin"])
+    session = session_factory()
+    try:
+        _seed_scoped_resources(session)
+    finally:
+        session.close()
+
+    reader = _client(api_client_factory, [projects.router], user_id=1)
+    project_admin = _client(api_client_factory, [projects.router], user_id=4)
+    super_admin = _client(api_client_factory, [projects.router], user_id=3)
+
+    assert reader.get(f"{API_PREFIX}/projects/1").json()["capabilities"] == {
+        "manage_members": False,
+        "view_audit_events": False,
+        "manage_project_admins": False,
+    }
+    assert project_admin.get(f"{API_PREFIX}/projects/1").json()["capabilities"] == {
+        "manage_members": True,
+        "view_audit_events": True,
+        "manage_project_admins": False,
+    }
+    assert super_admin.get(f"{API_PREFIX}/projects/1").json()["capabilities"] == {
+        "manage_members": True,
+        "view_audit_events": True,
+        "manage_project_admins": True,
+    }
+
+
+def test_quota_capabilities_only_enable_the_responsible_group_owner(
+    api_client_factory,
+    session_factory,
+):
+    from routers import group, storage_usage
+
+    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("super_admin_usernames", ["admin"])
+    session = session_factory()
+    try:
+        _seed_scoped_resources(session)
+    finally:
+        session.close()
+
+    owner = _client(api_client_factory, [group.router, storage_usage.router], user_id=1)
+    other = _client(api_client_factory, [group.router, storage_usage.router], user_id=2)
+
+    assert owner.get(f"{API_PREFIX}/groups/1").json()["capabilities"] == {"adjust_quota": True}
+    assert owner.get(f"{API_PREFIX}/storage-usages/1").json()["capabilities"] == {"adjust_quota": True}
+    assert other.get(f"{API_PREFIX}/groups/2").json()["capabilities"] == {"adjust_quota": False}

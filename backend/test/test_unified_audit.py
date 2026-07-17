@@ -319,6 +319,64 @@ def test_ai_message_lifecycle_appends_unscoped_redacted_audit_event(db_session, 
     )
 
 
+def test_audit_event_detail_is_available_only_within_the_authorized_project_scope(
+    api_client_factory,
+    session_factory,
+):
+    from routers import audit_events
+    from models import ProjectMembership
+    from utils.security import issue_token
+
+    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("super_admin_usernames", [])
+    session = session_factory()
+    try:
+        session.add_all(
+            [
+                User(id=1, rd_username="project-admin", username="Project Admin"),
+                Project(id=1, name="project-a"),
+                ProjectMembership(project_id=1, user_id=1, role="project_admin"),
+                AuditEvent(
+                    id="32d85a48-2667-4ee7-b369-5c4d670eb610",
+                    operation_id="54248ded-a2cb-45b5-b464-b5c12a2dc90d",
+                    phase="result",
+                    actor_type="user",
+                    action="project.membership.create",
+                    resource_type="project_membership",
+                    project_id=1,
+                    outcome="success",
+                    request_id="c57c77c9-46ed-4c3f-92fc-bfd6d9e7eae6",
+                    trace_id="ee874b8d-e657-45eb-b6f2-c0a7c4cefb39",
+                ),
+                AuditEvent(
+                    id="4e09b244-3c38-4633-a45b-eed7ed8b0b64",
+                    operation_id="d4c91d72-21a4-4f58-9536-617633fad767",
+                    phase="result",
+                    actor_type="user",
+                    action="ai.conversation.create",
+                    resource_type="ai_conversation",
+                    outcome="success",
+                    request_id="f685e514-cde5-420d-8c22-04af0ee97fa1",
+                    trace_id="a6dd42d9-ecd9-4740-8ec8-bd84e5a77767",
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    client = api_client_factory(
+        [audit_events.router],
+        headers={"Authorization": f"Bearer {issue_token(1)}"},
+    )
+    scoped = client.get(f"/storage-pulse/api/v1/audit-events/32d85a48-2667-4ee7-b369-5c4d670eb610")
+    unscoped = client.get(f"/storage-pulse/api/v1/audit-events/4e09b244-3c38-4633-a45b-eed7ed8b0b64")
+
+    assert scoped.status_code == 200
+    assert scoped.json()["id"] == "32d85a48-2667-4ee7-b369-5c4d670eb610"
+    assert unscoped.status_code == 403
+
+
 def _audit_migration_module():
     migration_path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000009_unified_audit.py"
     spec = importlib.util.spec_from_file_location("unified_audit_migration", migration_path)

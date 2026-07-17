@@ -102,7 +102,7 @@ describe('project RBAC and unified audit frontend contract', () => {
       await auditEventsApi.fetch({ page: 2, size: 20, outcome: 'denied' });
       await auditEventsApi.fetchById('event-7');
 
-      expect(auditEventsApi.urlPrefix).toBe('/audit-events');
+      expect(auditEventsApi.urlPrefix).toBe('/v1/audit-events');
       expect(getSpy).toHaveBeenCalledWith('', { page: 2, size: 20, outcome: 'denied' }, undefined);
       expect(getSpy).toHaveBeenCalledWith('/event-7', undefined, undefined);
     } finally {
