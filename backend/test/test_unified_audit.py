@@ -162,21 +162,13 @@ def test_append_audit_event_creates_a_new_redacted_event_without_committing():
     assert "do-not-store" not in persisted
 
 
-def test_member_and_project_ai_conversation_creation_append_correlated_audit_events(db_session):
-    """A project-admin action and the project AI lifecycle share the request correlation context."""
+def test_project_member_creation_appends_correlated_audit_event(db_session):
+    """A project-admin write records the actor and request correlation values."""
     base_config.set("super_admin_usernames", ["admin"])
     actor = User(id=1, username="Admin User", rd_username="admin")
     member = User(id=2, username="Reader User", rd_username="reader")
     project = Project(id=3, name="project-3")
-    model = AIConfig(
-        id=4,
-        name="audit-model",
-        provider="openai",
-        model="test-model",
-        enabled=True,
-        enable_chat=True,
-    )
-    db_session.add_all([actor, member, project, model])
+    db_session.add_all([actor, member, project])
     db_session.commit()
 
     context = audit_service.AuditContext(
@@ -194,28 +186,55 @@ def test_member_and_project_ai_conversation_creation_append_correlated_audit_eve
         current_user=actor,
         audit_context=context,
     )
+    events = db_session.query(AuditEvent).order_by(AuditEvent.occurred_at, AuditEvent.id).all()
+    assert [(event.action, event.resource_type, event.resource_id) for event in events] == [
+        ("project.membership.create", "project_membership", member.id),
+    ]
+    assert all(event.phase == "result" and event.outcome == "success" for event in events)
+    assert all(event.actor_user_id == actor.id for event in events)
+    assert events[0].project_id == project.id
+    assert all(event.request_id == context.request_id and event.trace_id == context.trace_id for event in events)
+
+
+def test_ai_conversation_creation_appends_correlated_unscoped_audit_event(db_session):
+    """AI lifecycle records stay user/conversation/model scoped and do not bind a project."""
+    actor = User(id=1, username="Admin User", rd_username="admin")
+    model = AIConfig(
+        id=4,
+        name="audit-model",
+        provider="openai",
+        model="test-model",
+        enabled=True,
+        enable_chat=True,
+    )
+    db_session.add_all([actor, model])
+    db_session.commit()
+    context = audit_service.AuditContext(
+        request_id="9cbaece5-30c2-4b6c-94b0-55c9f5df2d15",
+        trace_id="143b7cc2-f3c5-4e48-818b-33d4697fc801",
+        operation_id="1adcb3a0-34d0-4172-aa3f-1d5cc2d2b582",
+        actor_user_id=actor.id,
+    )
+
     conversation = ai_chat_service.create_conversation(
         db_session,
         actor.id,
         "audit lifecycle title",
         model.id,
-        project_id=project.id,
+        project_id=None,
         current_user=actor,
         audit_context=context,
     )
 
-    events = db_session.query(AuditEvent).order_by(AuditEvent.occurred_at, AuditEvent.id).all()
-    assert [(event.action, event.resource_type, event.resource_id) for event in events] == [
-        ("project.membership.create", "project_membership", member.id),
-        ("ai.conversation.create", "ai_conversation", conversation["id"]),
-    ]
-    assert all(event.phase == "result" and event.outcome == "success" for event in events)
-    assert all(event.actor_user_id == actor.id for event in events)
-    assert all(event.project_id == project.id for event in events)
-    assert all(event.request_id == context.request_id and event.trace_id == context.trace_id for event in events)
-    assert "audit lifecycle title" not in json.dumps(
-        [event.after_summary for event in events], ensure_ascii=False
+    event = db_session.query(AuditEvent).one()
+    assert (event.action, event.resource_type, event.resource_id) == (
+        "ai.conversation.create",
+        "ai_conversation",
+        conversation["id"],
     )
+    assert (event.phase, event.outcome, event.actor_user_id, event.project_id) == ("result", "success", actor.id, None)
+    assert (event.request_id, event.trace_id) == (context.request_id, context.trace_id)
+    assert "audit lifecycle title" not in json.dumps(event.after_summary, ensure_ascii=False)
 
 
 def _audit_migration_module():
