@@ -2,13 +2,16 @@
 
 ## 2026-07-17：Dashboard 图表化总览
 
-- Dashboard 已拆分为 `/summary`、`/capacity-trend`、`/capacity-items`、`/alert-trend` 和项目必选的 `/top-users`，旧 `/overview` 返回 `404`。
+- Dashboard 已拆分为 `/summary`、`/capacity-trend`、`/capacity-items`、`/alert-levels` 和项目必选的 `/top-users`，旧 `/overview` 与 `/alert-trend` 返回 `404`。
 - 全局按启用存储集群汇总物理容量，项目按配额与启用监控项目组汇总；用户排行通过用户目录关联项目组，按用户汇总已用容量后取前 10。
 - 项目切换改为摘要和图表分区加载，画布使用顶部对齐的固定内容轨道，修复整体骨架期间的大面积纵向留白；任一接口失败只影响对应面板。
-- 项目视图新增“用户使用 Top 10”横向排行图；项目组容量与用户排行同排，告警趋势在下一排通栏展示，响应式断点保持 `375/768/1024/1440px`。
-- 本轮修订 TDD 检查点：设计 `53bff72`、RED `2b0e35b`、GREEN `9dae638`。后端聚焦测试 `4 passed`，前端 Dashboard/API/图表组合测试 `15 passed`。
+- 项目视图新增“用户使用 Top 10”横向排行图；项目组容量、用户排行和告警级别按 `2:2:1` 同排，`1024px` 及以下改为单列。
+- 告警改为按 `alert_level` 汇总的饼图，固定优先展示重要、严重、紧急，继续排除配额调整和厂商事件。
+- 修复全局容量趋势将数值集群 ID 直接插入 QuestDB `SYMBOL` 查询导致空数组的问题；改为绑定字符串 ID 后，真实 QuestDB 返回 `2026-07-14` 至 `2026-07-17` 共 4 个日采样点。
+- 项目容量趋势仍无数据：真实 `project_storage_usages` 记录数为 0，现有采集器没有写入项目级时序指标，属于采集链缺口，不是 Dashboard 接口过滤问题。
+- 本轮追加 TDD 检查点：布局设计 `b21635a`、告警设计 `f0b1a79`、RED `047d8da`、GREEN `10101b1`。后端聚焦测试 `5 passed`，前端 Dashboard/API/图表组合测试 `15 passed`。
 - 目标 ESLint 为 `0 errors`（测试桩保留 5 条既有单文件多组件 warning），生产构建和 Python `compileall` 通过；构建保留既有大 chunk warning。
-- 未连接真实 QuestDB、真实登录后端或浏览器执行数据验收，真实趋势 SQL 与生产规模数据布局仍需部署环境复验。
+- 已连接当前配置的 PostgreSQL 与 QuestDB 验证全局趋势和告警级别；未使用真实登录态浏览器复验页面像素布局，项目趋势需补齐采集写入后再验收。
 
 ## 2026-07-17：前后端覆盖率门禁与 CI 基线调整
 

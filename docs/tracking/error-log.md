@@ -643,3 +643,12 @@
 - 修复：删除不可靠的计算样式断言，改由切换期间页头、三类图表标题和多个分区骨架持续存在的用户可见行为锁定无整页留白结果；生产构建继续验证 CSS 可编译。
 - 验证：Dashboard 页面聚焦测试恢复 `4 passed`。
 - 风险：CSS 像素级结果仍需登录态浏览器复验；JSDOM 只覆盖 DOM 结构和加载行为。
+
+### 2026-07-17：Dashboard 全局容量趋势因 QuestDB SYMBOL 查询返回空数组
+
+- 触发：使用当前 PostgreSQL 与 QuestDB 配置直接调用 Dashboard 全局容量趋势服务。
+- 现象：QuestDB 报 `STRING constant expected`，错误 SQL 包含 `storage_cluster_id IN (2, 1)`；服务按降级策略捕获异常并向前端返回空数组。
+- 根因：`storage_cluster_id` 在 QuestDB 中是 `SYMBOL`，接口把 PostgreSQL 数值主键直接拼接进查询，类型不匹配。
+- 修复：全局趋势查询使用 expanding bind 参数，并把启用集群 ID 转为字符串后绑定，不再拼接 SQL 标识值。
+- 验证：后端聚焦测试 `5 passed`；真实 QuestDB 查询返回 4 个日采样点，范围为 `2026-07-14` 至 `2026-07-17`。
+- 风险：项目趋势仍为空；`project_storage_usages` 当前没有记录，且现有采集器未写入项目级时序指标，需要单独补齐采集链路。
