@@ -29,6 +29,7 @@ router = APIRouter(
 def read_storage_back_up_records(page: int | None = 1, size: int | None = 20, nameLike: str | None = None,
                                  prop: str | None = None,
                                  order: str | None = None, user_id: int | str = Query(None),
+                                 _admin: None = Depends(require_super_admin),
                                  db: Session = Depends(get_db)):
     if user_id == "":
         user_id = None
