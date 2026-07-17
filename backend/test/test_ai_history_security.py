@@ -252,6 +252,25 @@ def test_legacy_ai_turn_without_visibility_or_tool_trace_is_hidden_safely(db_ses
     assert assistant["tool_calls"] == []
 
 
+def test_legacy_assistant_without_an_audit_record_is_hidden_safely(db_session):
+    user, _model, conversation = _seed_conversation(db_session)
+    db_session.add(
+        models.AIMessage(
+            conversation_id=conversation.id,
+            role="assistant",
+            content="没有审计来源的历史项目数据",
+        )
+    )
+    db_session.commit()
+
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+    assistant = history["messages"][-1]
+
+    assert assistant["status"] == "restricted"
+    assert assistant["content"] == HIDDEN_HISTORY_CONTENT
+    assert assistant["tool_calls"] == []
+
+
 def test_unknown_current_ai_trace_visibility_is_hidden_fail_closed(db_session):
     user, _model, conversation = _seed_conversation(db_session)
     _add_assistant_turn(

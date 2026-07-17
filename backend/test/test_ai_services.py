@@ -403,7 +403,7 @@ def test_tool_trace_redacts_sensitive_result_keys_before_persisting():
     assert display == {"accessToken": "[REDACTED]", "nested": {"apiKey": "[REDACTED]"}}
 
 
-def test_stream_history_omits_the_precreated_empty_assistant_placeholder(db_session, monkeypatch):
+def test_stream_history_replaces_unattributed_assistant_turn_with_safe_placeholder(db_session, monkeypatch):
     seed_user(db_session)
     configured = seed_model(db_session)
     conversation = AIConversation(user_id=1, model_id=configured.id, title="历史消息")
@@ -435,7 +435,7 @@ def test_stream_history_omits_the_precreated_empty_assistant_placeholder(db_sess
 
     assert captured_messages[-3:] == [
         {"role": "user", "content": "之前的问题"},
-        {"role": "assistant", "content": "之前的回答"},
+        {"role": "assistant", "content": ai_chat_service._HIDDEN_HISTORY_CONTENT},
         {"role": "user", "content": "当前问题"},
     ]
 

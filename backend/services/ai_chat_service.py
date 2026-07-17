@@ -265,7 +265,11 @@ def _visibility_for_audit(audit: AIAuditLog) -> dict:
         response.get("visibility") if isinstance(response, dict) else None
     )
     if response_visibility is None:
-        return trace_visibility if isinstance(detail, list) and detail else _known_visibility()
+        # Historical turns without an explicit response marker are only safe
+        # when every persisted tool trace carries an explicit scope marker.
+        # A no-tool legacy turn may still summarize an earlier project lookup,
+        # so it must not become globally visible by default.
+        return trace_visibility if isinstance(detail, list) and detail else _unknown_visibility()
     return _combine_visibility(response_visibility, trace_visibility)
 
 
@@ -405,20 +409,20 @@ def create_conversation(
 
 def get_conversation(db: Session, conversation_id: int, user_id: int) -> dict:
     conversation = _conversation_or_404(db, conversation_id, user_id)
-    audits_by_message = {}
-    visibility_by_message = {}
+    audits_by_message = _audits_by_message(db, conversation.id)
+    # An assistant response without an audit record has no verifiable scope.
+    # Keep legacy rows fail-closed until an explicit visibility marker exists.
+    visibility_by_message = {
+        message.id: False for message in conversation.messages if message.role == "assistant"
+    }
     current_user = db.get(User, user_id)
     current_project_ids = accessible_project_ids(db, current_user)
-    for audit in aiCrud.list_conversation_audits(db, conversation.id):
-        response = _audit_payload(audit.response_payload, {})
-        message_id = response.get("message_id") if isinstance(response, dict) else None
-        if isinstance(message_id, int):
-            audits_by_message[message_id] = audit
-            visibility_by_message[message_id] = _visibility_is_allowed(
-                _visibility_for_audit(audit),
-                current_user,
-                current_project_ids,
-            )
+    for message_id, audit in audits_by_message.items():
+        visibility_by_message[message_id] = _visibility_is_allowed(
+            _visibility_for_audit(audit),
+            current_user,
+            current_project_ids,
+        )
     return serialize_conversation(
         conversation,
         include_messages=True,
@@ -456,7 +460,31 @@ def _conversation_or_404(db: Session, conversation_id: int, user_id: int) -> AIC
     return conversation
 
 
-def _history(db: Session, conversation_id: int) -> list[dict]:
+def _audits_by_message(db: Session, conversation_id: int) -> dict[int, AIAuditLog]:
+    audits_by_message = {}
+    for audit in aiCrud.list_conversation_audits(db, conversation_id):
+        response = _audit_payload(audit.response_payload, {})
+        message_id = response.get("message_id") if isinstance(response, dict) else None
+        if isinstance(message_id, int):
+            audits_by_message[message_id] = audit
+    return audits_by_message
+
+
+def _historical_visibility(
+    db: Session,
+    conversation_id: int,
+    *,
+    exclude_audit_id: int | None = None,
+) -> dict:
+    visibility = _known_visibility()
+    for audit in aiCrud.list_conversation_audits(db, conversation_id):
+        if audit.id == exclude_audit_id:
+            continue
+        visibility = _combine_visibility(visibility, _visibility_for_audit(audit))
+    return visibility
+
+
+def _history(db: Session, conversation_id: int, *, current_user: User | None) -> list[dict]:
     # Fetch the newest bounded window cheaply, then restore provider-facing chronology.
     rows = list(
         db.scalars(
@@ -466,12 +494,22 @@ def _history(db: Session, conversation_id: int) -> list[dict]:
             .limit(20)
         )
     )
-    return [
-        {"role": item.role, "content": item.content}
-        for item in reversed(rows)
+    audits_by_message = _audits_by_message(db, conversation_id)
+    project_ids = accessible_project_ids(db, current_user) if current_user is not None else set()
+    history = []
+    for item in reversed(rows):
         # The current turn reserves an empty assistant row before streaming; it is not provider history.
-        if item.role != "assistant" or item.content.strip()
-    ]
+        if item.role == "assistant" and not item.content.strip():
+            continue
+        content = item.content
+        if item.role == "assistant":
+            audit = audits_by_message.get(item.id)
+            if audit is None or not _visibility_is_allowed(
+                _visibility_for_audit(audit), current_user, project_ids
+            ):
+                content = _HIDDEN_HISTORY_CONTENT
+        history.append({"role": item.role, "content": content})
+    return history
 
 
 def _provider_tool_messages(provider: str, call: AIClientToolCall, result: dict) -> list[dict]:
@@ -726,6 +764,11 @@ def stream_message(
     db.refresh(conversation)
     db.refresh(audit)
 
+    turn_visibility = _historical_visibility(
+        db,
+        conversation.id,
+        exclude_audit_id=audit.id,
+    )
     tool_trace: list[dict] = []
     emitted_text: list[str] = []
     final_text = ""
@@ -756,7 +799,7 @@ def stream_message(
         system_messages = [{"role": "system", "content": model.system_prompt or SYSTEM_PROMPT}]
         if any(item.system_management for item in registry.values()):
             system_messages.append({"role": "system", "content": _SYSTEM_MANAGEMENT_PROMPT})
-        messages = [*system_messages, *_history(db, conversation.id)]
+        messages = [*system_messages, *_history(db, conversation.id, current_user=current_user)]
         # Bound recursive model/tool turns independently of the number of tools per turn.
         max_iterations = int(base_config.get("ai.max_tool_iterations", 4))
         for iteration in range(1, max_iterations + 1):
@@ -899,7 +942,7 @@ def stream_message(
                 tool_trace=tool_trace,
                 error_message=degraded_error_message,
                 recovery=recovery,
-                visibility=_visibility_from_trace_entries(tool_trace),
+                visibility=_combine_visibility(turn_visibility, _visibility_from_trace_entries(tool_trace)),
             )
             terminal = True
             yield "completed", {
@@ -928,7 +971,7 @@ def stream_message(
             text=final_text.strip(),
             status_value="succeeded",
             tool_trace=tool_trace,
-            visibility=_visibility_from_trace_entries(tool_trace),
+            visibility=_combine_visibility(turn_visibility, _visibility_from_trace_entries(tool_trace)),
         )
         terminal = True
         yield "completed", {
@@ -957,7 +1000,7 @@ def stream_message(
                 status_value="cancelled",
                 tool_trace=tool_trace,
                 error_message="用户取消生成",
-                visibility=_visibility_from_trace_entries(tool_trace),
+                visibility=_combine_visibility(turn_visibility, _visibility_from_trace_entries(tool_trace)),
             )
         raise
     except asyncio.CancelledError:
@@ -979,7 +1022,7 @@ def stream_message(
             status_value="cancelled",
             tool_trace=tool_trace,
             error_message="用户取消生成",
-            visibility=_visibility_from_trace_entries(tool_trace),
+            visibility=_combine_visibility(turn_visibility, _visibility_from_trace_entries(tool_trace)),
         )
         terminal = True
         yield "cancelled", {
@@ -1013,7 +1056,7 @@ def stream_message(
                 status_value="failed",
                 tool_trace=tool_trace,
                 error_message=_safe_audit_error(error),
-                visibility=_visibility_from_trace_entries(tool_trace),
+                visibility=_combine_visibility(turn_visibility, _visibility_from_trace_entries(tool_trace)),
             )
             terminal = True
             yield "error", {
