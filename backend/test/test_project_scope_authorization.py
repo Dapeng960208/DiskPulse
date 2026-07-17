@@ -250,6 +250,39 @@ def test_project_reader_cannot_read_another_projects_storage_trend(
     assert queried_project_ids == []
 
 
+def test_project_reader_cannot_list_storage_backup_records(
+    api_client_factory,
+    session_factory,
+):
+    from routers import storage_back_up_records
+
+    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("super_admin_usernames", ["admin"])
+    session = session_factory()
+    try:
+        session.add_all(
+            [
+                models.User(id=1, rd_username="reader", username="Reader"),
+                models.StorageBackUpRecord(
+                    id=1,
+                    user_id=1,
+                    source_path="/data/reader",
+                    destination_path="/backup/reader",
+                    start_time=datetime.now(),
+                    end_time=datetime.now(),
+                    status=2,
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    reader = _client(api_client_factory, [storage_back_up_records.router], user_id=1)
+
+    assert reader.get(f"{API_PREFIX}/storage-back-up-records/").status_code == 403
+
+
 def test_unscoped_device_resource_routes_are_limited_to_super_admin(
     api_client_factory,
     session_factory,
