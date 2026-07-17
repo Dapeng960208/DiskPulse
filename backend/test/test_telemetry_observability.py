@@ -300,6 +300,26 @@ def test_metrics_requires_file_token_and_hides_postgres_failure(tmp_path, monkey
     assert "postgresql" not in response.text.lower()
 
 
+def test_metrics_does_not_pass_the_application_session_factory(tmp_path, monkeypatch):
+    import main
+    from services import observabilityService
+
+    token_file = Path(tmp_path) / "metrics.token"
+    token_file.write_text("metrics-test-token\n", encoding="utf-8")
+    base_config.set("observability.metrics_token_file", str(token_file))
+    render_metrics = Mock(return_value=b"# metrics\n")
+    monkeypatch.setattr(observabilityService, "render_metrics", render_metrics)
+    client = TestClient(main.app)
+
+    response = client.get(
+        "/storage-pulse/api/v1/metrics",
+        headers={"X-Metrics-Token": "metrics-test-token"},
+    )
+
+    assert response.status_code == 200
+    render_metrics.assert_called_once_with()
+
+
 def test_metrics_removes_cached_freshness_when_postgres_becomes_unavailable(monkeypatch):
     from services import observabilityService
 
