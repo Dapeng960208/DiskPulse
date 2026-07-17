@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElEmpty, ElMessage, ElSkeleton } from 'element-plus';
 import dashboardApi from '@/api/dashboard-api.js';
 import PieCharts from '@/common/charts/PieCharts.vue';
@@ -8,8 +8,12 @@ import ProjectSelect from '@/components/form/ProjectSelect.vue';
 import { getCssColor } from '@/lib/echarts.js';
 
 const projectId = ref(null);
-const overview = ref(null);
-const loading = ref(true);
+const summaryResponse = ref(null);
+const capacityTrend = ref([]);
+const capacityItems = ref([]);
+const alertTrend = ref([]);
+const topUsers = ref([]);
+const loading = reactive({ summary: true, trend: true, items: true, alerts: true, users: false });
 let requestId = 0;
 
 const token = (name, fallback) => getCssColor(name, fallback);
@@ -19,10 +23,11 @@ const warning = () => token('--warning-color', '#F59E0B');
 const gridColor = () => token('--border-light', '#F1F5F9');
 const axisColor = () => token('--text-tertiary', '#94A3B8');
 
-const isProject = computed(() => overview.value?.scope.mode === 'project');
+const isProject = computed(() => Boolean(projectId.value));
+const scope = computed(() => summaryResponse.value?.scope || {});
+const summary = computed(() => summaryResponse.value?.summary || {});
 const limitLabel = computed(() => (isProject.value ? '项目限额' : '物理总容量'));
 const comparisonTitle = computed(() => (isProject.value ? '项目组容量对比' : '项目容量对比'));
-const summary = computed(() => overview.value?.summary || {});
 const pieData = computed(() => [
   { name: '已使用', value: Number(summary.value.used_gb) || 0 },
   { name: '可使用', value: Number(summary.value.available_gb) || 0 },
@@ -46,7 +51,7 @@ const lineOption = computed(() => ({
   xAxis: {
     type: 'category',
     boundaryGap: false,
-    data: (overview.value?.capacity_trend || []).map((item) => dateLabel(item.timestamp)),
+    data: capacityTrend.value.map((item) => dateLabel(item.timestamp)),
     axisLine: { lineStyle: { color: gridColor() } },
     axisTick: { show: false },
     axisLabel: { color: axisColor(), hideOverlap: true },
@@ -63,42 +68,65 @@ const lineOption = computed(() => ({
     showSymbol: false,
     lineStyle: { width: 3, color: primary() },
     areaStyle: { color: primaryLight(), opacity: 0.22 },
-    data: (overview.value?.capacity_trend || []).map((item) => item.used_gb),
+    data: capacityTrend.value.map((item) => item.used_gb),
   }],
 }));
 
-const comparisonOption = computed(() => {
-  const items = overview.value?.capacity_items || [];
-  return {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => formatCapacity(value) },
-    legend: { bottom: 0, textStyle: { color: axisColor() } },
-    grid: { left: 8, right: 20, top: 12, bottom: 36, containLabel: true },
-    xAxis: {
-      type: 'value',
-      axisLabel: { color: axisColor(), formatter: (value) => formatCapacity(value) },
-      splitLine: { lineStyle: { color: gridColor(), type: 'dashed' } },
-    },
-    yAxis: {
-      type: 'category',
-      inverse: true,
-      data: items.map((item) => item.name),
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: axisColor(), width: 100, overflow: 'truncate' },
-    },
-    series: [
-      { name: '已使用', type: 'bar', stack: 'capacity', barWidth: 14, itemStyle: { color: primary(), borderRadius: [4, 0, 0, 4] }, data: items.map((item) => item.used_gb) },
-      { name: '可使用', type: 'bar', stack: 'capacity', barWidth: 14, itemStyle: { color: primaryLight(), borderRadius: [0, 4, 4, 0] }, data: items.map((item) => item.available_gb) },
-    ],
-  };
-});
+const comparisonOption = computed(() => ({
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => formatCapacity(value) },
+  legend: { bottom: 0, textStyle: { color: axisColor() } },
+  grid: { left: 8, right: 20, top: 12, bottom: 36, containLabel: true },
+  xAxis: {
+    type: 'value',
+    axisLabel: { color: axisColor(), formatter: (value) => formatCapacity(value) },
+    splitLine: { lineStyle: { color: gridColor(), type: 'dashed' } },
+  },
+  yAxis: {
+    type: 'category',
+    inverse: true,
+    data: capacityItems.value.map((item) => item.name),
+    axisLine: { show: false },
+    axisTick: { show: false },
+    axisLabel: { color: axisColor(), width: 100, overflow: 'truncate' },
+  },
+  series: [
+    { name: '已使用', type: 'bar', stack: 'capacity', barWidth: 14, itemStyle: { color: primary(), borderRadius: [4, 0, 0, 4] }, data: capacityItems.value.map((item) => item.used_gb) },
+    { name: '可使用', type: 'bar', stack: 'capacity', barWidth: 14, itemStyle: { color: primaryLight(), borderRadius: [0, 4, 4, 0] }, data: capacityItems.value.map((item) => item.available_gb) },
+  ],
+}));
+
+const topUsersOption = computed(() => ({
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => formatCapacity(value) },
+  grid: { left: 8, right: 28, top: 12, bottom: 12, containLabel: true },
+  xAxis: {
+    type: 'value',
+    axisLabel: { color: axisColor(), formatter: (value) => formatCapacity(value) },
+    splitLine: { lineStyle: { color: gridColor(), type: 'dashed' } },
+  },
+  yAxis: {
+    type: 'category',
+    inverse: true,
+    data: topUsers.value.map((item) => item.name),
+    axisLine: { show: false },
+    axisTick: { show: false },
+    axisLabel: { color: axisColor(), width: 100, overflow: 'truncate' },
+  },
+  series: [{
+    name: '已使用',
+    type: 'bar',
+    barWidth: 14,
+    itemStyle: { color: primary(), borderRadius: [0, 4, 4, 0] },
+    label: { show: true, position: 'right', color: axisColor(), formatter: ({ value }) => formatCapacity(value) },
+    data: topUsers.value.map((item) => item.used_gb),
+  }],
+}));
 
 const alertOption = computed(() => ({
   tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
   grid: { left: 12, right: 12, top: 18, bottom: 12, containLabel: true },
   xAxis: {
     type: 'category',
-    data: (overview.value?.alert_trend || []).map((item) => dateLabel(item.date)),
+    data: alertTrend.value.map((item) => dateLabel(item.date)),
     axisLine: { lineStyle: { color: gridColor() } },
     axisTick: { show: false },
     axisLabel: { color: axisColor(), hideOverlap: true },
@@ -114,29 +142,54 @@ const alertOption = computed(() => ({
     type: 'bar',
     barMaxWidth: 16,
     itemStyle: { color: warning(), borderRadius: [4, 4, 0, 0] },
-    data: (overview.value?.alert_trend || []).map((item) => item.count),
+    data: alertTrend.value.map((item) => item.count),
   }],
 }));
 
-async function loadOverview() {
+async function loadDashboard() {
   const currentRequest = ++requestId;
-  loading.value = true;
-  try {
-    const params = projectId.value ? { project_id: projectId.value } : {};
-    const result = await dashboardApi.fetchOverview(params);
-    if (currentRequest === requestId) overview.value = result;
-  } catch {
-    if (currentRequest === requestId) {
-      overview.value = null;
-      ElMessage.error('加载存储概览失败，请稍后重试');
+  const params = projectId.value ? { project_id: projectId.value } : {};
+  summaryResponse.value = null;
+  capacityTrend.value = [];
+  capacityItems.value = [];
+  alertTrend.value = [];
+  topUsers.value = [];
+  Object.assign(loading, {
+    summary: true,
+    trend: true,
+    items: true,
+    alerts: true,
+    users: isProject.value,
+  });
+
+  const requests = [
+    ['summary', dashboardApi.fetchSummary(params), (value) => (summaryResponse.value = value)],
+    ['trend', dashboardApi.fetchCapacityTrend(params), (value) => (capacityTrend.value = value)],
+    ['items', dashboardApi.fetchCapacityItems(params), (value) => (capacityItems.value = value)],
+    ['alerts', dashboardApi.fetchAlertTrend(params), (value) => (alertTrend.value = value)],
+  ];
+  if (isProject.value) {
+    requests.push(['users', dashboardApi.fetchTopUsers(params), (value) => (topUsers.value = value)]);
+  }
+
+  let failed = false;
+  await Promise.allSettled(requests.map(async ([key, request, apply]) => {
+    try {
+      const value = await request;
+      if (currentRequest === requestId) apply(value);
+    } catch {
+      failed = true;
+    } finally {
+      if (currentRequest === requestId) loading[key] = false;
     }
-  } finally {
-    if (currentRequest === requestId) loading.value = false;
+  }));
+  if (currentRequest === requestId && failed) {
+    ElMessage.error('加载存储概览失败，请稍后重试');
   }
 }
 
-watch(projectId, loadOverview);
-onMounted(loadOverview);
+watch(projectId, loadDashboard);
+onMounted(loadDashboard);
 </script>
 
 <template>
@@ -144,7 +197,7 @@ onMounted(loadOverview);
     <header class="dashboard-header">
       <div>
         <h1>存储概览</h1>
-        <p>{{ isProject ? overview?.scope.project_name : '全局存储运行视图' }}</p>
+        <p>{{ isProject ? (scope.project_name || '项目数据加载中') : '全局存储运行视图' }}</p>
       </div>
       <div class="dashboard-controls">
         <ProjectSelect
@@ -156,21 +209,20 @@ onMounted(loadOverview);
       </div>
     </header>
 
-    <ElSkeleton
-      v-if="loading"
-      class="dashboard-skeleton"
-      :rows="8"
-      animated />
-
-    <ElEmpty
-      v-else-if="!overview"
-      class="dashboard-empty"
-      description="暂无概览数据" />
-
-    <template v-else>
-      <section
-        class="summary-strip"
-        aria-label="容量摘要">
+    <section
+      class="summary-strip"
+      aria-label="容量摘要">
+      <template v-if="loading.summary">
+        <div
+          v-for="index in 4"
+          :key="index"
+          class="summary-item summary-item-loading">
+          <ElSkeleton
+            :rows="1"
+            animated />
+        </div>
+      </template>
+      <template v-else-if="summaryResponse">
         <div class="summary-item">
           <span>{{ limitLabel }}</span>
           <strong>{{ formatCapacity(summary.limit_gb) }}</strong>
@@ -187,28 +239,42 @@ onMounted(loadOverview);
           <span>近 30 天告警</span>
           <strong>{{ summary.alert_count }}</strong>
         </div>
-      </section>
+      </template>
+      <ElEmpty
+        v-else
+        class="summary-empty"
+        description="暂无摘要数据" />
+    </section>
 
-      <section class="dashboard-grid dashboard-grid-main">
-        <article class="dashboard-panel trend-panel">
-          <div class="panel-heading">
-            <h2>容量趋势</h2>
-            <span>已使用容量</span>
-          </div>
-          <DashboardChart
-            v-if="overview.capacity_trend.length"
-            :option="lineOption"
-            aria-label="近 30 天容量趋势" />
-          <ElEmpty
-            v-else
-            description="暂无容量趋势" />
-        </article>
+    <section class="dashboard-grid dashboard-grid-main">
+      <article class="dashboard-panel trend-panel">
+        <div class="panel-heading">
+          <h2>容量趋势</h2>
+          <span>已使用容量</span>
+        </div>
+        <ElSkeleton
+          v-if="loading.trend"
+          :rows="5"
+          animated />
+        <DashboardChart
+          v-else-if="capacityTrend.length"
+          :option="lineOption"
+          aria-label="近 30 天容量趋势" />
+        <ElEmpty
+          v-else
+          description="暂无容量趋势" />
+      </article>
 
-        <article class="dashboard-panel usage-panel">
-          <div class="panel-heading">
-            <h2>容量使用率</h2>
-            <span>{{ summary.storage_cluster_count }} 个存储集群</span>
-          </div>
+      <article class="dashboard-panel usage-panel">
+        <div class="panel-heading">
+          <h2>容量使用率</h2>
+          <span>{{ summary.storage_cluster_count || 0 }} 个存储集群</span>
+        </div>
+        <ElSkeleton
+          v-if="loading.summary"
+          :rows="5"
+          animated />
+        <template v-else-if="summaryResponse">
           <PieCharts
             :data="pieData"
             title="容量使用率"
@@ -220,58 +286,100 @@ onMounted(loadOverview);
             <span><i class="used-dot"></i>已使用 {{ formatCapacity(summary.used_gb) }}</span>
             <span><i class="available-dot"></i>可使用 {{ formatCapacity(summary.available_gb) }}</span>
           </div>
-        </article>
-      </section>
+        </template>
+        <ElEmpty
+          v-else
+          description="暂无使用率数据" />
+      </article>
+    </section>
 
-      <section class="dashboard-grid dashboard-grid-secondary">
-        <article class="dashboard-panel comparison-panel">
-          <div class="panel-heading">
-            <h2>{{ comparisonTitle }}</h2>
-            <span>按已使用容量 Top 10</span>
-          </div>
-          <DashboardChart
-            v-if="overview.capacity_items.length"
-            :option="comparisonOption"
-            :aria-label="comparisonTitle"
-            height="320px" />
-          <ElEmpty
-            v-else
-            description="暂无容量对比数据" />
-        </article>
+    <section class="dashboard-grid dashboard-grid-secondary">
+      <article class="dashboard-panel comparison-panel">
+        <div class="panel-heading">
+          <h2>{{ comparisonTitle }}</h2>
+          <span>按已使用容量 Top 10</span>
+        </div>
+        <ElSkeleton
+          v-if="loading.items"
+          :rows="7"
+          animated />
+        <DashboardChart
+          v-else-if="capacityItems.length"
+          :option="comparisonOption"
+          :aria-label="comparisonTitle"
+          height="320px" />
+        <ElEmpty
+          v-else
+          description="暂无容量对比数据" />
+      </article>
 
-        <article class="dashboard-panel alert-panel">
-          <div class="panel-heading">
-            <h2>告警趋势</h2>
-            <span>每日触发数</span>
-          </div>
-          <DashboardChart
-            :option="alertOption"
-            aria-label="近 30 天告警趋势"
-            height="320px" />
-        </article>
-      </section>
-    </template>
+      <article
+        v-if="isProject"
+        class="dashboard-panel top-users-panel">
+        <div class="panel-heading">
+          <h2>用户使用 Top 10</h2>
+          <span>按用户目录已使用容量</span>
+        </div>
+        <ElSkeleton
+          v-if="loading.users"
+          :rows="7"
+          animated />
+        <DashboardChart
+          v-else-if="topUsers.length"
+          :option="topUsersOption"
+          aria-label="项目内用户使用容量 Top 10"
+          height="320px" />
+        <ElEmpty
+          v-else
+          description="暂无用户使用数据" />
+      </article>
+
+      <article
+        class="dashboard-panel alert-panel"
+        :class="{ 'alert-panel-wide': isProject }">
+        <div class="panel-heading">
+          <h2>告警趋势</h2>
+          <span>每日触发数</span>
+        </div>
+        <ElSkeleton
+          v-if="loading.alerts"
+          :rows="7"
+          animated />
+        <DashboardChart
+          v-else-if="alertTrend.length"
+          :option="alertOption"
+          aria-label="近 30 天告警趋势"
+          height="320px" />
+        <ElEmpty
+          v-else
+          description="暂无告警趋势" />
+      </article>
+    </section>
   </main>
 </template>
 
 <style lang="scss" scoped>
-.dashboard-page { display: grid; gap: var(--spacing-xl); min-width: 0; padding: var(--spacing-2xl); background: var(--bg-secondary); }
+.dashboard-page { display: grid; grid-auto-rows: max-content; align-content: start; gap: var(--spacing-xl); min-width: 0; padding: var(--spacing-2xl); background: var(--bg-secondary); }
 .dashboard-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--spacing-xl); }
 .dashboard-header h1 { margin: 0; color: var(--text-primary); font-size: var(--font-size-3xl); line-height: var(--line-height-tight); }
 .dashboard-header p { margin: var(--spacing-xs) 0 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
 .dashboard-controls { display: flex; align-items: center; gap: var(--spacing-md); }
 .project-filter { width: 240px; }
 .period-chip { flex: none; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-secondary); font-size: var(--font-size-sm); }
-.summary-strip { display: grid; grid-template-columns: repeat(4, 1fr); overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-primary); box-shadow: var(--shadow-xs); }
+.summary-strip { display: grid; grid-template-columns: repeat(4, 1fr); overflow: hidden; min-height: 84px; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-primary); box-shadow: var(--shadow-xs); }
 .summary-item { display: grid; gap: var(--spacing-sm); padding: var(--spacing-xl) var(--spacing-2xl); border-right: 1px solid var(--border-light); }
 .summary-item:last-child { border-right: 0; }
 .summary-item span { color: var(--text-secondary); font-size: var(--font-size-sm); }
 .summary-item strong { color: var(--text-primary); font-size: var(--font-size-2xl); line-height: 1; }
+.summary-item-loading { align-content: center; }
 .summary-alert strong { color: var(--warning-color); }
+.summary-empty { grid-column: 1 / -1; }
 .dashboard-grid { display: grid; gap: var(--spacing-xl); min-width: 0; }
 .dashboard-grid-main { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); }
-.dashboard-grid-secondary { grid-template-columns: minmax(0, 1.35fr) minmax(340px, 1fr); }
-.dashboard-panel { min-width: 0; padding: var(--spacing-xl); border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-primary); box-shadow: var(--shadow-xs); }
+.dashboard-grid-secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dashboard-panel { min-width: 0; min-height: 380px; padding: var(--spacing-xl); border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-primary); box-shadow: var(--shadow-xs); }
+.trend-panel, .usage-panel { min-height: 330px; }
+.alert-panel-wide { grid-column: 1 / -1; }
 .panel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--spacing-md); margin-bottom: var(--spacing-md); }
 .panel-heading h2 { margin: 0; color: var(--text-primary); font-size: var(--font-size-lg); }
 .panel-heading span { color: var(--text-tertiary); font-size: var(--font-size-xs); }
@@ -279,10 +387,10 @@ onMounted(loadOverview);
 .usage-caption i { display: inline-block; width: 8px; height: 8px; margin-right: var(--spacing-xs); border-radius: var(--radius-full); }
 .used-dot { background: var(--primary-color); }
 .available-dot { background: var(--bg-tertiary); border: 1px solid var(--border-dark); }
-.dashboard-skeleton, .dashboard-empty { padding: var(--spacing-3xl); border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-primary); }
 
 @media (max-width: 1024px) {
   .dashboard-grid-main, .dashboard-grid-secondary { grid-template-columns: 1fr; }
+  .alert-panel-wide { grid-column: auto; }
 }
 @media (max-width: 768px) {
   .dashboard-page { padding: var(--spacing-lg); }

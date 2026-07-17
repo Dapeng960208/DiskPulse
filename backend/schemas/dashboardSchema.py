@@ -42,9 +42,12 @@ class AlertTrendPoint(BaseModel):
     count: int
 
 
-class DashboardOverview(BaseModel):
+class DashboardSummaryResponse(BaseModel):
     scope: DashboardScope
     summary: DashboardSummary
-    capacity_trend: list[CapacityTrendPoint]
-    capacity_items: list[CapacityItem]
-    alert_trend: list[AlertTrendPoint]
+
+
+class TopUser(BaseModel):
+    id: int
+    name: str
+    used_gb: float

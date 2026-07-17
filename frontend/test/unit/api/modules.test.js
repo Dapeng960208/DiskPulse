@@ -32,6 +32,7 @@ describe('api modules', () => {
     const { default: aggregateApi } = await import('@/api/aggregate-api');
     const { default: alertApi } = await import('@/api/alert-api');
     const { default: configApi } = await import('@/api/config-api');
+    const { default: dashboardApi } = await import('@/api/dashboard-api');
     const { default: departmentApi } = await import('@/api/department-api');
     const { default: domainGroupApi } = await import('@/api/domain-group-api');
     const { default: groupApi } = await import('@/api/group-api');
@@ -52,6 +53,11 @@ describe('api modules', () => {
     await aggregateApi.fetchStorageRealTimeDataById(2, { range: 'day' });
     await alertApi.fetch({ page: 1 });
     await configApi.updateConfig({ enabled: true });
+    await dashboardApi.fetchSummary({ project_id: 7 });
+    await dashboardApi.fetchCapacityTrend({ project_id: 7 });
+    await dashboardApi.fetchCapacityItems({ project_id: 7 });
+    await dashboardApi.fetchAlertTrend({ project_id: 7 });
+    await dashboardApi.fetchTopUsers({ project_id: 7 });
     await departmentApi.fetchTopLevel();
     await domainGroupApi.fetch({ page: 1 });
     await groupApi.fetchStorageRealTimeDataById(5, { detail: true });
@@ -83,6 +89,11 @@ describe('api modules', () => {
     expect(getSpy).toHaveBeenCalledWith('/1/storage-tree', { detail: true });
     expect(getSpy).toHaveBeenCalledWith('/2/realtime', { range: 'day' });
     expect(putSpy).toHaveBeenCalledWith('', { enabled: true });
+    expect(getSpy).toHaveBeenCalledWith('/summary', { project_id: 7 });
+    expect(getSpy).toHaveBeenCalledWith('/capacity-trend', { project_id: 7 });
+    expect(getSpy).toHaveBeenCalledWith('/capacity-items', { project_id: 7 });
+    expect(getSpy).toHaveBeenCalledWith('/alert-trend', { project_id: 7 });
+    expect(getSpy).toHaveBeenCalledWith('/top-users', { project_id: 7 });
     expect(getSpy).toHaveBeenCalledWith('/top-level');
     expect(postSpy).toHaveBeenCalledWith('', { username: 'user', password: 'password' });
     expect(deleteSpy).toHaveBeenCalledWith('');

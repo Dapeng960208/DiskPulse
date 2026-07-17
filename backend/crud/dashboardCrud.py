@@ -3,7 +3,7 @@ from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from dependencies import QuestDBSession
-from models import Group, Project, StorageAlerts, StorageCluster, StorageUsage
+from models import Group, Project, StorageAlerts, StorageCluster, StorageUsage, User
 
 
 def get_project(db: Session, project_id: int):
@@ -35,6 +35,19 @@ def get_project_storage_cluster_count(db: Session, project_id: int) -> int:
             Group.enable_monitoring.is_(True),
         )
     ) or 0)
+
+
+def get_top_users(db: Session, project_id: int):
+    used_gb = func.sum(StorageUsage.used).label("used_gb")
+    return db.execute(
+        select(User.id, User.rd_username, User.username, used_gb)
+        .join(StorageUsage, StorageUsage.user_id == User.id)
+        .join(Group, StorageUsage.group_id == Group.id)
+        .where(Group.project_id == project_id)
+        .group_by(User.id, User.rd_username, User.username)
+        .order_by(used_gb.desc())
+        .limit(10)
+    ).all()
 
 
 def _alert_filters(start_time, end_time):
