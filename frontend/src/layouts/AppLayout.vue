@@ -81,7 +81,7 @@ const breadcrumbItems = computed(() => buildBreadcrumbItems(route.matched));
             class="app-main__scrollbar"
             wrap-class="app-main__content-wrap"
             view-class="h-full flex flex-col">
-            <div class="flex-1 flex flex-col">
+            <div class="flex-1 min-h-0 flex flex-col">
               <RouterView v-slot="{ Component, route }">
                 <template v-if="Component">
                   <KeepAlive>

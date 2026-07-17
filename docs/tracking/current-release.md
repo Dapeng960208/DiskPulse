@@ -1,5 +1,22 @@
 # 当前交付记录
 
+## 2026-07-17: AI chat composer fixed
+
+### Completed
+
+- Long chat histories now scroll inside the message list while the composer stays at the bottom of the chat workspace.
+- The app shell route-content flex container can shrink, so message height no longer expands the outer scroll area.
+- The composer border is more visible; the colored new-conversation action, in-field model selector, and simplified chat header remain in place.
+
+### Verification
+
+- RED: the focused AI page test reproduced the missing shrink-height constraint.
+- GREEN: `npx vitest run test/unit/ai-pages.test.js --coverage.enabled=false` passed with `12 passed`; target ESLint passed.
+- Browser: at `http://localhost:5173/ai/chat`, long history measured `3527px` in a `559px` message scroller while the composer stayed at the workspace bottom. The pre-existing `ICarbonUserFilled` warning remains.
+
+### Risk
+
+- Full frontend tests were not run; the production build, focused AI tests, target ESLint, and authenticated long-history browser flow were verified.
 ## 2026-07-17：存储集群性能分析可用性改进
 
 - 已完成：性能图横轴长对象名使用截断标签、独立底部空间和原生悬停提示，避免与图表标题重叠；性能分析新增当前 Top-N 结果内的对象多选对比，图表和表格同步过滤，重置会清空对象条件。

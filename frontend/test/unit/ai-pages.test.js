@@ -1,6 +1,8 @@
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { toRaw } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { commonDirectives } from '../helpers/mount';
 
 const { aiApi, router } = vi.hoisted(() => ({
@@ -328,6 +330,27 @@ describe('AI pages interactions', () => {
     expect(wrapper.find('.composer__notice').text()).toContain('AI 可能会出错');
     expect(wrapper.find('.composer__send').attributes('aria-label')).toBe('发送消息');
     expect(wrapper.find('.composer-actions').exists()).toBe(false);
+  });
+
+  it('keeps model selection beside the composer action and simplifies chat chrome', async () => {
+    const wrapper = shallowMount(AiChatPage);
+    await flushPromises();
+
+    expect(wrapper.find('.panel-heading').text()).toContain('对话历史');
+    expect(wrapper.find('.conversation-create').attributes('aria-label')).toBe('新建对话');
+    expect(wrapper.find('.conversation-panel > .model-select').exists()).toBe(false);
+    expect(wrapper.find('.composer__model').exists()).toBe(true);
+    expect(wrapper.find('.chat-heading small').exists()).toBe(false);
+  });
+
+  it('constrains long chat history to the message scroller and gives the composer a visible border', async () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/pages/ai/AiChatPage.vue'), 'utf8');
+    const appLayoutSource = readFileSync(resolve(process.cwd(), 'src/layouts/AppLayout.vue'), 'utf8');
+
+    expect(source).toContain('flex: 1 1 0;');
+    expect(source).toContain('height: 100%;');
+    expect(source).toContain('border: 1px solid var(--text-tertiary);');
+    expect(appLayoutSource).toContain('class="flex-1 min-h-0 flex flex-col"');
   });
 
   it('creates, updates, tests, deletes models and loads audit filters', async () => {

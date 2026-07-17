@@ -309,23 +309,14 @@ onMounted(loadInitial);
   <section class="ai-workspace">
     <aside class="conversation-panel">
       <div class="panel-heading">
-        <strong>对话</strong>
+        <strong>对话历史</strong>
         <ElButton
+          class="conversation-create"
           plain
           size="small"
-          @click="createConversation">新建</ElButton>
+          aria-label="新建对话"
+          @click="createConversation"><i class="i-ri-add-line"></i><span>新建</span></ElButton>
       </div>
-      <ElSelect
-        v-model="selectedModelId"
-        class="model-select"
-        placeholder="选择模型"
-        :disabled="streaming">
-        <ElOption
-          v-for="model in models"
-          :key="model.id"
-          :label="model.name"
-          :value="model.id" />
-      </ElSelect>
       <ElScrollbar class="conversation-list">
         <button
           v-for="conversation in conversations"
@@ -351,7 +342,6 @@ onMounted(loadInitial);
       <div class="chat-heading">
         <div>
           <strong>{{ activeConversation?.title || 'AI 助手' }}</strong>
-          <small>查询 DiskPulse 中你有权访问的只读数据</small>
         </div>
         <span
           v-if="streaming"
@@ -442,6 +432,18 @@ onMounted(loadInitial);
             @keydown.ctrl.enter.prevent="send"
           />
           <span class="composer__shortcut">Ctrl + Enter</span>
+          <ElSelect
+            v-model="selectedModelId"
+            class="composer__model"
+            aria-label="选择模型"
+            placeholder="选择模型"
+            :disabled="streaming">
+            <ElOption
+              v-for="model in models"
+              :key="model.id"
+              :label="model.name"
+              :value="model.id" />
+          </ElSelect>
           <ElButton
             v-if="failedContent && !streaming"
             class="composer__retry"
@@ -468,18 +470,19 @@ onMounted(loadInitial);
 </template>
 
 <style scoped lang="scss">
-.ai-workspace { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 0; height: 100%; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; }
+.ai-workspace { display: grid; flex: 1 1 0; grid-template-columns: 248px minmax(0, 1fr); min-height: 0; height: 100%; max-height: 100%; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; }
 .conversation-panel { display: flex; flex-direction: column; min-width: 0; padding: 16px 12px; border-right: 1px solid var(--border-color); background: var(--bg-secondary); }
 .panel-heading, .chat-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .panel-heading { margin-bottom: 12px; }
-.model-select { width: 100%; margin-bottom: 12px; }
+.conversation-create { color: var(--primary-color); border-color: var(--el-color-primary-light-5); background: var(--el-color-primary-light-9); }
+.conversation-create:hover, .conversation-create:focus-visible { color: var(--primary-color); border-color: var(--primary-color); background: var(--el-color-primary-light-8); }
+.conversation-create i { margin-right: 4px; font-size: 14px; }
 .conversation-list { flex: 1; }
 .conversation-item { width: 100%; border: 0; background: transparent; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px; margin-bottom: 4px; border-radius: 8px; color: var(--text-secondary); cursor: pointer; text-align: left; }
 .conversation-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-item:hover, .conversation-item.active { color: var(--primary-color); background: var(--bg-hover); }
 .chat-panel { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
-.chat-heading { flex: none; min-height: 64px; padding: 0 22px; border-bottom: 1px solid var(--border-color); }
-.chat-heading small { display: block; margin-top: 3px; color: var(--text-tertiary); }
+.chat-heading { flex: none; min-height: 56px; padding: 0 22px; }
 .live-status { color: var(--primary-color); font-size: 13px; }
 .message-list { flex: 1; min-height: 0; padding: 20px 0; }
 .message { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; max-width: 920px; margin: 0 auto 18px; padding: 0 24px; }
@@ -504,12 +507,14 @@ onMounted(loadInitial);
 .tool-trace__details > div { display: grid; gap: 4px; }
 .tool-trace__details strong { margin-top: 8px; color: var(--text-secondary); font-size: 12px; }
 .tool-trace__details pre { max-height: 220px; margin: 0; overflow: auto; padding: 8px; border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
-.composer { flex: none; padding: 10px 20px 18px; border-top: 1px solid var(--border-color); background: var(--bg-primary); }
+.composer { flex: none; padding: 10px 20px 18px; background: var(--bg-primary); }
 .composer__notice { margin: 0 0 8px; color: var(--text-tertiary); font-size: 12px; text-align: center; }
 .composer__field { position: relative; max-width: 920px; margin: 0 auto; }
-.composer__field :deep(.el-textarea__inner) { min-height: 74px !important; padding: 13px 112px 28px 16px; border-radius: 18px; box-shadow: var(--shadow-sm); resize: none; }
+.composer__field :deep(.el-textarea__inner) { min-height: 74px !important; padding: 13px 210px 28px 16px; border: 1px solid var(--text-tertiary); border-radius: 18px; box-shadow: var(--shadow-sm); resize: none; }
 .composer__field :deep(.el-textarea__inner:focus) { box-shadow: 0 0 0 2px var(--el-color-primary-light-7); }
 .composer__shortcut { position: absolute; bottom: 12px; left: 16px; color: var(--text-tertiary); font-size: 12px; pointer-events: none; }
+.composer__model { position: absolute; right: 56px; bottom: 10px; width: 132px; }
+.composer__model :deep(.el-select__wrapper) { min-height: 36px; border-radius: var(--radius-full); background: var(--bg-secondary); box-shadow: none; }
 .composer__send, .composer__retry { position: absolute; right: 10px; bottom: 10px; width: 36px; height: 36px; padding: 0; border: 0; color: #fff; background: var(--text-primary); box-shadow: none; }
 .composer__send:hover, .composer__retry:hover { color: #fff; background: var(--text-secondary); }
 .composer__send:disabled { color: var(--text-disabled); background: var(--bg-tertiary); }
