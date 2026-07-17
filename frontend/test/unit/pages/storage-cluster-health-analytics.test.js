@@ -1,5 +1,6 @@
 import { defineComponent, h } from 'vue';
 import { flushPromises, shallowMount } from '@vue/test-utils';
+import { createPinia } from 'pinia';
 import { vi } from 'vitest';
 import StorageClusterDetailPage from '@/pages/admin/storage-cluster/StorageClusterDetailPage.vue';
 
@@ -153,6 +154,7 @@ async function mountPage() {
   const wrapper = shallowMount(StorageClusterDetailPage, {
     attachTo: document.body,
     global: {
+      plugins: [createPinia()],
       directives: {
         loading: () => {},
       },

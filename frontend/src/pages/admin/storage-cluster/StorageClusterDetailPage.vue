@@ -31,8 +31,10 @@ import aggregateApi from '@/api/aggregate-api.js';
 import storageClusterApi from '@/api/storage-cluster-api';
 import { useQuery } from '@/composables/query';
 import { getDefaultTime } from '@/composables/common';
+import { useBreadcrumbs } from '@/stores/breadcrumbs';
 
 const route = useRoute();
+const breadcrumbs = useBreadcrumbs();
 const clusterId = ref(null);
 const dateRange = ref(getDefaultTime(8));
 const activeTab = ref('capacity');
@@ -120,6 +122,9 @@ const fetchClusterInfo = async () => {
   return storageClusterApi.fetchById(clusterId.value);
 };
 const { result: infoResult, query: queryInfo } = useQuery(fetchClusterInfo, {});
+watch(() => infoResult.value?.name, (name) => {
+  breadcrumbs.setDetailTitle(route.name, name);
+}, { immediate: true });
 const capacitySeries = computed(() => [{
   name: infoResult.value?.name || '已使用',
   data: capacityChartData.value,

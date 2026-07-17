@@ -1,5 +1,6 @@
 import { defineComponent, h } from 'vue';
 import { flushPromises, shallowMount } from '@vue/test-utils';
+import { createPinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -343,6 +344,7 @@ const mountPage = async (component, options = {}) => {
     attachTo: document.body,
     ...options,
     global: {
+      plugins: [createPinia()],
       stubs: { ...commonStubs, ...(options.global?.stubs || {}) },
       directives: { loading: () => {}, ...(options.global?.directives || {}) },
     },

@@ -1,6 +1,7 @@
 <script setup>
 import { ElDatePicker, ElFormItem, ElOption, ElSelect, ElDescriptions, ElDescriptionsItem, ElCard, ElTable, ElTableColumn, ElTag } from 'element-plus';
 import { ref, watch, computed } from 'vue';
+import { useRoute } from 'vue-router';
 import StorageTrendChart from '@/components/dashboard/StorageTrendChart.vue';
 import FilterForm from '@/components/form/QueryForm.vue';
 import LoadingCharts from '@/common/charts/LoadingCharts.vue';
@@ -22,6 +23,7 @@ import storageUsageApi from '@/api/storage-usage-api.js';
 import { getDefaultTime } from '@/composables/common';
 import { useQuery, useQueryParams } from '@/composables/query';
 import { useStorageAlertThresholds } from '@/stores/storage-alert-thresholds';
+import { useBreadcrumbs } from '@/stores/breadcrumbs';
 
 const props = defineProps({
   apiType: {
@@ -46,6 +48,8 @@ const props = defineProps({
 });
 
 const attributeId = ref(Array.isArray(props.attributeId) ? props.attributeId : [props.attributeId]);
+const route = useRoute();
+const breadcrumbs = useBreadcrumbs();
 const dateRange = ref(getDefaultTime(8));
 
 const apiMap = {
@@ -131,6 +135,19 @@ const fetchData = async () => {
 const { result, querying, query } = useQuery(fetchData, {
   data: {}
 });
+
+const breadcrumbDetailTitle = computed(() => {
+  if (props.apiType === 'storage-usage') {
+    return result.value?.info?.user?.rd_username
+      || result.value?.info?.linux_path?.split('/').filter(Boolean).at(-1)
+      || '';
+  }
+  return result.value?.info?.name || '';
+});
+
+watch(breadcrumbDetailTitle, (title) => {
+  breadcrumbs.setDetailTitle(route.name, title);
+}, { immediate: true });
 
 // Fetch alerts and merge results
 const fetchAlerts = async () => {

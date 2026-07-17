@@ -3,13 +3,21 @@ import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElButton, ElDescriptions, ElDescriptionsItem, ElTag } from 'element-plus';
 import aiApi from '@/api/ai-api';
+import { useBreadcrumbs } from '@/stores/breadcrumbs';
 
 const route = useRoute();
 const router = useRouter();
+const breadcrumbs = useBreadcrumbs();
 const audit = ref(null);
 
 onMounted(async () => {
-  audit.value = await aiApi.getAudit(route.params.id);
+  breadcrumbs.setDetailTitle(route.name, '');
+  try {
+    audit.value = await aiApi.getAudit(route.params.id);
+    breadcrumbs.setDetailTitle(route.name, `审计记录 #${route.params.id}`);
+  } catch {
+    audit.value = null;
+  }
 });
 </script>
 

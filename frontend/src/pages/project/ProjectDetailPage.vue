@@ -3,10 +3,13 @@ import { ElEmpty, ElMessage, ElTable, ElTableColumn } from 'element-plus';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import groupApi from '@/api/group-api.js';
+import projectApi from '@/api/project-api.js';
 import { formatStorageTargetType } from '@/utils/storage-resource';
 import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
+import { useBreadcrumbs } from '@/stores/breadcrumbs';
 
 const route = useRoute();
+const breadcrumbs = useBreadcrumbs();
 const projectId = computed(() => Number(route.params.id));
 const groups = ref([]);
 const loading = ref(false);
@@ -24,7 +27,20 @@ async function loadGroups() {
   }
 }
 
-onMounted(loadGroups);
+async function loadProjectBreadcrumb() {
+  try {
+    const project = await projectApi.fetchById(projectId.value);
+    breadcrumbs.setDetailTitle(route.name, project?.name);
+  } catch {
+    breadcrumbs.setDetailTitle(route.name, '');
+  }
+}
+
+onMounted(() => {
+  breadcrumbs.setDetailTitle(route.name, '');
+  loadGroups();
+  loadProjectBreadcrumb();
+});
 </script>
 
 <template>
