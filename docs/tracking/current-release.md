@@ -1397,3 +1397,26 @@ npm test -- --coverage.enabled=false
 
 - 未连接真实 Provider、Redis、数据库或真实超级管理员身份完成端到端对话；部署前仍需验证这些外部边界。
 - 当前环境拒绝创建 `.git/index.lock`，无法暂存或创建本轮 TDD 检查点提交；工作区改动已保留，待具备 Git 写权限后再提交。
+## 2026-07-18：遥测新鲜度与平台可观测审查修复
+
+### 已完成
+
+- 统一本分支 PostgreSQL Alembic 链：`000000000008_telemetry_collection_runs` 以 `000000000007` 为唯一上游，当前仅有一个 head。
+- 账本约束收紧为运行中终态字段全部为空，结束后必须同时持有 `outcome` 和 UTC `finished_at`；集群新鲜度索引按 `(component, storage_cluster_id, finished_at DESC)` 创建。
+- `/metrics` 的最新成功运行记录改为数据库窗口查询，每个组件/集群仅返回一条，避免把 90 天账本历史加载到应用内存。
+- HTTP RED 指标覆盖未处理 5xx；中间件在会话关闭后的 `finally` 记录状态码与耗时，探针路径仍不会创建常规数据库会话。
+- 本轮审查问题均保留独立 RED/GREEN TDD 提交：`a53b420/6fb1160`、`44fc07e/791e984`、`b09fc4a/9011dd6`、`f782ff4/fd9858a`。
+
+### 验证状态
+
+- 遥测聚焦测试：`30 passed`。
+- 全量后端测试：`440 passed`。
+- `python -m compileall -q backend`：通过。
+- Alembic `heads`：仅 `000000000008 (head)`。
+- SQLite 升降级与 SQLite/PostgreSQL/MySQL 离线编译迁移测试：`2 passed`。
+- `git diff --check`：通过。
+
+### 风险与部署边界
+
+- 本地验证使用 SQLite 和服务替身；未连接真实 PostgreSQL、Redis、QuestDB、Celery Beat/Worker、飞书或反向代理网络策略。
+- 部署前仍需执行文档中的测试环境停止依赖/Worker 验收，以及 7 天暗运行观察。
