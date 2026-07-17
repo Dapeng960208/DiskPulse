@@ -12,6 +12,7 @@ from appConfig import base_config
 from models import Group, Qtree, StorageAlerts, StorageUsage, Volume
 from schemas.quotaSchema import QuotaAdjustmentRequest, QuotaAdjustmentResponse
 from services.storageAlertRuleService import resolve_recipient_usernames
+from utils.auth_service import is_super_admin
 from utils.isilonClient import IsilonClient
 from utils.mailTools.emailNotification import EmailNotification
 from utils.netAppClient import NetAppClient
@@ -344,10 +345,16 @@ def adjust_group_quota(
     *,
     group_id: int,
     request: QuotaAdjustmentRequest,
+    current_user=None,
 ) -> QuotaAdjustmentResponse:
     group = db.get(Group, group_id)
     if group is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+    require_group_quota_adjustment_permission(
+        db=db,
+        group_id=group_id,
+        current_user=current_user,
+    )
     resolved = resolve_group_storage_target(group)
     target = resolved["target"]
     if target is None:
@@ -373,6 +380,7 @@ def adjust_storage_usage_quota(
     *,
     storage_usage_id: int,
     request: QuotaAdjustmentRequest,
+    current_user=None,
 ) -> QuotaAdjustmentResponse:
     storage_usage = db.get(StorageUsage, storage_usage_id)
     if storage_usage is None:
@@ -385,6 +393,11 @@ def adjust_storage_usage_quota(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Storage usage relations not found",
         )
+    require_group_quota_adjustment_permission(
+        db=db,
+        group_id=storage_usage.group_id,
+        current_user=current_user,
+    )
     resolved = resolve_group_storage_target(storage_usage.group)
     return _execute_adjustment(
         db,
@@ -394,3 +407,17 @@ def adjust_storage_usage_quota(
         volume=resolved["volume"],
         request=request,
     )
+
+
+def require_group_quota_adjustment_permission(*, db: Session, group_id: int, current_user) -> Group:
+    """Only the responsible group owner may use the non-admin quota exception."""
+    if current_user is None:
+        return None
+    if is_super_admin(current_user):
+        return None
+    group = db.get(Group, group_id)
+    if group is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+    if group.in_charge_user_id == current_user.id:
+        return group
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="quota adjustment permission required")

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from appConfig import base_config
-from models import AIConfig, AIConversation, AIAuditLog, AIMessage, User
+from models import AIConfig, AIConversation, AIAuditLog, AIMessage, Project, ProjectMembership, User
 from routers import ai, ai_admin
 from services import ai_chat_service, ai_client
 from services.ai_client import AIClientError, AIClientToolArgumentsError, AIClientToolCall, AICompletionStreamEvent
@@ -84,6 +84,15 @@ def seed_model(db, *, actor_id=1, provider="openai"):
     db.commit()
     db.refresh(item)
     return item
+
+
+def seed_tool_project(db, *, user_id=1):
+    project = Project(name=f"tool-project-{user_id}")
+    db.add(project)
+    db.flush()
+    db.add(ProjectMembership(project_id=project.id, user_id=user_id, role="reader"))
+    db.commit()
+    return project
 
 
 def test_openai_and_claude_non_streaming_payloads(monkeypatch):
@@ -236,6 +245,7 @@ def test_stream_rejects_falsey_invalid_tool_arguments(monkeypatch, provider, lin
 def test_tool_loop_sync_endpoints_and_audit_filters(api_client_factory, db_session, monkeypatch):
     seed_user(db_session, username="alice")
     configured = seed_model(db_session)
+    project = seed_tool_project(db_session)
 
     calls = {"count": 0}
 
@@ -270,7 +280,7 @@ def test_tool_loop_sync_endpoints_and_audit_filters(api_client_factory, db_sessi
     assert len(client.get("/storage-pulse/api/ai/models").json()) == 1
     conversation = client.post(
         "/storage-pulse/api/ai/conversations",
-        json={"title": "新对话", "model_id": configured.id},
+        json={"title": "新对话", "model_id": configured.id, "project_id": project.id},
     ).json()
     response = client.post(
         f"/storage-pulse/api/ai/conversations/{conversation['id']}/messages",
@@ -303,7 +313,8 @@ def test_tool_loop_sync_endpoints_and_audit_filters(api_client_factory, db_sessi
 def test_stream_persists_live_tool_trace_with_distinct_call_ids_and_truncated_results(db_session, monkeypatch):
     seed_user(db_session)
     configured = seed_model(db_session)
-    conversation = AIConversation(user_id=1, model_id=configured.id, title="工具轨迹")
+    project = seed_tool_project(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, project_id=project.id, title="工具轨迹")
     db_session.add(conversation)
     db_session.commit()
     db_session.refresh(conversation)
@@ -546,7 +557,8 @@ def test_stream_repairs_malformed_tool_arguments_without_exposing_raw_payload(
     """A malformed provider tool payload is repaired in-band instead of failing the user turn."""
     seed_user(db_session)
     configured = seed_model(db_session)
-    conversation = AIConversation(user_id=1, model_id=configured.id, title=f"参数修复-{case}")
+    project = seed_tool_project(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, project_id=project.id, title=f"参数修复-{case}")
     db_session.add(conversation)
     db_session.commit()
     db_session.refresh(conversation)
@@ -606,7 +618,8 @@ def test_tool_iteration_limit_completes_as_degraded_and_persists_recovery_metada
 ):
     seed_user(db_session)
     configured = seed_model(db_session)
-    conversation = AIConversation(user_id=1, model_id=configured.id, title="轮次限制")
+    project = seed_tool_project(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, project_id=project.id, title="轮次限制")
     db_session.add(conversation)
     db_session.commit()
     db_session.refresh(conversation)
@@ -691,7 +704,8 @@ def test_tool_iteration_limit_completes_as_degraded_and_persists_recovery_metada
 def test_invalid_json_tool_argument_repairs_stop_after_two_attempts_and_degrade_safely(db_session, monkeypatch):
     seed_user(db_session)
     configured = seed_model(db_session)
-    conversation = AIConversation(user_id=1, model_id=configured.id, title="参数修复次数")
+    project = seed_tool_project(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, project_id=project.id, title="参数修复次数")
     db_session.add(conversation)
     db_session.commit()
     db_session.refresh(conversation)

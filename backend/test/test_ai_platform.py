@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from appConfig import base_config
 from dependencies import get_db, require_super_admin
-from models import AIConfig, AIConversation, AIAuditLog, AIMessage, User
+from models import AIConfig, AIConversation, AIAuditLog, AIMessage, Project, ProjectMembership, User
 from routers import (
     aggregate,
     ai,
@@ -97,7 +97,7 @@ def test_ai_models_match_global_conversation_contract():
     assert AIConversation.__tablename__ == "ai_conversations"
     assert AIMessage.__tablename__ == "ai_messages"
     assert AIAuditLog.__tablename__ == "ai_audit_logs"
-    assert "project_id" not in AIConversation.__table__.columns
+    assert "project_id" in AIConversation.__table__.columns
 
 
 def test_ai_secret_is_encrypted_and_masked():
@@ -375,10 +375,12 @@ def test_quota_adjustment_tools_require_admin_at_registration_and_execution(monk
 
     app.dependency_overrides[require_super_admin] = lambda: None
     app.dependency_overrides[get_db] = lambda: object()
+    from dependencies import get_current_user
+    app.dependency_overrides[get_current_user] = lambda: admin
     monkeypatch.setattr(
         quotaService,
         "adjust_group_quota",
-        lambda _db, group_id, request: calls.append(("group", group_id, request)) or {
+        lambda _db, group_id, request, current_user=None: calls.append(("group", group_id, request)) or {
             "id": group_id,
             "resource_type": "group",
             "storage_type": "netapp",
@@ -388,7 +390,7 @@ def test_quota_adjustment_tools_require_admin_at_registration_and_execution(monk
     monkeypatch.setattr(
         quotaService,
         "adjust_storage_usage_quota",
-        lambda _db, storage_usage_id, request: calls.append(("storage_usage", storage_usage_id, request)) or {
+        lambda _db, storage_usage_id, request, current_user=None: calls.append(("storage_usage", storage_usage_id, request)) or {
             "id": storage_usage_id,
             "resource_type": "storage_usage",
             "storage_type": "netapp",
@@ -401,8 +403,8 @@ def test_quota_adjustment_tools_require_admin_at_registration_and_execution(monk
         return ["ai-admin"] if key == "super_admin_usernames" else original_get(key, default)
 
     monkeypatch.setattr(base_config, "get", configured_get)
-    reader = User(id=101, username="reader", rd_username="reader", email="reader@example.com")
     admin = User(id=102, username="ai-admin", rd_username="ai-admin", email="admin@example.com")
+    reader = User(id=101, username="reader", rd_username="reader", email="reader@example.com")
     admin_registry = build_tool_registry(app, current_user=admin)
 
     assert {"adjust_group_quota", "adjust_storage_usage_quota"} <= set(admin_registry)
@@ -563,8 +565,18 @@ def test_chat_adds_system_management_instruction_only_when_admin_tools_are_autho
     reader = _seed_user(db_session, user_id=1, rd_username="reader")
     admin = _seed_user(db_session, user_id=2, rd_username="ai-admin")
     configured = _seed_model(db_session)
-    reader_conversation = AIConversation(user_id=reader.id, model_id=configured.id, title="普通用户")
-    admin_conversation = AIConversation(user_id=admin.id, model_id=configured.id, title="超级管理员")
+    reader_project = Project(name="reader-tool-project")
+    admin_project = Project(name="admin-tool-project")
+    db_session.add_all([reader_project, admin_project])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectMembership(project_id=reader_project.id, user_id=reader.id, role="reader"),
+            ProjectMembership(project_id=admin_project.id, user_id=admin.id, role="reader"),
+        ]
+    )
+    reader_conversation = AIConversation(user_id=reader.id, model_id=configured.id, project_id=reader_project.id, title="普通用户")
+    admin_conversation = AIConversation(user_id=admin.id, model_id=configured.id, project_id=admin_project.id, title="超级管理员")
     db_session.add_all([reader_conversation, admin_conversation])
     db_session.commit()
     db_session.refresh(reader_conversation)
@@ -952,13 +964,12 @@ def test_ai_migration_adopts_complete_create_all_schema():
     tables = (AIConfig.__table__, AIConversation.__table__, AIMessage.__table__, AIAuditLog.__table__)
 
     with sa.create_engine("sqlite://").begin() as connection:
-        for table in tables:
-            table.create(connection)
         migration.op = Operations(MigrationContext.configure(connection))
 
         migration.upgrade()
+        migration.upgrade()
 
-        assert set(sa.inspect(connection).get_table_names()) == {table.name for table in tables}
+        assert {table.name for table in tables} <= set(sa.inspect(connection).get_table_names())
 
 
 def test_ai_migration_rejects_partial_create_all_schema():

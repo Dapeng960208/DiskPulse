@@ -119,3 +119,15 @@ def require_project_permission(db, current_user, project_id: int, minimum_role: 
     )
     if membership is None or ROLE_RANK[membership.role] < ROLE_RANK[minimum_role]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="project permission required")
+
+
+def accessible_project_ids(db, current_user) -> set[int] | None:
+    """Return all project scopes visible to a user, or None for a super admin."""
+    if is_super_admin(current_user):
+        return None
+    return {
+        project_id
+        for (project_id,) in db.query(ProjectMembership.project_id)
+        .filter(ProjectMembership.user_id == current_user.id)
+        .all()
+    }

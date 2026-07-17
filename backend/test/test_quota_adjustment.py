@@ -612,7 +612,7 @@ def quota_api(api_client_factory, session_factory, monkeypatch):
     monkeypatch.setattr(
         quotaService,
         "adjust_group_quota",
-        lambda _db, group_id, request: {
+        lambda _db, group_id, request, current_user=None: {
             "id": group_id,
             "resource_type": "group",
             "storage_type": "netapp",
@@ -625,7 +625,7 @@ def quota_api(api_client_factory, session_factory, monkeypatch):
     monkeypatch.setattr(
         quotaService,
         "adjust_storage_usage_quota",
-        lambda _db, storage_usage_id, request: {
+        lambda _db, storage_usage_id, request, current_user=None: {
             "id": storage_usage_id,
             "resource_type": "storage_usage",
             "storage_type": "netapp",

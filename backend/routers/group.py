@@ -4,13 +4,14 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from schemas import groupSchema, commonSchema, quotaSchema, storageTrendSchema
 from crud import groupCrud
-from dependencies import get_db, require_super_admin
+from dependencies import CurrentUserDep, get_db, require_super_admin
 from services import quotaService
 from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 import logging
 from utils.common import convert_timestamp_to_datetime
 from utils.plot import plot_real_time_line
 from utils.storageTarget import resolve_group_storage_target
+from utils.auth_service import is_super_admin
 from fastapi.responses import FileResponse
 
 logger = logging.getLogger('app:groups')
@@ -99,10 +100,21 @@ def update_group(
 def adjust_group_quota(
     group_id: int,
     payload: quotaSchema.QuotaAdjustmentRequest,
-    _admin: None = Depends(require_super_admin),
+    current_user: CurrentUserDep,
     db: Session = Depends(get_db),
 ):
-    return quotaService.adjust_group_quota(db, group_id=group_id, request=payload)
+    if not is_super_admin(current_user):
+        quotaService.require_group_quota_adjustment_permission(
+            db=db,
+            group_id=group_id,
+            current_user=current_user,
+        )
+    return quotaService.adjust_group_quota(
+        db,
+        group_id=group_id,
+        request=payload,
+        current_user=current_user,
+    )
 
 
 @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)

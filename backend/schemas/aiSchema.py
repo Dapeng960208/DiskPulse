@@ -61,6 +61,7 @@ class AIModelOut(BaseModel):
 class ConversationCreate(BaseModel):
     title: str = Field(default="新对话", min_length=1, max_length=255)
     model_id: int = Field(ge=1)
+    project_id: int | None = Field(default=None, ge=1)
 
 
 class MessageCreate(BaseModel):

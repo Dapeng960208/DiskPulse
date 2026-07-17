@@ -16,6 +16,7 @@ from models import AIConversation, AIAuditLog, AIMessage, User
 from services.ai_client import AIClientError, AIClientToolArgumentsError, AIClientToolCall, chat_completion_stream
 from services.ai_config_service import serialize_model
 from services.ai_tool_service import build_tool_registry, execute_tool, tool_definitions
+from services.project_access_service import require_project_permission
 
 
 SYSTEM_PROMPT = """你是 DiskPulse AI 助手。你只能使用已授权的只读工具查询数据。
@@ -134,6 +135,7 @@ def serialize_conversation(
         "id": conversation.id,
         "user_id": conversation.user_id,
         "model_id": conversation.model_id,
+        "project_id": conversation.project_id,
         "title": conversation.title,
         "created_at": conversation.created_at,
         "updated_at": conversation.updated_at,
@@ -158,13 +160,32 @@ def list_conversations(db: Session, user_id: int) -> list[dict]:
     return [serialize_conversation(item) for item in aiCrud.list_conversations(db, user_id)]
 
 
-def create_conversation(db: Session, user_id: int, title: str, model_id: int) -> dict:
+def create_conversation(
+    db: Session,
+    user_id: int,
+    title: str,
+    model_id: int,
+    project_id: int | None = None,
+    current_user: User | None = None,
+) -> dict:
     model = aiCrud.get_model(db, model_id)
     if model is None or not model.enabled or not model.enable_chat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="可用 AI 模型不存在")
+    if project_id is not None:
+        require_project_permission(
+            db,
+            current_user or db.get(User, user_id),
+            project_id,
+            "reader",
+        )
     conversation = aiCrud.add_conversation(
         db,
-        AIConversation(user_id=user_id, model_id=model_id, title=title.strip() or "新对话"),
+        AIConversation(
+            user_id=user_id,
+            model_id=model_id,
+            project_id=project_id,
+            title=title.strip() or "新对话",
+        ),
     )
     db.commit()
     db.refresh(conversation)
@@ -379,6 +400,17 @@ def _tool_free_summary_instruction(reason: str) -> dict:
     }
 
 
+def _tool_registry_for_conversation(
+    app: FastAPI,
+    conversation: AIConversation | None,
+    current_user: User | None,
+) -> dict:
+    """Unscoped conversations cannot query project resources through tools."""
+    if conversation is None or conversation.project_id is None:
+        return {}
+    return build_tool_registry(app, current_user=current_user)
+
+
 def stream_message(
     *,
     app: FastAPI,
@@ -450,7 +482,7 @@ def stream_message(
         }
         yield "status", {"turn_id": turn_id, "status": "thinking"}
         # Build from live routes inside the failure boundary so setup failures retain a terminal reply.
-        registry = build_tool_registry(app, current_user=current_user)
+        registry = _tool_registry_for_conversation(app, conversation, current_user)
         tools = tool_definitions(registry, model.provider)
         system_messages = [{"role": "system", "content": model.system_prompt or SYSTEM_PROMPT}]
         if any(item.system_management for item in registry.values()):

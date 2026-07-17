@@ -26,7 +26,14 @@ def conversations(current_user: CurrentUserDep, db: Session = Depends(get_db)):
 
 @router.post("/conversations", status_code=status.HTTP_201_CREATED)
 def create_conversation(payload: ConversationCreate, current_user: CurrentUserDep, db: Session = Depends(get_db)):
-    return ai_chat_service.create_conversation(db, current_user.id, payload.title, payload.model_id)
+    return ai_chat_service.create_conversation(
+        db,
+        current_user.id,
+        payload.title,
+        payload.model_id,
+        project_id=payload.project_id,
+        current_user=current_user,
+    )
 
 
 @router.get("/conversations/{conversation_id}")

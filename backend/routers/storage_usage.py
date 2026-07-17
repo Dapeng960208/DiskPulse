@@ -7,13 +7,15 @@ from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
 from schemas import storageUsageSchema, commonSchema, quotaSchema, storageTrendSchema
 from crud import storageUsageCrud, usersCrud, groupCrud
-from dependencies import get_db, require_super_admin
+from dependencies import CurrentUserDep, get_db, require_super_admin
 from datetime import datetime, timedelta
 from utils.plot import plot_real_time_line
 from utils.common import convert_timestamp_to_datetime
 import logging
 from routers.common import handle_exceptions
 from services import quotaService
+from services import project_access_service
+from utils.auth_service import is_super_admin
 from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 from utils.storageTarget import resolve_group_storage_target
 from fastapi.responses import StreamingResponse
@@ -57,14 +59,16 @@ def read_storage_usages(page: int | None = 1, size: int | None = 20, nameLike: s
                          prop: str | None = None,
                          order: str | None = None, user_id: int | str = Query(None), group_id: int | None = None,
                          storage_cluster_id: int | None = None, project_id: int | None = None,
-                         group_tag_id: int | None = None, db: Session = Depends(get_db)):
+                         group_tag_id: int | None = None, current_user: CurrentUserDep = None,
+                         db: Session = Depends(get_db)):
     if user_id == "":
         user_id = None
     storage_usages, total = storageUsageCrud.get_storage_usages(db=db, page=page, size=size, nameLike=nameLike,
                                                                  prop=prop, order=order, user_id=user_id,
                                                                  group_id=group_id, storage_cluster_id=storage_cluster_id,
                                                                  project_id=project_id,
-                                                                 group_tag_id=group_tag_id)
+                                                                 group_tag_id=group_tag_id,
+                                                                 accessible_project_ids=project_access_service.accessible_project_ids(db, current_user))
     return commonSchema.ResponseModel[storageUsageSchema.StorageUsage](
         content=[storageUsageCrud.serialize_storage_usage(item) for item in storage_usages],
         total=total,
@@ -160,13 +164,23 @@ def read_storage_usage_realtime_data(storage_usage_id: int, start_time: datetime
 def adjust_storage_usage_quota(
     storage_usage_id: int,
     payload: quotaSchema.QuotaAdjustmentRequest,
-    _admin: None = Depends(require_super_admin),
+    current_user: CurrentUserDep,
     db: Session = Depends(get_db),
 ):
+    if not is_super_admin(current_user):
+        storage_usage = storageUsageCrud.get_storage_usage_by_id(db, storage_usage_id)
+        if storage_usage is None or storage_usage.group_id is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="StorageUsage not found")
+        quotaService.require_group_quota_adjustment_permission(
+            db=db,
+            group_id=storage_usage.group_id,
+            current_user=current_user,
+        )
     return quotaService.adjust_storage_usage_quota(
         db,
         storage_usage_id=storage_usage_id,
         request=payload,
+        current_user=current_user,
     )
 
 

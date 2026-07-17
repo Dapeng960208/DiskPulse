@@ -23,7 +23,8 @@ def get_storage_usages(db: Session, page: int | None = None, size: int | None = 
                        prop: str | None = None,
                        order: str | None = None, user_id: int | None = None, group_id: int | None = None,
                        storage_cluster_id: int | None = None, project_id: int | None = None,
-                       group_tag_id: int | None = None):
+                       group_tag_id: int | None = None,
+                       accessible_project_ids: set[int] | None = None):
     query = db.query(StorageUsage)
     conditions = []
     if nameLike and len(nameLike.strip()) > 0:
@@ -32,10 +33,17 @@ def get_storage_usages(db: Session, page: int | None = None, size: int | None = 
         conditions.append(StorageUsage.user_id == user_id)
     if group_id:
         conditions.append(StorageUsage.group_id == group_id)
-    if project_id is not None or group_tag_id is not None or storage_cluster_id is not None:
+    if (
+        project_id is not None
+        or group_tag_id is not None
+        or storage_cluster_id is not None
+        or accessible_project_ids is not None
+    ):
         query = query.join(Group, Group.id == StorageUsage.group_id)
     if project_id is not None:
         conditions.append(Group.project_id == project_id)
+    if accessible_project_ids is not None:
+        conditions.append(Group.project_id.in_(accessible_project_ids))
     if group_tag_id is not None:
         conditions.append(Group.group_tag_id == group_tag_id)
     if storage_cluster_id is not None:

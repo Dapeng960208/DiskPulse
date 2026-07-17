@@ -96,6 +96,7 @@ def get_projects(
     prop: str | None = None,
     order: str | None = None,
     status: int | None = None,
+    accessible_project_ids: set[int] | None = None,
 ):
     query = db.query(Project)
     if nameLike and len(nameLike.strip()) > 0:
@@ -104,6 +105,8 @@ def get_projects(
         query = query.filter(Project.id == project_id)
     if status is not None and status in [1, 2]:
         query = query.filter(Project.status == status)
+    if accessible_project_ids is not None:
+        query = query.filter(Project.id.in_(accessible_project_ids))
 
     total = query.count()
     sort_column = get_sort_column(Project, prop)
