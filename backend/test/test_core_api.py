@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import io
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import pytest
 
@@ -21,6 +21,7 @@ from routers import (
     volumes,
 )
 from utils.security import issue_token
+from middleware.correlation import CorrelationIdMiddleware
 
 
 NOW = "2026-06-30T10:00:00"
@@ -476,6 +477,31 @@ class TestCoreApi:
 
         assert response.status_code == 200
         schedule_collection.assert_called_once_with(response.json()["id"])
+
+    def test_active_storage_cluster_create_propagates_http_correlation_to_collection(self):
+        request_id = "2a48f1f1-78ea-49c1-b3bc-2712720e4c86"
+        trace_id = "1e8de2cf-9bdf-4242-a40c-794ce52694ec"
+        self.client.app.add_middleware(CorrelationIdMiddleware)
+
+        with patch("routers.storage_cluster._schedule_storage_collection") as schedule_collection:
+            response = self.client.post(
+                "/storage-pulse/api/storage-clusters/",
+                json={
+                    "name": "correlated-cluster",
+                    "storage_type": "netapp",
+                    "storage_host": "correlated.local",
+                    "storage_port": 443,
+                    "is_active": True,
+                },
+                headers={"X-Request-ID": request_id, "X-Trace-ID": trace_id},
+            )
+
+        assert response.status_code == 200
+        schedule_collection.assert_called_once_with(response.json()["id"], audit_context=ANY)
+        context = schedule_collection.call_args.kwargs["audit_context"]
+        assert context.request_id == request_id
+        assert context.trace_id == trace_id
+        assert context.actor_user_id == 1
 
     def test_project_user_and_storage_resource_lists(self):
         users_response = self.client.get(
