@@ -74,6 +74,25 @@ describe('AI API and SSE stream', () => {
     expect(fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer test-token');
   });
 
+  it.each([
+    [
+      'the missing accepted event',
+      ['event: delta\ndata: {"turn_id":"turn-missing-accepted","text":"部分回答"}\n\nevent: completed\ndata: {"turn_id":"turn-missing-accepted","message":{}}'],
+    ],
+    [
+      'the missing terminal event',
+      ['event: accepted\ndata: {"turn_id":"turn-missing-terminal","message":{"id":1,"role":"assistant"}}\n\nevent: delta\ndata: {"turn_id":"turn-missing-terminal","text":"部分回答"}'],
+    ],
+    [
+      'invalid data for a known event',
+      ['event: accepted\ndata: {"turn_id":"turn-invalid-data","message":{"id":2,"role":"assistant"}}\n\nevent: delta\ndata: not-json\n\nevent: completed\ndata: {"turn_id":"turn-invalid-data","message":{"id":2,"role":"assistant"}}'],
+    ],
+  ])('rejects an SSE stream with %s', async (_description, chunks) => {
+    global.fetch = vi.fn().mockResolvedValue(streamResponse(chunks));
+
+    await expect(streamConversationMessage(8, 'question', { onEvent: vi.fn() })).rejects.toThrow();
+  });
+
   it('surfaces JSON HTTP errors and missing stream support', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,

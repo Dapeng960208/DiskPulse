@@ -461,3 +461,260 @@ def test_tool_registry_provider_shapes_and_failure_responses():
     duplicate.include_router(router)
     with pytest.raises(RuntimeError, match="duplicate"):
         build_tool_registry(duplicate)
+
+
+def _openai_tool_call_response(arguments: str, *, tool_id="tool-repair", tool_name="get_capacity"):
+    return FakeResponse(
+        lines=[
+            "data: "
+            + json.dumps(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": tool_id,
+                                        "function": {"name": tool_name, "arguments": arguments},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            "data: [DONE]",
+        ]
+    )
+
+
+def _openai_text_response(text: str):
+    return FakeResponse(
+        lines=[
+            "data: " + json.dumps({"choices": [{"delta": {"content": text}}]}, ensure_ascii=False),
+            "data: [DONE]",
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    ("raw_arguments", "case"),
+    [
+        ("not-json-private-tool-arguments", "invalid_json"),
+        (json.dumps(["private-non-object-tool-arguments"]), "non_object"),
+    ],
+)
+def test_stream_repairs_malformed_tool_arguments_without_exposing_raw_payload(
+    db_session,
+    monkeypatch,
+    raw_arguments,
+    case,
+):
+    """A malformed provider tool payload is repaired in-band instead of failing the user turn."""
+    seed_user(db_session)
+    configured = seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, title=f"参数修复-{case}")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    app = FastAPI()
+
+    @app.get(
+        "/capacity/{item_id}",
+        openapi_extra={"ai_exposed": True, "ai_name": "get_capacity", "ai_description": "查询容量"},
+    )
+    def capacity(item_id: int):
+        return {"data": {"item_id": item_id, "used": 10}}
+
+    provider_requests = []
+    provider_responses = [
+        _openai_tool_call_response(raw_arguments),
+        _openai_tool_call_response('{"item_id": 4}', tool_id="tool-repaired"),
+        _openai_text_response("容量已查询"),
+    ]
+
+    def provider_stream(*_args, **kwargs):
+        provider_requests.append(kwargs["json"])
+        return provider_responses.pop(0)
+
+    monkeypatch.setattr(ai_client.httpx, "stream", provider_stream)
+    events = list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=1,
+            content="查询容量",
+        )
+    )
+
+    completed = next(data for event, data in events if event == "completed")
+    assert not [data for event, data in events if event == "error"]
+    assert completed["message"]["status"] == "succeeded"
+    assert completed["message"]["content"] == "容量已查询"
+    assert len(provider_requests) == 3
+    repair_messages = json.dumps(provider_requests[1]["messages"], ensure_ascii=False)
+    assert "get_capacity" in repair_messages
+    assert raw_arguments not in repair_messages
+
+    db_session.expire_all()
+    audit = db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation.id))
+    assert audit is not None
+    assert audit.status == "succeeded"
+    assert all(raw_arguments not in (payload or "") for payload in (audit.request_payload, audit.response_payload, audit.detail_payload))
+
+
+@pytest.mark.parametrize("summary_fails", [False, True], ids=["disabled_tool_summary", "local_fallback"])
+def test_tool_iteration_limit_completes_as_degraded_and_persists_recovery_metadata(
+    db_session,
+    monkeypatch,
+    summary_fails,
+):
+    seed_user(db_session)
+    configured = seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, title="轮次限制")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    app = FastAPI()
+
+    @app.get(
+        "/capacity",
+        openapi_extra={"ai_exposed": True, "ai_name": "get_capacity", "ai_description": "查询容量"},
+    )
+    def capacity():
+        return {"data": {"used": 10}}
+
+    original_get = base_config.get
+
+    def configured_get(key, default=None):
+        return 1 if key == "ai.max_tool_iterations" else original_get(key, default)
+
+    monkeypatch.setattr(ai_chat_service.base_config, "get", configured_get)
+    invocations = []
+
+    def provider_stream(_model, _messages, *, tools=None):
+        invocations.append(tools)
+        if len(invocations) == 1:
+            assert tools
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[AIClientToolCall(tool_id="tool-limit", name="get_capacity", arguments={})],
+                stop_reason="tool_calls",
+            )
+            return
+
+        assert tools == []
+        if summary_fails:
+            raise AIClientError("摘要服务暂不可用")
+        yield AICompletionStreamEvent(kind="delta", text="已基于已查询信息完成当前回答。")
+        yield AICompletionStreamEvent(
+            kind="completed",
+            text="已基于已查询信息完成当前回答。",
+            tool_calls=[],
+            stop_reason="final",
+        )
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    events = list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=1,
+            content="继续查容量",
+        )
+    )
+
+    completed = next(data for event, data in events if event == "completed")
+    assert not [data for event, data in events if event == "error"]
+    assert invocations[1] == []
+    assert completed["message"]["status"] == "degraded"
+    assert completed["message"]["recovery"] == {
+        "reason": "tool_iteration_limit",
+        "action": "continue",
+        "label": "继续查询",
+    }
+    if summary_fails:
+        assert completed["message"]["content"]
+        assert "AI 服务暂时不可用" not in completed["message"]["content"]
+    else:
+        assert completed["message"]["content"] == "已基于已查询信息完成当前回答。"
+
+    db_session.expire_all()
+    audit = db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation.id))
+    assert audit is not None
+    assert audit.status == "degraded"
+    response_payload = json.loads(audit.response_payload)
+    assert response_payload["status"] == "degraded"
+    assert response_payload["recovery"] == completed["message"]["recovery"]
+    history = ai_chat_service.get_conversation(db_session, conversation.id, 1)
+    assert history["messages"][-1]["status"] == "degraded"
+    assert history["messages"][-1]["recovery"] == completed["message"]["recovery"]
+
+
+def test_invalid_json_tool_argument_repairs_stop_after_two_attempts_and_degrade_safely(db_session, monkeypatch):
+    seed_user(db_session)
+    configured = seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, title="参数修复次数")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    app = FastAPI()
+
+    @app.get(
+        "/capacity/{item_id}",
+        openapi_extra={"ai_exposed": True, "ai_name": "get_capacity", "ai_description": "查询容量"},
+    )
+    def capacity(item_id: int):
+        return {"data": {"item_id": item_id}}
+
+    raw_arguments = "not-json-secret-tool-arguments"
+    provider_requests = []
+
+    def provider_stream(*_args, **kwargs):
+        provider_requests.append(kwargs["json"])
+        if len(provider_requests) <= 3:
+            return _openai_tool_call_response(raw_arguments)
+        assert kwargs["json"].get("tools") == []
+        return _openai_text_response("已基于已有查询信息给出有限结论。")
+
+    monkeypatch.setattr(ai_client.httpx, "stream", provider_stream)
+    events = list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=1,
+            content="查询容量",
+        )
+    )
+
+    completed = next(data for event, data in events if event == "completed")
+    assert not [data for event, data in events if event == "error"]
+    assert completed["message"]["status"] == "degraded"
+    assert completed["message"]["recovery"] == {
+        "reason": "invalid_tool_arguments",
+        "action": "retry",
+        "label": "重新查询",
+    }
+    enabled_tool_requests = [item for item in provider_requests if item.get("tools")]
+    assert len(enabled_tool_requests) == 3
+    assert all(raw_arguments not in json.dumps(item["messages"], ensure_ascii=False) for item in provider_requests[1:])
+    if len(provider_requests) > 3:
+        assert provider_requests[-1].get("tools") == []
+    assert "AI 服务暂时不可用" not in completed["message"]["content"]
+    assert raw_arguments not in json.dumps(completed, ensure_ascii=False)
+
+    db_session.expire_all()
+    audit = db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation.id))
+    assert audit is not None
+    assert audit.status == "degraded"
+    response_payload = json.loads(audit.response_payload)
+    assert response_payload["recovery"] == completed["message"]["recovery"]
+    assert all(raw_arguments not in (payload or "") for payload in (audit.request_payload, audit.response_payload, audit.detail_payload))

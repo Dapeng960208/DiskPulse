@@ -36,6 +36,8 @@ const { default: AiCenterPage } = await import('@/pages/admin/ai/AiCenterPage.vu
 describe('AI pages interactions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    aiApi.streamMessage.mockReset();
+    aiApi.streamMessage.mockResolvedValue();
     aiApi.listModels.mockResolvedValue([{ id: 1, name: 'Primary' }]);
     aiApi.listConversations.mockResolvedValue([]);
     aiApi.createConversation.mockResolvedValue({ id: 10, model_id: 1, title: '新对话' });
@@ -170,6 +172,110 @@ describe('AI pages interactions', () => {
     expect(streamedMessage.tool_calls[0]).toEqual(expect.objectContaining({ status: 'succeeded', expanded: true, elapsed_ms: 71 }));
   });
 
+  it('renders a recovery action for a completed degraded assistant reply', async () => {
+    const wrapper = shallowMount(AiChatPage);
+    await flushPromises();
+    wrapper.vm.activeConversationId = 10;
+    wrapper.vm.messages = [{
+      id: 36,
+      role: 'assistant',
+      content: '正在整理已查询的数据',
+      turn_id: 'turn-degraded',
+      status: 'streaming',
+      tool_calls: [{ call_id: 'call-projects', tool_name: 'list_projects', status: 'succeeded', result: { total: 4 } }],
+    }];
+
+    wrapper.vm.applyEvent(10, {
+      event: 'completed',
+      data: {
+        turn_id: 'turn-degraded',
+        message: {
+          id: 36,
+          role: 'assistant',
+          content: '已根据当前查询结果回答。若需继续查询，请授权继续。',
+          turn_id: 'turn-degraded',
+          status: 'degraded',
+          recovery: {
+            reason: 'tool_iteration_limit',
+            action: 'continue',
+            label: '继续查询',
+          },
+          tool_calls: [{ call_id: 'call-projects', tool_name: 'list_projects', status: 'succeeded', result: { total: 4 } }],
+        },
+        conversation: { id: 10, title: '项目', model_id: 1 },
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.vm.messages[0]).toEqual(expect.objectContaining({
+      status: 'degraded',
+      recovery: expect.objectContaining({ action: 'continue', label: '继续查询' }),
+    }));
+    expect(wrapper.find('.tool-trace').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="继续查询"]').exists()).toBe(true);
+  });
+
+  it('sends a visible authorization message when the recovery action is selected', async () => {
+    aiApi.streamMessage.mockImplementationOnce(async (_conversationId, prompt, { onEvent }) => {
+      onEvent({
+        event: 'user_message',
+        data: {
+          message: { id: 37, role: 'user', content: prompt },
+          conversation: { id: 10, title: '项目', model_id: 1 },
+        },
+      });
+      onEvent({
+        event: 'accepted',
+        data: {
+          turn_id: 'turn-authorized-recovery',
+          message: { id: 38, role: 'assistant', content: '', turn_id: 'turn-authorized-recovery', status: 'streaming', tool_calls: [] },
+        },
+      });
+      onEvent({
+        event: 'completed',
+        data: {
+          turn_id: 'turn-authorized-recovery',
+          message: { id: 38, role: 'assistant', content: '已继续查询。', turn_id: 'turn-authorized-recovery', status: 'succeeded', tool_calls: [] },
+          conversation: { id: 10, title: '项目', model_id: 1 },
+        },
+      });
+    });
+    const wrapper = shallowMount(AiChatPage);
+    await flushPromises();
+    wrapper.vm.conversations = [{ id: 10, model_id: 1, title: '项目' }];
+    wrapper.vm.activeConversationId = 10;
+    wrapper.vm.messages = [{
+      id: 36,
+      role: 'assistant',
+      content: '本轮查询已达到上限。',
+      turn_id: 'turn-degraded',
+      status: 'degraded',
+      recovery: {
+        reason: 'tool_iteration_limit',
+        action: 'continue',
+        label: '继续查询',
+      },
+      tool_calls: [],
+    }];
+    await flushPromises();
+
+    await wrapper.find('[aria-label="继续查询"]').trigger('click');
+    await flushPromises();
+
+    expect(aiApi.streamMessage).toHaveBeenCalledWith(
+      10,
+      expect.stringContaining('继续查询'),
+      expect.objectContaining({ onEvent: expect.any(Function) }),
+    );
+    const authorizationPrompt = aiApi.streamMessage.mock.calls[0][1];
+    expect(wrapper.findAll('.message.user').some((message) => message.text().includes(authorizationPrompt))).toBe(true);
+    expect(wrapper.vm.messages.at(-1)).toEqual(expect.objectContaining({
+      role: 'assistant',
+      status: 'succeeded',
+      content: '已继续查询。',
+    }));
+  });
+
   it('rehydrates persisted tool traces beneath their historical assistant reply', async () => {
     aiApi.listConversations.mockResolvedValue([{ id: 10, model_id: 1, title: '历史对话' }]);
     aiApi.getConversation.mockResolvedValue({
@@ -280,6 +386,35 @@ describe('AI pages interactions', () => {
     expect(wrapper.vm.messages[0]).toBe(streamedMessage);
     expect(streamedMessage).toEqual(expect.objectContaining({ content: '已返回部分结果', status: 'failed' }));
     expect(streamedMessage.tool_calls[0].result).toEqual({ error: '访问失败' });
+  });
+
+  it('turns an accepted but truncated stream into a retryable assistant failure', async () => {
+    aiApi.listConversations.mockResolvedValue([{ id: 10, model_id: 1, title: '旧会话' }]);
+    aiApi.streamMessage.mockImplementationOnce(async (_id, _content, { onEvent }) => {
+      onEvent({
+        event: 'accepted',
+        data: {
+          turn_id: 'turn-truncated',
+          message: { id: 63, role: 'assistant', content: '', turn_id: 'turn-truncated', status: 'streaming', tool_calls: [] },
+        },
+      });
+      onEvent({ event: 'delta', data: { turn_id: 'turn-truncated', text: '已获得部分结果' } });
+      throw new Error('AI 流式响应未正常结束');
+    });
+    const wrapper = shallowMount(AiChatPage);
+    await flushPromises();
+    wrapper.vm.content = '查询未完成的结果';
+
+    await wrapper.vm.send();
+
+    const assistant = wrapper.vm.messages.find((item) => item.turn_id === 'turn-truncated');
+    expect(wrapper.vm.streaming).toBe(false);
+    expect(assistant).toEqual(expect.objectContaining({
+      status: 'failed',
+      content: '已获得部分结果',
+      error: 'AI 流式响应未正常结束',
+    }));
+    expect(wrapper.vm.failedContent).toBe('查询未完成的结果');
   });
 
   it('locally marks an aborted accepted turn as cancelled without clearing partial content or tools', async () => {
