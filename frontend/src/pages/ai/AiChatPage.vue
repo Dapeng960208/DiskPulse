@@ -22,9 +22,11 @@ const content = ref('');
 const failedContent = ref('');
 const streaming = ref(false);
 const streamStatus = ref('');
-const toolStatus = ref([]);
+const activeTurnId = ref(null);
+const autoFollowMessages = ref(true);
 const messageScroll = ref();
 let abortController = null;
+let activePrompt = '';
 
 const activeConversation = computed(() => conversations.value.find((item) => item.id === activeConversationId.value));
 
@@ -50,7 +52,7 @@ async function createConversation() {
   conversations.value.unshift(conversation);
   activeConversationId.value = conversation.id;
   messages.value = [];
-  toolStatus.value = [];
+  autoFollowMessages.value = true;
   return conversation;
 }
 
@@ -60,8 +62,8 @@ async function openConversation(id) {
   activeConversationId.value = id;
   selectedModelId.value = conversation.model_id;
   messages.value = conversation.messages || [];
-  toolStatus.value = [];
-  await scrollToBottom();
+  autoFollowMessages.value = true;
+  await scrollToBottom(true);
 }
 
 async function removeConversation(id) {
@@ -73,41 +75,177 @@ async function removeConversation(id) {
   }
 }
 
-async function scrollToBottom() {
+function isNearMessageListBottom() {
+  const wrap = messageScroll.value?.wrapRef;
+  if (!wrap) return true;
+  return wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight <= 48;
+}
+
+function handleMessageScroll() {
+  autoFollowMessages.value = isNearMessageListBottom();
+}
+
+async function scrollToBottom(force = false) {
   await nextTick();
-  messageScroll.value?.setScrollTop?.(messageScroll.value.wrapRef?.scrollHeight || 0);
+  if (!force && !autoFollowMessages.value) return;
+  const wrap = messageScroll.value?.wrapRef;
+  messageScroll.value?.setScrollTop?.(wrap?.scrollHeight || 0);
+}
+
+function updateConversation(requestConversationId, conversation) {
+  const index = conversations.value.findIndex((item) => item.id === requestConversationId);
+  if (index >= 0 && conversation) conversations.value[index] = conversation;
+}
+
+function findAssistantMessage(turnId) {
+  if (!turnId) return null;
+  return messages.value.find((item) => item.role === 'assistant' && item.turn_id === turnId) || null;
+}
+
+function ensureToolCalls(message) {
+  if (!Array.isArray(message.tool_calls)) message.tool_calls = [];
+  return message.tool_calls;
+}
+
+function mergeToolCall(target, source, fallbackStatus) {
+  if (!source?.call_id) return null;
+  const calls = ensureToolCalls(target);
+  const current = calls.find((item) => item.call_id === source.call_id);
+  const next = { ...source };
+  if (!next.status && fallbackStatus) next.status = fallbackStatus;
+  if (current) {
+    const expanded = current.expanded;
+    const hasExpanded = Object.prototype.hasOwnProperty.call(current, 'expanded');
+    Object.assign(current, next);
+    if (hasExpanded) current.expanded = expanded;
+    return current;
+  }
+  const created = { ...next, expanded: false };
+  calls.push(created);
+  return created;
+}
+
+function reconcileAssistantMessage(target, persisted) {
+  if (!persisted || typeof persisted !== 'object') return target;
+  const currentCalls = ensureToolCalls(target);
+  const existingCalls = new Map(currentCalls.map((item) => [item.call_id, item]));
+  const nextCalls = (Array.isArray(persisted.tool_calls) ? persisted.tool_calls : []).map((call) => {
+    const current = existingCalls.get(call.call_id);
+    if (!current) return { ...call, expanded: false };
+    const expanded = current.expanded;
+    const hasExpanded = Object.prototype.hasOwnProperty.call(current, 'expanded');
+    Object.assign(current, call);
+    if (hasExpanded) current.expanded = expanded;
+    return current;
+  });
+  currentCalls.splice(0, currentCalls.length, ...nextCalls);
+  const { tool_calls: _toolCalls, ...messageFields } = persisted;
+  Object.assign(target, messageFields);
+  target.tool_calls = currentCalls;
+  return target;
+}
+
+function materializeAcceptedMessage(data) {
+  const turnId = data?.turn_id;
+  const persisted = data?.message;
+  if (!turnId || !persisted || typeof persisted !== 'object') return null;
+  let assistant = findAssistantMessage(turnId)
+    || messages.value.find((item) => item.role === 'assistant' && item.id === persisted.id);
+  if (assistant) {
+    assistant.turn_id ||= turnId;
+    reconcileAssistantMessage(assistant, { ...persisted, turn_id: turnId });
+  } else {
+    persisted.turn_id ||= turnId;
+    persisted.status ||= 'streaming';
+    ensureToolCalls(persisted);
+    messages.value.push(persisted);
+    assistant = findAssistantMessage(turnId);
+  }
+  activeTurnId.value = turnId;
+  return assistant;
+}
+
+function reconcileTerminalEvent(requestConversationId, data, fallbackStatus) {
+  const turnId = data?.turn_id;
+  const assistant = findAssistantMessage(turnId);
+  if (!assistant) return null;
+  const persisted = data?.message;
+  if (persisted && typeof persisted === 'object') {
+    reconcileAssistantMessage(assistant, { ...persisted, turn_id: turnId, status: persisted.status || fallbackStatus });
+  } else {
+    assistant.status = fallbackStatus;
+  }
+  if (fallbackStatus === 'failed') {
+    assistant.error = data?.error || data?.error_message || assistant.error || '生成失败，可重试';
+  }
+  updateConversation(requestConversationId, data?.conversation);
+  if (activeTurnId.value === turnId) activeTurnId.value = null;
+  return assistant;
+}
+
+function toolStatusText(status) {
+  return {
+    running: '调用中',
+    succeeded: '完成',
+    failed: '失败',
+    cancelled: '已停止',
+  }[status] || '等待中';
+}
+
+function formatToolPayload(value) {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function hasToolPayload(value) {
+  return value !== undefined && value !== null;
+}
+
+function toggleToolDetails(tool) {
+  tool.expanded = !tool.expanded;
+}
+
+function isWaitingForToolResult(message) {
+  return message.status === 'streaming'
+    && !String(message.content || '').trim()
+    && Array.isArray(message.tool_calls)
+    && message.tool_calls.length > 0;
 }
 
 function applyEvent(requestConversationId, { event, data }) {
   // Ignore late chunks from a request whose conversation is no longer displayed.
   if (activeConversationId.value !== requestConversationId) return;
   if (event === 'user_message') {
-    messages.value.push(data.message);
-    const index = conversations.value.findIndex((item) => item.id === requestConversationId);
-    if (index >= 0) conversations.value[index] = data.conversation;
+    if (data.message && !messages.value.some((item) => item.id === data.message.id)) messages.value.push(data.message);
+    updateConversation(requestConversationId, data.conversation);
+  } else if (event === 'accepted') {
+    if (!materializeAcceptedMessage(data)) return;
   } else if (event === 'delta') {
-    let assistant = messages.value.at(-1);
-    // Stream into one transient message; completed replaces it with the persisted server record.
-    if (!assistant || assistant.role !== 'assistant' || !assistant.streaming) {
-      assistant = { id: `stream-${Date.now()}`, role: 'assistant', content: '', streaming: true };
-      messages.value.push(assistant);
-    }
-    assistant.content += data.text;
+    const assistant = findAssistantMessage(data?.turn_id);
+    if (!assistant) return;
+    assistant.content = `${assistant.content || ''}${data.text || ''}`;
+    assistant.status = 'streaming';
   } else if (event === 'status') {
+    if (!findAssistantMessage(data?.turn_id)) return;
     streamStatus.value = data.status;
   } else if (event === 'tool_call_started') {
-    toolStatus.value.push({ ...data, status: 'running' });
+    const assistant = findAssistantMessage(data?.turn_id);
+    if (!assistant || !mergeToolCall(assistant, data, 'running')) return;
   } else if (event === 'tool_call_finished') {
-    const item = [...toolStatus.value].reverse().find((entry) => entry.tool_name === data.tool_name && entry.status === 'running');
-    if (item) item.status = data.status;
+    const assistant = findAssistantMessage(data?.turn_id);
+    if (!assistant || !mergeToolCall(assistant, data)) return;
   } else if (event === 'completed') {
-    const index = messages.value.findIndex((item) => item.streaming);
-    if (index >= 0) messages.value[index] = data.message;
-    else messages.value.push(data.message);
-    const conversationIndex = conversations.value.findIndex((item) => item.id === requestConversationId);
-    if (conversationIndex >= 0) conversations.value[conversationIndex] = data.conversation;
+    if (!reconcileTerminalEvent(requestConversationId, data, 'succeeded')) return;
+  } else if (event === 'cancelled') {
+    if (!reconcileTerminalEvent(requestConversationId, data, 'cancelled')) return;
   } else if (event === 'error') {
-    throw new Error(data.message || '生成失败');
+    const assistant = reconcileTerminalEvent(requestConversationId, data, 'failed');
+    if (!assistant) return;
+    failedContent.value = activePrompt;
   }
   scrollToBottom();
 }
@@ -125,18 +263,26 @@ async function send() {
     failedContent.value = '';
     streaming.value = true;
     streamStatus.value = 'connecting';
-    toolStatus.value = [];
+    activeTurnId.value = null;
+    activePrompt = prompt;
     abortController = new AbortController();
     await aiApi.streamMessage(requestConversationId, prompt, {
       signal: abortController.signal,
       onEvent: (event) => applyEvent(requestConversationId, event),
     });
   } catch (error) {
-    if (error.name !== 'AbortError') {
+    const assistant = findAssistantMessage(activeTurnId.value);
+    if (error.name === 'AbortError') {
+      if (assistant && assistant.status === 'streaming') assistant.status = 'cancelled';
+    } else {
       failedContent.value = prompt;
-      ElMessage.error(error.message || '生成失败，可重试');
-      const pending = messages.value.find((item) => item.streaming);
-      if (pending) pending.failed = true;
+      if (assistant) {
+        assistant.status = 'failed';
+        assistant.error = error.message || '生成失败，可重试';
+        scrollToBottom();
+      } else {
+        ElMessage.error(error.message || '生成失败，可重试');
+      }
     }
   } finally {
     streaming.value = false;
@@ -146,6 +292,8 @@ async function send() {
 }
 
 function stop() {
+  const assistant = findAssistantMessage(activeTurnId.value);
+  if (assistant && assistant.status === 'streaming') assistant.status = 'cancelled';
   abortController?.abort();
 }
 
@@ -212,7 +360,8 @@ onMounted(loadInitial);
 
       <ElScrollbar
         ref="messageScroll"
-        class="message-list">
+        class="message-list"
+        @scroll="handleMessageScroll">
         <ElEmpty
           v-if="messages.length === 0"
           description="输入问题开始对话" />
@@ -223,26 +372,62 @@ onMounted(loadInitial);
           :class="message.role">
           <div class="message-role">{{ message.role === 'user' ? '你' : 'AI' }}</div>
           <div
-            v-if="message.role === 'assistant'"
+            v-if="message.role === 'assistant' && isWaitingForToolResult(message)"
+            class="message-body tool-waiting">正在查询数据</div>
+          <div
+            v-else-if="message.role === 'assistant'"
             class="message-body markdown-body"
-            v-html="renderAiMarkdown(message.content)"></div>
+            v-html="renderAiMarkdown(message.content || '')"></div>
           <div
             v-else
             class="message-body">{{ message.content }}</div>
           <span
-            v-if="message.failed"
-            class="failed-label">生成中断</span>
+            v-if="message.role === 'assistant' && message.status === 'cancelled'"
+            class="failed-label">已停止生成</span>
+          <span
+            v-else-if="message.role === 'assistant' && message.status === 'failed'"
+            class="failed-label">{{ message.error || '生成失败，可重试' }}</span>
+          <section
+            v-if="message.role === 'assistant' && message.tool_calls?.length"
+            class="tool-trace"
+            aria-label="工具调用">
+            <span class="tool-trace__title">工具调用</span>
+            <div
+              v-for="tool in message.tool_calls"
+              :key="tool.call_id"
+              class="tool-trace__item">
+              <button
+                class="tool-trace__summary"
+                type="button"
+                :aria-expanded="Boolean(tool.expanded)"
+                @click="toggleToolDetails(tool)">
+                <span class="tool-trace__name">{{ tool.tool_name }}</span>
+                <span
+                  class="tool-trace__status"
+                  :class="`is-${tool.status}`">{{ toolStatusText(tool.status) }}</span>
+                <span
+                  v-if="tool.elapsed_ms !== undefined"
+                  class="tool-trace__elapsed">{{ tool.elapsed_ms }} ms</span>
+                <span
+                  v-if="tool.truncated"
+                  class="tool-trace__truncated">结果已截断</span>
+                <i :class="tool.expanded ? 'i-ri-arrow-up-s-line' : 'i-ri-arrow-down-s-line'"></i>
+              </button>
+              <div
+                v-if="tool.expanded"
+                class="tool-trace__details">
+                <div v-if="hasToolPayload(tool.arguments)">
+                  <strong>参数</strong>
+                  <pre>{{ formatToolPayload(tool.arguments) }}</pre>
+                </div>
+                <div v-if="hasToolPayload(tool.result)">
+                  <strong>返回内容</strong>
+                  <pre>{{ formatToolPayload(tool.result) }}</pre>
+                </div>
+              </div>
+            </div>
+          </section>
         </article>
-        <div
-          v-if="toolStatus.length"
-          class="tool-log">
-          <div
-            v-for="(tool, index) in toolStatus"
-            :key="`${tool.tool_name}-${index}`">
-            <i :class="tool.status === 'running' ? 'i-ri-loader-4-line animate-spin' : 'i-ri-check-line'"></i>
-            {{ tool.tool_name }} · {{ tool.status === 'running' ? '查询中' : tool.status === 'succeeded' ? '完成' : '失败' }}
-          </div>
-        </div>
       </ElScrollbar>
 
       <div class="composer">
@@ -295,8 +480,24 @@ onMounted(loadInitial);
 .message-role { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--el-color-primary-light-9); color: var(--primary-color); font-size: 12px; font-weight: 600; }
 .message.user .message-body { background: var(--bg-secondary); border-radius: 10px; padding: 10px 13px; white-space: pre-wrap; }
 .message-body { min-width: 0; line-height: 1.75; color: var(--text-primary); }
+.tool-waiting { color: var(--text-secondary); font-size: 13px; }
 .failed-label { grid-column: 2; color: var(--el-color-danger); font-size: 12px; }
-.tool-log { max-width: 872px; margin: -6px auto 18px; padding: 10px 14px; border-left: 3px solid var(--el-color-primary-light-5); color: var(--text-secondary); font-size: 12px; line-height: 1.8; }
+.tool-trace { grid-column: 2; display: grid; gap: 6px; margin-top: -8px; color: var(--text-secondary); font-size: 12px; }
+.tool-trace__title { color: var(--text-tertiary); font-weight: 600; }
+.tool-trace__item { border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-secondary); overflow: hidden; }
+.tool-trace__summary { width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 10px; color: inherit; background: transparent; cursor: pointer; text-align: left; }
+.tool-trace__summary:focus-visible { outline: 2px solid var(--primary-color); outline-offset: -2px; }
+.tool-trace__name { color: var(--text-primary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 600; }
+.tool-trace__status { color: var(--text-secondary); }
+.tool-trace__status.is-succeeded { color: var(--el-color-success); }
+.tool-trace__status.is-failed { color: var(--el-color-danger); }
+.tool-trace__status.is-running { color: var(--primary-color); }
+.tool-trace__elapsed, .tool-trace__truncated { color: var(--text-tertiary); }
+.tool-trace__summary i { margin-left: auto; }
+.tool-trace__details { display: grid; gap: 8px; padding: 0 10px 10px; border-top: 1px solid var(--border-color); }
+.tool-trace__details > div { display: grid; gap: 4px; }
+.tool-trace__details strong { margin-top: 8px; color: var(--text-secondary); font-size: 12px; }
+.tool-trace__details pre { max-height: 220px; margin: 0; overflow: auto; padding: 8px; border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
 .composer { padding: 14px 20px 18px; border-top: 1px solid var(--border-color); }
 .composer-actions { margin-top: 10px; }
 .composer-actions span { color: var(--text-tertiary); font-size: 12px; margin-right: auto; }

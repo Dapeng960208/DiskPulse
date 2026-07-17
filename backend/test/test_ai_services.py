@@ -254,11 +254,159 @@ def test_tool_loop_sync_endpoints_and_audit_filters(api_client_factory, db_sessi
     audits = client.get("/storage-pulse/api/admin/ai-audits", params={"status": "succeeded", "model_id": configured.id}).json()
     assert audits["total"] == 1
     audit_id = audits["content"][0]["id"]
-    assert client.get(f"/storage-pulse/api/admin/ai-audits/{audit_id}").json()["detail"] == [
-        {"tool_name": "get_capacity", "ok": True}
-    ]
+    trace = client.get(f"/storage-pulse/api/admin/ai-audits/{audit_id}").json()["detail"]
+    assert len(trace) == 1
+    assert trace[0]["call_id"]
+    assert trace[0]["sequence"] == 1
+    assert trace[0]["iteration"] == 1
+    assert trace[0]["tool_name"] == "get_capacity"
+    assert trace[0]["arguments"] == {"item_id": 4}
+    assert trace[0]["status"] == "succeeded"
+    assert trace[0]["elapsed_ms"] >= 0
+    assert trace[0]["result"]["ok"] is True
+    assert trace[0]["truncated"] is False
     assert client.get(f"/storage-pulse/api/admin/ai-audits/conversations/{conversation['id']}").json()["content"]
     assert client.delete(f"/storage-pulse/api/ai/conversations/{conversation['id']}").status_code == 204
+
+
+def test_stream_persists_live_tool_trace_with_distinct_call_ids_and_truncated_results(db_session, monkeypatch):
+    seed_user(db_session)
+    configured = seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, title="工具轨迹")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    app = FastAPI()
+
+    @app.get(
+        "/capacity/{item_id}",
+        openapi_extra={"ai_exposed": True, "ai_name": "get_capacity", "ai_description": "查询容量"},
+    )
+    def capacity(item_id: int):
+        return {"data": {"item_id": item_id, "payload": "x" * (33 * 1024) if item_id == 1 else "ok"}}
+
+    rounds = {"count": 0}
+
+    def provider_stream(*_args, **_kwargs):
+        rounds["count"] += 1
+        if rounds["count"] == 1:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[
+                    AIClientToolCall(tool_id="provider-call-1", name="get_capacity", arguments={"item_id": 1}),
+                    AIClientToolCall(tool_id="provider-call-2", name="get_capacity", arguments={"item_id": 2}),
+                ],
+                stop_reason="tool_calls",
+            )
+        else:
+            yield AICompletionStreamEvent(kind="delta", text="查询完成")
+            yield AICompletionStreamEvent(kind="completed", text="查询完成", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    stream = ai_chat_service.stream_message(
+        app=app,
+        db=db_session,
+        conversation_id=conversation.id,
+        user_id=1,
+        content="重复查询容量",
+    )
+
+    events = []
+    live_trace = None
+    while True:
+        try:
+            event, data = next(stream)
+        except StopIteration:
+            break
+        events.append((event, data))
+        if event == "tool_call_started" and live_trace is None:
+            db_session.expire_all()
+            audit = db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation.id))
+            live_trace = json.loads(audit.detail_payload)
+
+    accepted = next(data for event, data in events if event == "accepted")
+    started = [data for event, data in events if event == "tool_call_started"]
+    finished = [data for event, data in events if event == "tool_call_finished"]
+    assert [item["tool_name"] for item in started] == ["get_capacity", "get_capacity"]
+    assert len({item["call_id"] for item in started}) == 2
+    assert [item["call_id"] for item in finished] == [item["call_id"] for item in started]
+    assert all(item["arguments"] in ({"item_id": 1}, {"item_id": 2}) for item in started)
+    assert all(data["turn_id"] == accepted["turn_id"] for _event, data in events)
+    assert live_trace == [
+        {
+            "call_id": started[0]["call_id"],
+            "sequence": 1,
+            "iteration": 1,
+            "tool_name": "get_capacity",
+            "arguments": {"item_id": 1},
+            "status": "running",
+            "elapsed_ms": None,
+            "truncated": False,
+        }
+    ]
+
+    db_session.expire_all()
+    audit = db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation.id))
+    trace = json.loads(audit.detail_payload)
+    assert [item["call_id"] for item in trace] == [item["call_id"] for item in started]
+    assert trace[0]["status"] == "succeeded"
+    assert trace[0]["truncated"] is True
+    assert isinstance(trace[0]["result"], dict)
+    assert len(json.dumps(trace[0]["result"], ensure_ascii=False).encode("utf-8")) <= 32 * 1024
+    assert trace[1]["result"]["ok"] is True
+
+    history = ai_chat_service.get_conversation(db_session, conversation.id, 1)
+    assistant = history["messages"][-1]
+    assert assistant["turn_id"] == accepted["turn_id"]
+    assert assistant["status"] == "succeeded"
+    assert [item["call_id"] for item in assistant["tool_calls"]] == [item["call_id"] for item in started]
+
+
+def test_tool_trace_redacts_sensitive_result_keys_before_persisting():
+    display, truncated = ai_chat_service._display_tool_result(
+        {"accessToken": "should-not-persist", "nested": {"apiKey": "also-hidden"}}
+    )
+
+    assert truncated is False
+    assert display == {"accessToken": "[REDACTED]", "nested": {"apiKey": "[REDACTED]"}}
+
+
+def test_stream_history_omits_the_precreated_empty_assistant_placeholder(db_session, monkeypatch):
+    seed_user(db_session)
+    configured = seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, title="历史消息")
+    db_session.add_all(
+        [
+            conversation,
+            AIMessage(conversation=conversation, role="user", content="之前的问题"),
+            AIMessage(conversation=conversation, role="assistant", content="之前的回答"),
+        ]
+    )
+    db_session.commit()
+    db_session.refresh(conversation)
+    captured_messages = []
+
+    def provider_stream(_model, messages, **_kwargs):
+        captured_messages.extend(messages)
+        yield AICompletionStreamEvent(kind="delta", text="当前回答")
+        yield AICompletionStreamEvent(kind="completed", text="当前回答", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    stream = ai_chat_service.stream_message(
+        app=FastAPI(),
+        db=db_session,
+        conversation_id=conversation.id,
+        user_id=1,
+        content="当前问题",
+    )
+    list(stream)
+
+    assert captured_messages[-3:] == [
+        {"role": "user", "content": "之前的问题"},
+        {"role": "assistant", "content": "之前的回答"},
+        {"role": "user", "content": "当前问题"},
+    ]
 
 
 def test_claude_tool_message_format_and_missing_resources(db_session):

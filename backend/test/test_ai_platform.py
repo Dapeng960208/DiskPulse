@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import importlib.util
+import json
 import io
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from models import AIConfig, AIConversation, AIAuditLog, AIMessage, User
 from routers import ai, ai_admin
 from services import ai_chat_service
 from services import ai_config_service
-from services.ai_client import AIClientError, AICompletionResult
+from services.ai_client import AIClientError, AIClientToolCall, AICompletionResult
 from services.ai_client import AICompletionStreamEvent
 from services.ai_rate_limit import enforce_ai_rate_limit
 from services.ai_security import decrypt_secret, encrypt_secret, mask_secret
@@ -65,6 +66,14 @@ def _seed_model(db, *, actor_id=1):
     db.commit()
     db.refresh(model)
     return model
+
+
+def _sse_events(body: str) -> list[tuple[str, dict]]:
+    events = []
+    for block in body.strip().split("\n\n"):
+        lines = dict(line.split(": ", 1) for line in block.splitlines() if ": " in line)
+        events.append((lines["event"], json.loads(lines["data"])))
+    return events
 
 
 def test_ai_models_match_global_conversation_contract():
@@ -176,8 +185,18 @@ def test_chat_stream_persists_messages_and_isolates_conversations(
     assert "event: accepted" in streamed.text
     assert "event: delta" in streamed.text
     assert "event: completed" in streamed.text
-    assert streamed.text.index("event: accepted") < streamed.text.index("event: user_message")
-    assert streamed.text.index("event: user_message") < streamed.text.index("event: delta")
+    events = _sse_events(streamed.text)
+    event_names = [name for name, _data in events]
+    assert event_names.index("user_message") < event_names.index("accepted") < event_names.index("delta")
+    accepted = next(data for name, data in events if name == "accepted")
+    completed = next(data for name, data in events if name == "completed")
+    assert accepted["turn_id"] == accepted["audit_id"]
+    assert accepted["message_id"] == accepted["message"]["id"]
+    assert accepted["message"]["content"] == ""
+    assert accepted["message"]["turn_id"] == accepted["turn_id"]
+    assert completed["turn_id"] == accepted["turn_id"]
+    assert completed["message"]["id"] == accepted["message_id"]
+    assert all(data["turn_id"] == accepted["turn_id"] for _name, data in events)
 
     roles = list(
         db_session.scalars(
@@ -185,7 +204,16 @@ def test_chat_stream_persists_messages_and_isolates_conversations(
         )
     )
     assert roles == ["user", "assistant"]
-    assert db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation_id)).status == "succeeded"
+    audit = db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation_id))
+    assert audit.status == "succeeded"
+    assert json.loads(audit.response_payload)["message_id"] == accepted["message_id"]
+
+    history = client.get(f"/storage-pulse/api/ai/conversations/{conversation_id}").json()
+    assistant = history["messages"][-1]
+    assert assistant["id"] == accepted["message_id"]
+    assert assistant["turn_id"] == accepted["turn_id"]
+    assert assistant["status"] == "succeeded"
+    assert assistant["tool_calls"] == []
 
     other_client = api_client_factory([ai.router], headers={"Authorization": f"Bearer {issue_token(2)}"})
     assert other_client.get(f"/storage-pulse/api/ai/conversations/{conversation_id}").status_code == 404
@@ -232,7 +260,7 @@ def test_super_admin_model_crud_masks_key_and_runs_real_connection_test(
     assert client.delete(f"/storage-pulse/api/admin/ai-models/{body['id']}").status_code == 204
 
 
-def test_provider_failure_is_audited_without_assistant_message(
+def test_provider_failure_persists_the_precreated_assistant_message(
     api_client_factory,
     db_session,
     monkeypatch,
@@ -259,9 +287,21 @@ def test_provider_failure_is_audited_without_assistant_message(
     )
     assert "event: error" in response.text
     assert "HTTP 502" in response.text
+    events = _sse_events(response.text)
+    accepted = next(data for name, data in events if name == "accepted")
+    error = next(data for name, data in events if name == "error")
+    assert error["turn_id"] == accepted["turn_id"]
+    assert error["message"]["id"] == accepted["message_id"]
+    assert error["message"]["status"] == "failed"
+    assert error["message"]["content"]
     db_session.expire_all()
-    assert list(db_session.scalars(select(AIMessage).where(AIMessage.conversation_id == conversation_id)))[0].role == "user"
-    assert db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation_id)).status == "failed"
+    messages = list(db_session.scalars(select(AIMessage).where(AIMessage.conversation_id == conversation_id)))
+    assert [message.role for message in messages] == ["user", "assistant"]
+    assert messages[-1].id == accepted["message_id"]
+    assert messages[-1].content
+    audit = db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation_id))
+    assert audit.status == "failed"
+    assert json.loads(audit.response_payload)["message_id"] == accepted["message_id"]
 
 
 def test_closing_stream_marks_audit_cancelled(db_session):
@@ -280,10 +320,82 @@ def test_closing_stream_marks_audit_cancelled(db_session):
         user_id=1,
         content="停止这个请求",
     )
-    assert next(stream)[0] == "accepted"
+    assert next(stream)[0] == "user_message"
+    event, accepted = next(stream)
+    assert event == "accepted"
     stream.close()
     db_session.expire_all()
-    assert db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation.id)).status == "cancelled"
+    audit = db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation.id))
+    assert audit.status == "cancelled"
+    assert json.loads(audit.response_payload)["message_id"] == accepted["message_id"]
+    assistant = db_session.get(AIMessage, accepted["message_id"])
+    assert assistant is not None
+    assert assistant.role == "assistant"
+    history = ai_chat_service.get_conversation(db_session, conversation.id, 1)
+    assert history["messages"][-1]["status"] == "cancelled"
+    assert history["messages"][-1]["turn_id"] == accepted["turn_id"]
+
+
+def test_closing_stream_after_completed_keeps_the_persisted_success(db_session, monkeypatch):
+    base_config.set("ai.config_secret_key", "test-ai-config-secret-key")
+    _seed_user(db_session)
+    model = _seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=model.id, title="完成后断开")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    def completed_stream(*_args, **_kwargs):
+        yield AICompletionStreamEvent(kind="delta", text="已完成")
+        yield AICompletionStreamEvent(kind="completed", text="已完成", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", completed_stream)
+    stream = ai_chat_service.stream_message(
+        app=FastAPI(),
+        db=db_session,
+        conversation_id=conversation.id,
+        user_id=1,
+        content="完成后关闭",
+    )
+    while next(stream)[0] != "completed":
+        pass
+    stream.close()
+
+    db_session.expire_all()
+    audit = db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation.id))
+    assert audit.status == "succeeded"
+
+
+def test_stream_setup_failure_still_emits_the_precreated_turn(db_session, monkeypatch):
+    base_config.set("ai.config_secret_key", "test-ai-config-secret-key")
+    _seed_user(db_session)
+    model = _seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=model.id, title="初始化失败")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    def broken_registry(_app):
+        raise RuntimeError("工具注册失败")
+
+    monkeypatch.setattr(ai_chat_service, "build_tool_registry", broken_registry)
+    events = list(
+        ai_chat_service.stream_message(
+            app=FastAPI(),
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=1,
+            content="初始化失败后仍需返回回复标识",
+        )
+    )
+
+    assert [event for event, _data in events[:2]] == ["user_message", "accepted"]
+    accepted = events[1][1]
+    error = events[-1][1]
+    assert events[-1][0] == "error"
+    assert error["turn_id"] == accepted["turn_id"]
+    assert error["message"]["id"] == accepted["message_id"]
+    assert error["message"]["status"] == "failed"
 
 
 def test_rate_limit_returns_503_when_redis_is_unavailable():
