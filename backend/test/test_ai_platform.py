@@ -380,7 +380,7 @@ def test_quota_adjustment_tools_require_admin_at_registration_and_execution(monk
     monkeypatch.setattr(
         quotaService,
         "adjust_group_quota",
-        lambda _db, group_id, request, current_user=None: calls.append(("group", group_id, request)) or {
+        lambda _db, group_id, request, current_user=None, audit_context=None: calls.append(("group", group_id, request)) or {
             "id": group_id,
             "resource_type": "group",
             "storage_type": "netapp",
@@ -390,7 +390,7 @@ def test_quota_adjustment_tools_require_admin_at_registration_and_execution(monk
     monkeypatch.setattr(
         quotaService,
         "adjust_storage_usage_quota",
-        lambda _db, storage_usage_id, request, current_user=None: calls.append(("storage_usage", storage_usage_id, request)) or {
+        lambda _db, storage_usage_id, request, current_user=None, audit_context=None: calls.append(("storage_usage", storage_usage_id, request)) or {
             "id": storage_usage_id,
             "resource_type": "storage_usage",
             "storage_type": "netapp",

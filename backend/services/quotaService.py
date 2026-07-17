@@ -11,6 +11,7 @@ from urllib3.exceptions import InsecureRequestWarning
 from appConfig import base_config
 from models import Group, Qtree, StorageAlerts, StorageUsage, Volume
 from schemas.quotaSchema import QuotaAdjustmentRequest, QuotaAdjustmentResponse
+from services.audit_service import AuditContext, append_audit_event
 from services.storageAlertRuleService import resolve_recipient_usernames
 from utils.auth_service import is_super_admin
 from utils.isilonClient import IsilonClient
@@ -185,6 +186,7 @@ def _execute_adjustment(
     target,
     volume,
     request: QuotaAdjustmentRequest,
+    audit_context: AuditContext | None = None,
 ) -> QuotaAdjustmentResponse:
     cluster = resource.storage_cluster if isinstance(resource, Group) else resource.group.storage_cluster
     storage_type = (cluster.storage_type or "").lower()
@@ -208,6 +210,24 @@ def _execute_adjustment(
     client = None
     old_hard_limit = resource.limit
     old_soft_limit = resource.soft_limit
+    project_id = resource.project_id if isinstance(resource, Group) else resource.group.project_id
+    resource_id = resource.id
+    audit_resource_type = "group" if resource_type == "Group" else "storage_usage"
+    if audit_context is not None:
+        append_audit_event(
+            db,
+            context=audit_context,
+            phase="attempt",
+            action="quota.adjust",
+            resource_type=audit_resource_type,
+            resource_id=resource_id,
+            project_id=project_id,
+            outcome="success",
+            before_summary={"hard_limit": old_hard_limit, "soft_limit": old_soft_limit},
+            metadata={"storage_type": storage_type},
+        )
+        # Keep a durable pre-device record even if the target is unavailable.
+        db.commit()
     try:
         client = _build_client(cluster)
         if resource_type == "Group" and storage_type == "netapp" and isinstance(target, Volume):
@@ -235,9 +255,35 @@ def _execute_adjustment(
                 soft_grace=request.soft_grace_seconds,
             )
     except HTTPException:
+        if audit_context is not None:
+            append_audit_event(
+                db,
+                context=audit_context,
+                phase="result",
+                action="quota.adjust",
+                resource_type=audit_resource_type,
+                resource_id=resource_id,
+                project_id=project_id,
+                outcome="failure",
+                reason_code="quota_adjustment_rejected",
+            )
+            db.commit()
         raise
     except requests.HTTPError as error:
         native_response = device_error_response(error)
+        if audit_context is not None:
+            append_audit_event(
+                db,
+                context=audit_context,
+                phase="result",
+                action="quota.adjust",
+                resource_type=audit_resource_type,
+                resource_id=resource_id,
+                project_id=project_id,
+                outcome="failure",
+                reason_code="quota_device_rejected",
+            )
+            db.commit()
         if native_response is None:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -252,6 +298,19 @@ def _execute_adjustment(
         )
         return native_response
     except Exception as error:
+        if audit_context is not None:
+            append_audit_event(
+                db,
+                context=audit_context,
+                phase="result",
+                action="quota.adjust",
+                resource_type=audit_resource_type,
+                resource_id=resource_id,
+                project_id=project_id,
+                outcome="failure",
+                reason_code="quota_device_unavailable",
+            )
+            db.commit()
         logger.error(
             "Quota device update failed cluster_id=%s resource_type=%s resource_id=%s error_type=%s",
             cluster.id,
@@ -305,6 +364,20 @@ def _execute_adjustment(
         soft_limit=soft_limit,
         soft_grace_seconds=result.soft_grace_seconds,
     )
+    if audit_context is not None:
+        append_audit_event(
+            db,
+            context=audit_context,
+            phase="result",
+            action="quota.adjust",
+            resource_type=audit_resource_type,
+            resource_id=resource_id,
+            project_id=project_id,
+            outcome="success",
+            before_summary={"hard_limit": old_hard_limit, "soft_limit": old_soft_limit},
+            after_summary={"hard_limit": hard_limit, "soft_limit": soft_limit},
+            metadata={"storage_type": storage_type},
+        )
     try:
         db.commit()
     except Exception:
@@ -346,6 +419,7 @@ def adjust_group_quota(
     group_id: int,
     request: QuotaAdjustmentRequest,
     current_user=None,
+    audit_context: AuditContext | None = None,
 ) -> QuotaAdjustmentResponse:
     group = db.get(Group, group_id)
     if group is None:
@@ -372,6 +446,7 @@ def adjust_group_quota(
         target=target,
         volume=resolved["volume"],
         request=request,
+        audit_context=audit_context,
     )
 
 
@@ -381,6 +456,7 @@ def adjust_storage_usage_quota(
     storage_usage_id: int,
     request: QuotaAdjustmentRequest,
     current_user=None,
+    audit_context: AuditContext | None = None,
 ) -> QuotaAdjustmentResponse:
     storage_usage = db.get(StorageUsage, storage_usage_id)
     if storage_usage is None:
@@ -406,6 +482,7 @@ def adjust_storage_usage_quota(
         target=resolved["target"],
         volume=resolved["volume"],
         request=request,
+        audit_context=audit_context,
     )
 
 

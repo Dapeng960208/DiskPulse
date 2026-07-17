@@ -255,6 +255,7 @@ def test_quota_adjustment_writes_correlated_attempt_and_result_events(
     )
     monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
     monkeypatch.setattr(quotaService, "_send_adjustment_email", lambda *args, **kwargs: None)
+    monkeypatch.setattr(quotaService, "_enqueue_adjustment_feishu", lambda _event_id: None)
 
     adjust(db_session, context)
 
@@ -665,7 +666,7 @@ def quota_api(api_client_factory, session_factory, monkeypatch):
     monkeypatch.setattr(
         quotaService,
         "adjust_group_quota",
-        lambda _db, group_id, request, current_user=None: {
+        lambda _db, group_id, request, current_user=None, audit_context=None: {
             "id": group_id,
             "resource_type": "group",
             "storage_type": "netapp",
@@ -678,7 +679,7 @@ def quota_api(api_client_factory, session_factory, monkeypatch):
     monkeypatch.setattr(
         quotaService,
         "adjust_storage_usage_quota",
-        lambda _db, storage_usage_id, request, current_user=None: {
+        lambda _db, storage_usage_id, request, current_user=None, audit_context=None: {
             "id": storage_usage_id,
             "resource_type": "storage_usage",
             "storage_type": "netapp",

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import os.path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
 from schemas import storageUsageSchema, commonSchema, quotaSchema, storageTrendSchema
@@ -13,7 +13,7 @@ from utils.plot import plot_real_time_line
 from utils.common import convert_timestamp_to_datetime
 import logging
 from routers.common import handle_exceptions
-from services import quotaService
+from services import audit_service, quotaService
 from services import project_access_service
 from utils.auth_service import is_super_admin
 from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
@@ -164,6 +164,7 @@ def read_storage_usage_realtime_data(storage_usage_id: int, start_time: datetime
 def adjust_storage_usage_quota(
     storage_usage_id: int,
     payload: quotaSchema.QuotaAdjustmentRequest,
+    request: Request,
     current_user: CurrentUserDep,
     db: Session = Depends(get_db),
 ):
@@ -181,6 +182,7 @@ def adjust_storage_usage_quota(
         storage_usage_id=storage_usage_id,
         request=payload,
         current_user=current_user,
+        audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
     )
 
 

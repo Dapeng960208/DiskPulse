@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Response
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from schemas import groupSchema, commonSchema, quotaSchema, storageTrendSchema
 from crud import groupCrud
 from dependencies import CurrentUserDep, get_db, require_super_admin
-from services import quotaService
+from services import audit_service, quotaService
 from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 import logging
 from utils.common import convert_timestamp_to_datetime
@@ -100,6 +100,7 @@ def update_group(
 def adjust_group_quota(
     group_id: int,
     payload: quotaSchema.QuotaAdjustmentRequest,
+    request: Request,
     current_user: CurrentUserDep,
     db: Session = Depends(get_db),
 ):
@@ -114,6 +115,7 @@ def adjust_group_quota(
         group_id=group_id,
         request=payload,
         current_user=current_user,
+        audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
     )
 
 

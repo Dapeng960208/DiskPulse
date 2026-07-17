@@ -177,7 +177,7 @@ def test_group_owner_can_adjust_only_its_group_and_its_user_directories(
     monkeypatch.setattr(
         quotaService,
         "adjust_group_quota",
-        lambda _db, group_id, request, current_user=None: {
+        lambda _db, group_id, request, current_user=None, audit_context=None: {
             "id": group_id,
             "resource_type": "group",
             "storage_type": "netapp",
@@ -190,7 +190,7 @@ def test_group_owner_can_adjust_only_its_group_and_its_user_directories(
     monkeypatch.setattr(
         quotaService,
         "adjust_storage_usage_quota",
-        lambda _db, storage_usage_id, request, current_user=None: {
+        lambda _db, storage_usage_id, request, current_user=None, audit_context=None: {
             "id": storage_usage_id,
             "resource_type": "storage_usage",
             "storage_type": "netapp",
