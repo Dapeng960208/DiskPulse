@@ -26,6 +26,7 @@ const footerHeight = ref('60px');
     <ElContainer>
       <ElAside
         v-if="showAside"
+        id="app-aside"
         class="!w-auto border-r border-[var(--el-border-color)]">
         <ElScrollbar class="h-full">
           <RouterView
@@ -43,9 +44,14 @@ const footerHeight = ref('60px');
       <ElMain class="app-main">
         <div class="py-4">
           <ElSpace align="center">
-            <span
+            <button
               v-if="showAside"
-              class="cursor-pointer"
+              data-testid="aside-collapse-toggle"
+              class="aside-collapse-toggle"
+              type="button"
+              :aria-controls="'app-aside'"
+              :aria-expanded="String(!appSettings.asideCollapsed)"
+              :aria-label="appSettings.asideCollapsed ? '展开侧边导航' : '收起侧边导航'"
               @click="appSettings.toggleAsideCollapsed()">
               <i
                 v-if="appSettings.asideCollapsed"
@@ -53,7 +59,7 @@ const footerHeight = ref('60px');
               <i
                 v-else
                 class="i-ri-menu-fold-fill"></i>
-            </span>
+            </button>
             <ElBreadcrumb>
               <ElBreadcrumbItem
                 v-for="route of $route.matched"
@@ -141,15 +147,27 @@ const footerHeight = ref('60px');
     }
 
     // 菜单折叠按钮
-    .cursor-pointer {
+    .aside-collapse-toggle {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
       padding: var(--spacing-sm);
       border-radius: var(--radius-sm);
       color: var(--text-secondary);
       transition: var(--transition-base);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
 
       &:hover {
         background: var(--bg-hover);
         color: var(--primary-color);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
       }
 
       i {

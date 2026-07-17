@@ -32,6 +32,15 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  density: {
+    type: String,
+    validator: (value) => ['default', 'compact'].includes(value),
+    default: 'default',
+  },
+  error: {
+    type: String,
+    default: '',
+  },
 });
 const emit = defineEmits(['update:pagination']);
 const paginationLayout = computed(() => {
@@ -61,7 +70,12 @@ function handleSortChange({ column, prop, order }) {
 </script>
 
 <template>
-  <ElCard class="data-table-card h-full">
+  <ElCard
+    class="data-table-card h-full"
+    :class="{
+      'data-table-card--compact': density === 'compact',
+      'data-table-card--error': Boolean(error),
+    }">
     <ElPagination
       v-if="pagination && ['both', 'top'].includes(props.pagination.placement)"
       class="pagination-top"
@@ -80,7 +94,15 @@ function handleSortChange({ column, prop, order }) {
         pageSize,
       })"
     />
-    <div class="table-wrapper flex-1">
+    <div
+      v-if="error"
+      class="data-table-error"
+      role="alert">
+      {{ error }}
+    </div>
+    <div
+      v-else
+      class="table-wrapper flex-1">
       <ElTable
         v-loading="loading"
         :data="data"
@@ -151,8 +173,20 @@ function handleSortChange({ column, prop, order }) {
 
 // 表格容器
 .table-wrapper {
-  overflow: hidden;
+  overflow: auto hidden;
   border-radius: var(--radius-md);
+}
+
+.data-table-error {
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--danger-color);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-color);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
 }
 
 // 分页器样式
@@ -327,6 +361,19 @@ function handleSortChange({ column, prop, order }) {
       background: var(--bg-hover);
       border-color: var(--primary-color);
       color: var(--primary-color);
+    }
+  }
+}
+
+.data-table-card--compact {
+  :deep(.el-card__body) {
+    padding: var(--spacing-sm) var(--spacing-lg);
+  }
+
+  :deep(.el-table) {
+    .el-table__header-wrapper th,
+    .el-table__body-wrapper td {
+      padding: var(--spacing-xs) 0;
     }
   }
 }

@@ -398,4 +398,10 @@ onMounted(loadDashboard);
   .summary-item:last-child { border-bottom: 0; }
   .panel-heading { align-items: flex-start; flex-direction: column; }
 }
+
+@include mobile {
+  .dashboard-page-header {
+    flex-direction: column;
+  }
+}
 </style>

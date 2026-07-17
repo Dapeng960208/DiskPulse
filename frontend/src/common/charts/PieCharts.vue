@@ -5,8 +5,9 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch, onBeforeUnmount, nextTick } from 'vue';
-import * as echarts from 'echarts';
+import { onMounted, watch } from 'vue';
+import { useEchartsChart } from '@/composables/use-echarts-chart';
+import { getChartColors, getThemeVar } from '@/lib/echarts';
 
 const props = defineProps({
   width: {
@@ -35,24 +36,21 @@ const props = defineProps({
   },
 });
 
-const chartDom = ref(null);
-let chartInstance = null;
+const { chartDom, initChart, bindWindowResize } = useEchartsChart();
 
-function renderChart() {
-  if (!chartDom.value || !props.data || props.data.length===0 ) return;
+async function renderChart() {
+  if (!chartDom.value || !props.data?.length) return;
 
-  if (chartInstance) {
-    chartInstance.dispose();
-  }
+  const context = await initChart();
+  if (!context) return;
 
-  chartInstance = echarts.init(chartDom.value);
+  const { chart } = context;
   const isDashboard = props.variant === 'dashboard';
-  const styles = getComputedStyle(document.documentElement);
-  const color = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
+  const color = (name, fallback) => getThemeVar(name, fallback);
   const option = {
     color: isDashboard
       ? [color('--primary-color', '#3B82F6'), color('--bg-tertiary', '#F1F5F9')]
-      : undefined,
+      : getChartColors(),
     legend: {
       top: 'bottom',
       show: !isDashboard,
@@ -63,8 +61,8 @@ function renderChart() {
         mark: { show: true },
         dataView: { show: true, readOnly: false },
         restore: { show: true },
-        saveAsImage: { show: true }
-      }
+        saveAsImage: { show: true },
+      },
     },
     dataset: isDashboard ? undefined : { source: props.data },
     title: isDashboard ? {
@@ -87,34 +85,28 @@ function renderChart() {
         roseType: isDashboard ? undefined : 'radius',
         data: isDashboard ? props.data : undefined,
         itemStyle: {
-        borderRadius: isDashboard ? 10 : 5,
-        borderColor: color('--bg-primary', '#FFFFFF'),
-        borderWidth: isDashboard ? 3 : 0,
-      },
-      label: {
-        show: !isDashboard
-      },
-      emphasis: {
+          borderRadius: isDashboard ? 10 : 5,
+          borderColor: color('--bg-primary', '#FFFFFF'),
+          borderWidth: isDashboard ? 3 : 0,
+        },
         label: {
-          show: true
-        }
+          show: !isDashboard,
+        },
+        emphasis: {
+          label: {
+            show: true,
+          },
+        },
       },
-      }
-    ]
+    ],
   };
 
-  chartInstance.setOption(option);
-}
-
-function resizeChart() {
-  if (chartInstance) {
-    chartInstance.resize();
-  }
+  chart.setOption(option);
 }
 
 onMounted(() => {
-    renderChart();
-    window.addEventListener('resize', resizeChart, { passive: true });
+  renderChart();
+  bindWindowResize();
 });
 
 watch(() => props.width, renderChart);
@@ -123,10 +115,4 @@ watch(() => props.data, renderChart, { deep: true });
 watch(() => props.title, renderChart);
 watch(() => props.variant, renderChart);
 watch(() => props.centerLabel, renderChart);
-
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', resizeChart);
-  chartInstance?.dispose();
-});
-
 </script>

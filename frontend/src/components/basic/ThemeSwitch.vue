@@ -13,7 +13,10 @@ const appSettings = useAppSettings();
 
 async function toggle({ clientX: x, clientY: y }) {
   if (props.animated) {
-    if ('startViewTransition' in document/* && window.matchMedia('(prefers-reduced-motion: no-preference)').matches */) {
+    const canAnimate = 'startViewTransition' in document
+      && window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
+
+    if (canAnimate) {
       const clipPath = [
         `circle(0px at ${x}px ${y}px)`,
         `circle(${Math.hypot(
@@ -37,7 +40,6 @@ async function toggle({ clientX: x, clientY: y }) {
         },
       );
     } else {
-      console.error('View transition is not available');
       appSettings.toggleTheme();
     }
   } else {
@@ -49,6 +51,9 @@ async function toggle({ clientX: x, clientY: y }) {
 <template>
   <button
     class="theme-switch"
+    type="button"
+    :aria-label="appSettings.theme === 'dark' ? '切换到亮色模式' : '切换到暗色模式'"
+    :aria-pressed="String(appSettings.theme === 'dark')"
     :title="appSettings.theme === 'dark' ? '切换到亮色模式' : '切换到暗色模式'"
     @click="toggle">
     <i
@@ -86,6 +91,11 @@ async function toggle({ clientX: x, clientY: y }) {
 
   &:active {
     transform: scale(0.95);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
   }
 
   .theme-icon {

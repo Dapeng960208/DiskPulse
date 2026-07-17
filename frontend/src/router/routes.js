@@ -38,7 +38,7 @@ export default [
         name: 'Usages',
         component: () => import('@/pages/usage/UsageListPage.vue'),
         meta: {
-          title: '用户',
+          title: '用户目录',
           isRoot: true,
           menuOrder: 20,
           icon: 'i-ri-user-line',

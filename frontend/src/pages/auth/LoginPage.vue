@@ -133,7 +133,7 @@ import ThemeSwitch from '@/components/basic/ThemeSwitch.vue';
 import brandLogo from '@/assets/logo.png';
 import storageClusterBackground from '@/assets/images/storage-cluster-login.webp';
 
-const appTitle = import.meta.env.VITE_APP_TITLE || '存储管理系统';
+const appTitle = import.meta.env.VITE_APP_TITLE || 'DiskPulse 管理后台';
 
 const router = useRouter();
 const route = useRoute();

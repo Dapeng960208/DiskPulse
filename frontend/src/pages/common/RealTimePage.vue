@@ -163,7 +163,14 @@ const yAxisUnit = computed(() => {
 
 </script>
 <template>
-  <div class="flex flex-col flex-1 min-h-0">
+  <div class="real-time-page flex flex-col flex-1 min-h-0">
+    <section class="real-time-page__header">
+      <div>
+        <h1>{{ props.label }}实时监控</h1>
+        <p>查看指定时间范围内的容量指标趋势和最近告警。</p>
+      </div>
+      <span>{{ queryParams.start_time }} 至 {{ queryParams.end_time }}</span>
+    </section>
     <FilterForm
       @query="query();alertQuery();"
       @reset="reset(); query();alertQuery();">
@@ -224,8 +231,8 @@ const yAxisUnit = computed(() => {
           :info="result.info"></slot>
       </ElDescriptions>
     </ElCard>
-    <div class="flex flex-auto mt-2.5">
-      <div class="basis-3/4 pr-4">
+    <div class="real-time-page__workspace flex flex-auto mt-2.5">
+      <div class="real-time-page__chart-panel basis-3/4 pr-4">
         <ElCard class="h-full">
           <div
             v-if="querying"
@@ -273,7 +280,7 @@ const yAxisUnit = computed(() => {
         </ElCard>
       </div>
 
-      <div class="basis-1/4">
+      <div class="real-time-page__alerts-panel basis-1/4">
         <ElCard class="h-full">
           <ElTable
             :data="alertResult.content"
@@ -323,6 +330,38 @@ const yAxisUnit = computed(() => {
   .el-card__body {
     height: 100%;
     padding: var(--spacing-lg);
+  }
+}
+
+.real-time-page__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+
+  h1 {
+    font-size: var(--font-size-2xl);
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-xs);
+  }
+
+  p,
+  span {
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+  }
+
+  span {
+    white-space: nowrap;
+  }
+}
+
+.real-time-filter-field {
+  min-width: 240px;
+
+  &--wide {
+    min-width: 360px;
   }
 }
 

@@ -1,6 +1,7 @@
 <script setup>
-import { onMounted, ref, watch, onBeforeUnmount, nextTick } from 'vue';
-import * as echarts from 'echarts';
+import { onMounted, watch } from 'vue';
+import { useEchartsChart } from '@/composables/use-echarts-chart';
+import { getChartColors } from '@/lib/echarts';
 
 // 定义组件的属性
 const props = defineProps({
@@ -26,26 +27,23 @@ const props = defineProps({
   },
 });
 
-const chartDom = ref(null);
-let chartInstance = null;
+const { chartDom, initChart, bindWindowResize } = useEchartsChart();
 
 // 渲染图表
-function renderChart() {
+async function renderChart() {
   if (!props.data || props.data.length === 0) return;
 
-  if (chartInstance) {
-    chartInstance.dispose();
-  }
-
-  chartInstance = echarts.init(chartDom.value);
+  const context = await initChart();
+  if (!context) return;
+  const { chart } = context;
   const option = getOption();
 
-  chartInstance.showLoading();
-  chartInstance.on('updateAxisPointer', (event) => {
+  chart.showLoading();
+  chart.on('updateAxisPointer', (event) => {
     const xAxisInfo = event.axesInfo[0];
     if (xAxisInfo) {
       const dimension = xAxisInfo.value + 1;
-      chartInstance.setOption({
+      chart.setOption({
         series: {
           id: 'pie',
           label: {
@@ -59,8 +57,8 @@ function renderChart() {
       });
     }
   });
-  chartInstance.setOption(option);
-  chartInstance.hideLoading();
+  chart.setOption(option);
+  chart.hideLoading();
 }
 
 // 获取图表配置项
@@ -90,6 +88,7 @@ function getOption() {
   };
 
   return {
+    color: getChartColors(),
     title: {
       text: props.title,
       left: 'left',
@@ -124,15 +123,9 @@ function getOption() {
 }
 
 // 调整图表大小
-function resizeChart() {
-  if (chartInstance) {
-    chartInstance.resize();
-  }
-}
-
 onMounted(() => {
     renderChart();
-    window.addEventListener('resize', resizeChart, { passive: true });
+    bindWindowResize();
 });
 
 watch(() => props.width, renderChart);

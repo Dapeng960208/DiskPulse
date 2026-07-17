@@ -9,8 +9,8 @@ import GroupSelect from '@/components/form/GroupSelect.vue';
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
 import ProjectSelect from '@/components/form/ProjectSelect.vue';
 import { ref, computed } from 'vue';
-import { number } from 'echarts';
 
+const number = 'number';
 const emit = defineEmits(['submitted']);
 const { visible, open, close, beforeClose, forceClose } = useDialog({
   isDirty: () => isDirty.value,

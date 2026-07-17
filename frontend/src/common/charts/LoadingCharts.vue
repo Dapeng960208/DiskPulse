@@ -1,6 +1,7 @@
 <script setup>
-import { onMounted, ref, watch, onBeforeUnmount, nextTick } from 'vue';
-import * as echarts from 'echarts';
+import { onMounted, watch } from 'vue';
+import { useEchartsChart } from '@/composables/use-echarts-chart';
+import { getThemeVar, prefersReducedMotion } from '@/lib/echarts';
 
 const props = defineProps({
   width: {
@@ -13,10 +14,11 @@ const props = defineProps({
   },
 });
 
-const chartDom = ref(null);
-let chartInstance = null;
+const { chartDom, initChart, bindWindowResize } = useEchartsChart();
 
-const option = {
+function getOption() {
+  const reducedMotion = prefersReducedMotion();
+  return {
   graphic: {
     elements: [
       {
@@ -33,10 +35,10 @@ const option = {
             height: 80,
           },
           style: {
-            fill: '#5470c6',
+            fill: getThemeVar('--chart-color-primary', '#5470c6'),
           },
           keyframeAnimation: {
-            duration: 1000,
+            duration: reducedMotion ? 0 : 1000,
             delay: i * 200,
             loop: true,
             keyframes: [
@@ -57,29 +59,21 @@ const option = {
     ],
   },
 };
-
-
-function renderChart() {
-  if (!chartDom.value) return;
-
-  if (chartInstance) {
-    chartInstance.dispose();
-  }
-
-  chartInstance = echarts.init(chartDom.value);
-  chartInstance.setOption(option);
 }
 
-function resizeChart() {
-  if (chartInstance) {
-    chartInstance.resize();
-  }
+
+async function renderChart() {
+  if (!chartDom.value) return;
+
+  const context = await initChart();
+  if (!context) return;
+  context.chart.setOption(getOption());
 }
 
 // 监听 props 的变化
 onMounted(() => {
     renderChart();
-    window.addEventListener('resize', resizeChart, { passive: true });
+    bindWindowResize();
 });
 
 watch(() => props.width, renderChart);
