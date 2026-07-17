@@ -1,5 +1,14 @@
 # 错误记录
 
+### 2026-07-18：独立 worktree 缺少运行时配置，无法执行真实 PostgreSQL Alembic 升降级
+
+- 触发：在 `D:\dev\DiskPulse\.worktrees\telemetry-observability\backend` 执行 `D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic -c alembic.ini upgrade head`。
+- 现象：Alembic 在加载 `appConfig.py` 时提示 `Configuration file not found: ...\backend\config.yml`，未建立数据库连接或执行迁移。
+- 根因：`backend/config.yml` 是未跟踪的部署运行时配置，独立 Git worktree 只复制受版本控制文件，不应复制真实数据库凭据。
+- 修复：未创建或复制真实配置；本次改用 SQLite 实际 upgrade/downgrade 与 SQLite/PostgreSQL/MySQL 离线 DDL 编译测试验证 `000000000008`。
+- 验证：新增迁移测试通过，`alembic heads` 显示唯一 `000000000008`。
+- 风险：真实 PostgreSQL 的升级、回退、外键 `ON DELETE SET NULL` 和连接超时行为仍需由部署环境使用受控运行时配置验收。
+
 ### 2026-07-17：AI 工具轮次和参数格式错误被泛化为服务不可用
 
 - 触发：AI 对话连续调用只读工具达到 `ai.max_tool_iterations`，或 Provider 输出非 JSON/非对象的工具参数。
