@@ -2,6 +2,7 @@
 from collections import defaultdict
 import time
 from types import MappingProxyType
+from uuid import uuid4
 
 from sqlalchemy import func, select, update
 
@@ -18,6 +19,7 @@ from celery_tasks.tasks.redis_lock import redis_lock
 from celery.exceptions import SoftTimeLimitExceeded
 from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
 from models import Group, Project, Qtree, StorageCluster, StorageUsage, Volume
+from services.audit_service import AuditContext, append_audit_event
 logger = get_task_logger(__name__)
 
 
@@ -152,6 +154,60 @@ def _cluster_snapshots(snapshot):
         yield MappingProxyType(cluster)
 
 
+def _collection_audit_context() -> AuditContext:
+    return AuditContext(
+        request_id=uuid4(),
+        trace_id=uuid4(),
+        operation_id=uuid4(),
+        actor_type="service",
+    )
+
+
+def _append_collection_audit_result(
+    db,
+    *,
+    context: AuditContext,
+    storage_cluster_id: int,
+    outcome: str,
+    reason_code: str | None = None,
+    metrics=None,
+):
+    summary = None
+    if isinstance(metrics, dict):
+        summary = {
+            "storage_usage_count": len(metrics.get("storage_usage_ids", ())),
+            "group_count": len(metrics.get("group_ids", ())),
+        }
+    append_audit_event(
+        db,
+        context=context,
+        phase="result",
+        action="storage.collection.run",
+        resource_type="storage_cluster",
+        resource_id=storage_cluster_id,
+        outcome=outcome,
+        reason_code=reason_code,
+        after_summary=summary,
+    )
+
+
+def _record_collection_failure_audit(session_factory, *, context: AuditContext, storage_cluster_id: int):
+    audit_db = None
+    try:
+        audit_db = session_factory()
+        with audit_db.begin():
+            _append_collection_audit_result(
+                audit_db,
+                context=context,
+                storage_cluster_id=storage_cluster_id,
+                outcome="failure",
+                reason_code="collection_failed",
+            )
+    finally:
+        if audit_db is not None:
+            audit_db.close()
+
+
 def run_collection_round(
     snapshot,
     *,
@@ -168,6 +224,7 @@ def run_collection_round(
     refreshed_group_ids = []
     for cluster in _cluster_snapshots(snapshot):
         cluster_id = cluster["storage_cluster_id"]
+        audit_context = _collection_audit_context()
         db = None
         monitor = None
         try:
@@ -187,6 +244,13 @@ def run_collection_round(
                 if isinstance(metrics, dict):
                     refreshed_storage_usage_ids.extend(metrics.get("storage_usage_ids", ()))
                     refreshed_group_ids.extend(metrics.get("group_ids", ()))
+                _append_collection_audit_result(
+                    db,
+                    context=audit_context,
+                    storage_cluster_id=cluster_id,
+                    outcome="success",
+                    metrics=metrics,
+                )
             cluster_results[cluster_id] = True
             succeeded_clusters.append(cluster_id)
             try:
@@ -208,6 +272,18 @@ def run_collection_round(
                 cluster["storage_cluster_id"],
                 exc,
             )
+            try:
+                _record_collection_failure_audit(
+                    session_factory,
+                    context=audit_context,
+                    storage_cluster_id=cluster_id,
+                )
+            except Exception as audit_error:
+                logger.error(
+                    "Failed to record collection audit for cluster %s: %s",
+                    cluster_id,
+                    audit_error,
+                )
         finally:
             if monitor is not None:
                 close = getattr(monitor, "close", None) or getattr(monitor, "cleanup", None)
