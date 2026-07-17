@@ -1,5 +1,19 @@
 # 当前交付记录
 
+## 2026-07-18：项目级 RBAC 与统一操作审计（部分实施）
+
+### 已完成
+
+- 已提交项目成员模型/迁移、项目负责人 `project_admin` 补齐和 `pt_user` 移除；成员 Router 已注册到主应用并以 `7` 项聚焦测试覆盖路由合同。AI 会话可选项目绑定、项目详情成员/项目审计页签及系统管理统一审计页面已在当前 worktree 中实现。
+- 已提交 `audit_events` 模型、`000000000009_unified_audit.py`、关联 ID 中间件、脱敏审计服务、查询 API 及 SQLite/PostgreSQL/MySQL 不可变触发器定义。
+- 审计 RED/GREEN 检查点已提交。聚焦后端验证 `backend/test/test_unified_audit.py backend/test/test_group_tag_contract.py` 共 `16 passed`，受影响 Python 文件 `py_compile` 和 `git diff --check` 通过。
+
+### 风险与待完成
+
+- 成员 Router 已发布到主应用；仍需完成真实登录态下的页面增删改、跨项目隔离和角色矩阵联调。
+- 当前统一审计仅交付基础设施；登录/登出、项目和成员管理、AI、配额/设备、Celery 尚未全面产生日志，不能宣称写操作审计覆盖率达标。
+- 生产 PostgreSQL 的备份恢复、Alembic `stamp`/upgrade、触发器和运行账号/只读账号权限未验证；前端浏览器及全量测试本轮未重新执行。
+
 ## 2026-07-17：企业级 AI 存储智能运维调研基线
 
 ### 已完成

@@ -1,7 +1,7 @@
 # 项目级 RBAC 与统一操作审计实施计划
 
 - 依据：[实施计划索引](./2026-07-17-220000-enterprise-ai-storage-implementation-index.md)
-- 状态：待实施。
+- 状态：部分实施（本地 worktree；生产待验证）。
 - 前置条件：生产 PostgreSQL 已完成可恢复备份，并已确定数据库变更窗口。
 
 ## 目标与边界
@@ -32,6 +32,13 @@
 - 成员 API 只接收本地已存在 `users.id`，不得触发 LDAP 账号创建；项目管理员只可管理 `reader`、`editor`。审计查询只对超级管理员和项目管理员开放，响应只含脱敏摘要。
 
 ## 实施步骤
+
+## 实施状态（2026-07-18）
+
+- 已完成：`project_memberships`、`pt_user` 删除、项目负责人角色补齐、成员 Router 注册、可选 AI `project_id`、项目成员/项目审计前端页签、统一审计模型/迁移/关联 ID/脱敏/查询基础和统一审计前端页面。
+- 已完成：`audit_events` 的 SQLite 运行时不可变触发器验证，以及 SQLite/PostgreSQL/MySQL 离线 DDL 编译验证。
+- 待完成：项目资源反查全覆盖；AI 归属历史收敛；登录、管理操作、AI、设备和 Celery 的统一审计写入；生产数据库角色授权、备份恢复和真实 PostgreSQL 变更窗口验证。
+- 本计划其余“实施步骤”和“验证与验收”仍是未完成项，除非上述状态明确标为已完成。
 
 1. 在 `backend/test/` 先补角色矩阵、跨项目读取/写入、成员管理和审计序列化的 RED 测试；复用现有 JWT/SQLite fixture，不修改生产逻辑。
 2. 建立 Alembic baseline 并完成生产 `stamp` 演练后，创建前向 revision、ORM 模型、Pydantic schema、CRUD 与授权/审计 service；迁移将 `Project.in_charge_user_id`、`Project.pt_user_id` 去重后初始化为该项目 `project_admin`，空项目由超级管理员补齐。
