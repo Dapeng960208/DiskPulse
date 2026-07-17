@@ -312,6 +312,24 @@ describe('AI pages interactions', () => {
     expect(streamedMessage.tool_calls).toEqual([expect.objectContaining({ call_id: 'call-abort', status: 'running' })]);
   });
 
+  it('keeps the workspace regions stable and sends from the input field action', async () => {
+    const wrapper = shallowMount(AiChatPage, {
+      global: {
+        stubs: {
+          ElScrollbar: { template: '<div class="el-scrollbar-stub"><slot /></div>' },
+        },
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.find('.conversation-panel').exists()).toBe(true);
+    expect(wrapper.find('.chat-heading').exists()).toBe(true);
+    expect(wrapper.find('.message-list').exists()).toBe(true);
+    expect(wrapper.find('.composer__notice').text()).toContain('AI 可能会出错');
+    expect(wrapper.find('.composer__send').attributes('aria-label')).toBe('发送消息');
+    expect(wrapper.find('.composer-actions').exists()).toBe(false);
+  });
+
   it('creates, updates, tests, deletes models and loads audit filters', async () => {
     const wrapper = shallowMount(AiCenterPage, {
       global: { directives: commonDirectives },

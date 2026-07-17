@@ -431,30 +431,36 @@ onMounted(loadInitial);
       </ElScrollbar>
 
       <div class="composer">
-        <ElInput
-          v-model="content"
-          type="textarea"
-          :autosize="{ minRows: 2, maxRows: 6 }"
-          maxlength="32000"
-          placeholder="询问容量、告警、项目或存储趋势…"
-          @keydown.ctrl.enter.prevent="send"
-        />
-        <div class="composer-actions">
-          <span>Ctrl + Enter 发送</span>
+        <p class="composer__notice">AI 可能会出错，请核查重要信息。</p>
+        <div class="composer__field">
+          <ElInput
+            v-model="content"
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 6 }"
+            maxlength="32000"
+            placeholder="询问容量、告警、项目或存储趋势…"
+            @keydown.ctrl.enter.prevent="send"
+          />
+          <span class="composer__shortcut">Ctrl + Enter</span>
           <ElButton
             v-if="failedContent && !streaming"
-            plain
-            @click="retry">重试</ElButton>
+            class="composer__retry"
+            circle
+            aria-label="重试生成"
+            @click="retry"><i class="i-ri-refresh-line"></i></ElButton>
           <ElButton
-            v-if="streaming"
-            type="danger"
-            plain
-            @click="stop">停止生成</ElButton>
+            v-else-if="streaming"
+            class="composer__send composer__send--stop"
+            circle
+            aria-label="停止生成"
+            @click="stop"><i class="i-ri-stop-fill"></i></ElButton>
           <ElButton
             v-else
-            type="primary"
+            class="composer__send"
+            circle
+            aria-label="发送消息"
             :disabled="!content.trim()"
-            @click="send">发送</ElButton>
+            @click="send"><i class="i-ri-arrow-up-line"></i></ElButton>
         </div>
       </div>
     </main>
@@ -464,18 +470,18 @@ onMounted(loadInitial);
 <style scoped lang="scss">
 .ai-workspace { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 0; height: 100%; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; }
 .conversation-panel { display: flex; flex-direction: column; min-width: 0; padding: 16px 12px; border-right: 1px solid var(--border-color); background: var(--bg-secondary); }
-.panel-heading, .chat-heading, .composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.panel-heading, .chat-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .panel-heading { margin-bottom: 12px; }
 .model-select { width: 100%; margin-bottom: 12px; }
 .conversation-list { flex: 1; }
 .conversation-item { width: 100%; border: 0; background: transparent; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px; margin-bottom: 4px; border-radius: 8px; color: var(--text-secondary); cursor: pointer; text-align: left; }
 .conversation-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-item:hover, .conversation-item.active { color: var(--primary-color); background: var(--bg-hover); }
-.chat-panel { display: flex; min-width: 0; flex-direction: column; }
-.chat-heading { min-height: 64px; padding: 0 22px; border-bottom: 1px solid var(--border-color); }
+.chat-panel { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
+.chat-heading { flex: none; min-height: 64px; padding: 0 22px; border-bottom: 1px solid var(--border-color); }
 .chat-heading small { display: block; margin-top: 3px; color: var(--text-tertiary); }
 .live-status { color: var(--primary-color); font-size: 13px; }
-.message-list { flex: 1; padding: 20px 0; }
+.message-list { flex: 1; min-height: 0; padding: 20px 0; }
 .message { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; max-width: 920px; margin: 0 auto 18px; padding: 0 24px; }
 .message-role { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--el-color-primary-light-9); color: var(--primary-color); font-size: 12px; font-weight: 600; }
 .message.user .message-body { background: var(--bg-secondary); border-radius: 10px; padding: 10px 13px; white-space: pre-wrap; }
@@ -498,9 +504,19 @@ onMounted(loadInitial);
 .tool-trace__details > div { display: grid; gap: 4px; }
 .tool-trace__details strong { margin-top: 8px; color: var(--text-secondary); font-size: 12px; }
 .tool-trace__details pre { max-height: 220px; margin: 0; overflow: auto; padding: 8px; border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
-.composer { padding: 14px 20px 18px; border-top: 1px solid var(--border-color); }
-.composer-actions { margin-top: 10px; }
-.composer-actions span { color: var(--text-tertiary); font-size: 12px; margin-right: auto; }
+.composer { flex: none; padding: 10px 20px 18px; border-top: 1px solid var(--border-color); background: var(--bg-primary); }
+.composer__notice { margin: 0 0 8px; color: var(--text-tertiary); font-size: 12px; text-align: center; }
+.composer__field { position: relative; max-width: 920px; margin: 0 auto; }
+.composer__field :deep(.el-textarea__inner) { min-height: 74px !important; padding: 13px 112px 28px 16px; border-radius: 18px; box-shadow: var(--shadow-sm); resize: none; }
+.composer__field :deep(.el-textarea__inner:focus) { box-shadow: 0 0 0 2px var(--el-color-primary-light-7); }
+.composer__shortcut { position: absolute; bottom: 12px; left: 16px; color: var(--text-tertiary); font-size: 12px; pointer-events: none; }
+.composer__send, .composer__retry { position: absolute; right: 10px; bottom: 10px; width: 36px; height: 36px; padding: 0; border: 0; color: #fff; background: var(--text-primary); box-shadow: none; }
+.composer__send:hover, .composer__retry:hover { color: #fff; background: var(--text-secondary); }
+.composer__send:disabled { color: var(--text-disabled); background: var(--bg-tertiary); }
+.composer__send--stop { background: var(--el-color-danger); }
+.composer__send--stop:hover { background: var(--el-color-danger); }
+.composer__retry { right: 54px; color: var(--text-secondary); background: var(--bg-secondary); border: 1px solid var(--border-color); }
+.composer__retry:hover { color: var(--text-primary); background: var(--bg-tertiary); }
 .markdown-body :deep(pre) { overflow: auto; padding: 12px; border-radius: 8px; background: #18212f; color: #e8eef7; }
 .markdown-body :deep(code) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .markdown-body :deep(a) { color: var(--primary-color); }
