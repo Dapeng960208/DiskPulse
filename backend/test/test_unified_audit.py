@@ -17,8 +17,9 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
 from appConfig import base_config
-from models import AIConfig, AuditEvent, Project, User
+from models import AIConfig, AIConversation, AuditEvent, Project, User
 from services import ai_chat_service, audit_service, project_membership_service
+from services.ai_client import AICompletionStreamEvent
 
 
 def _uuid(value: str) -> str:
@@ -221,8 +222,6 @@ def test_ai_conversation_creation_appends_correlated_unscoped_audit_event(db_ses
         actor.id,
         "audit lifecycle title",
         model.id,
-        project_id=None,
-        current_user=actor,
         audit_context=context,
     )
 
@@ -235,6 +234,89 @@ def test_ai_conversation_creation_appends_correlated_unscoped_audit_event(db_ses
     assert (event.phase, event.outcome, event.actor_user_id, event.project_id) == ("result", "success", actor.id, None)
     assert (event.request_id, event.trace_id) == (context.request_id, context.trace_id)
     assert "audit lifecycle title" not in json.dumps(event.after_summary, ensure_ascii=False)
+
+
+def test_ai_conversation_delete_appends_correlated_unscoped_audit_event(db_session):
+    actor = User(id=1, username="Admin User", rd_username="admin")
+    model = AIConfig(
+        id=4,
+        name="audit-model",
+        provider="openai",
+        model="test-model",
+        enabled=True,
+        enable_chat=True,
+    )
+    conversation = AIConversation(id=5, user_id=actor.id, model_id=model.id, title="private title")
+    db_session.add_all([actor, model, conversation])
+    db_session.commit()
+    context = audit_service.AuditContext(
+        request_id="9cbaece5-30c2-4b6c-94b0-55c9f5df2d15",
+        trace_id="143b7cc2-f3c5-4e48-818b-33d4697fc801",
+        operation_id="1adcb3a0-34d0-4172-aa3f-1d5cc2d2b582",
+        actor_user_id=actor.id,
+    )
+
+    ai_chat_service.delete_conversation(
+        db_session,
+        conversation.id,
+        actor.id,
+        audit_context=context,
+    )
+
+    event = db_session.query(AuditEvent).one()
+    assert (event.action, event.resource_type, event.resource_id) == (
+        "ai.conversation.delete",
+        "ai_conversation",
+        conversation.id,
+    )
+    assert (event.phase, event.outcome, event.actor_user_id, event.project_id) == ("result", "success", actor.id, None)
+    assert "private title" not in json.dumps(event.before_summary, ensure_ascii=False)
+
+
+def test_ai_message_lifecycle_appends_unscoped_redacted_audit_event(db_session, monkeypatch):
+    actor = User(id=1, username="Admin User", rd_username="admin")
+    model = AIConfig(
+        id=4,
+        name="audit-model",
+        provider="openai",
+        model="test-model",
+        enabled=True,
+        enable_chat=True,
+    )
+    conversation = AIConversation(id=5, user_id=actor.id, model_id=model.id, title="message audit")
+    db_session.add_all([actor, model, conversation])
+    db_session.commit()
+    context = audit_service.AuditContext(
+        request_id="9cbaece5-30c2-4b6c-94b0-55c9f5df2d15",
+        trace_id="143b7cc2-f3c5-4e48-818b-33d4697fc801",
+        operation_id="1adcb3a0-34d0-4172-aa3f-1d5cc2d2b582",
+        actor_user_id=actor.id,
+    )
+
+    def provider_stream(*_args, **_kwargs):
+        yield AICompletionStreamEvent(kind="delta", text="已处理")
+        yield AICompletionStreamEvent(kind="completed", text="已处理", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    list(
+        ai_chat_service.stream_message(
+            app=FastAPI(),
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=actor.id,
+            content="do not store this private prompt",
+            current_user=actor,
+            audit_context=context,
+        )
+    )
+
+    events = db_session.query(AuditEvent).order_by(AuditEvent.occurred_at, AuditEvent.id).all()
+    assert [(event.phase, event.outcome) for event in events] == [("attempt", "success"), ("result", "success")]
+    assert all(event.action == "ai.message.send" and event.project_id is None for event in events)
+    assert all(event.resource_id == conversation.id and event.actor_user_id == actor.id for event in events)
+    assert "do not store this private prompt" not in json.dumps(
+        [event.before_summary for event in events] + [event.after_summary for event in events], ensure_ascii=False
+    )
 
 
 def _audit_migration_module():
