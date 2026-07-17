@@ -4,10 +4,12 @@ import { ref } from 'vue';
 import configApi from '@/api/config-api';
 import StorageAlertRuleForm from '@/components/form/StorageAlertRuleForm.vue';
 import { defaultStorageAlertRule } from '@/utils/storage-alert-rule';
+import { useStorageAlertThresholds } from '@/stores/storage-alert-thresholds';
 
 const form = ref({ storage_alert_rule: defaultStorageAlertRule() });
 const alertRuleValid = ref(true);
 const saving = ref(false);
+const alertThresholds = useStorageAlertThresholds();
 
 function fetchConfig() {
   configApi.fetch().then((result) => {
@@ -20,6 +22,7 @@ async function updateConfig() {
   saving.value = true;
   try {
     form.value = await configApi.updateConfig(form.value);
+    alertThresholds.setFromRule(form.value.storage_alert_rule);
     ElMessage.success('系统设置已保存');
   } finally {
     saving.value = false;

@@ -8,6 +8,32 @@
 - 修复：按当前交付要求将后端门禁调整为 `85%`、前端四项门禁调整为 `80%`，未扩大 coverage 排除范围。
 - 验证：前端在新门禁下通过；后端全量测试及 coverage 通过。远端 GitHub Actions 尚未执行。
 - 风险：后续若恢复更高门禁，仍需继续补充前端分支和函数测试。
+### 2026-07-16：前端全量回归仍断言已移除的 LDAP 与目录移动入口
+
+- 触发：执行 `npm test` 和 `npm run test:coverage`。
+- 现象：`user-management-ldap-sync.test.js` 两项找不到“新增用户”和“同步 LDAP 用户”，`write-form-experience.test.js` 一项找不到“移动用户目录 / 移动目录”；结果均为 `272 passed, 3 failed`。
+- 根因：页面已在此前系统设置废弃配置清理中移除 IAM/LDAP 集成和用户目录移动入口，但三条旧测试契约仍保留。
+- 修复：本轮不恢复已废弃功能，也不把无关测试清理并入使用率改动；在主工作区同一基线上复跑相同两份测试，确认同样为 `15 passed, 3 failed`。
+- 验证：排除两份已失效契约后覆盖率回归 `44 files / 257 passed`，Statements/Lines `92.69%`、Branches `83.26%`、Functions `68.19%`。
+- 风险：前端全量与默认覆盖率命令保持非零退出；后续应单独删除或改写这三条废弃功能断言。
+
+### 2026-07-16：Vitest exclude 参数重复传值被 CLI 拒绝
+
+- 触发：为确认其余前端覆盖率，连续传入两个 `--exclude` 参数。
+- 现象：Vitest 报 `Expected a single value for option "--exclude <glob>"`，未开始测试。
+- 根因：当前 Vitest CLI 的 `--exclude` 只接受一个 glob 值。
+- 修复：改用单个 brace glob：`--exclude "test/unit/{user-management-ldap-sync,write-form-experience}.test.js"`。
+- 验证：修正后 `44 files / 257 passed` 并生成覆盖率摘要。
+- 风险：仅影响验证命令形状，不影响生产代码。
+
+### 2026-07-16：列表页挂载测试加载了被整体 mock 的 API 基类
+
+- 触发：为共享 `Progress` 增加 Pinia 阈值缓存后，运行存储空间、容量池和 Qtree 列表的既有挂载测试。
+- 现象：三个用例均报 `Class extends value undefined is not a constructor or null`，堆栈落在 `UsersApi extends CrudApi`。
+- 根因：测试只在挂载配置中 stub `Progress`，模块加载阶段仍执行真实组件依赖；该测试环境又整体替换了 API 基类，间接加载用户 API 时基类为 `undefined`。
+- 修复：在列表页测试的模块边界直接 mock `Progress.vue`，使筛选契约测试不加载与目标无关的阈值和用户 API。
+- 验证：相同前端聚焦测试复验为 `7 files / 51 passed`。
+- 风险：仅调整测试隔离边界，生产组件、阈值请求和页面行为未改变。
 
 ### 2026-07-16：NetApp/Isilon 设备错误响应在不同调用阶段被改写或吞掉
 

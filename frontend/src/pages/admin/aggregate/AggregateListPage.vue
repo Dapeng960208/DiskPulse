@@ -9,7 +9,9 @@ import Progress from '@/components/form/Progress.vue';
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import { hasRole } from '@/utils/authorization';
 import { getStorageResourceNativeType } from '@/utils/storage-resource';
+import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 const router = useRouter();
+const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
   size: 20,
@@ -71,10 +73,11 @@ query();
       }"
     >
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="存储集群"
         align="center"
         prop="storageCluster.name"
-        min-width="100"
+        min-width="140"
       >
         <template #default="{ row }">
           <span>{{ row.storage_cluster?.name || '-' }}</span>
@@ -84,9 +87,11 @@ query();
         label="容量池名"
         align="center"
         prop="name"
-        min-width="120"
+        min-width="160"
+        show-overflow-tooltip
       />
       <ElTableColumn
+        v-if="showSecondaryColumns"
         label="原生类型"
         align="center"
         min-width="140">
@@ -95,11 +100,12 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="限额"
         sortable="custom"
         align="center"
         prop="limit"
-        min-width="50"
+        min-width="100"
       >
         <template #default="{ row }">
           <span v-if="row.limit">{{ row.limit>=1024 ? `${(row.limit/1024).toFixed(1)} T`: `${row.limit} G` }}</span>
@@ -109,22 +115,23 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="使用量"
         sortable="custom"
         align="center"
         prop="used"
-        min-width="50"
+        min-width="100"
       >
         <template #default="{ row }">
           <span>{{ row.used>=1024 ? `${(row.used/1024).toFixed(1)} T`: `${row.used} G` }}</span>
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="利用率(%)"
+        label="使用率(%)"
         align="center"
         prop="use_ratio"
         sortable="custom"
-        width="400"
+        width="240"
       >
         <template #default="{ row }">
           <Progress
@@ -138,7 +145,7 @@ query();
       <ElTableColumn
         v-if="hasRole('disk-monitor:admin')"
         align="right"
-        min-width="120">
+        width="132">
         <template #default="{ row }">
           <ElButton
             v-if="hasRole('disk-monitor:admin')"

@@ -19,6 +19,15 @@
 - GitHub Actions 固定 Node `22.14.0` 与 Python `3.13.0`，执行后端全量测试/coverage、前端全量 coverage、lint 和生产构建。
 - 本轮验证：后端 `363 passed`、coverage `91%`；前端 `294 passed`，Statements/Lines `98.40%`、Branches `89.84%`、Functions `83.95%`，在新门禁下通过；前端 lint 和生产构建通过。
 - 后端重复 warning 已从全量测试输出中清除；前端仅保留负向网络用例产生的预期错误日志和构建既有大 chunk 提示。GitHub-hosted runner 尚未实际执行，需以远端 Actions 结果为最终环境验证。
+## 2026-07-16：全局列表使用率与响应式列优化
+
+- 新增登录用户可读的 `GET /config/storage-alert-thresholds`，只返回 `important/serious/emergency`；完整 `/config/storage` 读写继续要求超级管理员。
+- 七个列表页统一使用率列 `240px`、操作列 `132px`，并按 `1440px`、`1024px` 两个断点实时隐藏次要列和容量上下文列；窄屏始终保留主标识、使用率和操作入口。
+- `Progress` 通过 Pinia 共享一次阈值请求，失败静默回退默认 `80/90/95`；设置保存后立即更新缓存。颜色规则为绿 `<80`、橙 `80–<90`、红 `90–95`、深红 `>95`，实际边界跟随配置阈值。
+- TDD RED 提交为 `6f0025b`；聚焦验证为后端 `51 passed`、前端 `51 passed`，新增 Pinia 烟测复验 `68 passed`；后端全量 `340 passed`，前端排除两份已失效基线契约后的覆盖率回归为 `257 passed`，Statements/Lines `92.69%`、Branches `83.26%`、Functions `68.19%`。
+- `npm run lint`、`npm run build:prod` 和 `git diff --check` 通过。完整 `npm test` 与 `npm run test:coverage` 均为 `272 passed, 3 failed`；三个失败在主工作区同一基线上可复现，来自已移除的 LDAP 新增/同步按钮和用户目录移动入口旧断言，与本轮改动无关。
+- 三档列映射已由 `1600/1200/900px` 自动化契约覆盖；未连接带登录态的本轮 Worktree 前端与后端执行浏览器人工验收，长文本 tooltip、真实视口切换和设置保存后的页面即时变色仍需部署环境确认。
+
 
 ## 2026-07-16：项目组与用户目录配额调整
 

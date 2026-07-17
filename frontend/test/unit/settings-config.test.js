@@ -1,4 +1,5 @@
 import { flushPromises, shallowMount } from '@vue/test-utils';
+import { createPinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const configApi = vi.hoisted(() => ({
@@ -21,7 +22,10 @@ async function mountSettings(config = { storage_alert_rule: storageAlertRule }) 
     '@/pages/admin/settings/SettingsPage.vue'
   );
   const wrapper = shallowMount(SettingsPage, {
-    global: { renderStubDefaultSlot: true },
+    global: {
+      renderStubDefaultSlot: true,
+      plugins: [createPinia()],
+    },
   });
   await flushPromises();
   return wrapper;

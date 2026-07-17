@@ -1,5 +1,10 @@
 <script setup>
 import { ElProgress } from 'element-plus';
+import { getQuotaProgressColor } from '@/utils/storage-alert-rule';
+import { useStorageAlertThresholds } from '@/stores/storage-alert-thresholds';
+
+const alertThresholds = useStorageAlertThresholds();
+alertThresholds.load();
 
 const props = defineProps({
   used: {
@@ -26,13 +31,7 @@ function calculatePercentage(value, total) {
 }
 
 function getColor(percentage) {
-  if (percentage < 80) {
-    return 'var(--chart-color-success)';
-  }
-  if (percentage < 90) {
-    return 'var(--chart-color-warning)';
-  }
-  return 'var(--chart-color-danger)';
+  return getQuotaProgressColor(percentage, alertThresholds.thresholds);
 }
 </script>
 

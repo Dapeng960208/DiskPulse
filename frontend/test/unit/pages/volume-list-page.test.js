@@ -29,6 +29,9 @@ vi.mock('@/components/form/StorageClusterSelect.vue', () => ({
 vi.mock('@/components/form/VolumeSelect.vue', () => ({
   default: { name: 'VolumeSelect', template: '<select />' },
 }));
+vi.mock('@/components/form/Progress.vue', () => ({
+  default: { name: 'Progress', template: '<div />' },
+}));
 vi.mock('@/utils/authorization', () => ({ hasRole: () => false }));
 vi.mock('vue-router', async () => ({
   ...(await vi.importActual('vue-router')),

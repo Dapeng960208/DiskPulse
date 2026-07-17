@@ -347,6 +347,28 @@ def test_sensitive_config_requires_super_admin(security_client):
     assert response.status_code == 403
 
 
+def test_authenticated_users_can_read_only_storage_alert_thresholds(security_client):
+    response = security_client.get(
+        "/storage-pulse/api/config/storage-alert-thresholds",
+        headers={"Authorization": f"Bearer {issue_token(2)}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "important": 80,
+        "serious": 90,
+        "emergency": 95,
+    }
+
+
+def test_storage_alert_thresholds_require_authentication(security_client):
+    response = security_client.get(
+        "/storage-pulse/api/config/storage-alert-thresholds",
+    )
+
+    assert response.status_code == 401
+
+
 def test_manual_integration_checks_are_not_collected_as_unit_tests():
     assert not (BACKEND_ROOT / "test" / "test_netapp.py").exists()
     assert not (BACKEND_ROOT / "test" / "test_isilon.py").exists()

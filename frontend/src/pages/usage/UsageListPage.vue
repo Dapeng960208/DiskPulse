@@ -20,11 +20,13 @@ import ExportDialog from '@/components/form/ExportDialog.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 import { formatStorageTargetType } from '@/utils/storage-resource';
 import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
+import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 const exportRef =ref(null);
 const currentUser = useCurrentUser();
 const router = useRouter();
 const storageUsageFormDialogRef = ref();
 const quotaAdjustmentDialogRef = ref();
+const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
   size: 20,
@@ -251,7 +253,8 @@ query();
       <ElTableColumn
         label="研发用户名"
         align="center"
-        min-width="80"
+        min-width="140"
+        show-overflow-tooltip
       >
         <template #default="{ row }">
           <span>{{ row.user?.rd_username }}</span>
@@ -267,6 +270,7 @@ query();
       </ElTableColumn>
 
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="项目"
         align="center"
         min-width="80">
@@ -275,6 +279,7 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showSecondaryColumns"
         label="项目组标签"
         align="center"
         min-width="80">
@@ -283,6 +288,7 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="项目组"
         align="center"
         min-width="80"
@@ -296,6 +302,7 @@ query();
       </ElTableColumn>
 
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="存储集群"
         align="center"
         prop="storageCluster.name"
@@ -306,6 +313,7 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showSecondaryColumns"
         label="存储类型"
         align="center"
         min-width="70">
@@ -320,18 +328,21 @@ query();
 
 
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="Linux路径"
         align="center"
         sortable="custom"
         prop="linux_path"
-        min-width="200"
+        min-width="220"
+        show-overflow-tooltip
       />
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="硬限额"
         sortable="custom"
         align="center"
         prop="limit"
-        min-width="50"
+        min-width="100"
       >
         <template #default="{ row }">
           <span v-if="row.limit">{{ formatQuotaLimit(row.limit) }}</span>
@@ -341,11 +352,12 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="软限额"
         sortable="custom"
         align="center"
         prop="soft_limit"
-        min-width="60"
+        min-width="100"
       >
         <template #default="{ row }">
           <span v-if="row.soft_limit">{{ formatQuotaLimit(row.soft_limit, { emptyText: '无软限额' }) }}</span>
@@ -356,22 +368,23 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="使用量"
         sortable="custom"
         align="center"
         prop="used"
-        min-width="50"
+        min-width="100"
       >
         <template #default="{ row }">
           <span>{{ row.used>=1024 ? `${(row.used/1024).toFixed(1)} T`: `${row.used} G` }}</span>
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="硬利用率(%)"
+        label="硬限额使用率(%)"
         align="center"
         prop="use_ratio"
         sortable="custom"
-        width="200"
+        width="240"
       >
         <template #default="{ row }">
           <Progress
@@ -382,11 +395,11 @@ query();
         </template>
       </ElTableColumn>
       <ElTableColumn
-        label="软利用率(%)"
+        label="软限额使用率(%)"
         align="center"
         prop="soft_use_ratio"
         sortable="custom"
-        width="200"
+        width="240"
       >
         <template #default="{ row }">
           <Progress

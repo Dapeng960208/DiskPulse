@@ -3,6 +3,12 @@ from pydantic import BaseModel, ConfigDict
 from schemas.storageAlertRuleSchema import DEFAULT_STORAGE_ALERT_RULE, StorageAlertRule
 
 
+class StorageAlertThresholds(BaseModel):
+    important: int
+    serious: int
+    emergency: int
+
+
 class StorageConf(BaseModel):
     id: int | None = None
     name: str | None = None
