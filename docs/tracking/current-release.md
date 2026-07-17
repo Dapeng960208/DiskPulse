@@ -56,6 +56,7 @@
 
 - 生产 PostgreSQL 的备份恢复、Alembic `stamp`/upgrade、触发器和应用运行账号/审计只读账号授权未验证；真实 NetApp/Isilon 设备写入、采集和 Feishu 投递也尚未在变更窗口完成联调验证。仓库没有 Playwright 配置/依赖且当前无可用浏览器运行时，浏览器 E2E 未执行。前端构建保留既有 `%VITE_APP_TITLE%` 未定义和大 chunk 警告。
 - 升级前必须备份：`000000000009` 会删除 `projects.pt_user_id`，downgrade 仅重建空列，历史 PT 负责人数据不可恢复，不能将 downgrade 作为该数据的回滚方案。
+- 本地合并提交为 `3b2c85e`；功能 worktree 和 `codex/project-rbac-unified-audit` 分支已清理。该 worktree 的后台 CodeGraph/Vite 进程已停止，不影响主工作区。
 
 ## 2026-07-17：企业级 AI 存储智能运维调研基线
 

@@ -1,5 +1,14 @@
 # 错误记录
 
+### 2026-07-18：已移除的功能 worktree 被 CodeGraph 与 Vite 进程占用
+
+- 触发：完成 `main` 本地合并后删除 `codex/project-rbac-unified-audit` worktree。
+- 现象：Git 删除返回 `Invalid argument`；PowerShell 随后报告 `.codegraph/codegraph.db` 和 `frontend` 目录正被其他进程使用。
+- 根因：该 worktree 的 CodeGraph 索引 daemon 和 Vite 预览进程仍在运行，分别持有索引数据库和前端目录句柄。
+- 修复：按 daemon PID 和命令行仅结束指向该 worktree 的 CodeGraph/Vite 进程，再删除孤立目录并执行 `git worktree prune`。
+- 验证：`git worktree list` 仅保留 `D:/dev/DiskPulse [main]`；`codex/project-rbac-unified-audit` 分支已删除，主工作区干净。
+- 风险：后续启动临时 worktree 服务时，清理前仍须先停止该 worktree 下的索引与前端进程。
+
 ### 2026-07-18：并行分支复用了 Alembic revision `000000000008`
 
 - 触发：将遥测可观测与项目 RBAC/统一审计分支合并，并执行迁移唯一 head 与 SQLite 升降级回归。
