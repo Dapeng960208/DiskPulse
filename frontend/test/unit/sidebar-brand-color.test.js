@@ -4,18 +4,15 @@ import { describe, expect, it } from 'vitest';
 const readSource = (path) => readFileSync(path, 'utf8');
 
 describe('logo color sidebar treatment', () => {
-  it('uses dedicated logo-derived tokens for the sidebar and its menu states', () => {
+  it('applies the logo-derived color only to navigation icons', () => {
     const variables = readSource('src/styles/variables.scss');
-    const appLayout = readSource('src/layouts/AppLayout.vue');
     const routeMenu = readSource('src/layouts/components/RouteMenu.vue');
 
-    expect(variables).toContain('--aside-bg: #F4FBE1');
-    expect(variables).toContain('--aside-active-bg: #E3F5A7');
-    expect(variables).toContain('--aside-accent: #5D7A18');
-    expect(variables).toMatch(/html\.dark\s*\{[\s\S]*--aside-bg: #25320F/);
-    expect(appLayout).toContain('background: var(--aside-bg)');
-    expect(routeMenu).toContain('background: var(--aside-bg)');
-    expect(routeMenu).toContain('background: var(--aside-active-bg)');
-    expect(routeMenu).toContain('color: var(--aside-accent)');
+    expect(variables).toContain('--sidebar-icon-color: #76A51D');
+    expect(variables).toMatch(/html\.dark\s*\{[\s\S]*--sidebar-icon-color: #B0E237/);
+    expect(routeMenu).toContain('color: var(--sidebar-icon-color)');
+    expect(routeMenu).toMatch(/\.route-menu[\s\S]*\.el-menu-item > i/);
+    expect(routeMenu).toMatch(/\.el-sub-menu__title > i/);
+    expect(routeMenu).not.toContain('background: var(--aside-bg)');
   });
 });

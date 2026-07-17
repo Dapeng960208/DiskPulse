@@ -75,6 +75,11 @@ function mapRouteToMenuOption(route, parentPath) {
   border-right: none !important;
   padding: var(--spacing-sm) var(--spacing-xs);
 
+  :deep(.el-menu-item > i),
+  :deep(.el-sub-menu__title > i) {
+    color: var(--sidebar-icon-color);
+  }
+
   :deep(.el-menu-item) {
     height: 44px;
     line-height: 44px;
