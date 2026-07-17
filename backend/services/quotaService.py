@@ -74,10 +74,22 @@ def _display_limit(value: float | None) -> str:
     return "未设置" if value is None else f"{value:.2f} GiB"
 
 
-def _enqueue_adjustment_feishu(event_id: int) -> None:
+def _enqueue_adjustment_feishu(event_id: int, *, audit_context: AuditContext | None = None) -> None:
     from celery_tasks.tasks.storage_alerts import deliver_storage_alert_task
 
-    deliver_storage_alert_task.delay(event_id)
+    if audit_context is None:
+        deliver_storage_alert_task.delay(event_id)
+        return
+    deliver_storage_alert_task.delay(
+        event_id,
+        audit_context_payload={
+            "request_id": audit_context.request_id,
+            "trace_id": audit_context.trace_id,
+            "operation_id": audit_context.operation_id,
+            "actor_type": audit_context.actor_type,
+            "actor_user_id": audit_context.actor_user_id,
+        },
+    )
 
 
 def _record_adjustment(
@@ -392,7 +404,7 @@ def _execute_adjustment(
 
     if alert.delivery_status == "pending":
         try:
-            _enqueue_adjustment_feishu(alert.id)
+            _enqueue_adjustment_feishu(alert.id, audit_context=audit_context)
         except Exception as error:
             logger.error(
                 "Quota adjustment Feishu enqueue failed resource_type=%s resource_id=%s error_type=%s",

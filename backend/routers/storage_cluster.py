@@ -2,14 +2,15 @@
 import io
 from typing import Annotated, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
 from schemas import storageClusterSchema, commonSchema, storageTrendSchema
 from crud import storageClusterCrud
 from crud.questDbCrud import get_storage_cluster_real_time
-from dependencies import get_db, require_super_admin
+from dependencies import CurrentUserDep, get_db, require_super_admin
+from services import audit_service
 from services.storageClusterService import schedule_storage_collection as _schedule_storage_collection
 from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 from services.storageHealthAnalyticsService import (
@@ -83,12 +84,17 @@ def read_storage_clusters(
 )
 def create_storage_cluster(
     storage_cluster: storageClusterSchema.StorageClusterCreate,
+    request: Request,
+    current_user: CurrentUserDep,
     _admin: None = Depends(require_super_admin),
     db: Session = Depends(get_db)
 ):
     db_cluster = storageClusterCrud.create_storage_cluster(db=db, storage_cluster=storage_cluster)
     if db_cluster.is_active:
-        _schedule_storage_collection(db_cluster.id)
+        _schedule_storage_collection(
+            db_cluster.id,
+            audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
+        )
     return db_cluster
 
 
@@ -122,6 +128,8 @@ def read_storage_cluster(storage_cluster_id: int, db: Session = Depends(get_db))
 def update_storage_cluster(
     storage_cluster_id: int,
     storage_cluster: storageClusterSchema.StorageClusterUpdate,
+    request: Request,
+    current_user: CurrentUserDep,
     _admin: None = Depends(require_super_admin),
     db: Session = Depends(get_db)
 ):
@@ -131,7 +139,10 @@ def update_storage_cluster(
     db_cluster = storageClusterCrud.update_storage_cluster(db=db, storage_cluster_id=storage_cluster_id,
                                                            storage_cluster=storage_cluster)
     if db_cluster.is_active:
-        _schedule_storage_collection(db_cluster.id)
+        _schedule_storage_collection(
+            db_cluster.id,
+            audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
+        )
     return db_cluster
 
 

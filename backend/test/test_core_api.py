@@ -337,7 +337,7 @@ class TestCoreApi:
                 f"/storage-pulse/api/storage-clusters/{cluster_id}",
                 json={"name": "cluster-b-renamed", "is_active": True, "used": 200, "use_ratio": 25},
             )
-            schedule_collection.assert_called_once_with(cluster_id)
+            schedule_collection.assert_called_once_with(cluster_id, audit_context=ANY)
         assert update_response.status_code == 200
         assert update_response.json()["name"] == "cluster-b-renamed"
 
@@ -476,7 +476,7 @@ class TestCoreApi:
             )
 
         assert response.status_code == 200
-        schedule_collection.assert_called_once_with(response.json()["id"])
+        schedule_collection.assert_called_once_with(response.json()["id"], audit_context=ANY)
 
     def test_active_storage_cluster_create_propagates_http_correlation_to_collection(self):
         request_id = "2a48f1f1-78ea-49c1-b3bc-2712720e4c86"
