@@ -1,5 +1,5 @@
 <script setup>
-import { ElRow,ElCol,ElDescriptionsItem } from 'element-plus';
+import { ElDescriptionsItem } from 'element-plus';
 import { ref,onBeforeMount} from 'vue';
 import RealTimePage from '@/pages/common/RealTimePage.vue';
 import { useRoute } from 'vue-router';
