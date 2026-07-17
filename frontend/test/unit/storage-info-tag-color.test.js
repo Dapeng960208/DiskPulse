@@ -9,10 +9,14 @@ const softLimitContracts = [
 ];
 
 const storageTypeContracts = [
-  ['src/pages/group/GroupListPage.vue', 'type="info"'],
-  ['src/pages/usage/UsageListPage.vue', 'type="success"'],
-  ['src/pages/project/ProjectDetailPage.vue', 'type="info"'],
-  ['src/pages/project/components/ProjectTable.vue', 'type="info"'],
+  'src/pages/group/GroupListPage.vue',
+  'src/pages/usage/UsageListPage.vue',
+  'src/pages/project/ProjectDetailPage.vue',
+  'src/pages/project/components/ProjectTable.vue',
+  'src/pages/admin/aggregate/AggregateListPage.vue',
+  'src/pages/admin/volume/VolumeListPage.vue',
+  'src/pages/admin/qtree/QtreeListPage.vue',
+  'src/pages/admin/storage-cluster/StorageClusterListPage.vue',
 ];
 
 const source = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
@@ -26,10 +30,12 @@ describe('storage information tag colors', () => {
         .toHaveLength(expectedCount);
     }
 
-    for (const [path, expectedType] of storageTypeContracts) {
+    for (const path of storageTypeContracts) {
       const page = source(path);
       expect(page, path).not.toContain('storage-info-tag');
-      expect(page, path).toContain(expectedType);
+      expect(page, path).toContain('<StorageTypeTag');
     }
+
+    expect(source('src/components/data/StorageTypeTag.vue')).toContain('type="success"');
   });
 });
