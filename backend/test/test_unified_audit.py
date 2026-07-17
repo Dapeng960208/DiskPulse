@@ -11,6 +11,7 @@ from uuid import UUID
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 import pytest
+import sqlalchemy as sa
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 from alembic.migration import MigrationContext
@@ -378,7 +379,7 @@ def test_audit_event_detail_is_available_only_within_the_authorized_project_scop
 
 
 def _audit_migration_module():
-    migration_path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000009_unified_audit.py"
+    migration_path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000008_project_rbac_unified_audit.py"
     spec = importlib.util.spec_from_file_location("unified_audit_migration", migration_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -394,7 +395,18 @@ def _run_migration(migration, context, method_name):
 def test_unified_audit_migration_prevents_sqlite_updates_and_deletes():
     migration = _audit_migration_module()
     engine = create_engine("sqlite+pysqlite:///:memory:")
-    with engine.begin() as connection:
+    with engine.connect() as connection:
+        metadata = sa.MetaData()
+        sa.Table("users", metadata, sa.Column("id", sa.Integer(), primary_key=True))
+        sa.Table(
+            "projects",
+            metadata,
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column("in_charge_user_id", sa.Integer()),
+            sa.Column("pt_user_id", sa.Integer()),
+        )
+        metadata.create_all(connection)
+        connection.commit()
         _run_migration(migration, MigrationContext.configure(connection), "upgrade")
         connection.execute(
             text(
@@ -432,6 +444,7 @@ def test_unified_audit_migration_compiles_without_online_database_access(dialect
 
     sql = output.getvalue()
     assert "CREATE TABLE audit_events" in sql
-    assert "op.get_bind" not in Path(migration.__file__).read_text(encoding="utf-8")
+    source = Path(migration.__file__).read_text(encoding="utf-8")
+    assert "if context.as_sql" in source
     if dialect_name == "sqlite":
         assert "CREATE TRIGGER trg_audit_events_no_update" in sql
