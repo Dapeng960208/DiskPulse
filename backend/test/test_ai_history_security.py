@@ -83,6 +83,134 @@ def test_revoked_project_membership_hides_persisted_ai_turn_and_tool_result(db_s
     assert assistant["tool_calls"] == []
 
 
+def test_revoked_membership_never_reaches_provider_history_or_sse(db_session, monkeypatch):
+    user, _model, conversation = _seed_conversation(db_session)
+    project = models.Project(id=1, name="revoked-project")
+    membership = models.ProjectMembership(project_id=project.id, user_id=user.id, role="reader")
+    db_session.add_all([project, membership])
+    db_session.commit()
+    secret = "revoked-project 的私密用量为 42 GiB"
+    _add_assistant_turn(
+        db_session,
+        conversation,
+        content=secret,
+        response_payload={
+            "visibility": {
+                "known": True,
+                "project_scope_ids": [project.id],
+                "requires_super_admin": False,
+            }
+        },
+        detail_payload=[
+            {
+                "tool_name": "get_project",
+                "visibility": {
+                    "known": True,
+                    "project_scope_ids": [project.id],
+                    "requires_super_admin": False,
+                },
+                "result": {"ok": True, "data": {"id": project.id}},
+            }
+        ],
+    )
+    db_session.delete(membership)
+    db_session.commit()
+    provider_messages = []
+
+    def provider_stream(_model, messages, **_kwargs):
+        provider_messages.extend(messages)
+        text = secret if secret in json.dumps(messages, ensure_ascii=False) else "无可用的项目历史数据"
+        yield AICompletionStreamEvent(kind="delta", text=text)
+        yield AICompletionStreamEvent(kind="completed", text=text, tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    events = list(
+        ai_chat_service.stream_message(
+            app=FastAPI(),
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=user.id,
+            current_user=user,
+            content="请总结上一条",
+        )
+    )
+
+    assert secret not in json.dumps(provider_messages, ensure_ascii=False)
+    assert all(secret not in data.get("text", "") for event, data in events if event == "delta")
+
+
+def test_sensitive_tool_turn_propagates_visibility_to_a_follow_up_summary(db_session, monkeypatch):
+    user, _model, conversation = _seed_conversation(db_session)
+    project = models.Project(id=1, name="restricted-project")
+    membership = models.ProjectMembership(project_id=project.id, user_id=user.id, role="reader")
+    db_session.add_all([project, membership])
+    db_session.commit()
+    app = FastAPI()
+    router = APIRouter()
+
+    @router.get(
+        "/projects/{project_id}",
+        openapi_extra={"ai_exposed": True, "ai_name": "get_project", "ai_description": "查询项目"},
+    )
+    def get_project(project_id: int):
+        return {"id": project_id, "project_id": project_id, "used": 42}
+
+    app.include_router(router)
+    calls = {"count": 0}
+
+    def provider_stream(*_args, **_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[
+                    AIClientToolCall(
+                        tool_id="project-tool",
+                        name="get_project",
+                        arguments={"project_id": project.id},
+                    )
+                ],
+                stop_reason="tool_calls",
+            )
+            return
+        text = "该项目的私密容量摘要"
+        yield AICompletionStreamEvent(kind="delta", text=text)
+        yield AICompletionStreamEvent(kind="completed", text=text, tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=user.id,
+            current_user=user,
+            content="查询项目容量",
+        )
+    )
+    list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=user.id,
+            current_user=user,
+            content="请总结上一条",
+        )
+    )
+
+    audits = db_session.query(models.AIAuditLog).filter_by(conversation_id=conversation.id).order_by(models.AIAuditLog.id).all()
+    assert json.loads(audits[-1].response_payload)["visibility"]["project_scope_ids"] == [project.id]
+
+    db_session.delete(membership)
+    db_session.commit()
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+    assistants = [message for message in history["messages"] if message["role"] == "assistant"]
+
+    assert [message["status"] for message in assistants] == ["restricted", "restricted"]
+    assert [message["content"] for message in assistants] == [HIDDEN_HISTORY_CONTENT, HIDDEN_HISTORY_CONTENT]
+
+
 def test_legacy_ai_trace_without_visibility_metadata_is_hidden_safely(db_session):
     user, _model, conversation = _seed_conversation(db_session)
     _add_assistant_turn(
@@ -96,6 +224,24 @@ def test_legacy_ai_trace_without_visibility_metadata_is_hidden_safely(db_session
                 "result": {"ok": True, "data": {"items": [{"project_id": 1, "name": "secret"}]}},
             }
         ],
+    )
+
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+    assistant = history["messages"][-1]
+
+    assert assistant["status"] == "restricted"
+    assert assistant["content"] == HIDDEN_HISTORY_CONTENT
+    assert assistant["tool_calls"] == []
+
+
+def test_legacy_ai_turn_without_visibility_or_tool_trace_is_hidden_safely(db_session):
+    user, _model, conversation = _seed_conversation(db_session)
+    _add_assistant_turn(
+        db_session,
+        conversation,
+        content="可能包含无权项目的历史文本",
+        response_payload={},
+        detail_payload=[],
     )
 
     history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
