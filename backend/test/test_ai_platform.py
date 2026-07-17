@@ -14,21 +14,25 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from appConfig import base_config
+from dependencies import require_super_admin
 from models import AIConfig, AIConversation, AIAuditLog, AIMessage, User
 from routers import (
     aggregate,
     ai,
     ai_admin,
     config,
+    group,
     group_tag,
     qtrees,
     storage_back_up_records,
     storage_cluster,
+    storage_usage,
     users,
     volumes,
 )
 from services import ai_chat_service
 from services import ai_config_service
+from services import quotaService
 from services.ai_client import AIClientError, AIClientToolCall, AICompletionResult
 from services.ai_client import AICompletionStreamEvent
 from services.ai_rate_limit import enforce_ai_rate_limit
@@ -266,6 +270,8 @@ def test_registered_system_management_crud_tools_are_admin_only(monkeypatch):
         config.router,
         ai_admin.router,
         storage_back_up_records.router,
+        group.router,
+        storage_usage.router,
     ):
         app.include_router(router)
 
@@ -283,40 +289,25 @@ def test_registered_system_management_crud_tools_are_admin_only(monkeypatch):
         "create_storage_cluster": ("/storage-clusters/", "POST"),
         "get_storage_cluster": ("/storage-clusters/{storage_cluster_id}", "GET"),
         "update_storage_cluster": ("/storage-clusters/{storage_cluster_id}", "PUT"),
-        "delete_storage_cluster": ("/storage-clusters/{storage_cluster_id}", "DELETE"),
         "list_aggregates": ("/aggregates/", "GET"),
-        "create_aggregate": ("/aggregates/", "POST"),
         "get_aggregate": ("/aggregates/{aggregate_id}", "GET"),
         "update_aggregate": ("/aggregates/{aggregate_id}", "PUT"),
-        "delete_aggregate": ("/aggregates/{aggregate_id}", "DELETE"),
         "list_volumes": ("/volumes/", "GET"),
-        "create_volume": ("/volumes/", "POST"),
         "get_volume": ("/volumes/{volume_id}", "GET"),
-        "update_volume": ("/volumes/{volume_id}", "PUT"),
-        "delete_volume": ("/volumes/{volume_id}", "DELETE"),
-        "list_qtrees": ("/qtrees/", "GET"),
-        "create_qtree": ("/qtrees/", "POST"),
-        "get_qtree": ("/qtrees/{qtree_id}", "GET"),
-        "update_qtree": ("/qtrees/{qtree_id}", "PUT"),
-        "delete_qtree": ("/qtrees/{qtree_id}", "DELETE"),
         "list_group_tags": ("/group-tags", "GET"),
         "create_group_tag": ("/group-tags", "POST"),
         "get_group_tag": ("/group-tags/{group_tag_id}", "GET"),
         "update_group_tag": ("/group-tags/{group_tag_id}", "PUT"),
-        "delete_group_tag": ("/group-tags/{group_tag_id}", "DELETE"),
         "list_users": ("/users/", "GET"),
-        "create_user": ("/users/", "POST"),
         "get_user": ("/users/{user_id}", "GET"),
         "update_user": ("/users/{user_id}", "PUT"),
-        "delete_user": ("/users/{user_id}", "DELETE"),
         "list_ai_models": ("/admin/ai-models", "GET"),
         "create_ai_model": ("/admin/ai-models", "POST"),
         "update_ai_model": ("/admin/ai-models/{model_id}", "PATCH"),
-        "delete_ai_model": ("/admin/ai-models/{model_id}", "DELETE"),
         "get_storage_config": ("/config/storage", "GET"),
-        "update_storage_config": ("/config/storage", "PUT"),
         "list_storage_backup_records": ("/storage-back-up-records/", "GET"),
-        "delete_storage_backup_record": ("/storage-back-up-records/{storage_back_up_record_id}", "DELETE"),
+        "adjust_group_quota": ("/groups/{group_id}/quota", "PATCH"),
+        "adjust_storage_usage_quota": ("/storage-usages/{storage_usage_id}/quota", "PATCH"),
     }
     admin_registry = build_tool_registry(app, current_user=admin)
     reader_registry = build_tool_registry(app, current_user=reader)
@@ -327,6 +318,29 @@ def test_registered_system_management_crud_tools_are_admin_only(monkeypatch):
         if definition.system_management
     } == expected
     assert not (set(expected) & set(reader_registry))
+    assert not {
+        "delete_storage_cluster",
+        "create_aggregate",
+        "delete_aggregate",
+        "create_volume",
+        "update_volume",
+        "delete_volume",
+        "list_qtrees",
+        "create_qtree",
+        "get_qtree",
+        "get_qtree_realtime",
+        "update_qtree",
+        "delete_qtree",
+        "delete_group_tag",
+        "create_user",
+        "delete_user",
+        "delete_ai_model",
+        "update_storage_config",
+        "delete_storage_backup_record",
+        "list_ai_audits",
+        "get_ai_audit",
+        "get_ai_audit_conversation",
+    } & set(admin_registry)
     assert not any(
         definition.system_management and (definition.route_path, definition.method) in {
             ("/users/login", "POST"),
@@ -351,6 +365,92 @@ def test_registered_system_management_crud_tools_are_admin_only(monkeypatch):
         }
         for definition in admin_registry.values()
     )
+
+
+def test_quota_adjustment_tools_require_admin_at_registration_and_execution(monkeypatch):
+    app = FastAPI()
+    app.include_router(group.router)
+    app.include_router(storage_usage.router)
+    calls = []
+
+    app.dependency_overrides[require_super_admin] = lambda: None
+    monkeypatch.setattr(
+        quotaService,
+        "adjust_group_quota",
+        lambda _db, group_id, request: calls.append(("group", group_id, request)) or {
+            "id": group_id,
+            "resource_type": "group",
+            "storage_type": "netapp",
+            "hard_limit": request.hard_limit_gib,
+        },
+    )
+    monkeypatch.setattr(
+        quotaService,
+        "adjust_storage_usage_quota",
+        lambda _db, storage_usage_id, request: calls.append(("storage_usage", storage_usage_id, request)) or {
+            "id": storage_usage_id,
+            "resource_type": "storage_usage",
+            "storage_type": "netapp",
+            "hard_limit": request.hard_limit_gib,
+        },
+    )
+    original_get = base_config.get
+
+    def configured_get(key, default=None):
+        return ["ai-admin"] if key == "super_admin_usernames" else original_get(key, default)
+
+    monkeypatch.setattr(base_config, "get", configured_get)
+    reader = User(id=101, username="reader", rd_username="reader", email="reader@example.com")
+    admin = User(id=102, username="ai-admin", rd_username="ai-admin", email="admin@example.com")
+    admin_registry = build_tool_registry(app, current_user=admin)
+
+    assert {"adjust_group_quota", "adjust_storage_usage_quota"} <= set(admin_registry)
+    assert not {"adjust_group_quota", "adjust_storage_usage_quota"} & set(
+        build_tool_registry(app, current_user=reader)
+    )
+    assert execute_tool(
+        app=app,
+        registry=admin_registry,
+        tool_name="adjust_group_quota",
+        arguments={"group_id": 7, "body": {"hard_limit": 2, "unit": "TiB"}},
+        current_user=reader,
+    ) == {"ok": False, "error": "系统管理工具仅限超级管理员"}
+    assert calls == []
+
+    group_result = execute_tool(
+        app=app,
+        registry=admin_registry,
+        tool_name="adjust_group_quota",
+        arguments={"group_id": 7, "body": {"hard_limit": 2, "unit": "TiB"}},
+        current_user=admin,
+    )
+    usage_result = execute_tool(
+        app=app,
+        registry=admin_registry,
+        tool_name="adjust_storage_usage_quota",
+        arguments={"storage_usage_id": 9, "body": {"hard_limit": 120, "unit": "GiB"}},
+        current_user=admin,
+    )
+
+    assert group_result == {
+        "ok": True,
+        "data": {"id": 7, "resource_type": "group", "storage_type": "netapp", "hard_limit": 2048},
+    }
+    assert usage_result == {
+        "ok": True,
+        "data": {"id": 9, "resource_type": "storage_usage", "storage_type": "netapp", "hard_limit": 120},
+    }
+    assert [(kind, identifier, request.hard_limit_gib) for kind, identifier, request in calls] == [
+        ("group", 7, 2048),
+        ("storage_usage", 9, 120),
+    ]
+    assert execute_tool(
+        app=app,
+        registry=admin_registry,
+        tool_name="adjust_group_quota",
+        arguments={"group_id": 7, "body": {"hard_limit": 120, "unit": "GiB", "unexpected": True}},
+        current_user=admin,
+    )["error"] == "工具参数无效"
 
 
 def test_system_management_tool_validates_and_forwards_pydantic_body(monkeypatch):
