@@ -13,7 +13,7 @@
 ### 验证状态
 
 - RED：新增账本、新鲜度、探针、指标、授权 API、任务隔离、清理和迁移跨方言测试在实现前按预期失败。
-- GREEN：`D:\\dev\\DiskPulse\\.venv\\Scripts\\python.exe -m pytest backend/test/test_telemetry_observability.py backend/test/test_storage_collection_trigger.py backend/test/test_storage_health_analytics.py -q` 通过 `122 passed`；账本专题测试随后扩展至 `20 passed`。
+- GREEN：`D:\\dev\\DiskPulse\\.venv\\Scripts\\python.exe -m pytest backend/test/test_telemetry_observability.py backend/test/test_storage_collection_trigger.py backend/test/test_storage_health_analytics.py -q` 通过 `122 passed`；账本专题测试随后扩展至 `27 passed`，全量后端测试为 `437 passed`。
 
 ### 风险与后续
 
