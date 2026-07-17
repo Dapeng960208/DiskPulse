@@ -594,18 +594,21 @@ def test_analytics_time_range_rejects_mixed_timezone_awareness_as_value_error():
 
 
 @pytest.fixture
-def analytics_client(api_client_factory, db_session):
-    db_session.add(
-        models.StorageCluster(
-            id=1,
-            name="cluster-a",
-            storage_type="netapp",
-            storage_host="storage.local",
-            is_active=True,
-        )
+def analytics_client(api_client_factory, auth_headers, db_session):
+    db_session.add_all(
+        [
+            models.User(id=1, rd_username="alice"),
+            models.StorageCluster(
+                id=1,
+                name="cluster-a",
+                storage_type="netapp",
+                storage_host="storage.local",
+                is_active=True,
+            ),
+        ]
     )
     db_session.commit()
-    return api_client_factory([storage_cluster.router], authenticated=False)
+    return api_client_factory([storage_cluster.router], headers=auth_headers)
 
 
 @pytest.mark.parametrize(
