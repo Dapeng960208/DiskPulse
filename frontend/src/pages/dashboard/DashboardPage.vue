@@ -330,7 +330,7 @@ onMounted(loadDashboard);
 </template>
 
 <style lang="scss" scoped>
-.dashboard-page { display: grid; grid-auto-rows: max-content; align-content: start; gap: var(--spacing-xl); min-width: 0; padding: var(--spacing-2xl); background: var(--bg-secondary); }
+.dashboard-page { display: grid; grid-auto-rows: max-content; align-content: start; gap: var(--spacing-xl); min-width: 0; background: var(--bg-secondary); }
 .dashboard-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--spacing-xl); }
 .dashboard-header h1 { margin: 0; color: var(--text-primary); font-size: var(--font-size-3xl); line-height: var(--line-height-tight); }
 .dashboard-header p { margin: var(--spacing-xs) 0 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
@@ -362,7 +362,6 @@ onMounted(loadDashboard);
   .dashboard-grid-main, .dashboard-grid-secondary { grid-template-columns: 1fr; }
 }
 @media (max-width: 768px) {
-  .dashboard-page { padding: var(--spacing-lg); }
   .dashboard-header { align-items: stretch; flex-direction: column; }
   .dashboard-controls, .project-filter { width: 100%; }
   .summary-strip { grid-template-columns: repeat(2, 1fr); }

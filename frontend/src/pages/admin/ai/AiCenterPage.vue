@@ -388,7 +388,6 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
-.ai-center { padding-bottom: 24px; }
 header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
 .ai-center > header h2 { margin: 0 0 5px; font-size: 22px; color: var(--text-primary); }
 .ai-center > header p { margin: 0; color: var(--text-secondary); }

@@ -96,11 +96,14 @@ describe('application shell content spacing contract', () => {
     );
   });
 
-  it('keeps app-main gutter-free and gives the breadcrumb matching independent padding', () => {
+  it('explicitly resets app-main padding and gives the breadcrumb matching independent padding', () => {
     const source = readFrontendSource('src/layouts/AppLayout.vue');
     const appMain = directDeclarations(extractBlocks(source, '.app-main')[0]);
+    const appMainPadding = [...appMain.matchAll(
+      /padding(?:-(?:left|right))?\s*:\s*([^;]+);/g,
+    )].map((match) => match[1].trim());
 
-    expect(appMain).not.toMatch(/padding(?:-left|-right)?\s*:/);
+    expect(appMainPadding).toEqual(['0']);
 
     const breadcrumb = directDeclarations(extractBlocks(source, '.py-4')[0]);
     expect(breadcrumb).toMatch(/padding-left:\s*var\(--spacing-lg\)/);

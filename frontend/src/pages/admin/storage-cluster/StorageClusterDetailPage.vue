@@ -312,7 +312,7 @@ onBeforeMount(() => {
   <div class="storage-health-page flex flex-col flex-1 min-h-0">
     <ElCard
       v-if="clusterId"
-      class="mt-2.5 flex-auto min-h-0">
+      class="flex-auto min-h-0">
       <ElTabs
         v-model="activeTab"
         class="h-full">

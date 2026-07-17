@@ -277,7 +277,7 @@ onMounted(loadInitial);
 </template>
 
 <style scoped lang="scss">
-.ai-workspace { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 680px; height: calc(100vh - 180px); background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; }
+.ai-workspace { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 0; height: 100%; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; }
 .conversation-panel { display: flex; flex-direction: column; min-width: 0; padding: 16px 12px; border-right: 1px solid var(--border-color); background: var(--bg-secondary); }
 .panel-heading, .chat-heading, .composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .panel-heading { margin-bottom: 12px; }
@@ -303,5 +303,5 @@ onMounted(loadInitial);
 .markdown-body :deep(pre) { overflow: auto; padding: 12px; border-radius: 8px; background: #18212f; color: #e8eef7; }
 .markdown-body :deep(code) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .markdown-body :deep(a) { color: var(--primary-color); }
-@media (max-width: 860px) { .ai-workspace { grid-template-columns: 1fr; height: auto; } .conversation-panel { max-height: 220px; border-right: 0; border-bottom: 1px solid var(--border-color); } .chat-panel { min-height: 620px; } }
+@media (max-width: 860px) { .ai-workspace { grid-template-columns: 1fr; } .conversation-panel { max-height: 220px; border-right: 0; border-bottom: 1px solid var(--border-color); } .chat-panel { min-height: 620px; } }
 </style>

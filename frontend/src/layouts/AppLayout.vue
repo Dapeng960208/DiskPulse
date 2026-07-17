@@ -75,7 +75,7 @@ const footerHeight = ref('40px');
           </div>
           <ElScrollbar
             class="app-main__scrollbar"
-            wrap-class="px-4"
+            wrap-class="app-main__content-wrap"
             view-class="h-full flex flex-col">
             <div class="flex-1 flex flex-col">
               <RouterView v-slot="{ Component, route }">
@@ -126,7 +126,7 @@ const footerHeight = ref('40px');
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  padding: 0 var(--spacing-lg);
+  padding: 0;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -137,12 +137,15 @@ const footerHeight = ref('40px');
     min-height: 0;
   }
 
+  :deep(.app-main__content-wrap) {
+    padding: var(--spacing-lg);
+  }
+
   // 面包屑区域
   .py-4 {
     padding: var(--spacing-lg) 0;
     border-bottom: 1px solid var(--border-light);
     background: var(--bg-primary);
-    margin: 0 calc(-1 * var(--spacing-lg));
     padding-left: var(--spacing-lg);
     padding-right: var(--spacing-lg);
 
@@ -229,19 +232,14 @@ const footerHeight = ref('40px');
 // 响应式设计
 @include mobile {
   .app-main {
-    padding: 0 var(--spacing-md);
+    :deep(.app-main__content-wrap) {
+      padding: var(--spacing-md);
+    }
 
     .py-4 {
-      margin: 0 calc(-1 * var(--spacing-md));
       padding-left: var(--spacing-md);
       padding-right: var(--spacing-md);
     }
-  }
-}
-
-@include tablet {
-  .app-main {
-    padding: 0 var(--spacing-lg);
   }
 }
 </style>

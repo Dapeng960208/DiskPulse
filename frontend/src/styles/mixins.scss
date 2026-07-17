@@ -173,10 +173,8 @@
   flex-direction: column;
   gap: var(--spacing-md);
   height: 100%;
-  padding: var(--spacing-lg);
 
   @include mobile {
-    padding: var(--spacing-md);
     gap: var(--spacing-sm);
   }
 }
