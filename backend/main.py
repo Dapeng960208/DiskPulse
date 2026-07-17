@@ -18,6 +18,7 @@ from routers import (
     group,
     group_tag,
     large_files,
+    project_memberships,
     projects,
     qtrees,
     storage_alerts,
@@ -45,6 +46,7 @@ storage_router.include_router(ai.router)
 storage_router.include_router(ai_admin.router)
 storage_router.include_router(audit_events.router)
 storage_router.include_router(projects.router)
+storage_router.include_router(project_memberships.router)
 storage_router.include_router(group_tag.router)
 storage_router.include_router(config.router)
 storage_router.include_router(dashboard.router)
