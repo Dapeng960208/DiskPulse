@@ -111,9 +111,9 @@ async def db_session_middleware(request: Request, call_next):
         raise
     finally:
         request.state.db.close()
-    observabilityService.record_http_request(
-        request,
-        response,
-        time.perf_counter() - started,
-    )
+        observabilityService.record_http_request(
+            request,
+            response,
+            time.perf_counter() - started,
+        )
     return response
