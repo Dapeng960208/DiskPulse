@@ -29,6 +29,13 @@ def _lock(granted, exits):
     return lock
 
 
+def _log_text(logger, level):
+    return " ".join(
+        " ".join(str(argument) for argument in call.args)
+        for call in getattr(logger, level).call_args_list
+    )
+
+
 def test_celery_beat_registers_scheduled_user_tasks_and_preserves_storage_collection():
     celery_worker = importlib.import_module("celery_worker")
     schedule = celery_worker.diskpulse_app.conf.beat_schedule
@@ -57,9 +64,11 @@ def test_ldap_task_skips_without_lock_and_does_not_open_session(monkeypatch):
     exits = []
     session_factory = Mock()
     sync = Mock()
+    task_logger = Mock()
     monkeypatch.setattr(users, "redis_lock", _lock(False, exits))
     monkeypatch.setattr(users, "SessionLocal", session_factory)
     monkeypatch.setattr(users.usersService, "sync_ldap_users", sync)
+    monkeypatch.setattr(users, "logger", task_logger)
 
     assert _task(users, "ldap_users_sync_schedule_task")() == {"status": "skipped"}
     session_factory.assert_not_called()
@@ -68,6 +77,7 @@ def test_ldap_task_skips_without_lock_and_does_not_open_session(monkeypatch):
         ("entered", "ldap_users_sync_schedule_task_lock", 28800),
         ("exited", "ldap_users_sync_schedule_task_lock", 28800),
     ]
+    assert "already running" in _log_text(task_logger, "info").lower()
 
 
 def test_ldap_task_serializes_result_and_closes_its_session(monkeypatch):
@@ -85,6 +95,8 @@ def test_ldap_task_serializes_result_and_closes_its_session(monkeypatch):
     monkeypatch.setattr(users, "SessionLocal", Mock(return_value=db))
     sync = Mock(return_value=result)
     monkeypatch.setattr(users.usersService, "sync_ldap_users", sync)
+    task_logger = Mock()
+    monkeypatch.setattr(users, "logger", task_logger)
 
     actual = _task(users, "ldap_users_sync_schedule_task")()
 
@@ -94,6 +106,29 @@ def test_ldap_task_serializes_result_and_closes_its_session(monkeypatch):
     db.close.assert_called_once_with()
     db.commit.assert_not_called()
     assert exits[-1] == ("exited", "ldap_users_sync_schedule_task_lock", 28800)
+    info = _log_text(task_logger, "info").lower()
+    assert "started" in info
+    assert "completed" in info
+    assert "created" in info and "marked_inactive" in info
+    assert "duration_seconds" in info
+
+
+def test_ldap_task_logs_and_reraises_session_creation_failure(monkeypatch):
+    users = importlib.import_module("celery_tasks.tasks.users")
+    failure = RuntimeError("PostgreSQL session unavailable")
+    task_logger = Mock()
+    sync = Mock()
+    monkeypatch.setattr(users, "redis_lock", _lock(True, []))
+    monkeypatch.setattr(users, "SessionLocal", Mock(side_effect=failure))
+    monkeypatch.setattr(users.usersService, "sync_ldap_users", sync)
+    monkeypatch.setattr(users, "logger", task_logger)
+
+    with pytest.raises(RuntimeError, match="PostgreSQL session unavailable"):
+        _task(users, "ldap_users_sync_schedule_task")()
+
+    sync.assert_not_called()
+    assert "ldap" in _log_text(task_logger, "exception").lower()
+    assert "failed" in _log_text(task_logger, "exception").lower()
 
 
 @pytest.mark.parametrize(
@@ -202,6 +237,8 @@ def test_user_storage_task_aggregates_rows_with_one_consistent_sample_time(
     monkeypatch.setattr(storages, "SessionLocal", session_factory)
     monkeypatch.setattr(storages, "QuestDBSessionLocal", Mock(return_value=quest))
     monkeypatch.setattr(storages, "datetime", FixedDatetime)
+    task_logger = Mock()
+    monkeypatch.setattr(storages, "logger", task_logger)
 
     result = _task(storages, "user_storage_statistics_schedule_task")()
 
@@ -224,6 +261,11 @@ def test_user_storage_task_aggregates_rows_with_one_consistent_sample_time(
     assert samples[20].use_ratio == 0
     assert samples[20].soft_use_ratio == 0
     assert {sample.updated_at for sample in samples.values()} == {sampled_at}
+    info = _log_text(task_logger, "info").lower()
+    assert "started" in info
+    assert "completed" in info
+    assert "count" in info and "2" in info
+    assert "duration_seconds" in info
 
 
 def test_user_storage_task_empty_data_does_not_open_questdb(monkeypatch, session_factory):
@@ -246,15 +288,81 @@ def test_user_storage_task_skips_without_opening_databases(monkeypatch):
     storages = importlib.import_module("celery_tasks.tasks.storages")
     postgres_factory = Mock()
     quest_factory = Mock()
+    task_logger = Mock()
     monkeypatch.setattr(storages, "redis_lock", _lock(False, []))
     monkeypatch.setattr(storages, "SessionLocal", postgres_factory)
     monkeypatch.setattr(storages, "QuestDBSessionLocal", quest_factory)
+    monkeypatch.setattr(storages, "logger", task_logger)
 
     assert _task(storages, "user_storage_statistics_schedule_task")() == {
         "status": "skipped"
     }
     postgres_factory.assert_not_called()
     quest_factory.assert_not_called()
+    assert "already running" in _log_text(task_logger, "info").lower()
+
+
+def test_user_storage_task_logs_postgres_session_creation_failure(monkeypatch):
+    storages = importlib.import_module("celery_tasks.tasks.storages")
+    failure = RuntimeError("PostgreSQL session unavailable")
+    quest_factory = Mock()
+    task_logger = Mock()
+    monkeypatch.setattr(storages, "redis_lock", _lock(True, []))
+    monkeypatch.setattr(storages, "SessionLocal", Mock(side_effect=failure))
+    monkeypatch.setattr(storages, "QuestDBSessionLocal", quest_factory)
+    monkeypatch.setattr(storages, "logger", task_logger)
+
+    with pytest.raises(RuntimeError, match="PostgreSQL session unavailable"):
+        _task(storages, "user_storage_statistics_schedule_task")()
+
+    quest_factory.assert_not_called()
+    exception_log = _log_text(task_logger, "exception").lower()
+    assert "postgresql" in exception_log
+    assert "failed" in exception_log
+
+
+def test_user_storage_task_logs_questdb_session_creation_failure(
+    monkeypatch, session_factory
+):
+    storages = importlib.import_module("celery_tasks.tasks.storages")
+    with session_factory() as db:
+        db.add(StorageUsage(id=1, user_id=10, limit=100, used=50))
+        db.commit()
+    failure = RuntimeError("QuestDB session unavailable")
+    task_logger = Mock()
+    monkeypatch.setattr(storages, "redis_lock", _lock(True, []))
+    monkeypatch.setattr(storages, "SessionLocal", session_factory)
+    monkeypatch.setattr(storages, "QuestDBSessionLocal", Mock(side_effect=failure))
+    monkeypatch.setattr(storages, "logger", task_logger)
+
+    with pytest.raises(RuntimeError, match="QuestDB session unavailable"):
+        _task(storages, "user_storage_statistics_schedule_task")()
+
+    exception_log = _log_text(task_logger, "exception").lower()
+    assert "questdb" in exception_log
+    assert "failed" in exception_log
+
+
+def test_user_storage_task_rolls_back_closes_and_reraises_add_all_failure(
+    monkeypatch, session_factory
+):
+    storages = importlib.import_module("celery_tasks.tasks.storages")
+    with session_factory() as db:
+        db.add(StorageUsage(id=1, user_id=10, limit=100, used=50))
+        db.commit()
+    failure = RuntimeError("QuestDB add failed")
+    quest = Mock()
+    quest.add_all.side_effect = failure
+    monkeypatch.setattr(storages, "redis_lock", _lock(True, []))
+    monkeypatch.setattr(storages, "SessionLocal", session_factory)
+    monkeypatch.setattr(storages, "QuestDBSessionLocal", Mock(return_value=quest))
+
+    with pytest.raises(RuntimeError, match="QuestDB add failed"):
+        _task(storages, "user_storage_statistics_schedule_task")()
+
+    quest.rollback.assert_called_once_with()
+    quest.close.assert_called_once_with()
+    quest.commit.assert_not_called()
 
 
 def test_user_storage_task_rolls_back_closes_and_reraises_questdb_commit_failure(

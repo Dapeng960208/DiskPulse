@@ -169,16 +169,16 @@ def test_user_storage_usage_revision_matches_model_and_has_stable_checksum():
     assert set(map(_normalize, revision.statements)) == {
         _normalize(
             """
-            CREATE TABLE IF NOT EXISTS user_storage_usages (
-                user_id SYMBOL,
-                limit DOUBLE,
-                soft_limit DOUBLE,
-                used DOUBLE,
-                use_ratio DOUBLE,
-                soft_use_ratio DOUBLE,
-                file_used DOUBLE,
-                updated_at TIMESTAMP
-            ) TIMESTAMP(updated_at) PARTITION BY DAY WAL
+            CREATE TABLE IF NOT EXISTS "user_storage_usages" (
+                "user_id" SYMBOL,
+                "limit" DOUBLE,
+                "soft_limit" DOUBLE,
+                "used" DOUBLE,
+                "use_ratio" DOUBLE,
+                "soft_use_ratio" DOUBLE,
+                "file_used" DOUBLE,
+                "updated_at" TIMESTAMP
+            ) TIMESTAMP("updated_at") PARTITION BY DAY WAL
             """
         )
     }
