@@ -177,6 +177,24 @@ def test_group_adjustment_rejects_shared_target_before_device_call(db_session, m
     build_client.assert_not_called()
 
 
+def test_quota_adjustment_requires_authenticated_user(db_session, monkeypatch):
+    """Direct service callers cannot bypass the quota authorization boundary."""
+    seed_quota_target(db_session)
+    client = FakeQuotaClient()
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+
+    with pytest.raises(HTTPException) as error:
+        quotaService.adjust_group_quota(
+            db_session,
+            group_id=1,
+            request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+            current_user=None,
+        )
+
+    assert error.value.status_code == 401
+    assert client.calls == []
+
+
 def test_netapp_qtree_group_adjustment_updates_device_and_local_state(db_session, monkeypatch):
     seed_quota_target(db_session)
     client = FakeQuotaClient()
