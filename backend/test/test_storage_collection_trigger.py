@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 from unittest.mock import Mock, patch
+from uuid import UUID
 
 import pytest
 from urllib3.exceptions import InsecureRequestWarning
 
 from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
 from celery_tasks.tasks.storages import load_collection_snapshot, run_collection_round
-from models import StorageCluster, Volume
+from models import AuditEvent, StorageCluster, Volume
 from routers.storage_cluster import _schedule_storage_collection
 
 
@@ -232,3 +233,52 @@ def test_failed_collection_rolls_back_resource_changes(session_factory):
 
     with session_factory() as db:
         assert db.get(Volume, 1) is not None
+
+
+@pytest.mark.parametrize("fails", [False, True], ids=["success", "failure"])
+def test_collection_round_writes_service_audit_result_without_snapshot_secrets(session_factory, fails):
+    with session_factory() as db:
+        db.add(StorageCluster(id=1, name="isilon-a", storage_type="isilon", is_active=True))
+        db.commit()
+        snapshot = load_collection_snapshot(db, storage_cluster_id=1)
+
+    class Monitor:
+        def __init__(self, _db, _logger, _cluster):
+            pass
+
+        def collect_postgres(self):
+            if fails:
+                raise RuntimeError("collector-private-error")
+            return {"storage_usage_ids": (11,), "group_ids": (12,)}
+
+        def close(self):
+            pass
+
+    if fails:
+        with pytest.raises(RuntimeError, match="all storage clusters failed"):
+            run_collection_round(
+                snapshot,
+                session_factory=session_factory,
+                monitor_factory=Monitor,
+                questdb_writer=lambda *_args: None,
+            )
+    else:
+        run_collection_round(
+            snapshot,
+            session_factory=session_factory,
+            monitor_factory=Monitor,
+            questdb_writer=lambda *_args: None,
+        )
+
+    with session_factory() as db:
+        event = db.query(AuditEvent).one()
+    assert (event.action, event.resource_type, event.resource_id, event.actor_type) == (
+        "storage.collection.run",
+        "storage_cluster",
+        1,
+        "service",
+    )
+    assert (event.phase, event.outcome) == ("result", "failure" if fails else "success")
+    assert event.reason_code == ("collection_failed" if fails else None)
+    assert UUID(event.request_id) and UUID(event.trace_id) and UUID(event.operation_id)
+    assert "collector-private-error" not in str(event.event_metadata)

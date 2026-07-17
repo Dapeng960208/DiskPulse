@@ -727,3 +727,55 @@ def test_delivery_marks_failed_after_initial_attempt_and_three_retries(
     assert event.delivery_status == "failed"
     assert event.next_attempt_at is None
     assert event.delivery_error == "down"
+
+
+def test_storage_alert_delivery_writes_service_audit_attempt_and_result(db_session, session_factory, monkeypatch):
+    import models
+
+    tasks = _module("celery_tasks.tasks.storage_alerts")
+    monkeypatch.setattr(tasks, "SessionLocal", session_factory)
+    monkeypatch.setattr(
+        tasks.base_config,
+        "get",
+        lambda key, default=None: {
+            "feishu_notification": {
+                "enabled": True,
+                "base_url": "https://notify.example/api",
+                "app": "bot",
+                "app_key": "notification-secret",
+            }
+        }.get(key, default),
+    )
+    event = models.StorageAlerts(
+        source="diskpulse",
+        severity="important",
+        alert_level="important",
+        alert_type="usage",
+        description="test",
+        threshold=80,
+        avg_use_ratio=81,
+        related_type="group",
+        event_type="trigger",
+        quota_basis="hard",
+        delivery_status="pending",
+        recipient_usernames=["alice"],
+        next_attempt_at=NOW,
+        related_info={"title": "private notification title", "paragraphs": []},
+    )
+    db_session.add(event)
+    db_session.commit()
+
+    with patch.object(tasks.FeishuNotificationService, "send", return_value=[]):
+        tasks.deliver_storage_alert_task.run(event.id)
+
+    events = db_session.query(models.AuditEvent).order_by(models.AuditEvent.occurred_at, models.AuditEvent.id).all()
+    assert [(item.phase, item.outcome) for item in events] == [("attempt", "success"), ("result", "success")]
+    assert all(
+        (item.action, item.resource_type, item.resource_id, item.actor_type)
+        == ("notification.storage_alert.deliver", "storage_alert", event.id, "service")
+        for item in events
+    )
+    assert len({item.operation_id for item in events}) == 1
+    payload = str([(item.before_summary, item.after_summary, item.event_metadata) for item in events])
+    assert "private notification title" not in payload
+    assert "notification-secret" not in payload
