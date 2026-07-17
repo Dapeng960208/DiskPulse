@@ -108,7 +108,6 @@ def read_project_by_id(project_id: int, current_user: CurrentUserDep, db: Sessio
     if project_db is None:
         raise HTTPException(status_code=404, detail="The project was not found")
     project_access_service.require_project_permission(db, current_user, project_id, "reader")
-    project_access_service.require_project_permission(db, current_user, project_id, "reader")
     result = projectsSchema.Project.model_validate(project_db).model_dump()
     result["capabilities"] = project_access_service.project_capabilities(
         db,
