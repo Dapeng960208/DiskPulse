@@ -7,6 +7,6 @@ describe('default avatar selection', () => {
   });
 
   it('uses a built-in avatar when the user identity is empty', () => {
-    expect(getDefaultAvatar('')).toMatch(/default-avatar-\d\.gif$/);
+    expect(getDefaultAvatar('')).toMatch(/default-avatar-(mint|peach|sky|lilac)\.gif$/);
   });
 });

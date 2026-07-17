@@ -4,6 +4,7 @@ import { useCurrentUser } from '@/stores/current-user';
 import { isAuthenticated, removeToken } from '@/utils/authorization';
 import usersApi from '@/api/users-api';
 import { toLoginPage } from '@/utils';
+import { getDefaultAvatar } from '@/utils/default-avatar';
 import UserAvatar from '@/components/data/UserAvatar.vue';
 import ThemeSwitch from '@/components/basic/ThemeSwitch.vue';
 import logo from '@/assets/logo.png';
@@ -61,7 +62,7 @@ function handleMenuClick(command) {
           <div class="user-info">
             <UserAvatar
               class="user-avatar"
-              :src="currentUser.avatarUrl" />
+              :src="currentUser.avatarUrl || getDefaultAvatar(currentUser.username || currentUser.displayName)" />
             <span class="user-name">{{ currentUser.displayName }}</span>
             <i class="dropdown-icon i-ri-arrow-down-s-fill"></i>
           </div>
