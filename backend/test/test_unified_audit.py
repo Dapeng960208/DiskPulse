@@ -87,6 +87,10 @@ def test_audit_redaction_removes_secrets_paths_and_raw_prompt_content():
         "linux_path": "/mnt/diskpulse/private/alice",
         "prompt": "请总结 alice 的私有目录配额",
         "response_payload": {"content": "模型原始回复"},
+        "response": "设备原始响应",
+        "raw_response": "设备原始 raw 响应",
+        "device_response": "设备原始 device 响应",
+        "body": "设备原始响应体",
         "hard_limit": 1024,
     }
 
@@ -99,6 +103,10 @@ def test_audit_redaction_removes_secrets_paths_and_raw_prompt_content():
         "/mnt/diskpulse/private/alice",
         "请总结 alice 的私有目录配额",
         "模型原始回复",
+        "设备原始响应",
+        "设备原始 raw 响应",
+        "设备原始 device 响应",
+        "设备原始响应体",
     ):
         assert forbidden not in serialized
     assert redacted["hard_limit"] == 1024
