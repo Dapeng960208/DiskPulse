@@ -40,7 +40,7 @@ docs/
 | 存储集群 | [总览](./features/storage-cluster/overview.md) · [性能与事件设计](./features/storage-cluster/performance-event-collection.md) · [厂商/API 契约](./features/storage-cluster/vendor-api-contracts.md) |
 | 存储告警规则与飞书通知 | [features/storage-alerts/design.md](./features/storage-alerts/design.md) |
 | 存储配额软限额 | [features/storage-quota/overview.md](./features/storage-quota/overview.md) |
-| 全站存储趋势图 | [设计](./features/storage-trends/design.md) · [详情路由加载修复](./features/storage-trends/detail-route-loading-fix.md) |
+| 全站存储趋势图 | [设计](./features/storage-trends/design.md) · [详情路由加载修复](./features/storage-trends/detail-route-loading-fix.md) · [用户目录扩展字段隐藏](./features/storage-trends/usage-detail-field-visibility.md) |
 | AI 对话与管理中心 | [总览](./features/ai-chat/overview.md) · [后端实现](./features/ai-chat/backend.md) · [前端实现](./features/ai-chat/frontend.md) |
 
 ## 规范
