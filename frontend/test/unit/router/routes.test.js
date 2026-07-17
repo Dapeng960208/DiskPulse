@@ -132,4 +132,30 @@ describe('router/routes and app shell', () => {
 
     expect(labels[labels.indexOf('项目组') + 1]).toBe('AI 助手');
   });
+
+  it('orders system management from storage resources to platform administration with semantic icons', () => {
+    const adminRoute = routes.find((route) => route.path === '/admin');
+    const visibleRoutes = adminRoute.children.filter((route) => !route.meta?.isHidden);
+
+    expect(visibleRoutes.map((route) => route.name)).toEqual([
+      'StorageClusters',
+      'Aggregates',
+      'Volumes',
+      'Qtrees',
+      'GroupTags',
+      'UsersManagement',
+      'Settings',
+      'AICenter',
+    ]);
+    expect(Object.fromEntries(visibleRoutes.map((route) => [route.name, route.meta.icon]))).toEqual({
+      StorageClusters: 'i-ri-server-line',
+      Aggregates: 'i-ri-pie-chart-2-line',
+      Volumes: 'i-ri-database-2-line',
+      Qtrees: 'i-ri-folder-2-line',
+      GroupTags: 'i-ri-price-tag-3-line',
+      UsersManagement: 'i-ri-team-line',
+      Settings: 'i-ri-settings-3-line',
+      AICenter: 'i-ri-robot-2-line',
+    });
+  });
 });
