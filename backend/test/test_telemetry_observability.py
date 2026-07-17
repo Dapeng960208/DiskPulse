@@ -204,6 +204,23 @@ def test_probe_endpoints_short_circuit_database_middleware(monkeypatch):
     assert response.json() == {"status": "ok"}
 
 
+def test_unhandled_http_error_is_recorded_as_a_500_metric(monkeypatch):
+    import main
+
+    def raise_unhandled_error():
+        raise RuntimeError("expected test error")
+
+    main.app.add_api_route("/_telemetry-test-error", raise_unhandled_error)
+    recorded = Mock()
+    monkeypatch.setattr(main.observabilityService, "record_http_request", recorded)
+    client = TestClient(main.app, raise_server_exceptions=False)
+
+    response = client.get("/_telemetry-test-error")
+
+    assert response.status_code == 500
+    assert recorded.call_args.args[1].status_code == 500
+
+
 def test_readyz_has_stable_ready_degraded_and_not_ready_responses(monkeypatch):
     import main
     from services import observabilityService
