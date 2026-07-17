@@ -320,6 +320,40 @@ def test_metrics_does_not_pass_the_application_session_factory(tmp_path, monkeyp
     render_metrics.assert_called_once_with()
 
 
+def test_metrics_default_session_factory_uses_and_disposes_a_dedicated_probe_engine(monkeypatch):
+    from services import observabilityService
+
+    probe_engine = Mock()
+    session_factory = Mock()
+    monkeypatch.setattr(
+        observabilityService,
+        "check_dependencies",
+        lambda: {"postgres": True, "redis": True, "questdb": True},
+    )
+    monkeypatch.setattr(observabilityService, "_probe_engine", Mock(return_value=probe_engine))
+    monkeypatch.setattr(observabilityService, "sessionmaker", Mock(return_value=session_factory))
+    refresh_telemetry_metrics = Mock()
+    monkeypatch.setattr(
+        observabilityService,
+        "refresh_telemetry_metrics",
+        refresh_telemetry_metrics,
+    )
+
+    observabilityService.render_metrics()
+
+    observabilityService._probe_engine.assert_called_once_with(
+        base_config.get_sqlalchemy_database_url(),
+        connect_args={"connect_timeout": 1},
+    )
+    observabilityService.sessionmaker.assert_called_once_with(
+        autocommit=False,
+        autoflush=False,
+        bind=probe_engine,
+    )
+    refresh_telemetry_metrics.assert_called_once_with(session_factory)
+    probe_engine.dispose.assert_called_once_with()
+
+
 def test_metrics_removes_cached_freshness_when_postgres_becomes_unavailable(monkeypatch):
     from services import observabilityService
 
