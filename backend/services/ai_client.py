@@ -14,6 +14,17 @@ class AIClientError(RuntimeError):
     pass
 
 
+class AIClientToolArgumentsError(AIClientError):
+    """A provider emitted a tool call whose arguments cannot be safely executed."""
+
+    def __init__(self, *, tool_id: str, tool_name: str, reason: str):
+        self.tool_id = tool_id
+        self.tool_name = tool_name
+        self.reason = reason
+        message = "AI 工具参数不是有效 JSON" if reason == "invalid_json" else "AI 工具参数必须是对象"
+        super().__init__(message)
+
+
 @dataclass(frozen=True)
 class AIClientToolCall:
     tool_id: str
@@ -57,17 +68,30 @@ def _timeout() -> int:
     return int(base_config.get("ai.request_timeout_seconds", 60))
 
 
-def _decode_arguments(raw: object) -> dict[str, Any]:
+def _decode_arguments(
+    raw: object,
+    *,
+    tool_id: str = "",
+    tool_name: str = "",
+) -> dict[str, Any]:
     if isinstance(raw, dict):
         return raw
     if isinstance(raw, str):
         try:
             parsed = json.loads(raw or "{}")
         except json.JSONDecodeError as error:
-            raise AIClientError("AI 工具参数不是有效 JSON") from error
+            raise AIClientToolArgumentsError(
+                tool_id=tool_id,
+                tool_name=tool_name,
+                reason="invalid_json",
+            ) from error
         if isinstance(parsed, dict):
             return parsed
-    raise AIClientError("AI 工具参数必须是对象")
+    raise AIClientToolArgumentsError(
+        tool_id=tool_id,
+        tool_name=tool_name,
+        reason="non_object",
+    )
 
 
 def _headers(config: AIConfig) -> dict[str, str]:
@@ -156,7 +180,11 @@ def chat_completion(
                 AIClientToolCall(
                     tool_id=str(block.get("id") or ""),
                     name=str(block.get("name") or ""),
-                    arguments=_decode_arguments(block.get("input") or {}),
+                    arguments=_decode_arguments(
+                        block.get("input") or {},
+                        tool_id=str(block.get("id") or ""),
+                        tool_name=str(block.get("name") or ""),
+                    ),
                 )
                 for block in blocks
                 if block.get("type") == "tool_use"
@@ -175,7 +203,11 @@ def chat_completion(
                 AIClientToolCall(
                     tool_id=str(item.get("id") or ""),
                     name=str(item.get("function", {}).get("name") or ""),
-                    arguments=_decode_arguments(item.get("function", {}).get("arguments") or "{}"),
+                    arguments=_decode_arguments(
+                        item.get("function", {}).get("arguments") or "{}",
+                        tool_id=str(item.get("id") or ""),
+                        tool_name=str(item.get("function", {}).get("name") or ""),
+                    ),
                 )
                 for item in message.get("tool_calls") or []
             ]
@@ -229,7 +261,11 @@ def _openai_stream(
         AIClientToolCall(
             tool_id=value["id"] or f"tool_{index}",
             name=value["name"],
-            arguments=_decode_arguments(value["arguments"] or "{}"),
+            arguments=_decode_arguments(
+                value["arguments"] or "{}",
+                tool_id=value["id"] or f"tool_{index}",
+                tool_name=value["name"],
+            ),
         )
         for index, value in sorted(calls.items())
     ]
@@ -286,7 +322,11 @@ def _claude_stream(
         AIClientToolCall(
             tool_id=value["id"] or f"tool_{index}",
             name=value["name"],
-            arguments=_decode_arguments(value["arguments"] or "{}"),
+            arguments=_decode_arguments(
+                value["arguments"] or "{}",
+                tool_id=value["id"] or f"tool_{index}",
+                tool_name=value["name"],
+            ),
         )
         for index, value in sorted(calls.items())
     ]

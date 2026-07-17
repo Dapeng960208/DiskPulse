@@ -24,10 +24,10 @@
 4. 保存用户消息、首条消息标题和 `running` 审计，再开始输出 SSE。这样即使 Provider 失败或客户端断开，用户输入和审计仍可恢复。
 5. 按消息 ID 倒序取最近 20 条，再反转为时间正序发送给 Provider。
 6. 从当前 FastAPI 应用路由构建工具注册表，并转换为当前 Provider 的工具格式。
-7. 流式读取模型输出；普通文本产生 `delta`，工具请求进入最多 4 轮的执行循环。
+7. 流式读取模型输出；普通文本产生 `delta`，工具请求进入最多 4 轮的执行循环。工具参数若不是 JSON 对象，则在服务端保留工具名和错误类别，不保留原始参数。
 8. 工具通过内部 ASGI 请求调用原业务 GET API，并把结果按 Provider 协议追加到上下文。
-9. 得到最终文本后保存助手消息，将审计改为 `succeeded`，最后发送 `completed`。
-10. Provider 或格式错误将审计改为 `failed`；生成器关闭或任务取消将审计改为 `cancelled`。
+9. 达到工具轮次上限时，额外发起一次禁用工具的总结调用；总结只能使用当前已获得的工具结果。工具参数格式错误会最多反馈给模型两次后重试。
+10. 正常完成保存 `succeeded`；工具上限、参数修复耗尽或无工具总结失败保存 `degraded` 并发送 `completed`。真实 Provider/传输失败才保存 `failed`；生成器关闭或任务取消保存 `cancelled`。
 
 同步接口复用同一生成器，只消费到 `completed`；因此同步与 SSE 的模型、工具和审计行为一致。
 
@@ -39,10 +39,10 @@
 | `user_message` | 完整用户消息、更新后的会话 | 前端可安全加入消息列表并更新自动标题。 |
 | `status` | `thinking` | 仅表示当前生成状态，不落库。 |
 | `tool_call_started` | 工具名、轮次、序号 | 审计中的工具调用计数已增加。 |
-| `tool_call_finished` | 工具名、轮次、成功或失败 | 仅返回状态，不返回工具参数或结果。 |
+| `tool_call_finished` | 工具名、轮次、成功或失败、脱敏限长的展示结果 | 工具轨迹已提交；非法参数只返回安全错误类别和空参数对象。 |
 | `delta` | 文本分片 | 分片不逐条落库，避免高频写入。 |
-| `completed` | 完整助手消息、会话、审计 ID | 助手消息和成功审计已提交。 |
-| `error` | 可展示错误 | 审计已标记失败；非预期异常统一返回友好文案。 |
+| `completed` | 完整助手消息、会话、审计 ID、可选 `recovery` | `succeeded` 或 `degraded` 已提交；`recovery` 表示需由用户授权继续/重新查询。 |
+| `error` | 可展示错误 | 仅真实不可恢复故障使用；审计已标记 `failed`，不回显内部异常或原始工具参数。 |
 | `cancelled` | 会话 ID、审计 ID | 异步取消时审计已标记取消。客户端断开时连接可能无法再接收该事件。 |
 
 ## 4. Provider 适配
@@ -51,6 +51,7 @@
 - Provider 客户端把文本和工具调用统一为 `AICompletionStreamEvent`，对话服务不解析厂商原始响应。
 - OpenAI 工具名称和 JSON 参数可能分多个 delta 到达，按工具索引拼接后再校验 JSON。
 - Claude 的 `tool_use` 和 `input_json_delta` 分开到达；空的初始 `input` 不提前写成 `{}`，避免与后续参数片段拼成无效 JSON。
+- 非 JSON 或非对象参数抛出带工具 ID、工具名和错误类别的内部异常；编排层只将安全的格式提示回送给模型，最多重试两次，不将原始参数写入 SSE 或审计。
 - 工具结果按厂商要求回填：OpenAI 使用 `assistant.tool_calls + tool`，Claude 使用 `assistant.tool_use + user.tool_result`。
 - 管理端连接测试真实发送最小消息，不把 URL、密钥格式校验当作连接成功。
 
@@ -76,22 +77,24 @@
 
 - API Key 使用 `ai.config_secret_key` 经 SHA-256 派生 Fernet 密钥后加密；`fernet::` 前缀用于识别当前密文格式。配置密钥必须独立且不得使用占位值。
 - 管理响应只包含密钥掩码和是否已配置；空更新不会覆盖已有密钥。
-- 审计请求只保存 `[REDACTED]` 和长度，响应只保存消息 ID 与长度，工具明细只保存工具名和结果状态。
+- 审计请求只保存 `[REDACTED]` 和长度；响应保存消息 ID、长度、最终状态及可选恢复操作。工具展示明细经脱敏和 `32 KiB` 限长，非法原始参数不保存。
 - 限流键为 `diskpulse:ai:rate:{user_id}:{UTC分钟}`。首次计数设置 60 秒过期；超限返回 `429 + Retry-After`。
 - Redis 是聊天入口的安全依赖，连接或命令失败时采用关闭式失败并返回 `503`，不绕过限流。
 - 工具循环受 `ai.max_tool_iterations` 限制，避免模型递归调用工具造成不可控资源消耗。
+- 到达上限后不会自动开启新查询回合：当前回合先禁用工具总结，助手消息以 `degraded` 保存 `recovery`；只有用户在页面点击恢复操作才会发送新的受限回合。
 
 ## 7. 事务与失败恢复
 
 - SSE 开始前提交用户消息和运行中审计，后续失败不会丢失用户提问。
 - 最终文本只在完整生成后一次性保存；半截 `delta` 不进入历史上下文。
 - 异常处理中先 `rollback` 清理 SQLAlchemy 会话，再重新加载审计记录并提交失败状态。
+- `degraded` 的恢复信息写在既有审计 `response_payload` 中；会话重载时由助手消息序列化恢复，因而不需要数据库迁移。
 - 客户端主动关闭同步生成器触发 `GeneratorExit`；异步任务取消触发 `CancelledError`。两者均记录取消审计。
 - 前端重试会作为一条新用户消息再次发送，不修改或覆盖原消息。
 
 ## 8. 验证入口
 
-- 后端 AI 聚焦测试：`.\.venv\Scripts\python.exe -m pytest backend\test\test_ai_platform.py backend\test\test_ai_services.py`
+- 后端 AI 聚焦测试：`.\.venv\Scripts\python.exe -m pytest backend\test\test_ai_platform.py backend\test\test_ai_services.py`，覆盖轮次上限降级、无工具总结回退、两次参数修复、原始参数脱敏和历史恢复。
 - 动态工具的注册、参数和权限契约包含在上述两个测试文件中。
 - 迁移检查：`alembic heads`、`alembic history`、`alembic upgrade head --sql`
 - 部署环境仍需验证真实 Provider、Redis DB 7、数据库迁移和不同权限用户的完整 SSE 对话。

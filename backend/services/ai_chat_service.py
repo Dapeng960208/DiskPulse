@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from appConfig import base_config
 from crud import aiCrud
 from models import AIConversation, AIAuditLog, AIMessage
-from services.ai_client import AIClientError, AIClientToolCall, chat_completion_stream
+from services.ai_client import AIClientError, AIClientToolArgumentsError, AIClientToolCall, chat_completion_stream
 from services.ai_config_service import serialize_model
 from services.ai_tool_service import build_tool_registry, execute_tool, tool_definitions
 
@@ -24,6 +24,15 @@ SYSTEM_PROMPT = """你是 DiskPulse AI 助手。你只能使用已授权的只�
 
 _DISPLAY_TOOL_RESULT_LIMIT_BYTES = 32 * 1024
 _FAILED_RESPONSE = "抱歉，AI 服务暂时不可用，请稍后重试。"
+_MAX_TOOL_ARGUMENT_REPAIRS = 2
+_RECOVERY_BY_REASON = {
+    "tool_iteration_limit": {"reason": "tool_iteration_limit", "action": "continue", "label": "继续查询"},
+    "invalid_tool_arguments": {"reason": "invalid_tool_arguments", "action": "retry", "label": "重新查询"},
+}
+_DEGRADED_FALLBACKS = {
+    "tool_iteration_limit": "本轮已达到工具查询上限。我已保留已完成的查询结果；如需补充信息，请授权继续查询。",
+    "invalid_tool_arguments": "本轮工具参数多次无效，无法继续执行查询。我已保留当前可用信息；请重新查询。",
+}
 
 
 def _json_safe(value: object) -> object:
@@ -79,11 +88,20 @@ def _message_turn_metadata(message: AIMessage, audits_by_message: dict[int, AIAu
     if audit is None:
         return {"status": "succeeded", "tool_calls": []}
     detail = _audit_payload(audit.detail_payload, [])
-    return {
+    metadata = {
         "turn_id": audit.id,
         "status": audit.status,
         "tool_calls": detail if isinstance(detail, list) else [],
     }
+    response = _audit_payload(audit.response_payload, {})
+    recovery = response.get("recovery") if isinstance(response, dict) else None
+    if isinstance(recovery, dict) and all(isinstance(recovery.get(key), str) for key in ("reason", "action", "label")):
+        metadata["recovery"] = {
+            "reason": recovery["reason"],
+            "action": recovery["action"],
+            "label": recovery["label"],
+        }
+    return metadata
 
 
 def serialize_message(message: AIMessage, audit: AIAuditLog | None = None) -> dict:
@@ -264,16 +282,20 @@ def _terminal_message(
     status_value: str,
     tool_trace: list[dict],
     error_message: str | None = None,
+    recovery: dict | None = None,
 ) -> tuple[dict, dict]:
     assistant.content = text
     assistant.updated_at = datetime.now()
     conversation.updated_at = datetime.now()
     db.flush()
+    response = {"message_id": assistant.id, "length": len(assistant.content), "status": status_value}
+    if recovery is not None:
+        response["recovery"] = recovery
     _finish_audit(
         db,
         audit,
         status_value=status_value,
-        response={"message_id": assistant.id, "length": len(assistant.content)},
+        response=response,
         detail=tool_trace,
         error_message=error_message,
     )
@@ -284,6 +306,74 @@ def _terminal_message(
 
 def _safe_audit_error(error: Exception) -> str:
     return str(error)[:1000] if isinstance(error, AIClientError) else "AI 服务暂不可用"
+
+
+def _tool_argument_repair_instruction(error: AIClientToolArgumentsError) -> dict:
+    tool_name = error.tool_name.strip()[:128] or "上一条工具"
+    reason = "不是有效 JSON" if error.reason == "invalid_json" else "不是 JSON 对象"
+    return {
+        "role": "user",
+        "content": (
+            f"系统校验：工具 {tool_name} 的参数{reason}，本次调用未执行。"
+            "请仅重新调用该工具，参数必须是符合工具定义的合法 JSON 对象；"
+            "不要编造查询结果或输出参数原文。"
+        ),
+    }
+
+
+def _invalid_tool_trace(
+    *,
+    audit: AIAuditLog,
+    iteration: int,
+    attempt: int,
+    error: AIClientToolArgumentsError,
+) -> tuple[dict, dict, dict]:
+    audit.tool_call_count += 1
+    audit.tool_failed_count += 1
+    tool_name = error.tool_name.strip()[:128] or "unknown_tool"
+    call_id = f"{audit.id}:{iteration}:invalid:{attempt}"
+    trace = {
+        "call_id": call_id,
+        "sequence": attempt,
+        "iteration": iteration,
+        "tool_name": tool_name,
+        "arguments": {},
+        "status": "failed",
+        "elapsed_ms": 0,
+        "truncated": False,
+        "result": {"ok": False, "error": "AI 工具参数格式无效"},
+    }
+    started = {
+        "call_id": call_id,
+        "sequence": attempt,
+        "iteration": iteration,
+        "tool_name": tool_name,
+        "arguments": {},
+        "status": "running",
+    }
+    finished = {
+        "call_id": call_id,
+        "sequence": attempt,
+        "iteration": iteration,
+        "tool_name": tool_name,
+        "status": "failed",
+        "elapsed_ms": 0,
+        "result": trace["result"],
+        "truncated": False,
+    }
+    return trace, started, finished
+
+
+def _tool_free_summary_instruction(reason: str) -> dict:
+    action = _RECOVERY_BY_REASON[reason]["label"]
+    return {
+        "role": "system",
+        "content": (
+            "系统限制：当前回合不能再调用工具。请严格基于已经获得的工具结果回答用户，"
+            "不得编造新数据或请求工具。明确说明尚未完成的查询范围，并邀请用户点击“"
+            f"{action}”后再继续查询。"
+        ),
+    }
 
 
 def stream_message(
@@ -334,6 +424,8 @@ def stream_message(
     tool_trace: list[dict] = []
     emitted_text: list[str] = []
     final_text = ""
+    recovery: dict | None = None
+    degraded_error_message: str | None = None
     terminal = False
     turn_id = audit.id
     assistant_id = assistant.id
@@ -361,16 +453,40 @@ def stream_message(
         max_iterations = int(base_config.get("ai.max_tool_iterations", 4))
         for iteration in range(1, max_iterations + 1):
             completion = None
-            streamed_text: list[str] = []
-            for event in chat_completion_stream(model, messages, tools=tools):
-                if event.kind == "delta" and event.text:
-                    streamed_text.append(event.text)
-                    emitted_text.append(event.text)
-                    yield "delta", {"turn_id": turn_id, "text": event.text}
-                elif event.kind == "completed":
-                    completion = event
-            if completion is None:
-                raise AIClientError("AI 流式响应未正常结束")
+            repair_attempts = 0
+            while True:
+                streamed_text: list[str] = []
+                try:
+                    for event in chat_completion_stream(model, messages, tools=tools):
+                        if event.kind == "delta" and event.text:
+                            streamed_text.append(event.text)
+                            emitted_text.append(event.text)
+                            yield "delta", {"turn_id": turn_id, "text": event.text}
+                        elif event.kind == "completed":
+                            completion = event
+                    if completion is None:
+                        raise AIClientError("AI 流式响应未正常结束")
+                    break
+                except AIClientToolArgumentsError as error:
+                    repair_attempts += 1
+                    trace_entry, started, finished = _invalid_tool_trace(
+                        audit=audit,
+                        iteration=iteration,
+                        attempt=repair_attempts,
+                        error=error,
+                    )
+                    tool_trace.append(trace_entry)
+                    _persist_running_audit(db, audit, tool_trace)
+                    yield "tool_call_started", {"turn_id": turn_id, **started}
+                    yield "tool_call_finished", {"turn_id": turn_id, **finished}
+                    if repair_attempts > _MAX_TOOL_ARGUMENT_REPAIRS:
+                        recovery = dict(_RECOVERY_BY_REASON["invalid_tool_arguments"])
+                        degraded_error_message = "AI 工具参数连续修复失败"
+                        break
+                    messages.append(_tool_argument_repair_instruction(error))
+                    yield "status", {"turn_id": turn_id, "status": "thinking"}
+            if recovery is not None:
+                break
             calls = completion.tool_calls or []
             if not calls:
                 final_text = "".join(emitted_text) or completion.text or "".join(streamed_text)
@@ -434,7 +550,44 @@ def stream_message(
                 messages.extend(_provider_tool_messages(model.provider, call, result))
             yield "status", {"turn_id": turn_id, "status": "thinking"}
         else:
-            raise AIClientError("AI 工具调用轮次超过限制")
+            recovery = dict(_RECOVERY_BY_REASON["tool_iteration_limit"])
+            degraded_error_message = "已达到 AI 工具调用轮次上限"
+
+        if recovery is not None:
+            summary_text: list[str] = []
+            try:
+                summary_completion = None
+                summary_messages = [*messages, _tool_free_summary_instruction(recovery["reason"])]
+                for event in chat_completion_stream(model, summary_messages, tools=[]):
+                    if event.kind == "delta" and event.text:
+                        summary_text.append(event.text)
+                        yield "delta", {"turn_id": turn_id, "text": event.text}
+                    elif event.kind == "completed":
+                        summary_completion = event
+                if not summary_text and summary_completion is not None and summary_completion.text:
+                    summary_text.append(summary_completion.text)
+            except Exception:
+                degraded_error_message = f"{degraded_error_message}；无工具总结调用失败"
+            final_text = "".join(summary_text).strip() or _DEGRADED_FALLBACKS[recovery["reason"]]
+            message_data, conversation_data = _terminal_message(
+                db,
+                assistant=assistant,
+                audit=audit,
+                conversation=conversation,
+                text=final_text,
+                status_value="degraded",
+                tool_trace=tool_trace,
+                error_message=degraded_error_message,
+                recovery=recovery,
+            )
+            terminal = True
+            yield "completed", {
+                "turn_id": turn_id,
+                "message": message_data,
+                "conversation": conversation_data,
+                "audit_id": audit.id,
+            }
+            return
 
         if not final_text.strip():
             raise AIClientError("AI 服务返回空内容")

@@ -173,7 +173,13 @@ describe('AI pages interactions', () => {
   });
 
   it('renders a recovery action for a completed degraded assistant reply', async () => {
-    const wrapper = shallowMount(AiChatPage);
+    const wrapper = shallowMount(AiChatPage, {
+      global: {
+        stubs: {
+          ElScrollbar: { template: '<div class="el-scrollbar-stub"><slot /></div>' },
+        },
+      },
+    });
     await flushPromises();
     wrapper.vm.activeConversationId = 10;
     wrapper.vm.messages = [{
@@ -240,7 +246,13 @@ describe('AI pages interactions', () => {
         },
       });
     });
-    const wrapper = shallowMount(AiChatPage);
+    const wrapper = shallowMount(AiChatPage, {
+      global: {
+        stubs: {
+          ElScrollbar: { template: '<div class="el-scrollbar-stub"><slot /></div>' },
+        },
+      },
+    });
     await flushPromises();
     wrapper.vm.conversations = [{ id: 10, model_id: 1, title: '项目' }];
     wrapper.vm.activeConversationId = 10;

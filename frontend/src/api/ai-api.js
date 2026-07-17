@@ -1,5 +1,18 @@
 import { getToken } from '@/utils/authorization';
 
+const KNOWN_SSE_EVENTS = new Set([
+  'accepted',
+  'user_message',
+  'status',
+  'delta',
+  'tool_call_started',
+  'tool_call_finished',
+  'completed',
+  'error',
+  'cancelled',
+]);
+const TERMINAL_SSE_EVENTS = new Set(['completed', 'error', 'cancelled']);
+
 async function request(method, url, { data, params } = {}) {
   // Lazy loading breaks the router/request initialization cycle while preserving the shared client.
   const { default: baseRequest } = await import('./support/base-request');
@@ -23,6 +36,38 @@ export function parseSseBlock(block) {
   } catch {
     return { event, data: raw };
   }
+}
+
+function dispatchSseEvent(parsed, state, onEvent) {
+  if (KNOWN_SSE_EVENTS.has(parsed.event)) {
+    if (!isValidSsePayload(parsed.event, parsed.data)) {
+      throw new Error('AI 流式事件数据无效');
+    }
+    if (parsed.event === 'accepted') state.accepted = true;
+    if (TERMINAL_SSE_EVENTS.has(parsed.event)) state.terminal = true;
+  }
+  onEvent(parsed);
+}
+
+function isObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasTurnId(data) {
+  return typeof data.turn_id === 'string' || typeof data.turn_id === 'number';
+}
+
+function isValidSsePayload(event, data) {
+  if (!isObject(data)) return false;
+  if (event === 'user_message') return hasTurnId(data) && isObject(data.message) && isObject(data.conversation);
+  if (event === 'accepted') return hasTurnId(data) && isObject(data.message);
+  if (event === 'status') return hasTurnId(data) && typeof data.status === 'string';
+  if (event === 'delta') return hasTurnId(data) && typeof data.text === 'string';
+  if (event === 'tool_call_started' || event === 'tool_call_finished') {
+    return hasTurnId(data) && typeof data.call_id === 'string';
+  }
+  if (TERMINAL_SSE_EVENTS.has(event)) return hasTurnId(data) && isObject(data.message);
+  return true;
 }
 
 function apiUrl(path) {
@@ -60,6 +105,7 @@ export async function streamConversationMessage(conversationId, content, { signa
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  const state = { accepted: false, terminal: false };
   while (true) {
     const { done, value } = await reader.read();
     buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
@@ -68,12 +114,14 @@ export async function streamConversationMessage(conversationId, content, { signa
     buffer = blocks.pop() || '';
     for (const block of blocks) {
       const parsed = parseSseBlock(block);
-      if (parsed) onEvent(parsed);
+      if (parsed) dispatchSseEvent(parsed, state, onEvent);
     }
     if (done) break;
   }
   const parsed = parseSseBlock(buffer.trim());
-  if (parsed) onEvent(parsed);
+  if (parsed) dispatchSseEvent(parsed, state, onEvent);
+  if (!state.accepted) throw new Error('AI 流式响应未收到确认事件');
+  if (!state.terminal) throw new Error('AI 流式响应未正常结束');
 }
 
 export default {

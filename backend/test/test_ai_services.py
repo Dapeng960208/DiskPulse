@@ -707,9 +707,9 @@ def test_invalid_json_tool_argument_repairs_stop_after_two_attempts_and_degrade_
     assert len(enabled_tool_requests) == 3
     assert all(raw_arguments not in json.dumps(item["messages"], ensure_ascii=False) for item in provider_requests[1:])
     if len(provider_requests) > 3:
-        assert provider_requests[-1].get("tools") == []
+        assert not provider_requests[-1].get("tools")
     assert "AI 服务暂时不可用" not in completed["message"]["content"]
-    assert raw_arguments not in json.dumps(completed, ensure_ascii=False)
+    assert raw_arguments not in json.dumps(completed, ensure_ascii=False, default=str)
 
     db_session.expire_all()
     audit = db_session.scalar(select(AIAuditLog).where(AIAuditLog.conversation_id == conversation.id))

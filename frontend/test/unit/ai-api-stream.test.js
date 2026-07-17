@@ -59,17 +59,17 @@ describe('AI API and SSE stream', () => {
 
   it('parses events split across response chunks and flushes the final block', async () => {
     global.fetch = vi.fn().mockResolvedValue(streamResponse([
-      'event: accepted\ndata: {"id":1}\n\nevent: del',
-      'ta\ndata: {"text":"容量"}\n\nevent: completed\ndata: {"ok":true}',
+      'event: accepted\ndata: {"turn_id":"turn-1","message":{"id":1,"role":"assistant"}}\n\nevent: del',
+      'ta\ndata: {"turn_id":"turn-1","text":"容量"}\n\nevent: completed\ndata: {"turn_id":"turn-1","message":{"id":1,"role":"assistant"}}',
     ]));
     const events = [];
 
     await streamConversationMessage(8, 'question', { onEvent: (event) => events.push(event) });
 
     expect(events).toEqual([
-      { event: 'accepted', data: { id: 1 } },
-      { event: 'delta', data: { text: '容量' } },
-      { event: 'completed', data: { ok: true } },
+      { event: 'accepted', data: { turn_id: 'turn-1', message: { id: 1, role: 'assistant' } } },
+      { event: 'delta', data: { turn_id: 'turn-1', text: '容量' } },
+      { event: 'completed', data: { turn_id: 'turn-1', message: { id: 1, role: 'assistant' } } },
     ]);
     expect(fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer test-token');
   });
@@ -77,7 +77,7 @@ describe('AI API and SSE stream', () => {
   it.each([
     [
       'the missing accepted event',
-      ['event: delta\ndata: {"turn_id":"turn-missing-accepted","text":"部分回答"}\n\nevent: completed\ndata: {"turn_id":"turn-missing-accepted","message":{}}'],
+      ['event: delta\ndata: {"turn_id":"turn-missing-accepted","text":"部分回答"}\n\nevent: completed\ndata: {"turn_id":"turn-missing-accepted","message":{"id":1}}'],
     ],
     [
       'the missing terminal event',

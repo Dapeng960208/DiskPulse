@@ -302,6 +302,20 @@ function retry() {
   send();
 }
 
+function recoveryDescription(message) {
+  return message?.recovery?.reason === 'tool_iteration_limit'
+    ? '本轮工具查询已达到上限，回答已基于当前可用信息生成。'
+    : '本轮工具参数多次无效，回答已保留当前可用信息。';
+}
+
+async function continueRecovery(message) {
+  if (!message?.recovery || streaming.value) return;
+  content.value = message.recovery.action === 'retry'
+    ? '请重新查询并补全上一个问题。'
+    : '我授权继续查询并补全上一个问题。';
+  await send();
+}
+
 onMounted(loadInitial);
 </script>
 
@@ -377,6 +391,17 @@ onMounted(loadInitial);
           <span
             v-else-if="message.role === 'assistant' && message.status === 'failed'"
             class="failed-label">{{ message.error || '生成失败，可重试' }}</span>
+          <section
+            v-if="message.role === 'assistant' && message.status === 'degraded' && message.recovery"
+            class="message-recovery">
+            <span>{{ recoveryDescription(message) }}</span>
+            <button
+              class="message-recovery__action"
+              type="button"
+              :aria-label="message.recovery.label"
+              :disabled="streaming"
+              @click="continueRecovery(message)">{{ message.recovery.label }}</button>
+          </section>
           <section
             v-if="message.role === 'assistant' && message.tool_calls?.length"
             class="tool-trace"
@@ -491,6 +516,10 @@ onMounted(loadInitial);
 .message-body { min-width: 0; line-height: 1.75; color: var(--text-primary); }
 .tool-waiting { color: var(--text-secondary); font-size: 13px; }
 .failed-label { grid-column: 2; color: var(--el-color-danger); font-size: 12px; }
+.message-recovery { grid-column: 2; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--el-color-warning); font-size: 12px; }
+.message-recovery__action { padding: 4px 9px; border: 1px solid var(--el-color-warning-light-3); border-radius: var(--radius-full); color: var(--el-color-warning); background: var(--el-color-warning-light-9); cursor: pointer; font: inherit; }
+.message-recovery__action:hover:not(:disabled), .message-recovery__action:focus-visible { border-color: var(--el-color-warning); outline: none; }
+.message-recovery__action:disabled { cursor: not-allowed; opacity: .65; }
 .tool-trace { grid-column: 2; display: grid; gap: 6px; margin-top: -8px; color: var(--text-secondary); font-size: 12px; }
 .tool-trace__title { color: var(--text-tertiary); font-weight: 600; }
 .tool-trace__item { border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-secondary); overflow: hidden; }
