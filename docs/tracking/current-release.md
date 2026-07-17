@@ -10,6 +10,7 @@
 - 已接入认证与成员审计：登录成功/拒绝、登出以及项目成员新增、更新、删除写入脱敏 `result` 事件，并保留请求关联 ID。
 - 已接入 AI 与配额审计：AI 会话创建/删除和消息 attempt/result 不保存标题或消息内容，`AIAuditLog.trace_id` 继承请求上下文；AI 模型创建、更新、删除、连接测试也写入统一审计。项目组与用户目录配额调整在设备调用前后以同一 `operation_id` 写入 attempt/result，且不保存设备路径、凭据或令牌。
 - 已接入服务操作审计：存储采集轮次按集群写入服务身份的成功/失败结果；Feishu 告警投递在真实发送前后写入同一 `operation_id` 的 attempt/result，摘要不保存通知标题、收件人或凭据。
+- 合并前复查新增并修复两项 fail-closed 安全缺口：撤销成员资格后，AI 续聊输入、历史读取和其后的无工具总结不再暴露原项目数据；统一审计同时屏蔽 `response`、`raw_response`、`device_response`、`body` 等原始响应别名。
 - 审计、迁移、配额和 AI RED/GREEN 检查点已提交。后端全量为 `490 passed`；迁移 `6 passed`、配额 `19 passed`、AI 权限/脱敏 `48 passed`、关联和模型审计组合 `51 passed`；前端全量 coverage 无失败（Lines/Statements `97.67%`、Functions `82.26%`、Branches `87.40%`），生产构建通过。
 
 ### 风险与待完成
