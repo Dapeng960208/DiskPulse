@@ -1,5 +1,24 @@
 # 当前交付记录
 
+## 2026-07-18：遥测可观测复查与复盘交付
+
+### 已完成
+
+- 对账本约束、三条采集链路、探针短路、专用依赖连接、指标标签、运行查询权限/脱敏、迁移链和账本清理完成 CodeGraph 复查。
+- 发现 `/metrics` 将应用 `SessionLocal` 传给指标服务，违背专用 `pool_size=1` 连接边界；已按 RED-GREEN TDD 修复为单次抓取创建并释放专用 PostgreSQL engine，保留测试用注入接口。
+- 新增遥测专题的[设计](../features/telemetry-observability/design.md)、[功能](../features/telemetry-observability/feature.md)、[实施](../features/telemetry-observability/implementation.md)和[验收](../features/telemetry-observability/acceptance.md)复盘，并更新索引与功能总览。
+
+### 验证状态
+
+- RED：路由传入应用 session factory 的回归测试按预期失败；专用 sessionmaker 生命周期用例在实现前也按预期失败。
+- GREEN：`D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test/test_telemetry_observability.py -q` 通过 `32 passed`；`D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test -q` 通过 `442 passed`。
+- 发布检查：`D:\dev\DiskPulse\.venv\Scripts\python.exe -m compileall -q backend`、`D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini heads`、通用迁移契约测试 `13 passed` 与 `git diff --check` 均通过；另直接验证 `000000000008` 的 SQLite 升降级和 SQLite/PostgreSQL/MySQL 离线 DDL 编译。Alembic 唯一 head 为 `000000000008`。
+
+### 风险与后续
+
+- 真实 PostgreSQL/Redis/QuestDB/Celery/飞书故障演练、Token 文件权限、监控网段限制、真实设备调用次数和 100 次 metrics 抓取 P95 仍需部署环境执行。
+- 保持 7 天暗运行：先对照账本、`/telemetry-runs` 与指标的一致性，仅观察 `not_ready`/`stale`，稳定后再启用既有通知体系的告警。
+
 ## 2026-07-18：遥测新鲜度与平台可观测
 
 ### 已完成

@@ -4,6 +4,7 @@
 
 - 容量、厂商事件和性能三条采集链路新增独立运行账本，记录集群级最后结果、UTC 时间、新鲜度所需的最后成功状态和安全 `trace_id`；不再依赖 `StorageCluster.updated_at` 或日志判断采集状态。
 - 新增无认证 `healthz`、依赖就绪 `readyz`、受 Token 保护的 Prometheus `metrics`，以及超级管理员只读的 `telemetry-runs` 查询接口；探针不创建常规 API 数据库 session。
+- 复查修复了 `/metrics` 复用应用 PostgreSQL session factory 的偏差：指标抓取现为单次创建并释放的专用 `pool_size=1` 连接，不会占用业务连接池。完整复盘见[设计](../features/telemetry-observability/design.md)、[功能](../features/telemetry-observability/feature.md)、[实施](../features/telemetry-observability/implementation.md)和[验收](../features/telemetry-observability/acceptance.md)。
 - 容量/厂商事件 150 秒、性能 630 秒内为新鲜；QuestDB 单独不可用使就绪状态降级但不阻塞 API 存活，PostgreSQL 或 Redis 不可用返回未就绪。
 - 新增 90 天运行账本每日清理、Redis 单例锁与飞书直发失败通知；先在测试环境暗运行 7 天再启用新鲜度告警。真实依赖、网络网段与监控抓取仍需部署环境验收。
 

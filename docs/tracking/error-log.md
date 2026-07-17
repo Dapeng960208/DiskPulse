@@ -1,5 +1,14 @@
 # 错误记录
 
+### 2026-07-18：metrics 抓取复用了应用数据库连接池
+
+- 触发：对 `/storage-pulse/api/v1/metrics` 进行 CodeGraph 实现复查，并新增路由和专用连接生命周期回归测试。
+- 现象：Router 将全局 `SessionLocal` 作为参数传入 `render_metrics`；指标读取可能占用正常 API 的 PostgreSQL 连接池，偏离探针专用 `pool_size=1` 连接契约。
+- 根因：指标服务支持 session factory 注入以便测试，但生产 Router 直接复用了业务 factory，未在服务层为默认抓取创建专用 engine。
+- 修复：Router 不再导入或传入 `SessionLocal`；服务在默认路径使用 `_probe_engine(..., pool_size=1)` 和专用 `sessionmaker`，并在单次抓取结束时 `dispose()`；测试注入能力保留。
+- 验证：RED 分别得到路由实参不符和缺少 `sessionmaker` 的预期失败；GREEN 后遥测聚焦 `32 passed`、后端全量 `442 passed`。
+- 风险：真实数据库连接超时、并发抓取和 P95 仍需部署环境验证。
+
 ### 2026-07-18：独立 worktree 缺少运行时配置，无法执行真实 PostgreSQL Alembic 升降级
 
 - 触发：在 `D:\dev\DiskPulse\.worktrees\telemetry-observability\backend` 执行 `D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic -c alembic.ini upgrade head`。
