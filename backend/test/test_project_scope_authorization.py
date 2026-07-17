@@ -5,6 +5,7 @@ from io import BytesIO
 import models
 
 from appConfig import base_config
+from schemas.storageTrendSchema import StorageTrendMeta, StorageTrendThresholds
 from utils.security import issue_token
 
 
@@ -142,11 +143,11 @@ def test_project_reader_cannot_bypass_scope_through_group_or_storage_usage_route
     finally:
         session.close()
 
-    export_called = False
+    export_args = None
 
     def _export(*_args, **_kwargs):
-        nonlocal export_called
-        export_called = True
+        nonlocal export_args
+        export_args = (_args, _kwargs)
         return BytesIO(b"private export")
 
     monkeypatch.setattr(storage_usage.storageUsageCrud, "export_storage_usage_to_excel", _export)
@@ -168,8 +169,9 @@ def test_project_reader_cannot_bypass_scope_through_group_or_storage_usage_route
     assert forbidden_group.status_code == 403
     assert forbidden_usage.status_code == 403
     assert forbidden_usage_trend.status_code == 403
-    assert forbidden_export.status_code == 403
-    assert export_called is False
+    assert forbidden_export.status_code == 200
+    assert export_args is not None
+    assert export_args[0][-1] == {1}
 
 
 def test_project_reader_filters_large_files_alerts_and_dashboard_before_pagination(
@@ -207,6 +209,45 @@ def test_project_reader_filters_large_files_alerts_and_dashboard_before_paginati
     assert global_dashboard.status_code == 403
     assert own_project_dashboard.status_code == 200
     assert forbidden_project_dashboard.status_code == 403
+
+
+def test_project_reader_cannot_read_another_projects_storage_trend(
+    api_client_factory,
+    monkeypatch,
+    session_factory,
+):
+    from routers import projects
+
+    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("super_admin_usernames", ["admin"])
+    session = session_factory()
+    try:
+        _seed_scoped_resources(session)
+    finally:
+        session.close()
+
+    queried_project_ids = []
+    monkeypatch.setattr(
+        projects,
+        "build_storage_trend_meta",
+        lambda *_args, **_kwargs: StorageTrendMeta(
+            quota_basis="hard",
+            rule_source="system",
+            thresholds=StorageTrendThresholds(important=80, serious=90, emergency=95),
+            ratio_indicator="used_ratio",
+        ),
+    )
+    monkeypatch.setattr(
+        projects.projectsCrud,
+        "get_project_storage_usages_real_time_data_by_id",
+        lambda *, project_id, **_kwargs: queried_project_ids.append(project_id) or [],
+    )
+    client = _client(api_client_factory, [projects.router], user_id=1)
+
+    response = client.get(f"{API_PREFIX}/projects/2/storage")
+
+    assert response.status_code == 403
+    assert queried_project_ids == []
 
 
 def test_unscoped_device_resource_routes_are_limited_to_super_admin(
@@ -280,8 +321,8 @@ def test_quota_capabilities_only_enable_the_responsible_group_owner(
         session.close()
 
     owner = _client(api_client_factory, [group.router, storage_usage.router], user_id=1)
-    other = _client(api_client_factory, [group.router, storage_usage.router], user_id=2)
+    other = _client(api_client_factory, [group.router, storage_usage.router], user_id=4)
 
     assert owner.get(f"{API_PREFIX}/groups/1").json()["capabilities"] == {"adjust_quota": True}
     assert owner.get(f"{API_PREFIX}/storage-usages/1").json()["capabilities"] == {"adjust_quota": True}
-    assert other.get(f"{API_PREFIX}/groups/2").json()["capabilities"] == {"adjust_quota": False}
+    assert other.get(f"{API_PREFIX}/groups/1").json()["capabilities"] == {"adjust_quota": False}
