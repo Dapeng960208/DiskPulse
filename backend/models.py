@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
+    desc,
     Float,
     ForeignKey,
     Index,
@@ -182,11 +183,18 @@ class TelemetryCollectionRun(Base):
         ),
         CheckConstraint(
             "outcome IS NULL OR "
-            "(outcome = 'success' AND data_state IS NOT NULL AND records_written IS NOT NULL AND error_code IS NULL) OR "
-            "(outcome IN ('failed', 'skipped') AND data_state IS NULL AND records_written IS NULL AND error_code IS NULL)",
+            "(finished_at IS NOT NULL AND ((outcome = 'success' AND data_state IS NOT NULL "
+            "AND records_written IS NOT NULL AND error_code IS NULL) OR "
+            "(outcome IN ('failed', 'skipped') AND data_state IS NULL "
+            "AND records_written IS NULL AND error_code IS NULL)))",
             name="ck_telemetry_run_terminal_fields",
         ),
-        Index("ix_telemetry_run_component_cluster_finished", "component", "storage_cluster_id", "finished_at"),
+        Index(
+            "ix_telemetry_run_component_cluster_finished",
+            "component",
+            "storage_cluster_id",
+            desc("finished_at"),
+        ),
         Index("ix_telemetry_run_created_at", "created_at"),
     )
 
