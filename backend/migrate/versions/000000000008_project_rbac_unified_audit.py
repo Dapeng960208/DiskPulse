@@ -30,6 +30,7 @@ def _sqlite_projects_table(*, include_pt_user: bool) -> sa.Table:
         sa.Column("project_process_code", sa.String(), nullable=True),
         sa.Column("recipients", sa.String(), nullable=True),
         sa.Column("is_alert", sa.Boolean(), nullable=True),
+        sa.Column("storage_alert_rule", sa.JSON(), nullable=True),
         sa.Column("in_charge_user_id", sa.Integer(), nullable=True),
     ]
     if include_pt_user:
