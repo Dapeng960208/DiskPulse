@@ -24,7 +24,15 @@ const props = defineProps({
   title: {
     type: String,
     default: 'Nightingale Chart',
-  }
+  },
+  variant: {
+    type: String,
+    default: 'rose',
+  },
+  centerLabel: {
+    type: String,
+    default: '',
+  },
 });
 
 const chartDom = ref(null);
@@ -38,12 +46,19 @@ function renderChart() {
   }
 
   chartInstance = echarts.init(chartDom.value);
+  const isDashboard = props.variant === 'dashboard';
+  const styles = getComputedStyle(document.documentElement);
+  const color = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
   const option = {
+    color: isDashboard
+      ? [color('--primary-color', '#3B82F6'), color('--bg-tertiary', '#F1F5F9')]
+      : undefined,
     legend: {
-      top: 'bottom'
+      top: 'bottom',
+      show: !isDashboard,
     },
     toolbox: {
-      show: true,
+      show: !isDashboard,
       feature: {
         mark: { show: true },
         dataView: { show: true, readOnly: false },
@@ -51,9 +66,15 @@ function renderChart() {
         saveAsImage: { show: true }
       }
     },
-    dataset: {
-      source: props.data
-    },
+    dataset: isDashboard ? undefined : { source: props.data },
+    title: isDashboard ? {
+      text: props.centerLabel,
+      subtext: '已使用',
+      left: 'center',
+      top: '38%',
+      textStyle: { color: color('--text-primary', '#1E293B'), fontSize: 24, fontWeight: 700 },
+      subtextStyle: { color: color('--text-secondary', '#64748B'), fontSize: 12 },
+    } : undefined,
     tooltip: {
       trigger: 'item',
     },
@@ -61,14 +82,17 @@ function renderChart() {
       {
         name: props.title,
         type: 'pie',
-        radius: [20, 140],
+        radius: isDashboard ? ['68%', '86%'] : [20, 140],
         center: ['50%', '50%'],
-        roseType: 'radius',
+        roseType: isDashboard ? undefined : 'radius',
+        data: isDashboard ? props.data : undefined,
         itemStyle: {
-        borderRadius: 5
+        borderRadius: isDashboard ? 10 : 5,
+        borderColor: color('--bg-primary', '#FFFFFF'),
+        borderWidth: isDashboard ? 3 : 0,
       },
       label: {
-        show: true
+        show: !isDashboard
       },
       emphasis: {
         label: {
@@ -97,5 +121,12 @@ watch(() => props.width, renderChart);
 watch(() => props.height, renderChart);
 watch(() => props.data, renderChart, { deep: true });
 watch(() => props.title, renderChart);
+watch(() => props.variant, renderChart);
+watch(() => props.centerLabel, renderChart);
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeChart);
+  chartInstance?.dispose();
+});
 
 </script>

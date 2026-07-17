@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
 
-from models import Group, GroupTag, Project, StorageAlerts, StorageCluster, Volume
+import pytest
+from fastapi import HTTPException
+
+from models import Group, GroupTag, Project, StorageAlerts, StorageCluster, User, Volume
 
 
 def seed_dashboard_data(db):
@@ -50,7 +53,7 @@ def seed_dashboard_data(db):
             source="diskpulse",
             alert_type="alert",
             event_type="trigger",
-            related_type="group",
+            related_type="Group",
             related_id=group.id,
             updated_at=now - timedelta(days=1),
         ),
@@ -58,7 +61,7 @@ def seed_dashboard_data(db):
             source="diskpulse",
             alert_type="quota_adjustment",
             event_type="trigger",
-            related_type="group",
+            related_type="Group",
             related_id=group.id,
             updated_at=now - timedelta(days=1),
         ),
@@ -66,7 +69,7 @@ def seed_dashboard_data(db):
             source="vendor",
             alert_type="alert",
             event_type="trigger",
-            related_type="group",
+            related_type="Group",
             related_id=group.id,
             updated_at=now - timedelta(days=1),
         ),
@@ -124,7 +127,18 @@ def test_dashboard_service_keeps_snapshots_when_questdb_is_unavailable(db_sessio
     assert overview["capacity_trend"] == []
 
 
-def test_dashboard_router_validates_project_id(api_client_factory, auth_headers, monkeypatch):
+def test_dashboard_service_returns_not_found_for_unknown_project(db_session):
+    from services import dashboardService
+
+    with pytest.raises(HTTPException) as error:
+        dashboardService.get_dashboard_overview(db_session, project_id=999)
+
+    assert error.value.status_code == 404
+
+
+def test_dashboard_router_validates_project_id(
+    api_client_factory, auth_headers, db_session, monkeypatch
+):
     from routers import dashboard
 
     overview = {
@@ -149,8 +163,9 @@ def test_dashboard_router_validates_project_id(api_client_factory, auth_headers,
         "alert_trend": [],
     }
     monkeypatch.setattr(dashboard.dashboardService, "get_dashboard_overview", lambda _db, project_id=None: overview)
+    db_session.add(User(id=1, username="dashboard-user"))
+    db_session.commit()
     client = api_client_factory([dashboard.router], headers=auth_headers)
 
     assert client.get("/storage-pulse/api/dashboard/overview?project_id=0").status_code == 422
     assert client.get("/storage-pulse/api/dashboard/overview").status_code == 200
-

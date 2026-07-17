@@ -21,6 +21,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  placeholder: {
+    type: String,
+    default: '根据项目名搜索',
+  },
 });
 const emit = defineEmits(['update:modelValue']);
 const { model, normalizedModelValue } = useSelectModel(props, emit);
@@ -64,7 +68,7 @@ function searchProjects(queryString) {
     class="w-full"
     :loading="searchingProjects"
     :remote-method="searchProjects"
-    placeholder="根据项目名搜索"
+    :placeholder="placeholder"
     :multiple="multiple"
     :multiple-limit="multipleLimit"
     :reserve-keyword="false"

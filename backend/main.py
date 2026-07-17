@@ -12,6 +12,7 @@ from routers import (
     ai,
     ai_admin,
     config,
+    dashboard,
     group,
     group_tag,
     large_files,
@@ -43,6 +44,7 @@ storage_router.include_router(ai_admin.router)
 storage_router.include_router(projects.router)
 storage_router.include_router(group_tag.router)
 storage_router.include_router(config.router)
+storage_router.include_router(dashboard.router)
 storage_router.include_router(group.router)
 storage_router.include_router(storage_cluster.router)
 storage_router.include_router(aggregate.router)
