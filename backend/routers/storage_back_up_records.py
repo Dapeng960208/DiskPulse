@@ -43,12 +43,6 @@ def read_storage_back_up_records(page: int | None = 1, size: int | None = 20, na
 @router.delete(
     "/{storage_back_up_record_id}",
     status_code=status.HTTP_200_OK,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "delete_storage_backup_record",
-        "ai_description": "删除离职备份记录",
-    },
 )
 def delete_storage_usage(storage_back_up_record_id: int, background_tasks: BackgroundTasks,
                          _admin: None = Depends(require_super_admin),

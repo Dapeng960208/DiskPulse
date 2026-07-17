@@ -147,7 +147,16 @@ def read_storage_usage_realtime_data(storage_usage_id: int, start_time: datetime
                                                                                    trend_meta=trend_meta)
 
 
-@router.patch("/{storage_usage_id}/quota", response_model=quotaSchema.QuotaAdjustmentResponse)
+@router.patch(
+    "/{storage_usage_id}/quota",
+    response_model=quotaSchema.QuotaAdjustmentResponse,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "adjust_storage_usage_quota",
+        "ai_description": "调整用户目录限额",
+    },
+)
 def adjust_storage_usage_quota(
     storage_usage_id: int,
     payload: quotaSchema.QuotaAdjustmentRequest,

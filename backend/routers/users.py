@@ -56,12 +56,6 @@ def sync_ldap_users(_admin: AdminDep, db: DBDep):
 @router.post(
     "/",
     response_model=usersSchema.User,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "create_user",
-        "ai_description": "创建用户",
-    },
 )
 def create_user(user: usersSchema.UserCreate, _admin: AdminDep, db: DBDep):
     return usersService.create_user(db, user)
@@ -137,12 +131,6 @@ def update_user(
 @router.delete(
     "/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "delete_user",
-        "ai_description": "删除用户",
-    },
 )
 def delete_user(user_id: int, _admin: AdminDep, db: DBDep):
     usersService.delete_user(db, user_id)

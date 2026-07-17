@@ -18,12 +18,6 @@ router = APIRouter(
 @router.post(
     "/",
     response_model=aggregateSchema.Aggregate,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "create_aggregate",
-        "ai_description": "创建容量池",
-    },
 )
 def create_aggregate(
     aggregate: aggregateSchema.AggregateCreate,
@@ -109,12 +103,6 @@ def update_aggregate(
 @router.delete(
     "/{aggregate_id}",
     response_model=aggregateSchema.Aggregate,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "delete_aggregate",
-        "ai_description": "删除容量池",
-    },
 )
 def delete_aggregate(
     aggregate_id: int,

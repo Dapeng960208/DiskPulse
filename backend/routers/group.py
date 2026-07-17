@@ -86,7 +86,16 @@ def update_group(
     )
 
 
-@router.patch("/{group_id}/quota", response_model=quotaSchema.QuotaAdjustmentResponse)
+@router.patch(
+    "/{group_id}/quota",
+    response_model=quotaSchema.QuotaAdjustmentResponse,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "adjust_group_quota",
+        "ai_description": "调整项目组限额",
+    },
+)
 def adjust_group_quota(
     group_id: int,
     payload: quotaSchema.QuotaAdjustmentRequest,

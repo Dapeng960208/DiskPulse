@@ -137,12 +137,6 @@ def update_storage_cluster(
 
 @router.delete(
     "/{storage_cluster_id}",
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "delete_storage_cluster",
-        "ai_description": "删除存储集群",
-    },
 )
 def delete_storage_cluster(
     storage_cluster_id: int,

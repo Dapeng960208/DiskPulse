@@ -20,12 +20,6 @@ router = APIRouter(
 @router.post(
     "/",
     response_model=qtreeSchema.Qtree,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "create_qtree",
-        "ai_description": "创建 Qtree",
-    },
 )
 def create_qtree(
     qtree: qtreeSchema.QtreeCreate,
@@ -38,12 +32,6 @@ def create_qtree(
 @router.get(
     "/",
     response_model=commonSchema.ResponseModel,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "list_qtrees",
-        "ai_description": "分页查询 Qtree",
-    },
 )
 def read_qtrees(page: int, size: int, nameLike: str | None = None, prop: str | None = None,
                 order: str | None = None, volume_id: int | None = None, storage_cluster_id: int | None = None,
@@ -56,12 +44,6 @@ def read_qtrees(page: int, size: int, nameLike: str | None = None, prop: str | N
 @router.get(
     "/{qtree_id}",
     response_model=qtreeSchema.Qtree,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "get_qtree",
-        "ai_description": "查询指定 Qtree",
-    },
 )
 def read_qtree(qtree_id: int, db: Session = Depends(get_db)):
     db_qtree = qtreeCrud.get_qtree_by_id(db, qtree_id=qtree_id)
@@ -70,7 +52,7 @@ def read_qtree(qtree_id: int, db: Session = Depends(get_db)):
     return db_qtree
 
 
-@router.get("/{qtree_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_qtree_realtime", "ai_description": "查询 Qtree 实时容量趋势"})
+@router.get("/{qtree_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel)
 def read_qtree_realtime_data(qtree_id: int, start_time: datetime | None = None,
                              end_time: datetime | None = None,
                              indicator: storageTrendSchema.TrendIndicator = 'used', db: Session = Depends(get_db)):
@@ -89,12 +71,6 @@ def read_qtree_realtime_data(qtree_id: int, start_time: datetime | None = None,
 @router.put(
     "/{qtree_id}",
     response_model=qtreeSchema.Qtree,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "update_qtree",
-        "ai_description": "更新 Qtree",
-    },
 )
 def update_qtree(
     qtree_id: int,
@@ -111,12 +87,6 @@ def update_qtree(
 @router.delete(
     "/{qtree_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "delete_qtree",
-        "ai_description": "删除 Qtree",
-    },
 )
 def delete_qtree(
     qtree_id: int,

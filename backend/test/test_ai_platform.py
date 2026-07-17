@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from appConfig import base_config
-from dependencies import require_super_admin
+from dependencies import get_db, require_super_admin
 from models import AIConfig, AIConversation, AIAuditLog, AIMessage, User
 from routers import (
     aggregate,
@@ -374,6 +374,7 @@ def test_quota_adjustment_tools_require_admin_at_registration_and_execution(monk
     calls = []
 
     app.dependency_overrides[require_super_admin] = lambda: None
+    app.dependency_overrides[get_db] = lambda: object()
     monkeypatch.setattr(
         quotaService,
         "adjust_group_quota",
@@ -432,13 +433,25 @@ def test_quota_adjustment_tools_require_admin_at_registration_and_execution(monk
         current_user=admin,
     )
 
-    assert group_result == {
-        "ok": True,
-        "data": {"id": 7, "resource_type": "group", "storage_type": "netapp", "hard_limit": 2048},
+    assert group_result["ok"] is True
+    assert {
+        key: group_result["data"][key]
+        for key in ("id", "resource_type", "storage_type", "hard_limit")
+    } == {
+        "id": 7,
+        "resource_type": "group",
+        "storage_type": "netapp",
+        "hard_limit": 2048,
     }
-    assert usage_result == {
-        "ok": True,
-        "data": {"id": 9, "resource_type": "storage_usage", "storage_type": "netapp", "hard_limit": 120},
+    assert usage_result["ok"] is True
+    assert {
+        key: usage_result["data"][key]
+        for key in ("id", "resource_type", "storage_type", "hard_limit")
+    } == {
+        "id": 9,
+        "resource_type": "storage_usage",
+        "storage_type": "netapp",
+        "hard_limit": 120,
     }
     assert [(kind, identifier, request.hard_limit_gib) for kind, identifier, request in calls] == [
         ("group", 7, 2048),

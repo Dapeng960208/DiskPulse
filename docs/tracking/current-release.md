@@ -1,5 +1,22 @@
 # 当前交付记录
 
+## 2026-07-17：AI 工具白名单收敛与限额调整
+
+### 已完成
+
+- 仅调整 AI 工具路由元数据：删除工具、创建用户、创建容量池、创建/更新存储空间、全部 Qtree（NetApp）、存储设置更新及 AI 审计查询均不再注册；直接 HTTP API、页面和既有权限未修改。
+- 为既有项目组与用户目录配额 PATCH 路由新增超级管理员 AI 工具元数据；执行端继续复核当前用户身份，并携带原用户 Bearer Token 调用原路由。
+- 工具请求体转发排除 Pydantic 计算字段，避免原配额请求模型的 `extra="forbid"` 校验拒绝合法工具调用。
+
+### 验证状态
+
+- RED：`backend/test/test_ai_platform.py` 先确认旧注册表仍包含 17 个待移除工具且不含两条限额调整工具。
+- GREEN：`.\.venv\Scripts\python.exe -m pytest backend\test\test_ai_platform.py backend\test\test_ai_services.py backend\test\test_quota_adjustment.py -q -p no:cacheprovider` 通过，`55 passed`。
+
+### 风险
+
+- 自动化测试覆盖注册、执行端二次鉴权、路径/请求体转发和原有 Pydantic 校验；真实存储设备限额写入仍需在专用测试目标完成联调。
+
 ## 2026-07-17：AI 对话可恢复工具调用
 
 ### 已完成

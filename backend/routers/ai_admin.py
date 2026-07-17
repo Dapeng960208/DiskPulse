@@ -64,12 +64,6 @@ def update_model(
 @router.delete(
     "/ai-models/{model_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "delete_ai_model",
-        "ai_description": "删除 AI 模型配置",
-    },
 )
 def delete_model(model_id: int, _current_user: CurrentUserDep, db: Session = Depends(get_db)):
     ai_config_service.delete_model(db, model_id)

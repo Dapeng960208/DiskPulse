@@ -84,12 +84,6 @@ def update_group_tag(
 @router.delete(
     "/{group_tag_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "delete_group_tag",
-        "ai_description": "删除项目组标签",
-    },
 )
 def delete_group_tag(group_tag_id: int, _admin: AdminDep, db: DBDep):
     groupTagService.delete_group_tag(db, group_tag_id=group_tag_id)

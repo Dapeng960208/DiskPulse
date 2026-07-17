@@ -139,8 +139,13 @@ def tool_definitions(registry: dict[str, AIToolDefinition], provider: str) -> li
 
 
 def _request_parts(definition: AIToolDefinition, payload: _ToolInput) -> tuple[str, dict[str, Any], object | None]:
-    raw = payload.model_dump(mode="json", exclude_none=True)
-    aliased = payload.model_dump(mode="json", by_alias=True, exclude_none=True)
+    raw = payload.model_dump(mode="json", exclude_none=True, exclude_computed_fields=True)
+    aliased = payload.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_none=True,
+        exclude_computed_fields=True,
+    )
     raw.pop("body", None)
     body = aliased.pop("body", None)
     path = definition.route_path

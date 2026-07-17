@@ -18,12 +18,6 @@ router = APIRouter(
 @router.post(
     "/",
     response_model=volumeSchema.Volume,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "create_volume",
-        "ai_description": "创建存储空间",
-    },
 )
 def create_volume(
     volume: volumeSchema.VolumeCreate,
@@ -87,12 +81,6 @@ def read_volume_realtime_data(volume_id: int, start_time: datetime | None = None
 @router.put(
     "/{volume_id}",
     response_model=volumeSchema.Volume,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "update_volume",
-        "ai_description": "更新存储空间",
-    },
 )
 def update_volume(
     volume_id: int,
@@ -109,12 +97,6 @@ def update_volume(
 @router.delete(
     "/{volume_id}",
     response_model=volumeSchema.Volume,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "delete_volume",
-        "ai_description": "删除存储空间",
-    },
 )
 def delete_volume(
     volume_id: int,

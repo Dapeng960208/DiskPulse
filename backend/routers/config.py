@@ -45,12 +45,6 @@ def read_storage_alert_thresholds(db: Session = Depends(get_db)):
     "/storage",
     response_model=configSchemas.StorageConfPublic,
     dependencies=[Depends(require_super_admin)],
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "update_storage_config",
-        "ai_description": "更新存储系统设置",
-    },
 )
 def update_storage_config(storage_config: configSchemas.StorageConf, db: Session = Depends(get_db)):
     return configCrud.update_storage_config(db=db, storage_config=storage_config)
