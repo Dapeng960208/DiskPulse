@@ -30,6 +30,9 @@ redis:
   port: 6379
   session_db: 8
 
+observability:
+  metrics_token_file: ./metrics-token.test
+
 ai:
   config_secret_key: test-ai-config-secret-key
   request_timeout_seconds: 60

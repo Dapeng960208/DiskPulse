@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
+from datetime import datetime, timezone
+from uuid import uuid4
 
 from sqlalchemy import (
     Boolean,
@@ -14,11 +15,38 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    TypeDecorator,
     UniqueConstraint,
+    Uuid,
 )
 from sqlalchemy.orm import backref, relationship
 
 from database import Base
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class UTCDateTime(TypeDecorator):
+    """Persist telemetry ledger timestamps as UTC-aware datetimes."""
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("Telemetry timestamps must include a timezone")
+        return value.astimezone(timezone.utc)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
 
 class StorageConf(Base):
@@ -132,6 +160,57 @@ class StorageCluster(Base):
     qtrees = relationship("Qtree", back_populates="storage_cluster", lazy=True)
     storage_usages = relationship("StorageUsage", back_populates="storage_cluster", lazy=True)
     groups = relationship("Group", back_populates="storage_cluster", lazy=True)
+
+
+class TelemetryCollectionRun(Base):
+    __tablename__ = "telemetry_collection_runs"
+    __table_args__ = (
+        UniqueConstraint("task_id", "attempt", "component", "scope_key", name="uq_telemetry_run_task_attempt_scope"),
+        CheckConstraint("attempt >= 1", name="ck_telemetry_run_attempt"),
+        CheckConstraint("scope_type IN ('cluster', 'scheduler')", name="ck_telemetry_run_scope_type"),
+        CheckConstraint("component IN ('capacity', 'vendor_events', 'performance')", name="ck_telemetry_run_component"),
+        CheckConstraint("outcome IS NULL OR outcome IN ('success', 'failed', 'skipped')", name="ck_telemetry_run_outcome"),
+        CheckConstraint("data_state IS NULL OR data_state IN ('data', 'empty', 'unsupported')", name="ck_telemetry_run_data_state"),
+        CheckConstraint(
+            "error_code IS NULL OR error_code IN ('vendor_auth', 'vendor_timeout', 'postgres', 'questdb', 'unknown')",
+            name="ck_telemetry_run_error_code",
+        ),
+        CheckConstraint(
+            "(scope_type = 'cluster' AND scope_key <> '') OR "
+            "(scope_type = 'scheduler' AND scope_key = 'scheduler' AND storage_cluster_id IS NULL)",
+            name="ck_telemetry_run_scope",
+        ),
+        CheckConstraint(
+            "outcome IS NULL OR "
+            "(outcome = 'success' AND data_state IS NOT NULL AND records_written IS NOT NULL AND error_code IS NULL) OR "
+            "(outcome IN ('failed', 'skipped') AND data_state IS NULL AND records_written IS NULL AND error_code IS NULL)",
+            name="ck_telemetry_run_terminal_fields",
+        ),
+        Index("ix_telemetry_run_component_cluster_finished", "component", "storage_cluster_id", "finished_at"),
+        Index("ix_telemetry_run_created_at", "created_at"),
+    )
+
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    task_id = Column(String(128), nullable=False)
+    attempt = Column(Integer, nullable=False)
+    scope_type = Column(String(16), nullable=False)
+    scope_key = Column(String(64), nullable=False)
+    storage_cluster_id = Column(
+        Integer,
+        ForeignKey("storage_clusters.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    component = Column(String(32), nullable=False)
+    trace_id = Column(String(36), nullable=False)
+    started_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+    finished_at = Column(UTCDateTime(), nullable=True)
+    outcome = Column(String(16), nullable=True)
+    data_state = Column(String(16), nullable=True)
+    records_written = Column(Integer, nullable=True)
+    error_code = Column(String(32), nullable=True)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+
+    storage_cluster = relationship("StorageCluster", lazy=True)
 
 
 class GroupTag(Base):

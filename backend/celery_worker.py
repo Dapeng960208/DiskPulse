@@ -58,6 +58,11 @@ diskpulse_app.conf.beat_schedule = {
         "schedule": 300.0,
         "options": {"expires": 300},
     },
+    "telemetry_collection_runs_cleanup_task": {
+        "task": "celery_tasks.tasks.telemetry.telemetry_collection_runs_cleanup_task",
+        "schedule": crontab(hour="3", minute="17"),
+        "options": {"expires": 1800},
+    },
     "storage_alerts_schedule_task": {
         "task": "celery_tasks.tasks.storage_alerts.storage_alerts_schedule_task",
         "schedule": 60.0,
@@ -128,6 +133,7 @@ import celery_tasks.tasks.users
 import celery_tasks.tasks.large_files
 import celery_tasks.tasks.storage_health
 import celery_tasks.tasks.storage_alerts
+import celery_tasks.tasks.telemetry
 # import celery_tasks.tasks.check_quest_db
 # import celery_tasks.tasks.large_files
 # import celery_tasks.tasks.lsf_alerts

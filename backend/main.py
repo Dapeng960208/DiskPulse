@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import time
+
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import DisconnectionError
@@ -22,9 +24,12 @@ from routers import (
     storage_back_up_records,
     storage_cluster,
     storage_usage,
+    telemetry,
     users,
     volumes,
+    observability,
 )
+from services import observabilityService
 
 if base_config.get("database.create_tables", False):
     upgrade_questdb()
@@ -55,6 +60,13 @@ storage_router.include_router(storage_alerts.router)
 storage_router.include_router(storage_back_up_records.router)
 storage_router.include_router(large_files.router)
 app.include_router(storage_router)
+app.include_router(observability.router, prefix="/storage-pulse/api")
+v1_authenticated_router = APIRouter(
+    prefix="/storage-pulse/api",
+    dependencies=[Depends(require_authenticated_request)],
+)
+v1_authenticated_router.include_router(telemetry.router)
+app.include_router(v1_authenticated_router)
 
 cors_origins = base_config.get("application.cors_origins", [])
 
@@ -69,6 +81,14 @@ app.add_middleware(
 
 @app.middleware("http")
 async def db_session_middleware(request: Request, call_next):
+    if request.url.path in {
+        "/storage-pulse/api/v1/healthz",
+        "/storage-pulse/api/v1/readyz",
+        "/storage-pulse/api/v1/metrics",
+    }:
+        return await call_next(request)
+
+    started = time.perf_counter()
     response = Response("Internal server error", status_code=500)
     request.state.db = SessionLocal()
     try:
@@ -84,4 +104,9 @@ async def db_session_middleware(request: Request, call_next):
         raise
     finally:
         request.state.db.close()
+    observabilityService.record_http_request(
+        request,
+        response,
+        time.perf_counter() - started,
+    )
     return response

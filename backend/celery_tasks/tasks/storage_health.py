@@ -14,6 +14,7 @@ from database import SessionLocal
 from dependencies import QuestDBSession
 from models import StorageAlerts, StorageCluster, Volume
 from services.storageHealthAnalyticsService import normalize_severity
+from services import telemetryObservabilityService
 
 
 logger = get_task_logger(__name__)
@@ -159,15 +160,56 @@ def normalize_vendor_events(
     return rows
 
 
-def run_isolated(cluster_ids, collect: Callable[[int], object], task_logger=logger) -> dict:
+def run_isolated(
+    cluster_ids,
+    collect: Callable[[int], object],
+    task_logger=logger,
+    *,
+    telemetry_context: dict | None = None,
+    component: str | None = None,
+    session_factory=SessionLocal,
+) -> dict:
     succeeded = []
     failed = []
     for cluster_id in cluster_ids:
+        run = None
+        if telemetry_context is not None and component is not None:
+            run = telemetryObservabilityService.safe_start_collection_run(
+                session_factory,
+                task_logger,
+                task_id=telemetry_context["task_id"],
+                attempt=telemetry_context["attempt"],
+                scope_type="cluster",
+                scope_key=str(cluster_id),
+                storage_cluster_id=cluster_id,
+                component=component,
+                trace_id=telemetry_context["trace_id"],
+            )
         try:
-            collect(cluster_id)
+            records_written = collect(cluster_id)
             succeeded.append(cluster_id)
+            if run is not None:
+                telemetryObservabilityService.safe_complete_collection_run(
+                    session_factory,
+                    task_logger,
+                    run.id,
+                    outcome="success",
+                    data_state=telemetryObservabilityService.successful_data_state(records_written),
+                    records_written=records_written,
+                )
         except Exception as exc:
             failed.append(cluster_id)
+            if run is not None:
+                telemetryObservabilityService.safe_complete_collection_run(
+                    session_factory,
+                    task_logger,
+                    run.id,
+                    outcome="failed",
+                    error_code=telemetryObservabilityService.classify_error_code(
+                        exc,
+                        phase="vendor",
+                    ),
+                )
             task_logger.error("Storage health collection failed for cluster %s: %s", cluster_id, exc)
     return {
         "succeeded_clusters": tuple(succeeded),
@@ -403,17 +445,41 @@ def _collect_performance(storage_cluster_id: int) -> int:
                 monitor.cleanup()
 
 
-@diskpulse_app.task(soft_time_limit=50, time_limit=60, expires=60)
-def storage_events_schedule_fetching_task():
+@diskpulse_app.task(bind=True, soft_time_limit=50, time_limit=60, expires=60)
+def storage_events_schedule_fetching_task(self):
+    telemetry_context = telemetryObservabilityService.task_execution_context(self)
     with redis_lock("storage_events_schedule_fetching_task_lock", expires=60) as have_lock:
         if not have_lock:
+            telemetryObservabilityService.safe_record_scheduler_skip(
+                SessionLocal,
+                logger,
+                component="vendor_events",
+                **telemetry_context,
+            )
             return {"succeeded_clusters": (), "failed_clusters": ()}
-        return run_isolated(_active_cluster_ids(), _collect_events)
+        return run_isolated(
+            _active_cluster_ids(),
+            _collect_events,
+            telemetry_context=telemetry_context,
+            component="vendor_events",
+        )
 
 
-@diskpulse_app.task(soft_time_limit=240, time_limit=300, expires=300)
-def storage_performance_schedule_fetching_task():
+@diskpulse_app.task(bind=True, soft_time_limit=240, time_limit=300, expires=300)
+def storage_performance_schedule_fetching_task(self):
+    telemetry_context = telemetryObservabilityService.task_execution_context(self)
     with redis_lock("storage_performance_schedule_fetching_task_lock", expires=300) as have_lock:
         if not have_lock:
+            telemetryObservabilityService.safe_record_scheduler_skip(
+                SessionLocal,
+                logger,
+                component="performance",
+                **telemetry_context,
+            )
             return {"succeeded_clusters": (), "failed_clusters": ()}
-        return run_isolated(_active_cluster_ids(), _collect_performance)
+        return run_isolated(
+            _active_cluster_ids(),
+            _collect_performance,
+            telemetry_context=telemetry_context,
+            component="performance",
+        )

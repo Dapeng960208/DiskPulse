@@ -18,6 +18,7 @@ from celery_tasks.tasks.redis_lock import redis_lock
 from celery.exceptions import SoftTimeLimitExceeded
 from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
 from models import Group, Project, Qtree, StorageCluster, StorageUsage, Volume
+from services import telemetryObservabilityService
 logger = get_task_logger(__name__)
 
 
@@ -160,6 +161,7 @@ def run_collection_round(
     questdb_writer=None,
     logger=logger,
     collected_at=None,
+    telemetry_context=None,
 ):
     cluster_results = {}
     succeeded_clusters = []
@@ -170,6 +172,19 @@ def run_collection_round(
         cluster_id = cluster["storage_cluster_id"]
         db = None
         monitor = None
+        run = None
+        if telemetry_context is not None:
+            run = telemetryObservabilityService.safe_start_collection_run(
+                session_factory,
+                logger,
+                task_id=telemetry_context["task_id"],
+                attempt=telemetry_context["attempt"],
+                scope_type="cluster",
+                scope_key=str(cluster_id),
+                storage_cluster_id=cluster_id,
+                component="capacity",
+                trace_id=telemetry_context["trace_id"],
+            )
         try:
             db = session_factory()
             with db.begin():
@@ -189,6 +204,21 @@ def run_collection_round(
                     refreshed_group_ids.extend(metrics.get("group_ids", ()))
             cluster_results[cluster_id] = True
             succeeded_clusters.append(cluster_id)
+            records_written = (
+                len(metrics.get("storage_usage_ids", ()))
+                + len(metrics.get("group_ids", ()))
+                if isinstance(metrics, dict)
+                else 0
+            )
+            if run is not None:
+                telemetryObservabilityService.safe_complete_collection_run(
+                    session_factory,
+                    logger,
+                    run.id,
+                    outcome="success",
+                    data_state=telemetryObservabilityService.successful_data_state(records_written),
+                    records_written=records_written,
+                )
             try:
                 if questdb_writer is None:
                     monitor.write_questdb(metrics)
@@ -203,6 +233,17 @@ def run_collection_round(
         except Exception as exc:
             cluster_results[cluster_id] = False
             failed_clusters.append(cluster_id)
+            if run is not None:
+                telemetryObservabilityService.safe_complete_collection_run(
+                    session_factory,
+                    logger,
+                    run.id,
+                    outcome="failed",
+                    error_code=telemetryObservabilityService.classify_error_code(
+                        exc,
+                        phase="vendor",
+                    ),
+                )
             logger.error(
                 "Error monitoring cluster %s: %s",
                 cluster["storage_cluster_id"],
@@ -242,9 +283,10 @@ def run_collection_round(
     }
 
 
-@diskpulse_app.task(soft_time_limit=120, time_limit=180, expires=60)
-def storages_schedule_fetching_task(storage_cluster_id=None):
+@diskpulse_app.task(bind=True, soft_time_limit=120, time_limit=180, expires=60)
+def storages_schedule_fetching_task(self, storage_cluster_id=None):
     try:
+        telemetry_context = telemetryObservabilityService.task_execution_context(self)
         logger.info(
             "Storage collection task started: cluster=%s",
             "all" if storage_cluster_id is None else storage_cluster_id,
@@ -258,6 +300,7 @@ def storages_schedule_fetching_task(storage_cluster_id=None):
                     snapshot,
                     session_factory=SessionLocal,
                     collected_at=collected_at,
+                    telemetry_context=telemetry_context,
                 )
                 logger.info(
                     "Storage collection round completed: succeeded=%s failed=%s",
@@ -272,6 +315,12 @@ def storages_schedule_fetching_task(storage_cluster_id=None):
                             collected_at=collected_at,
                         )
             else:
+                telemetryObservabilityService.safe_record_scheduler_skip(
+                    SessionLocal,
+                    logger,
+                    component="capacity",
+                    **telemetry_context,
+                )
                 logger.info("Storages schedule fetching task is already running.")
     except Exception as e:
         logger.error(f"Error in storages fetching task: {e}")

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta, timezone
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import Mock
 from uuid import UUID
@@ -262,3 +263,73 @@ def test_telemetry_runs_api_requires_super_admin_and_returns_safe_paginated_fiel
         "finished_at",
     } == set(item)
     assert "task_id" not in item
+
+
+def test_isolated_vendor_collection_records_cluster_success_and_failure(session_factory):
+    from celery_tasks.tasks import storage_health
+
+    with session_factory() as db:
+        db.add_all(
+            [
+                models.StorageCluster(id=1, name="cluster-a", storage_type="netapp"),
+                models.StorageCluster(id=2, name="cluster-b", storage_type="netapp"),
+            ]
+        )
+        db.commit()
+
+    def collect(cluster_id):
+        if cluster_id == 2:
+            raise TimeoutError()
+        return 4
+
+    summary = storage_health.run_isolated(
+        [1, 2],
+        collect,
+        telemetry_context={
+            "task_id": "vendor-task",
+            "attempt": 1,
+            "trace_id": "698195ec-302f-4c7e-a583-2de7f2948f4c",
+        },
+        component="vendor_events",
+        session_factory=session_factory,
+    )
+
+    assert summary == {"succeeded_clusters": (1,), "failed_clusters": (2,)}
+    with session_factory() as db:
+        rows = db.query(models.TelemetryCollectionRun).order_by(models.TelemetryCollectionRun.scope_key).all()
+    assert [(row.outcome, row.records_written, row.data_state) for row in rows] == [
+        ("success", 4, "data"),
+        ("failed", None, None),
+    ]
+
+
+def test_telemetry_cleanup_deletes_expired_rows_in_batches_and_retries_on_failure(
+    session_factory, monkeypatch
+):
+    from celery_tasks.tasks import telemetry as telemetry_tasks
+
+    with session_factory() as db:
+        db.add(
+            models.TelemetryCollectionRun(
+                **_run_payload(task_id="expired-run"),
+                outcome="success",
+                data_state="empty",
+                records_written=0,
+                finished_at=UTC_NOW,
+                created_at=UTC_NOW - timedelta(days=91),
+            )
+        )
+        db.commit()
+
+    @contextmanager
+    def lock(_name, expires):
+        assert expires == 1800
+        yield True
+
+    monkeypatch.setattr(telemetry_tasks, "SessionLocal", session_factory)
+    monkeypatch.setattr(telemetry_tasks, "redis_lock", lock)
+    monkeypatch.setattr(telemetry_tasks, "utc_now", lambda: UTC_NOW)
+
+    assert telemetry_tasks.telemetry_collection_runs_cleanup_task.run() == {"deleted": 1}
+    with session_factory() as db:
+        assert db.query(models.TelemetryCollectionRun).count() == 0
