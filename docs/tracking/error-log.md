@@ -731,3 +731,12 @@
 - 修复：保持测试命令不变，将 shell 工具超时提高到 `120000ms` 后重新执行，并运行 `.\.venv\Scripts\python.exe -m coverage report` 生成覆盖率报告。
 - 验证：复跑完成，pytest 结果为 `386 passed`，覆盖率报告为 `TOTAL 91%`，退出状态成功。
 - 风险：后续运行后端全量测试或覆盖率测试时应预留足够工具超时，避免把外层进程终止误判为测试失败。
+
+### 2026-07-17：仓库根目录无法直接运行 QuestDB migration 模块
+
+- 触发：在仓库根目录执行 `.\.venv\Scripts\python.exe -m questdb.migrate history`。
+- 现象：Python 返回 `ModuleNotFoundError: No module named 'questdb'`。
+- 根因：仓库根目录执行时，`backend` 包根目录不在 `sys.path` 中，无法解析 `questdb` 模块。
+- 修复：切换到 `backend` 目录，执行 `..\.venv\Scripts\python.exe -m questdb.migrate history`。
+- 验证：命令成功列出 `000000000001` 至 `000000000004 user_storage_usages` 的完整 revision 历史。
+- 风险：文档和运维命令必须明确要求从 `backend` 目录执行，或显式配置包含 `backend` 的 `PYTHONPATH`。
