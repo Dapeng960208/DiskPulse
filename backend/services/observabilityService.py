@@ -6,6 +6,7 @@ from pathlib import Path
 import redis
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
 from sqlalchemy import create_engine, select, text
+from sqlalchemy.orm import sessionmaker
 
 from appConfig import base_config
 from crud import telemetryCollectionRunCrud
@@ -216,15 +217,29 @@ def clear_telemetry_metrics() -> None:
     _telemetry_metric_labels = set()
 
 
-def render_metrics(session_factory) -> bytes:
+def render_metrics(session_factory=None) -> bytes:
     dependencies = check_dependencies()
     update_dependency_metrics(dependencies)
+    probe_engine = None
     if dependencies["postgres"]:
         try:
+            if session_factory is None:
+                probe_engine = _probe_engine(
+                    base_config.get_sqlalchemy_database_url(),
+                    connect_args={"connect_timeout": 1},
+                )
+                session_factory = sessionmaker(
+                    autocommit=False,
+                    autoflush=False,
+                    bind=probe_engine,
+                )
             refresh_telemetry_metrics(session_factory)
         except Exception:
             DEPENDENCY_READY.labels(component="postgres", cluster_id="").set(0)
             clear_telemetry_metrics()
+        finally:
+            if probe_engine is not None:
+                probe_engine.dispose()
     else:
         clear_telemetry_metrics()
     return generate_latest(METRICS_REGISTRY)

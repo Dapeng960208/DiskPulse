@@ -4,7 +4,6 @@ from typing import Annotated
 from fastapi import APIRouter, Header, HTTPException, Response, status
 from prometheus_client import CONTENT_TYPE_LATEST
 
-from database import SessionLocal
 from schemas.telemetryObservabilitySchema import HealthStatus
 from services import observabilityService
 
@@ -39,6 +38,6 @@ def metrics(
     if not observabilityService.metrics_token_is_valid(metrics_token):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="metrics access denied")
     return Response(
-        content=observabilityService.render_metrics(SessionLocal),
+        content=observabilityService.render_metrics(),
         media_type=CONTENT_TYPE_LATEST,
     )
