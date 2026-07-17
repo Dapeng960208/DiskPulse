@@ -23,8 +23,10 @@ _SENSITIVE_KEY_PARTS = (
     "credential",
     "cookie",
     "prompt",
+    "response",
     "request_payload",
     "response_payload",
+    "body",
     "message",
     "content",
 )
