@@ -41,12 +41,17 @@ def test_load_collection_snapshot_targets_one_cluster(db_session):
 
 
 def test_schedule_storage_collection_dispatches_target_cluster(caplog):
-    with caplog.at_level("INFO", logger="uvicorn.error"):
+    with caplog.at_level("INFO", logger="services.storageClusterService"):
         with patch("celery_tasks.tasks.storages.storages_schedule_fetching_task.delay") as delay:
             _schedule_storage_collection(42)
 
     delay.assert_called_once_with(42)
     assert "Storage collection scheduled for cluster 42" in caplog.text
+    assert any(
+        record.name == "services.storageClusterService"
+        and record.getMessage() == "Storage collection scheduled for cluster 42"
+        for record in caplog.records
+    )
 
 
 def test_schedule_storage_collection_passes_request_correlation_to_task():
@@ -73,13 +78,19 @@ def test_schedule_storage_collection_passes_request_correlation_to_task():
 
 
 def test_schedule_failure_is_logged_without_rolling_back_cluster(caplog):
-    with patch(
-        "celery_tasks.tasks.storages.storages_schedule_fetching_task.delay",
-        side_effect=RuntimeError("broker unavailable"),
-    ):
-        _schedule_storage_collection(42)
+    with caplog.at_level("ERROR", logger="services.storageClusterService"):
+        with patch(
+            "celery_tasks.tasks.storages.storages_schedule_fetching_task.delay",
+            side_effect=RuntimeError("broker unavailable"),
+        ):
+            _schedule_storage_collection(42)
 
     assert "Failed to schedule storage collection for cluster 42" in caplog.text
+    assert any(
+        record.name == "services.storageClusterService"
+        and record.getMessage() == "Failed to schedule storage collection for cluster 42"
+        for record in caplog.records
+    )
 
 
 @pytest.mark.parametrize(
