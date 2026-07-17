@@ -88,7 +88,7 @@ async function renderChart() {
   const option = {
     color: getChartColors(),
     title: {
-      bottom: 0,
+      bottom: 8,
       text: props.title,
       left: 'center',
       textStyle: {
@@ -102,7 +102,7 @@ async function renderChart() {
       left: 100,
       right: 100,
       top: 50,
-      bottom: 80
+      bottom: 120
     },
     toolbox: {
       show: true,
@@ -122,6 +122,8 @@ async function renderChart() {
       axisLabel: {
         rotate: 45, // Rotate the labels 45 degrees
         interval: 0, // Show all labels
+        width: 100,
+        overflow: 'truncate',
         formatter: function (value) {
           return value.length > 10 ? value.slice(0, 10) + '...' : value; // Optional: truncate long labels
         }

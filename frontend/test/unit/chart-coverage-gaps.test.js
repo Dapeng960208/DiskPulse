@@ -122,11 +122,14 @@ describe('chart coverage gaps', () => {
 
     const instance = latestChart();
     const option = latestOption();
+    expect(option.title.bottom).toBe(8);
+    expect(option.grid.bottom).toBe(120);
     expect(option.series.map((series) => series.name)).toEqual(['raw', '已映射']);
     expect(option.series[0].data).toEqual([1, 0]);
     expect(option.series[0].label.formatter({ value: 1.6 })).toBe('2G');
     expect(option.xAxis.axisLabel.formatter('short')).toBe('short');
     expect(option.xAxis.axisLabel.formatter('a category name longer than ten')).toBe('a category...');
+    expect(option.xAxis.axisLabel.width).toBe(100);
     expect(option.tooltip.formatter([
       { axisValue: 'short', marker: '*', seriesName: 'raw', value: 1 },
       { marker: '+', seriesName: 'mapped', value: 3 },
