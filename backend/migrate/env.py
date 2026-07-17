@@ -1,3 +1,4 @@
+import logging
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
@@ -11,9 +12,9 @@ from appConfig import base_config
 config = context.config
 config.set_main_option("sqlalchemy.url", base_config.get_sqlalchemy_database_url())
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
-if config.config_file_name is not None:
+# Preserve logging configured by the hosting application or test runner.  The
+# Alembic CLI starts without root handlers, so it still receives the INI setup.
+if config.config_file_name is not None and not logging.getLogger().handlers:
     fileConfig(config.config_file_name)
 
 # add your model's MetaData object here
