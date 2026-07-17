@@ -164,7 +164,6 @@ def test_project_crud_lists_and_storage_summaries(db_session):
             recipient_ids=[1, 2],
             is_alert=True,
             in_charge_user_id=1,
-            pt_user_id=2,
         ),
     )
     assert created.recipients == "1 2"
@@ -181,7 +180,6 @@ def test_project_crud_lists_and_storage_summaries(db_session):
             recipient_ids=[2],
             is_alert=False,
             in_charge_user_id=2,
-            pt_user_id=1,
         ),
     )
     assert updated.name == "beta-renamed"

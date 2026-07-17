@@ -1,13 +1,31 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
+import importlib.util
+import io
+from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
+import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from fastapi import HTTPException
 
 import models
+from appConfig import base_config
 from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
+from routers import project_memberships
 from schemas import projectsSchema, storageUsageSchema
 from services import project_access_service, project_membership_service
+
+
+def _membership_migration():
+    path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000008_project_memberships.py"
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    return migration
 
 
 def _seed_project_users(db):
@@ -38,6 +56,54 @@ def test_project_owner_is_initialized_as_project_admin_and_pt_user_is_absent(db_
     assert not hasattr(models.Project, "pt_user_id")
 
 
+def test_project_membership_migration_compiles_for_supported_dialects():
+    for dialect_name in ("sqlite", "postgresql", "mysql"):
+        migration = _membership_migration()
+        output = io.StringIO()
+        migration.op = Operations(
+            MigrationContext.configure(
+                dialect_name=dialect_name,
+                opts={"as_sql": True, "output_buffer": output},
+            )
+        )
+        migration.upgrade()
+        migration.downgrade()
+        sql = output.getvalue().lower()
+        assert "project_memberships" in sql
+        assert "pt_user_id" in sql
+
+
+def test_project_membership_migration_backfills_owner_and_drops_pt_user_on_sqlite():
+    migration = _membership_migration()
+    metadata = sa.MetaData()
+    users = sa.Table("users", metadata, sa.Column("id", sa.Integer(), primary_key=True))
+    projects = sa.Table(
+        "projects",
+        metadata,
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("in_charge_user_id", sa.Integer()),
+        sa.Column("pt_user_id", sa.Integer()),
+    )
+    with sa.create_engine("sqlite://").begin() as connection:
+        metadata.create_all(connection)
+        connection.execute(users.insert(), [{"id": 1}, {"id": 2}])
+        connection.execute(projects.insert(), {"id": 1, "in_charge_user_id": 1, "pt_user_id": 2})
+        migration.op = Operations(MigrationContext.configure(connection))
+
+        migration.upgrade()
+
+        membership = connection.execute(
+            sa.text("SELECT project_id, user_id, role FROM project_memberships")
+        ).one()
+        assert membership == (1, 1, "project_admin")
+        assert "pt_user_id" not in {column["name"] for column in sa.inspect(connection).get_columns("projects")}
+
+        migration.downgrade()
+
+        assert "pt_user_id" in {column["name"] for column in sa.inspect(connection).get_columns("projects")}
+        assert "project_memberships" not in sa.inspect(connection).get_table_names()
+
+
 def test_project_admin_can_manage_reader_and_editor_but_not_project_admin(db_session):
     _seed_project_users(db_session)
     project_access_service.ensure_project_owner_membership(db_session, project_id=1)
@@ -51,7 +117,7 @@ def test_project_admin_can_manage_reader_and_editor_but_not_project_admin(db_ses
         current_user=db_session.get(models.User, 2),
     )
 
-    assert created.role == "editor"
+    assert created["role"] == "editor"
     with pytest.raises(HTTPException) as error:
         project_membership_service.create_membership(
             db_session,
@@ -61,6 +127,52 @@ def test_project_admin_can_manage_reader_and_editor_but_not_project_admin(db_ses
             current_user=db_session.get(models.User, 2),
         )
     assert error.value.status_code == 403
+
+
+def test_membership_api_enforces_local_user_and_project_admin_role_boundary(
+    api_client_factory,
+    session_factory,
+):
+    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("super_admin_usernames", ["super-admin"])
+    session = session_factory()
+    try:
+        _seed_project_users(session)
+    finally:
+        session.close()
+    client = api_client_factory(
+        [project_memberships.router],
+        headers={"Authorization": "Bearer invalid-placeholder"},
+    )
+    from utils.security import issue_token
+
+    client.headers.update({"Authorization": f"Bearer {issue_token(1)}"})
+    created = client.post(
+        "/storage-pulse/api/projects/1/members",
+        json={"user_id": 3, "role": "project_admin"},
+    )
+    assert created.status_code == 201
+    assert created.json()["role"] == "project_admin"
+
+    session = session_factory()
+    try:
+        owner = session.get(models.User, 2)
+        project_access_service.ensure_project_owner_membership(session, project_id=1)
+        session.commit()
+        owner_token = issue_token(owner.id)
+    finally:
+        session.close()
+    client.headers.update({"Authorization": f"Bearer {owner_token}"})
+    denied = client.post(
+        "/storage-pulse/api/projects/1/members",
+        json={"user_id": 4, "role": "project_admin"},
+    )
+    missing_user = client.post(
+        "/storage-pulse/api/projects/1/members",
+        json={"user_id": 99, "role": "reader"},
+    )
+    assert denied.status_code == 403
+    assert missing_user.status_code == 404
 
 
 def test_storage_collection_grants_reader_without_downgrading_existing_membership(db_session):
@@ -77,13 +189,14 @@ def test_storage_collection_grants_reader_without_downgrading_existing_membershi
                 group_tag_id=1,
                 name="group-a",
                 linux_path="/data/project-a",
+                enable_monitoring=False,
             ),
         ]
     )
     db_session.commit()
     monitor = StoragePulseMonitor(
         db_session,
-        logger=object(),
+        logger=Mock(),
         storage_cluster_id=1,
         snapshot={"storage_type": "netapp", "storage_cluster_name": "cluster-a"},
     )
@@ -106,13 +219,12 @@ def test_storage_collection_grants_reader_without_downgrading_existing_membershi
     db_session.commit()
     assert db_session.query(models.ProjectMembership).filter_by(project_id=1, user_id=1).one().role == "reader"
 
-    project_membership_service.update_membership(
+    project_access_service.set_project_member(
         db_session,
         project_id=1,
         user_id=1,
         role="editor",
-        current_user=models.User(id=99, rd_username="super-admin"),
-        is_super_admin_override=True,
+        actor_is_super_admin=True,
     )
     monitor.sync_data_to_postgres(
         [item],

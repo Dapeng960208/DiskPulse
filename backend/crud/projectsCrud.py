@@ -13,6 +13,7 @@ from models import (
     StorageUsage,
 )
 from schemas import projectsSchema
+from services.project_access_service import ensure_project_owner_membership
 from utils.common import convert_GB_to_TB
 from utils.query import get_sort_column, require_allowed
 
@@ -55,9 +56,10 @@ def create_project(db: Session, project: projectsSchema.ProjectUpdate):
             project.storage_alert_rule.model_dump() if project.storage_alert_rule else None
         ),
         in_charge_user_id=project.in_charge_user_id,
-        pt_user_id=project.pt_user_id,
     )
     db.add(project_db)
+    db.flush()
+    ensure_project_owner_membership(db, project_id=project_db.id)
     db.commit()
     db.refresh(project_db)
     return project_db
@@ -76,9 +78,10 @@ def update_project(db: Session, project_id: int, project: projectsSchema.Project
             project.storage_alert_rule.model_dump() if project.storage_alert_rule else None
         )
         project_db.in_charge_user_id = project.in_charge_user_id
-        project_db.pt_user_id = project.pt_user_id
         project_db.project_process_code = project.project_process_code
         project_db.updated_at = datetime.now()
+        db.flush()
+        ensure_project_owner_membership(db, project_id=project_db.id)
         db.commit()
         db.refresh(project_db)
     return project_db

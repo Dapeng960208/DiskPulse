@@ -92,7 +92,6 @@ class Project(Base):
     is_alert = Column(Boolean, default=True)
     storage_alert_rule = Column(JSON, nullable=True)
     in_charge_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    pt_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     limit = Column(Float, default=0)
     soft_limit = Column(Float, nullable=True)
     used = Column(Float, default=0)
@@ -102,13 +101,16 @@ class Project(Base):
 
     groups = relationship("Group", back_populates="project", lazy=True)
     in_charge_user = relationship("User", foreign_keys=[in_charge_user_id], lazy=True)
-    pt_user = relationship("User", foreign_keys=[pt_user_id], lazy=True)
 
 
 class ProjectMembership(Base):
     __tablename__ = "project_memberships"
     __table_args__ = (
         UniqueConstraint("project_id", "user_id", name="uq_project_membership_user"),
+        CheckConstraint(
+            "role IN ('reader', 'editor', 'project_admin')",
+            name="ck_project_membership_role",
+        ),
         Index("ix_project_membership_user_project", "user_id", "project_id"),
         Index("ix_project_membership_project_role", "project_id", "role"),
     )
