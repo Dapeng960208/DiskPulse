@@ -20,6 +20,16 @@
 
   已通过 `11` 项，覆盖登录成功、无效凭据拒绝、登出撤销和三类认证结果审计；审计摘要不保存口令或 JWT。
 
+- 服务操作审计聚焦验证：
+
+  ```powershell
+  Set-Location backend
+  uv run pytest test/test_storage_collection_trigger.py -q
+  uv run pytest test/test_storage_alert_rules.py -q
+  ```
+
+  已分别通过 `10` 项和 `31` 项，覆盖存储采集按集群写入服务身份的成功/失败结果，以及 Feishu 告警投递的同操作 ID attempt/result；测试使用替身，不调用真实设备或 broker。
+
 - 受影响后端文件已执行 `py_compile`，并已执行 `git diff --check`。
 
 - 主应用成员路由合同：
@@ -33,7 +43,5 @@
 ## 待验证
 
 - 验证未登录、跨项目、角色变更即时生效、项目管理员不得授予 `project_admin`、普通 `editor` 不得调整配额及项目组负责人例外。
-- 存储设备采集、Celery 任务和通知链路尚未接入统一审计；仍需覆盖其成功、拒绝、校验失败和设备失败的关联记录。
-- 运行项目成员和前端审计页面的聚焦测试；本次文档交付未重新执行浏览器或前端全量测试。
 - 在真实 PostgreSQL 变更窗口完成备份恢复、`alembic upgrade`/downgrade、触发器和应用/只读数据库角色权限验证。
-- 在当前已接入的认证、成员、AI 和配额范围内补齐失败路径覆盖；最终确认所有记录可按 `request_id`、`trace_id`、`operation_id` 关联。
+- 在真实 NetApp/Isilon 设备和 Feishu 环境完成采集、配额写入与通知投递验证；测试环境的替身不替代该验收。

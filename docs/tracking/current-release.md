@@ -8,13 +8,12 @@
 - 已提交 `audit_events` 模型、`000000000009_unified_audit.py`、关联 ID 中间件、脱敏审计服务、查询 API 及 SQLite/PostgreSQL/MySQL 不可变触发器定义。
 - 已接入认证与成员审计：登录成功/拒绝、登出以及项目成员新增、更新、删除写入脱敏 `result` 事件，并保留请求关联 ID。
 - 已接入 AI 与配额审计：AI 会话创建/删除和消息 attempt/result 不保存标题或消息内容；项目组与用户目录配额调整在设备调用前后以同一 `operation_id` 写入 attempt/result，且不保存设备路径、凭据或令牌。
+- 已接入服务操作审计：存储采集轮次按集群写入服务身份的成功/失败结果；Feishu 告警投递在真实发送前后写入同一 `operation_id` 的 attempt/result，摘要不保存通知标题、收件人或凭据。
 - 审计 RED/GREEN 检查点已提交。聚焦验证覆盖统一审计、配额、项目负责人权限和 AI 平台，共 `54 passed`；认证 API 聚焦验证另有 `11 passed`。
 
 ### 风险与待完成
 
-- 成员 Router 已发布到主应用；仍需完成真实登录态下的页面增删改、跨项目隔离和角色矩阵联调。
-- 当前统一审计尚未覆盖存储设备采集、Celery 任务和通知链路，不能宣称范围内写操作审计覆盖率已达标。
-- 生产 PostgreSQL 的备份恢复、Alembic `stamp`/upgrade、触发器和应用运行账号/审计只读账号授权未验证；前端浏览器及全量测试本轮未重新执行。
+- 生产 PostgreSQL 的备份恢复、Alembic `stamp`/upgrade、触发器和应用运行账号/审计只读账号授权未验证；真实 NetApp/Isilon 设备写入、采集和 Feishu 投递也尚未在变更窗口完成联调验证。
 
 ## 2026-07-17：企业级 AI 存储智能运维调研基线
 
