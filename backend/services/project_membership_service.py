@@ -3,6 +3,7 @@ from fastapi import HTTPException, status
 
 from models import Project, ProjectMembership, User
 from services import project_access_service
+from services.audit_service import AuditContext, append_audit_event
 from utils.auth_service import is_super_admin
 
 
@@ -60,7 +61,15 @@ def list_memberships(db, *, project_id: int, current_user: User) -> list[dict]:
     return [_serialize(membership, user) for membership, user in rows]
 
 
-def create_membership(db, *, project_id: int, user_id: int, role: str, current_user: User) -> dict:
+def create_membership(
+    db,
+    *,
+    project_id: int,
+    user_id: int,
+    role: str,
+    current_user: User,
+    audit_context: AuditContext | None = None,
+) -> dict:
     actor_is_super_admin = _require_manage_members(db, project_id=project_id, current_user=current_user)
     _validate_assignable_role(role=role, actor_is_super_admin=actor_is_super_admin)
     _require_target_user(db, user_id)
@@ -79,12 +88,32 @@ def create_membership(db, *, project_id: int, user_id: int, role: str, current_u
         updated_by=current_user.id,
     )
     db.add(membership)
+    if audit_context is not None:
+        append_audit_event(
+            db,
+            context=audit_context,
+            phase="result",
+            action="project.membership.create",
+            resource_type="project_membership",
+            resource_id=user_id,
+            project_id=project_id,
+            outcome="success",
+            after_summary={"role": role},
+        )
     db.commit()
     db.refresh(membership)
     return _serialize(membership, db.get(User, user_id))
 
 
-def update_membership(db, *, project_id: int, user_id: int, role: str, current_user: User) -> dict:
+def update_membership(
+    db,
+    *,
+    project_id: int,
+    user_id: int,
+    role: str,
+    current_user: User,
+    audit_context: AuditContext | None = None,
+) -> dict:
     actor_is_super_admin = _require_manage_members(db, project_id=project_id, current_user=current_user)
     _validate_assignable_role(role=role, actor_is_super_admin=actor_is_super_admin)
     membership = (
@@ -94,14 +123,35 @@ def update_membership(db, *, project_id: int, user_id: int, role: str, current_u
     )
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project member was not found")
+    previous_role = membership.role
     membership.role = role
     membership.updated_by = current_user.id
+    if audit_context is not None:
+        append_audit_event(
+            db,
+            context=audit_context,
+            phase="result",
+            action="project.membership.update",
+            resource_type="project_membership",
+            resource_id=user_id,
+            project_id=project_id,
+            outcome="success",
+            before_summary={"role": previous_role},
+            after_summary={"role": role},
+        )
     db.commit()
     db.refresh(membership)
     return _serialize(membership, db.get(User, user_id))
 
 
-def delete_membership(db, *, project_id: int, user_id: int, current_user: User) -> None:
+def delete_membership(
+    db,
+    *,
+    project_id: int,
+    user_id: int,
+    current_user: User,
+    audit_context: AuditContext | None = None,
+) -> None:
     actor_is_super_admin = _require_manage_members(db, project_id=project_id, current_user=current_user)
     membership = (
         db.query(ProjectMembership)
@@ -111,5 +161,17 @@ def delete_membership(db, *, project_id: int, user_id: int, current_user: User) 
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project member was not found")
     _validate_assignable_role(role=membership.role, actor_is_super_admin=actor_is_super_admin)
+    if audit_context is not None:
+        append_audit_event(
+            db,
+            context=audit_context,
+            phase="result",
+            action="project.membership.delete",
+            resource_type="project_membership",
+            resource_id=user_id,
+            project_id=project_id,
+            outcome="success",
+            before_summary={"role": membership.role},
+        )
     db.delete(membership)
     db.commit()

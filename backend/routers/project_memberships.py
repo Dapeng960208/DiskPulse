@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from dependencies import CurrentUserDep, get_db
 from schemas import projectMembershipSchema
-from services import project_membership_service
+from services import audit_service, project_membership_service
 
 
 router = APIRouter(prefix="/projects", tags=["project-memberships"])
@@ -30,6 +30,7 @@ def list_project_members(project_id: int, current_user: CurrentUserDep, db: DBDe
 def create_project_member(
     project_id: int,
     payload: projectMembershipSchema.ProjectMembershipCreate,
+    request: Request,
     current_user: CurrentUserDep,
     db: DBDep,
 ):
@@ -39,6 +40,7 @@ def create_project_member(
         user_id=payload.user_id,
         role=payload.role,
         current_user=current_user,
+        audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
     )
 
 
@@ -47,6 +49,7 @@ def update_project_member(
     project_id: int,
     user_id: int,
     payload: projectMembershipSchema.ProjectMembershipUpdate,
+    request: Request,
     current_user: CurrentUserDep,
     db: DBDep,
 ):
@@ -56,15 +59,23 @@ def update_project_member(
         user_id=user_id,
         role=payload.role,
         current_user=current_user,
+        audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
     )
 
 
 @router.delete("/{project_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_project_member(project_id: int, user_id: int, current_user: CurrentUserDep, db: DBDep):
+def delete_project_member(
+    project_id: int,
+    user_id: int,
+    request: Request,
+    current_user: CurrentUserDep,
+    db: DBDep,
+):
     project_membership_service.delete_membership(
         db,
         project_id=project_id,
         user_id=user_id,
         current_user=current_user,
+        audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

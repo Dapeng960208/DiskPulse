@@ -52,6 +52,24 @@ class AuditContext:
         object.__setattr__(self, "operation_id", _normalise_uuid(self.operation_id))
 
 
+def audit_context_for_request(request, *, actor_user_id: int | None, actor_type: str = "user") -> AuditContext:
+    """Bind the request correlation values to the user performing a mutation."""
+    context = getattr(getattr(request, "state", None), "audit_context", None)
+    if not isinstance(context, AuditContext):
+        context = AuditContext(
+            request_id=uuid4(),
+            trace_id=uuid4(),
+            operation_id=uuid4(),
+        )
+    return AuditContext(
+        request_id=context.request_id,
+        trace_id=context.trace_id,
+        operation_id=context.operation_id,
+        actor_type=actor_type,
+        actor_user_id=actor_user_id,
+    )
+
+
 def redact_audit_payload(value: Any, *, key: str | None = None) -> Any:
     """Return a summary-safe deep copy without credentials, prompts, or full paths."""
     key_name = (key or "").casefold()
