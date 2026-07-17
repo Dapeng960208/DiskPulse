@@ -87,6 +87,7 @@ def test_questdb_migrations_add_soft_quota_metric_columns():
         "000000000001",
         "000000000002",
         "000000000003",
+        "000000000004",
     )
     soft_quota_tables = {
         "volume_storage_usages",
@@ -122,12 +123,14 @@ def test_questdb_upgrade_records_revision_and_is_repeatable():
         "000000000001",
         "000000000002",
         "000000000003",
+        "000000000004",
     )
     assert runner.upgrade(engine) == ()
     assert engine.applied.keys() == {
         "000000000001",
         "000000000002",
         "000000000003",
+        "000000000004",
     }
     assert engine.commits == 2
 
@@ -140,12 +143,57 @@ def test_questdb_upgrade_applies_soft_quota_revision_after_initial_schema():
         tables={"diskpulse_schema_migrations"},
     )
 
-    assert runner.upgrade(engine) == ("000000000002", "000000000003")
+    assert runner.upgrade(engine) == (
+        "000000000002",
+        "000000000003",
+        "000000000004",
+    )
     assert engine.applied.keys() == {
         "000000000001",
         "000000000002",
         "000000000003",
+        "000000000004",
     }
+
+
+def test_user_storage_usage_revision_matches_model_and_has_stable_checksum():
+    runner = _load_runner()
+    first = runner.load_migrations(MIGRATION_ROOT)
+    second = runner.load_migrations(MIGRATION_ROOT)
+    revision = first[-1]
+
+    assert revision.version == "000000000004"
+    assert revision.name == "user_storage_usages"
+    assert revision.checksum == second[-1].checksum
+    assert len(revision.checksum) == 64
+    assert set(map(_normalize, revision.statements)) == {
+        _normalize(
+            """
+            CREATE TABLE IF NOT EXISTS user_storage_usages (
+                user_id SYMBOL,
+                limit DOUBLE,
+                soft_limit DOUBLE,
+                used DOUBLE,
+                use_ratio DOUBLE,
+                soft_use_ratio DOUBLE,
+                file_used DOUBLE,
+                updated_at TIMESTAMP
+            ) TIMESTAMP(updated_at) PARTITION BY DAY WAL
+            """
+        )
+    }
+    table = QuestDBBase.metadata.tables["user_storage_usages"]
+    assert tuple(table.columns.keys()) == (
+        "user_id",
+        "limit",
+        "soft_limit",
+        "used",
+        "use_ratio",
+        "soft_use_ratio",
+        "file_used",
+        "updated_at",
+    )
+    assert table.primary_key.columns.keys() == ["user_id", "updated_at"]
 
 
 def test_questdb_upgrade_rejects_changed_applied_revision():
@@ -206,7 +254,8 @@ def test_questdb_current_reports_base_and_applied_revisions():
             (),
             "000000000001 initial_schema\n"
             "000000000002 add_soft_quota_metrics\n"
-            "000000000003 storage_performance_metrics",
+            "000000000003 storage_performance_metrics\n"
+            "000000000004 user_storage_usages",
         ),
         ("current", ("000000000002",), (), "000000000002"),
         ("current", (), (), "base"),
