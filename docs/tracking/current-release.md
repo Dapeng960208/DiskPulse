@@ -1,5 +1,25 @@
 # 当前交付记录
 
+## 2026-07-17：企业级 AI 存储智能运维调研基线
+
+### 已完成
+
+- 新增 `docs/features/ai-storage-management/research.md`，将 DiskPulse 当前定位明确为“多厂商存储监控、告警、配额运维平台 + AI 工具助手原型”，并说明尚未达到企业级自治存储控制平台。
+- 报告以 NetApp Digital Advisor、Data Infrastructure Insights、NetApp Console/Ransomware Resilience 和 Dell AIOps 的官方资料为主对标，面向芯片/IC 企业的 NetApp、PowerScale 私有化智能运维场景。
+- 固化 12 个能力域差距矩阵、当前成熟度基线、模型数据路由、自动化风险分级、未来接口边界、18 个月路线和可量化验收门槛；所有未来能力均标记为“待实现”或“仅设计”。
+- 同步 `docs/README.md` 索引；本次仅修改文档，不修改代码、数据库、配置、路由或运行时 API，也不创建 Git 提交。
+- 基于调研基线新增六份待实施计划：项目级 RBAC/统一审计、模型网关/Secrets/出口控制、遥测新鲜度/平台可观测、控制面 HA/DR、预测/RCA/事件中心、策略 Runbook/受控自治；索引固化依赖图、数据/API 契约、分步交付、TDD/隔离环境验收与旧直写 API 的退出条件，见 `docs/superpowers/plans/2026-07-17-220000-enterprise-ai-storage-implementation-index.md`。
+
+### 验证状态
+
+- 报告的 19 条本地链接、13 个代码行锚点和 `docs/README.md` 索引目标均已核对有效；六份实施计划与索引的相对链接、版本化 API 前缀、依赖关系和占位词也已检查；`git diff --check` 通过。
+- 12 条 NetApp、WEKA、VAST、Komprise 官方链接在当前网络返回 `200`。Dell AIOps 页面在当前网络的 `HEAD`/`GET` 请求分别返回 `500`/`403`（Akamai 拒绝），本次不以该网络错误否定已核实的官方资料；交付后如需刷新资料，应从可访问的企业网络再次确认。
+
+### 风险与后续
+
+- 报告中的厂商能力以 2026-07-17 官方资料为准；PowerScale InsightIQ 的当前细节未在本轮获得完整一手正文，故未作为确认能力陈述。
+- 预测、RCA、自治、HA/DR 与企业集成均为后续研发方向；真实 NetApp/PowerScale 设备、第三方 Provider 和灾备环境仍需分阶段验证。
+
 ## 2026-07-17：AI 工具白名单收敛与限额调整
 
 ### 已完成

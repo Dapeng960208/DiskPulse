@@ -43,6 +43,7 @@ docs/
 | 存储配额软限额 | [features/storage-quota/overview.md](./features/storage-quota/overview.md) |
 | 全站存储趋势图 | [设计](./features/storage-trends/design.md) · [详情路由加载修复](./features/storage-trends/detail-route-loading-fix.md) · [用户目录扩展字段隐藏](./features/storage-trends/usage-detail-field-visibility.md) · [实时页头与告警等级](./features/storage-trends/realtime-header-alert-level.md) |
 | AI 对话与管理中心 | [总览](./features/ai-chat/overview.md) · [后端实现](./features/ai-chat/backend.md) · [前端实现](./features/ai-chat/frontend.md) |
+| 企业级 AI 存储智能运维 | [调研报告与建设基线](./features/ai-storage-management/research.md) |
 
 ## 规范
 
