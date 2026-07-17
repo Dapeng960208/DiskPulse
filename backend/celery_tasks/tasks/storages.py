@@ -154,7 +154,15 @@ def _cluster_snapshots(snapshot):
         yield MappingProxyType(cluster)
 
 
-def _collection_audit_context() -> AuditContext:
+def _collection_audit_context(audit_context_payload=None) -> AuditContext:
+    if audit_context_payload is not None:
+        return AuditContext(
+            request_id=audit_context_payload["request_id"],
+            trace_id=audit_context_payload["trace_id"],
+            operation_id=audit_context_payload["operation_id"],
+            actor_type=audit_context_payload.get("actor_type", "service"),
+            actor_user_id=audit_context_payload.get("actor_user_id"),
+        )
     return AuditContext(
         request_id=uuid4(),
         trace_id=uuid4(),
@@ -208,6 +216,25 @@ def _record_collection_failure_audit(session_factory, *, context: AuditContext, 
             audit_db.close()
 
 
+def _record_collection_attempt_audit(session_factory, *, context: AuditContext, storage_cluster_id: int):
+    audit_db = None
+    try:
+        audit_db = session_factory()
+        with audit_db.begin():
+            append_audit_event(
+                audit_db,
+                context=context,
+                phase="attempt",
+                action="storage.collection.run",
+                resource_type="storage_cluster",
+                resource_id=storage_cluster_id,
+                outcome="success",
+            )
+    finally:
+        if audit_db is not None:
+            audit_db.close()
+
+
 def run_collection_round(
     snapshot,
     *,
@@ -216,6 +243,7 @@ def run_collection_round(
     questdb_writer=None,
     logger=logger,
     collected_at=None,
+    audit_context: AuditContext | None = None,
 ):
     cluster_results = {}
     succeeded_clusters = []
@@ -224,10 +252,15 @@ def run_collection_round(
     refreshed_group_ids = []
     for cluster in _cluster_snapshots(snapshot):
         cluster_id = cluster["storage_cluster_id"]
-        audit_context = _collection_audit_context()
+        cluster_audit_context = audit_context or _collection_audit_context()
         db = None
         monitor = None
         try:
+            _record_collection_attempt_audit(
+                session_factory,
+                context=cluster_audit_context,
+                storage_cluster_id=cluster_id,
+            )
             db = session_factory()
             with db.begin():
                 if monitor_factory is StoragePulseMonitor:
@@ -246,7 +279,7 @@ def run_collection_round(
                     refreshed_group_ids.extend(metrics.get("group_ids", ()))
                 _append_collection_audit_result(
                     db,
-                    context=audit_context,
+                    context=cluster_audit_context,
                     storage_cluster_id=cluster_id,
                     outcome="success",
                     metrics=metrics,
@@ -275,7 +308,7 @@ def run_collection_round(
             try:
                 _record_collection_failure_audit(
                     session_factory,
-                    context=audit_context,
+                    context=cluster_audit_context,
                     storage_cluster_id=cluster_id,
                 )
             except Exception as audit_error:
@@ -319,7 +352,7 @@ def run_collection_round(
 
 
 @diskpulse_app.task(soft_time_limit=120, time_limit=180, expires=60)
-def storages_schedule_fetching_task(storage_cluster_id=None):
+def storages_schedule_fetching_task(storage_cluster_id=None, audit_context_payload=None):
     try:
         logger.info(
             "Storage collection task started: cluster=%s",
@@ -334,6 +367,7 @@ def storages_schedule_fetching_task(storage_cluster_id=None):
                     snapshot,
                     session_factory=SessionLocal,
                     collected_at=collected_at,
+                    audit_context=_collection_audit_context(audit_context_payload),
                 )
                 logger.info(
                     "Storage collection round completed: succeeded=%s failed=%s",
