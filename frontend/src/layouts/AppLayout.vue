@@ -6,6 +6,7 @@ import AppFooter from './components/AppFooter.vue';
 import AppHeader from './components/AppHeader.vue';
 import RouteMenu from './components/RouteMenu.vue';
 import { useAppSettings } from '@/stores/app-settings';
+import { useBreadcrumbs } from '@/stores/breadcrumbs';
 import { buildBreadcrumbItems } from '@/utils/breadcrumbs';
 
 defineProps({
@@ -16,10 +17,14 @@ defineProps({
 });
 
 const appSettings = useAppSettings();
+const breadcrumbs = useBreadcrumbs();
 const route = useRoute();
 const headerHeight = ref('60px');
 const footerHeight = ref('40px');
-const breadcrumbItems = computed(() => buildBreadcrumbItems(route.matched));
+const breadcrumbItems = computed(() => buildBreadcrumbItems(
+  route.matched,
+  breadcrumbs.detailTitleFor(route.name),
+));
 </script>
 
 <template>
@@ -70,9 +75,11 @@ const breadcrumbItems = computed(() => buildBreadcrumbItems(route.matched));
               <ElBreadcrumb>
                 <ElBreadcrumbItem
                   v-for="breadcrumbItem of breadcrumbItems"
-                  :key="breadcrumbItem"
+                  :key="breadcrumbItem.title"
                 >
-                  {{ breadcrumbItem }}
+                  <span
+                    class="breadcrumb-text"
+                    :title="breadcrumbItem.title">{{ breadcrumbItem.label }}</span>
                 </ElBreadcrumbItem>
               </ElBreadcrumb>
             </ElSpace>
@@ -164,6 +171,15 @@ const breadcrumbItems = computed(() => buildBreadcrumbItems(route.matched));
         &:last-child .el-breadcrumb__inner {
           color: var(--primary-color);
         }
+      }
+
+      .breadcrumb-text {
+        display: inline-block;
+        max-width: min(28vw, 280px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: bottom;
+        white-space: nowrap;
       }
 
       .el-breadcrumb__separator {

@@ -1,22 +1,30 @@
 # 当前交付记录
 
-## 2026-07-17: AI chat composer fixed
+## 2026-07-17：AI 聊天输入区固定与工作区优化
 
-### Completed
+### 已完成
 
-- Long chat histories now scroll inside the message list while the composer stays at the bottom of the chat workspace.
-- The app shell route-content flex container can shrink, so message height no longer expands the outer scroll area.
-- The composer border is more visible; the colored new-conversation action, in-field model selector, and simplified chat header remain in place.
+- AI 聊天工作区的消息列表改为独立滚动，长对话不会再撑开应用内容区；输入区固定在聊天工作区底部。
+- 应用壳的路由内容 flex 容器允许收缩，避免消息内容的默认最小高度把输入区带出可视区域。
+- 输入框边框调整为可辨识的灰蓝色；会话栏标题、带色图标的新建按钮、输入框内模型选择器与精简的聊天标题区保持当前布局。
 
-### Verification
+### 验证状态
 
-- RED: the focused AI page test reproduced the missing shrink-height constraint.
-- GREEN: `npx vitest run test/unit/ai-pages.test.js --coverage.enabled=false` passed with `12 passed`; target ESLint passed.
-- Browser: at `http://localhost:5173/ai/chat`, long history measured `3527px` in a `559px` message scroller while the composer stayed at the workspace bottom. The pre-existing `ICarbonUserFilled` warning remains.
+- RED：AI 页面聚焦测试按预期失败，锁定应用壳缺少可收缩高度约束。
+- GREEN：`npx vitest run test/unit/ai-pages.test.js --coverage.enabled=false` 通过，`12 passed`；目标 ESLint 通过。
+- 浏览器：`http://localhost:5173/ai/chat` 的长历史消息列表内容高度 `3527px`、可视滚动区 `559px`，输入区仍位于工作区底部；未发现本次改动引入的页面错误。应用头部存在既有 `ICarbonUserFilled` 未解析 warning。
 
-### Risk
+### 风险
 
-- Full frontend tests were not run; the production build, focused AI tests, target ESLint, and authenticated long-history browser flow were verified.
+- 未执行全部前端测试；本次生产构建、AI 页面聚焦测试、目标 ESLint 和登录态浏览器长历史场景已验证。
+
+## 2026-07-17：全局详情页动态面包屑
+
+- 已完成：用户目录、项目、项目组、容量池、存储空间、Qtree（NetApp）、存储集群和 AI 审计详情的最后一级面包屑会在既有详情数据加载后显示对象名称；父级仍由路由声明，保持完整层级。
+- 已完成：面包屑文本支持 `title` 完整提示和宽度不足时的截断显示；无名称或请求失败时回退静态详情标题，避免展示上一个详情对象。
+- 验证完成：动态标题、状态、实时详情、存储集群分析和路由聚焦回归共 `5 files / 33 passed`；定向 ESLint 为 `0 errors`（测试桩保留既有 31 条 `vue/one-component-per-file` warning），`npm run build:prod` 通过。
+- 浏览器验收：本地存储集群详情确认显示“系统管理 / 存储集群 / 北京详情”，每一级均有完整 `title` 文本提示；浏览器仅观察到既有 `ICarbonUserFilled` 未解析 warning，本次没有新增页面错误。
+
 ## 2026-07-17：存储集群性能分析可用性改进
 
 - 已完成：性能图横轴长对象名使用截断标签、独立底部空间和原生悬停提示，避免与图表标题重叠；性能分析新增当前 Top-N 结果内的对象多选对比，图表和表格同步过滤，重置会清空对象条件。
