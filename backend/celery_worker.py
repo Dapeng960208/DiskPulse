@@ -38,6 +38,16 @@ diskpulse_app.conf.beat_schedule = {
         "schedule": 60.0,
         "options": {"expires": 120},
     },
+    "ldap_users_sync_schedule_task": {
+        "task": "celery_tasks.tasks.users.ldap_users_sync_schedule_task",
+        "schedule": 28800.0,
+        "options": {"expires": 28800},
+    },
+    "user_storage_statistics_schedule_task": {
+        "task": "celery_tasks.tasks.storages.user_storage_statistics_schedule_task",
+        "schedule": crontab(minute="0"),
+        "options": {"expires": 3600},
+    },
     "storage_events_schedule_fetching_task": {
         "task": "celery_tasks.tasks.storage_health.storage_events_schedule_fetching_task",
         "schedule": 60.0,
@@ -114,6 +124,7 @@ diskpulse_app.conf.beat_schedule = {
 # import celery_tasks.tasks.jobs
 # import celery_tasks.tasks.configs
 import celery_tasks.tasks.storages
+import celery_tasks.tasks.users
 import celery_tasks.tasks.large_files
 import celery_tasks.tasks.storage_health
 import celery_tasks.tasks.storage_alerts

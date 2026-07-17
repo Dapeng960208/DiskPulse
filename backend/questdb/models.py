@@ -137,6 +137,27 @@ class StorageUsage(QuestDBBase):
     updated_at = Column(Timestamp, primary_key=True)
 
 
+class UserStorageUsage(QuestDBBase):
+    __tablename__ = "user_storage_usages"
+    __table_args__ = (
+        QDBTableEngine(
+            table_name="user_storage_usages",
+            ts_col_name="updated_at",
+            partition_by=PartitionBy.DAY,
+            is_wal=True,
+        ),
+    )
+
+    user_id = Column(Symbol, primary_key=True)
+    limit = Column(Double)
+    soft_limit = Column(Double)
+    used = Column(Double)
+    use_ratio = Column(Double)
+    soft_use_ratio = Column(Double)
+    file_used = Column(Double)
+    updated_at = Column(Timestamp, primary_key=True)
+
+
 class StoragePerformanceMetric(QuestDBBase):
     __tablename__ = "storage_performance_metrics"
     __table_args__ = (

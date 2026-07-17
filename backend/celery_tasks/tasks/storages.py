@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 from collections import defaultdict
+import time
 from types import MappingProxyType
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from dependencies import DBSession
 from database import SessionLocal
+from questdb.database import QuestDBSessionLocal
+from questdb.models import UserStorageUsage
 from celery_worker import diskpulse_app
 from celery_tasks.manager.remoteFileManager import RemoteFileManager
 from celery.utils.log import get_task_logger
@@ -14,7 +17,7 @@ from celery_tasks.manager.storageAlert import StorageAlert
 from celery_tasks.tasks.redis_lock import redis_lock
 from celery.exceptions import SoftTimeLimitExceeded
 from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
-from models import Group, Project, Qtree, StorageCluster, Volume
+from models import Group, Project, Qtree, StorageCluster, StorageUsage, Volume
 logger = get_task_logger(__name__)
 
 
@@ -273,6 +276,113 @@ def storages_schedule_fetching_task(storage_cluster_id=None):
     except Exception as e:
         logger.error(f"Error in storages fetching task: {e}")
         raise
+
+
+@diskpulse_app.task(soft_time_limit=3300, time_limit=3600, expires=3600)
+def user_storage_statistics_schedule_task():
+    with redis_lock(
+        "user_storage_statistics_schedule_task_lock", expires=3600
+    ) as have_lock:
+        if not have_lock:
+            logger.info("User storage statistics task is already running")
+            return {"status": "skipped"}
+
+        started_at = time.monotonic()
+        sampled_at = datetime.now()
+        logger.info(
+            "User storage statistics task started: sampled_at=%s",
+            sampled_at.isoformat(),
+        )
+        db = None
+        try:
+            db = SessionLocal()
+            rows = db.execute(
+                select(
+                    StorageUsage.user_id,
+                    func.coalesce(func.sum(StorageUsage.limit), 0).label("limit"),
+                    func.coalesce(func.sum(StorageUsage.soft_limit), 0).label(
+                        "soft_limit"
+                    ),
+                    func.coalesce(func.sum(StorageUsage.used), 0).label("used"),
+                    func.coalesce(func.sum(StorageUsage.file_used), 0).label(
+                        "file_used"
+                    ),
+                )
+                .where(StorageUsage.user_id.is_not(None))
+                .group_by(StorageUsage.user_id)
+                .order_by(StorageUsage.user_id)
+            ).all()
+        except Exception:
+            logger.exception(
+                "User storage statistics PostgreSQL query failed: "
+                "duration_seconds=%.3f",
+                time.monotonic() - started_at,
+            )
+            raise
+        finally:
+            if db is not None:
+                db.close()
+
+        if not rows:
+            logger.info(
+                "User storage statistics task completed: count=0 "
+                "duration_seconds=%.3f",
+                time.monotonic() - started_at,
+            )
+            return {"count": 0, "updated_at": sampled_at.isoformat()}
+
+        samples = []
+        for row in rows:
+            limit = float(row.limit or 0)
+            soft_limit = float(row.soft_limit or 0)
+            used = float(row.used or 0)
+            samples.append(
+                UserStorageUsage(
+                    user_id=str(row.user_id),
+                    limit=limit,
+                    soft_limit=soft_limit,
+                    used=used,
+                    use_ratio=round(used * 100 / limit, 2) if limit > 0 else 0,
+                    soft_use_ratio=(
+                        round(used * 100 / soft_limit, 2)
+                        if soft_limit > 0
+                        else 0
+                    ),
+                    file_used=float(row.file_used or 0),
+                    updated_at=sampled_at,
+                )
+            )
+
+        quest_db = None
+        try:
+            quest_db = QuestDBSessionLocal()
+            quest_db.add_all(samples)
+            quest_db.commit()
+        except Exception:
+            logger.exception(
+                "User storage statistics QuestDB write failed: "
+                "duration_seconds=%.3f",
+                time.monotonic() - started_at,
+            )
+            if quest_db is not None:
+                try:
+                    quest_db.rollback()
+                except Exception:
+                    logger.exception("User storage statistics QuestDB rollback failed")
+            raise
+        finally:
+            if quest_db is not None:
+                quest_db.close()
+
+        result = {"count": len(samples), "updated_at": sampled_at.isoformat()}
+        logger.info(
+            "User storage statistics task completed: count=%s sampled_at=%s "
+            "duration_seconds=%.3f",
+            result["count"],
+            result["updated_at"],
+            time.monotonic() - started_at,
+        )
+        return result
 
 
 @diskpulse_app.task(soft_time_limit=120, time_limit=150, expires=1800)
