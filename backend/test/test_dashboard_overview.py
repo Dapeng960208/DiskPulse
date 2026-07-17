@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -93,9 +94,19 @@ def seed_dashboard_data(db):
             source="diskpulse",
             alert_type="alert",
             event_type="trigger",
+            alert_level="important",
             related_type="Group",
             related_id=group.id,
             updated_at=now - timedelta(days=1),
+        ),
+        StorageAlerts(
+            source="diskpulse",
+            alert_type="alert",
+            event_type="trigger",
+            alert_level="serious",
+            related_type="Group",
+            related_id=group.id,
+            updated_at=now - timedelta(days=2),
         ),
         StorageAlerts(
             source="diskpulse",
@@ -136,11 +147,14 @@ def test_dashboard_service_builds_independent_global_and_project_data(db_session
         "available_gb": 400.0,
         "use_ratio": 60.0,
         "storage_cluster_count": 1,
-        "alert_count": 1,
+        "alert_count": 2,
     }
     assert [item["name"] for item in dashboardService.get_capacity_items(db_session)] == ["项目 A"]
     assert dashboardService.get_capacity_trend(db_session)[-1]["used_gb"] == 600.0
-    assert sum(item["count"] for item in dashboardService.get_alert_trend(db_session)) == 1
+    assert dashboardService.get_alert_levels(db_session) == [
+        {"level": "important", "name": "重要", "count": 1},
+        {"level": "serious", "name": "严重", "count": 1},
+    ]
 
     project_summary = dashboardService.get_summary(db_session, project_id=project.id)
     assert project_summary["scope"]["mode"] == "project"
@@ -149,7 +163,7 @@ def test_dashboard_service_builds_independent_global_and_project_data(db_session
     assert project_summary["summary"]["used_gb"] == 200.0
     assert project_summary["summary"]["storage_cluster_count"] == 1
     assert [item["name"] for item in dashboardService.get_capacity_items(db_session, project.id)] == ["项目组 A"]
-    assert project_summary["summary"]["alert_count"] == 1
+    assert project_summary["summary"]["alert_count"] == 2
 
     top_users = dashboardService.get_top_users(db_session, project.id)
     assert top_users == [
@@ -169,6 +183,41 @@ def test_dashboard_service_keeps_snapshots_when_questdb_is_unavailable(db_sessio
     monkeypatch.setattr(dashboardService.dashboardCrud, "get_capacity_trend", fail_trend)
     assert dashboardService.get_summary(db_session)["summary"]["used_gb"] == 600.0
     assert dashboardService.get_capacity_trend(db_session) == []
+
+
+def test_global_capacity_trend_binds_cluster_symbol_ids(monkeypatch):
+    from crud import dashboardCrud
+
+    captured = {}
+
+    class FakeQuestDB:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, query, params):
+            captured["query"] = str(query)
+            captured["params"] = params
+            return SimpleNamespace(all=lambda: [])
+
+    monkeypatch.setattr(
+        dashboardCrud,
+        "get_active_clusters",
+        lambda _db: [SimpleNamespace(id=2), SimpleNamespace(id=1)],
+    )
+    monkeypatch.setattr(dashboardCrud, "QuestDBSession", FakeQuestDB)
+
+    dashboardCrud.get_capacity_trend(
+        db=object(),
+        project_id=None,
+        start_time=datetime(2026, 6, 18),
+        end_time=datetime(2026, 7, 17),
+    )
+
+    assert captured["params"]["cluster_ids"] == ["2", "1"]
+    assert "IN (2, 1)" not in captured["query"]
 
 
 def test_dashboard_service_returns_not_found_for_unknown_project(db_session):
@@ -206,7 +255,7 @@ def test_dashboard_router_validates_project_id(
     monkeypatch.setattr(dashboard.dashboardService, "get_summary", lambda _db, project_id=None: summary)
     monkeypatch.setattr(dashboard.dashboardService, "get_capacity_trend", lambda _db, project_id=None: [])
     monkeypatch.setattr(dashboard.dashboardService, "get_capacity_items", lambda _db, project_id=None: [])
-    monkeypatch.setattr(dashboard.dashboardService, "get_alert_trend", lambda _db, project_id=None: [])
+    monkeypatch.setattr(dashboard.dashboardService, "get_alert_levels", lambda _db, project_id=None: [])
     monkeypatch.setattr(dashboard.dashboardService, "get_top_users", lambda _db, project_id: [])
     db_session.add(User(id=1, username="dashboard-user"))
     db_session.commit()
@@ -217,6 +266,7 @@ def test_dashboard_router_validates_project_id(
     assert client.get("/storage-pulse/api/dashboard/summary").status_code == 200
     assert client.get("/storage-pulse/api/dashboard/capacity-trend").status_code == 200
     assert client.get("/storage-pulse/api/dashboard/capacity-items").status_code == 200
-    assert client.get("/storage-pulse/api/dashboard/alert-trend").status_code == 200
+    assert client.get("/storage-pulse/api/dashboard/alert-trend").status_code == 404
+    assert client.get("/storage-pulse/api/dashboard/alert-levels").status_code == 200
     assert client.get("/storage-pulse/api/dashboard/top-users").status_code == 422
     assert client.get("/storage-pulse/api/dashboard/top-users?project_id=1").status_code == 200

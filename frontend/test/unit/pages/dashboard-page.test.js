@@ -7,7 +7,7 @@ const dashboardApi = {
   fetchSummary: vi.fn(),
   fetchCapacityTrend: vi.fn(),
   fetchCapacityItems: vi.fn(),
-  fetchAlertTrend: vi.fn(),
+  fetchAlertLevels: vi.fn(),
   fetchTopUsers: vi.fn(),
 };
 
@@ -68,7 +68,10 @@ const capacityTrend = [
 const capacityItems = (mode = 'global') => [
   { id: 1, name: mode === 'project' ? '项目组 A' : '项目 A', limit_gb: 100, used_gb: 70, available_gb: 30, use_ratio: 70 },
 ];
-const alertTrend = [{ date: '2026-07-17', count: 3 }];
+const alertLevels = [
+  { level: 'important', name: '重要', count: 3 },
+  { level: 'serious', name: '严重', count: 1 },
+];
 const topUsers = [{ id: 9, name: 'alice', used_gb: 40 }];
 
 async function mountPage({ flush = true } = {}) {
@@ -94,7 +97,7 @@ describe('DashboardPage', () => {
     dashboardApi.fetchSummary.mockResolvedValue(summaryResponse());
     dashboardApi.fetchCapacityTrend.mockResolvedValue(capacityTrend);
     dashboardApi.fetchCapacityItems.mockResolvedValue(capacityItems());
-    dashboardApi.fetchAlertTrend.mockResolvedValue(alertTrend);
+    dashboardApi.fetchAlertLevels.mockResolvedValue(alertLevels);
     dashboardApi.fetchTopUsers.mockResolvedValue(topUsers);
   });
 
@@ -104,7 +107,7 @@ describe('DashboardPage', () => {
     expect(dashboardApi.fetchSummary).toHaveBeenCalledWith({});
     expect(dashboardApi.fetchCapacityTrend).toHaveBeenCalledWith({});
     expect(dashboardApi.fetchCapacityItems).toHaveBeenCalledWith({});
-    expect(dashboardApi.fetchAlertTrend).toHaveBeenCalledWith({});
+    expect(dashboardApi.fetchAlertLevels).toHaveBeenCalledWith({});
     expect(dashboardApi.fetchTopUsers).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('物理总容量');
     expect(wrapper.text()).toContain('项目容量对比');
@@ -131,25 +134,29 @@ describe('DashboardPage', () => {
     expect(dashboardApi.fetchSummary).toHaveBeenLastCalledWith({ project_id: 7 });
     expect(dashboardApi.fetchCapacityTrend).toHaveBeenLastCalledWith({ project_id: 7 });
     expect(dashboardApi.fetchCapacityItems).toHaveBeenLastCalledWith({ project_id: 7 });
-    expect(dashboardApi.fetchAlertTrend).toHaveBeenLastCalledWith({ project_id: 7 });
+    expect(dashboardApi.fetchAlertLevels).toHaveBeenLastCalledWith({ project_id: 7 });
     expect(dashboardApi.fetchTopUsers).toHaveBeenCalledWith({ project_id: 7 });
     expect(wrapper.text()).toContain('项目限额');
     expect(wrapper.text()).toContain('项目组容量对比');
     expect(wrapper.text()).toContain('用户使用 Top 10');
+    expect(wrapper.text()).toContain('告警级别');
     expect(wrapper.findAllComponents(DashboardChart)).toHaveLength(4);
+    const chartRow = wrapper.find('.dashboard-grid-secondary');
+    expect(chartRow.findAll('article')).toHaveLength(3);
+    expect(chartRow.attributes('style')).toContain('--dashboard-columns: 2fr 2fr 1fr');
   });
 
   it('keeps the dashboard structure visible while project data is loading', async () => {
     dashboardApi.fetchSummary.mockReturnValue(new Promise(() => {}));
     dashboardApi.fetchCapacityTrend.mockReturnValue(new Promise(() => {}));
     dashboardApi.fetchCapacityItems.mockReturnValue(new Promise(() => {}));
-    dashboardApi.fetchAlertTrend.mockReturnValue(new Promise(() => {}));
+    dashboardApi.fetchAlertLevels.mockReturnValue(new Promise(() => {}));
 
     const wrapper = await mountPage({ flush: false });
 
     expect(wrapper.text()).toContain('容量趋势');
     expect(wrapper.text()).toContain('项目容量对比');
-    expect(wrapper.text()).toContain('告警趋势');
+    expect(wrapper.text()).toContain('告警级别');
     expect(wrapper.findAll('.skeleton').length).toBeGreaterThan(1);
   });
 
