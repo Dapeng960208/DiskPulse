@@ -634,3 +634,12 @@
 - 修复：改用 `npm test -- test/unit/components/dashboard-chart.test.js test/unit/pages/dashboard-page.test.js`。
 - 验证：目标两个测试文件共 `4 passed`；扩展 Dashboard 与图表契约组合测试共 `13 passed`。
 - 风险：从 `frontend` 目录执行聚焦测试时必须使用 `test/...` 相对路径，不重复附加 `--run`。
+
+### 2026-07-17：浅挂载无法读取 SFC scoped style 计算值
+
+- 触发：在 Dashboard 切换加载测试中对 `getComputedStyle(wrapper.element).alignContent` 断言 `start`。
+- 现象：Vitest/JSDOM 返回空字符串，页面测试 `3 passed, 1 failed`。
+- 根因：当前 `shallowMount` 测试环境不注入 Vue SFC 的 scoped style，不能通过计算样式验证该 CSS 声明。
+- 修复：删除不可靠的计算样式断言，改由切换期间页头、三类图表标题和多个分区骨架持续存在的用户可见行为锁定无整页留白结果；生产构建继续验证 CSS 可编译。
+- 验证：Dashboard 页面聚焦测试恢复 `4 passed`。
+- 风险：CSS 像素级结果仍需登录态浏览器复验；JSDOM 只覆盖 DOM 结构和加载行为。
