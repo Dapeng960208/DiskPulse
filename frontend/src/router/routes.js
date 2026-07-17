@@ -41,7 +41,7 @@ export default [
           title: '用户目录',
           isRoot: true,
           menuOrder: 20,
-          icon: 'i-ri-user-line',
+          icon: 'i-ri-folder-user-line',
         },
       },
       {
@@ -67,7 +67,7 @@ export default [
           title: '项目',
           isRoot: true,
           menuOrder: 30,
-          icon: 'i-ri-projector-2-line',
+          icon: 'i-ri-briefcase-4-line',
         },
       },
       {
@@ -93,7 +93,7 @@ export default [
           title: '项目组',
           isRoot: true,
           menuOrder: 40,
-          icon: 'i-ri-group-2-line',
+          icon: 'i-ri-team-line',
         },
       },
       {
@@ -119,7 +119,7 @@ export default [
           title: '告警',
           isRoot: true,
           menuOrder: 60,
-          icon: 'i-ri-alarm-warning-line',
+          icon: 'i-ri-notification-3-line',
         },
       },
       {
@@ -130,7 +130,7 @@ export default [
           title: 'AI 助手',
           isRoot: true,
           menuOrder: 50,
-          icon: 'i-ri-sparkling-2-line',
+          icon: 'i-ri-robot-2-line',
         },
       },
     ],
@@ -140,26 +140,19 @@ export default [
     component: AppLayout,
     meta: {
       title: '系统管理',
-      icon: 'i-ri-settings-line',
+      icon: 'i-ri-settings-3-line',
       isRoot: true,
       menuOrder: 70,
       // isAccessible: () => hasRole('diskpulse:admin') ? 200 : 403,
     },
     children: [
       {
-        path: 'group-tags',
-        name: 'GroupTags',
-        component: () => import('@/pages/group-tag/GroupTagListPage.vue'),
-        meta: {
-          title: '项目组标签',
-        },
-      },
-      {
         path: 'storage-clusters',
         name: 'StorageClusters',
         component: () => import('@/pages/admin/storage-cluster/StorageClusterListPage.vue'),
         meta: {
           title: '存储集群',
+          icon: 'i-ri-server-line',
         },
       },
       {
@@ -177,6 +170,7 @@ export default [
         component: () => import('@/pages/admin/aggregate/AggregateListPage.vue'),
         meta: {
           title: '容量池',
+          icon: 'i-ri-pie-chart-2-line',
         },
       },
       {
@@ -194,6 +188,7 @@ export default [
         component: () => import('@/pages/admin/volume/VolumeListPage.vue'),
         meta: {
           title: '存储空间',
+          icon: 'i-ri-database-2-line',
         },
       },
       {
@@ -211,6 +206,16 @@ export default [
         component: () => import('@/pages/admin/qtree/QtreeListPage.vue'),
         meta: {
           title: 'Qtree（NetApp）',
+          icon: 'i-ri-folder-2-line',
+        },
+      },
+      {
+        path: 'group-tags',
+        name: 'GroupTags',
+        component: () => import('@/pages/group-tag/GroupTagListPage.vue'),
+        meta: {
+          title: '项目组标签',
+          icon: 'i-ri-price-tag-3-line',
         },
       },
       {
@@ -228,6 +233,7 @@ export default [
         component: () => import('@/pages/admin/user/UserListPage.vue'),
         meta: {
           title: '用户信息管理',
+          icon: 'i-ri-team-line',
           isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },
@@ -246,6 +252,7 @@ export default [
         component: () => import('@/pages/admin/settings/SettingsPage.vue'),
         meta: {
           title: '系统设置',
+          icon: 'i-ri-settings-3-line',
           isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },
@@ -255,6 +262,7 @@ export default [
         component: () => import('@/pages/admin/ai/AiCenterPage.vue'),
         meta: {
           title: 'AI 中心',
+          icon: 'i-ri-robot-2-line',
           isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },
