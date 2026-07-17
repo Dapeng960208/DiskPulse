@@ -21,6 +21,7 @@ import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 import { formatStorageTargetType } from '@/utils/storage-resource';
 import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
+import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
 const exportRef =ref(null);
 const currentUser = useCurrentUser();
 const router = useRouter();
@@ -318,10 +319,7 @@ query();
         align="center"
         min-width="70">
         <template #default="{ row }">
-          <ElTag
-            v-if="row.storage_cluster?.storage_type"
-            type="success">{{ row.storage_cluster.storage_type }}</ElTag>
-          <span v-else>-</span>
+          <StorageTypeTag :value="row.storage_cluster?.storage_type" />
         </template>
       </ElTableColumn>
 

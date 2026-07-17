@@ -11,6 +11,7 @@ import Progress from '@/components/form//Progress.vue';
 import ProjectFormDialog from './ProjectFormDialog.vue';
 import UserAvatar from '@/components/data/UserAvatar.vue'
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
+import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
 const projectFormDialogRef = ref();
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 const { queryParams, reset } = useQueryParams(() => ({
@@ -74,17 +75,32 @@ query();
       />
       <ElTableColumn
         v-if="showSecondaryColumns"
-        label="集群类型"
+        label="存储集群"
         align="center"
-        min-width="120">
+        min-width="140">
         <template #default="{ row }">
-          <ElTag
-            v-for="storageType in row.storage_cluster_types"
-            :key="storageType"
-            type="info">
-            {{ storageType }}
-          </ElTag>
-          <span v-if="!row.storage_cluster_types?.length">-</span>
+          <template v-if="row.storage_clusters?.length">
+            <div
+              v-for="cluster in row.storage_clusters"
+              :key="cluster.id">{{ cluster.name }}</div>
+          </template>
+          <span v-else>-</span>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        v-if="showSecondaryColumns"
+        label="存储类型"
+        align="center"
+        min-width="90">
+        <template #default="{ row }">
+          <template v-if="row.storage_clusters?.length">
+            <div
+              v-for="cluster in row.storage_clusters"
+              :key="cluster.id">
+              <StorageTypeTag :value="cluster.storage_type" />
+            </div>
+          </template>
+          <span v-else>-</span>
         </template>
       </ElTableColumn>
       <ElTableColumn

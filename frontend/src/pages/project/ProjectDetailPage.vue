@@ -1,9 +1,10 @@
 <script setup>
-import { ElEmpty, ElMessage, ElTable, ElTableColumn, ElTag } from 'element-plus';
+import { ElEmpty, ElMessage, ElTable, ElTableColumn } from 'element-plus';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import groupApi from '@/api/group-api.js';
 import { formatStorageTargetType } from '@/utils/storage-resource';
+import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
 
 const route = useRoute();
 const projectId = computed(() => Number(route.params.id));
@@ -42,7 +43,11 @@ onMounted(loadGroups);
       <ElTableColumn label="存储集群">
         <template #default="scope">
           {{ scope?.row?.storage_cluster?.name || '-' }}
-          <ElTag type="info"> {{ scope?.row?.storage_cluster?.storage_type || '-' }}</ElTag>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn label="存储类型">
+        <template #default="scope">
+          <StorageTypeTag :value="scope?.row?.storage_cluster?.storage_type" />
         </template>
       </ElTableColumn>
       <ElTableColumn label="存储目标"><template #default="scope">{{ formatStorageTargetType(scope?.row?.storage_target?.type) }} / {{ scope?.row?.storage_target?.name || '-' }}</template></ElTableColumn>

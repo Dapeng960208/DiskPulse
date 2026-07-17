@@ -10,6 +10,7 @@ import { hasRole } from '@/utils/authorization';
 import StorageClusterFormDialog from './components/StorageClusterFormDialog.vue';
 import Progress from '@/components/form//Progress.vue';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
+import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
 const router = useRouter();
 const formDialogRef = ref();
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
@@ -99,6 +100,15 @@ query();
         min-width="150"
         show-overflow-tooltip
       />
+      <ElTableColumn
+        v-if="showSecondaryColumns"
+        label="存储类型"
+        align="center"
+        min-width="90">
+        <template #default="{ row }">
+          <StorageTypeTag :value="row.storage_type" />
+        </template>
+      </ElTableColumn>
       <ElTableColumn
         v-if="showSecondaryColumns"
         label="描述"

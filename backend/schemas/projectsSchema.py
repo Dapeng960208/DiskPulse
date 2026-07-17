@@ -43,8 +43,15 @@ class Project(ProjectBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ProjectStorageCluster(BaseModel):
+    id: int
+    name: str
+    storage_type: str
+
+
 class ProjectOverview(Project):
     storage_cluster_types: list[str] = Field(default_factory=list)
+    storage_clusters: list[ProjectStorageCluster] = Field(default_factory=list)
 
 
 class ProjectUpdate(BaseModel):

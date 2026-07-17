@@ -10,6 +10,7 @@ import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import { hasRole } from '@/utils/authorization';
 import { getStorageResourceNativeType } from '@/utils/storage-resource';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
+import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
 const router = useRouter();
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 const { queryParams, reset } = useQueryParams(() => ({
@@ -81,6 +82,15 @@ query();
       >
         <template #default="{ row }">
           <span>{{ row.storage_cluster?.name || '-' }}</span>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        v-if="showCapacityColumns"
+        label="存储类型"
+        align="center"
+        min-width="90">
+        <template #default="{ row }">
+          <StorageTypeTag :value="row.storage_cluster?.storage_type" />
         </template>
       </ElTableColumn>
       <ElTableColumn

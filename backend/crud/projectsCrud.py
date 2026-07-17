@@ -119,7 +119,10 @@ def _attach_storage_cluster_overviews(
     projects: list[Project],
 ) -> None:
     overviews = {
-        project.id: {"storage_cluster_types": set()}
+        project.id: {
+            "storage_cluster_types": set(),
+            "storage_clusters": {},
+        }
         for project in projects
     }
     if not overviews:
@@ -128,6 +131,8 @@ def _attach_storage_cluster_overviews(
     rows = (
         db.query(
             Group.project_id,
+            StorageCluster.id,
+            StorageCluster.name,
             StorageCluster.storage_type,
         )
         .join(StorageCluster, StorageCluster.id == Group.storage_cluster_id)
@@ -135,13 +140,22 @@ def _attach_storage_cluster_overviews(
         .distinct()
         .all()
     )
-    for project_id, storage_type in rows:
+    for project_id, cluster_id, cluster_name, storage_type in rows:
         overviews[project_id]["storage_cluster_types"].add(storage_type)
+        overviews[project_id]["storage_clusters"][cluster_id] = {
+            "id": cluster_id,
+            "name": cluster_name,
+            "storage_type": storage_type,
+        }
 
     for project in projects:
         overview = overviews[project.id]
         overview["storage_cluster_types"] = sorted(
             overview["storage_cluster_types"]
+        )
+        overview["storage_clusters"] = sorted(
+            overview["storage_clusters"].values(),
+            key=lambda cluster: (cluster["name"], cluster["id"]),
         )
         for field, value in overview.items():
             setattr(project, field, value)

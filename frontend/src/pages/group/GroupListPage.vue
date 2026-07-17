@@ -19,6 +19,7 @@ import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 import { formatStorageTargetType } from '@/utils/storage-resource';
 import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
+import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
 
 const groupFormDialogRef = ref();
 const quotaAdjustmentDialogRef = ref();
@@ -252,9 +253,15 @@ function confirmDelete(row) {
       >
         <template #default="{ row }">
           <span>{{ row.storage_cluster?.name || '-' }}</span>
-          <ElTag type="info">
-            {{ row.storage_cluster?.storage_type || '-' }}
-          </ElTag>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        v-if="showCapacityColumns"
+        label="存储类型"
+        align="center"
+        min-width="90">
+        <template #default="{ row }">
+          <StorageTypeTag :value="row.storage_cluster?.storage_type" />
         </template>
       </ElTableColumn>
       <ElTableColumn
