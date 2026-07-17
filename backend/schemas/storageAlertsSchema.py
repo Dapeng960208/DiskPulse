@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_serializer
 from datetime import datetime
 from typing import Optional
 
@@ -26,8 +26,8 @@ class StorageAlert(BaseModel):
     cluster_name: Optional[str] = None
     project_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-        json_encoders = {
-            datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S"),
-        }
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("updated_at", when_used="json")
+    def serialize_datetime(self, value: datetime | None) -> str | None:
+        return value.strftime("%Y-%m-%d %H:%M:%S") if value else None

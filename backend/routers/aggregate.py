@@ -45,7 +45,7 @@ def read_aggregate_realtime_data(aggregate_id: int, start_time: datetime | None 
                                  indicator: str = 'used', db: Session = Depends(get_db)):
     db_aggregate = aggregateCrud.get_aggregate_by_id(db, aggregate_id=aggregate_id)
     if db_aggregate is None:
-        raise HTTPException(status_code=404, detail="Qtree not found")
+        raise HTTPException(status_code=404, detail="Aggregate not found")
     real_time_data = aggregateCrud.get_aggregate_real_time_data_by_id(db=db, start_time=start_time,
                                                                       end_time=end_time,
                                                                       aggregate_id=aggregate_id,

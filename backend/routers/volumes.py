@@ -45,7 +45,7 @@ def read_volume_realtime_data(volume_id: int, start_time: datetime | None = None
                               indicator: str = 'used', db: Session = Depends(get_db)):
     db_volume = volumeCrud.get_volume_by_id(db, volume_id=volume_id)
     if db_volume is None:
-        raise HTTPException(status_code=404, detail="Qtree not found")
+        raise HTTPException(status_code=404, detail="Volume not found")
     real_time_data = volumeCrud.get_volume_real_time_data_by_id(db=db, start_time=start_time,
                                                                 end_time=end_time,
                                                                 volume_id=volume_id,

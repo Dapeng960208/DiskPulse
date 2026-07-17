@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional
 from schemas.storageClusterSchema import StorageCluster
@@ -8,8 +8,7 @@ class VolumeName(BaseModel):
     name: str
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VolumeBase(BaseModel):
@@ -27,8 +26,7 @@ class VolumeBase(BaseModel):
     updated_at: datetime
     storage_cluster_id: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VolumeCreate(VolumeBase):
@@ -43,7 +41,6 @@ class Volume(VolumeBase):
     id: int
     storage_cluster: Optional[StorageCluster] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 Volume.model_rebuild()

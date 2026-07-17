@@ -78,7 +78,8 @@ describe('write form experience contract', () => {
       .toMatch(/删除项目组标签[\s\S]*删除标签/);
     expect(source('src/pages/admin/backup/BackUpListPage.vue'))
       .toMatch(/删除数据备份[\s\S]*删除备份[\s\S]*回滚数据备份[\s\S]*开始回滚/);
-    expect(source('src/pages/usage/UsageListPage.vue'))
-      .toMatch(/移动用户目录[\s\S]*移动目录/);
+    const usageListPage = source('src/pages/usage/UsageListPage.vue');
+    expect(usageListPage).toContain('调整配额');
+    expect(usageListPage).not.toContain('移动用户目录');
   });
 });

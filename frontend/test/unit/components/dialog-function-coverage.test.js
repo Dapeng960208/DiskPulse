@@ -66,6 +66,7 @@ vi.mock('@/api/users-api', () => ({ default: usersApi }));
 vi.mock('@/api/storage-usage-api', () => ({ default: storageUsageApi }));
 vi.mock('@/api/storage-cluster-api', () => ({ default: storageClusterApi }));
 vi.mock('@/api/group-tag-api', () => ({ default: groupTagApi }));
+vi.mock('@/api/config-api', () => ({ default: { fetch: vi.fn(() => Promise.resolve({})) } }));
 vi.mock('@/components/form/RdUserSelect.vue', () => ({ default: createSelectComponentStub('RdUserSelect') }));
 vi.mock('@/components/form/ProjectSelect.vue', () => ({ default: createSelectComponentStub('ProjectSelect') }));
 vi.mock('@/components/form/GroupTagSelect.vue', () => ({ default: createSelectComponentStub('GroupTagSelect') }));

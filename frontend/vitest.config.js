@@ -13,6 +13,14 @@ export default defineConfig({
       '@': resolve(__dirname, 'src'),
     },
   },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        // Vite 4 uses Sass's legacy JS API; keep this deprecation local to tests.
+        silenceDeprecations: ['legacy-js-api'],
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,
@@ -29,9 +37,10 @@ export default defineConfig({
         'src/main.js',
       ],
       thresholds: {
-        lines: 70,
-        branches: 70,
-        statements: 70,
+        lines: 80,
+        branches: 80,
+        functions: 80,
+        statements: 80,
       },
     },
   },

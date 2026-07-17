@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from schemas.volumeSchema import VolumeBase,VolumeName
 from schemas.storageClusterSchema import StorageCluster
@@ -32,8 +32,7 @@ class QtreeBase(BaseModel):
     updated_at: datetime
     storage_cluster_id: int | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class QtreeCreate(QtreeBase):
@@ -49,14 +48,12 @@ class Qtree(QtreeBase):
     volume: VolumeBase
     storage_cluster: StorageCluster | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class QtreeForGroup(BaseModel):
     name: str
     volume: VolumeName
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 Qtree.model_rebuild()

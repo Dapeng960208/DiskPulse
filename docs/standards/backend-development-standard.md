@@ -62,7 +62,7 @@
 - 新增行为优先 TDD：先补失败测试，再实现，再验证。
 - 关键安全路径必须直接测试：JWT、LDAP bind、机器上报 token、权限拒绝、输入校验、错误响应。
 - API 测试必须覆盖成功路径和至少一个失败路径。
-- 整体覆盖率门槛为 Statements、Branches、Functions、Lines 均不低于 90%；核心功能目标不低于 90%。
+- 整体覆盖率门槛为 Statements、Branches、Functions、Lines 均不低于 85%；核心功能目标不低于 85%。
 - 涉及 Alembic 的变更必须验证迁移可应用；涉及数据库差异时优先补 PostgreSQL 集成测试，或说明仅 SQLite 验证风险。
 - 涉及 Alembic 的变更，除迁移链验证外，还必须补至少一条跨方言回归保障：优先覆盖 `SQLite`、`PostgreSQL`、`MySQL` 的 SQL 编译或参数绑定行为，防止迁移只在当前本地数据库上可用。
 - 涉及列表、分析、搜索或统计性能的变更必须补性能治理测试：

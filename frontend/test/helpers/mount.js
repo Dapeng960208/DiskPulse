@@ -64,3 +64,7 @@ export const commonStubs = {
   MultipleLineCharts: createStub('MultipleLineCharts'),
   ICarbonUserFilled: createStub('ICarbonUserFilled'),
 };
+
+export const commonDirectives = {
+  loading: () => undefined,
+};

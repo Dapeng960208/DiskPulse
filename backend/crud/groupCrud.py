@@ -22,7 +22,7 @@ def get_groups(db: Session, page: int | None = None, size: int | None = None, na
                volume_id: int | None = None):
     if volume_id is not None and qtree_id is not None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="volume_id and qtree_id cannot be used together",
         )
     query = db.query(Group)
@@ -115,7 +115,7 @@ def _validate_alert_cc_users(db: Session, data: dict) -> None:
     missing = [user_id for user_id in user_ids if user_id not in existing]
     if missing:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Alert CC users not found: {', '.join(map(str, missing))}",
         )
     data["alert_cc_user_ids"] = user_ids
@@ -124,18 +124,18 @@ def _validate_alert_cc_users(db: Session, data: dict) -> None:
 def _validate_binding(db: Session, data: dict) -> None:
     if db.get(Project, data["project_id"]) is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Project not found",
         )
     storage_cluster = db.get(StorageCluster, data["storage_cluster_id"])
     if storage_cluster is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Storage cluster not found",
         )
     if db.get(GroupTag, data["group_tag_id"]) is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Group tag not found",
         )
 
@@ -145,7 +145,7 @@ def _validate_binding(db: Session, data: dict) -> None:
     else:
         if (storage_cluster.storage_type or "").lower() == "isilon":
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Isilon environments do not support qtree targets",
             )
         target = db.query(Qtree).filter(Qtree.id == data.get("qtree_id")).first()
@@ -153,12 +153,12 @@ def _validate_binding(db: Session, data: dict) -> None:
 
     if target is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"{target_name} not found",
         )
     if target.storage_cluster_id != storage_cluster.id:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"{target_name} does not belong to the selected storage cluster",
         )
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from typing import Any
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from schemas import usersSchema
 from schemas.storageAlertRuleSchema import StorageAlertRule
@@ -19,8 +19,7 @@ class ProjectBaseInfo(BaseModel):
     status: int | None = 1
     project_process_code: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectBase(ProjectBaseInfo):
@@ -41,8 +40,7 @@ class ProjectBase(ProjectBaseInfo):
 class Project(ProjectBase):
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectOverview(Project):

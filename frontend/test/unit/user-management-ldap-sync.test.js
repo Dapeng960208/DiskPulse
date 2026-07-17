@@ -57,18 +57,21 @@ const TableColumnStub = defineComponent({
   name: 'ElTableColumn',
   props: { label: String, prop: String },
   setup(_, { slots }) {
-    return () => h('div', slots.default?.({
-      row: {
-        id: 1,
-        rd_username: 'alice',
-        username: 'Alice',
-        email: 'alice@example.com',
-        department: '研发部',
-        user_type: 2,
-        is_alert: true,
-        storage_used: 1,
-      },
-    }));
+    return () => h('div', [
+      slots.header?.(),
+      slots.default?.({
+        row: {
+          id: 1,
+          rd_username: 'alice',
+          username: 'Alice',
+          email: 'alice@example.com',
+          department: '研发部',
+          user_type: 2,
+          is_alert: true,
+          storage_used: 1,
+        },
+      }),
+    ]);
   },
 });
 const InputStub = defineComponent({
@@ -176,7 +179,7 @@ describe('user management LDAP sync contracts', () => {
     it('exposes add and LDAP sync actions with the complete safety confirmation', async () => {
       const wrapper = await mountPage();
       const addButton = findButton(wrapper, '新增用户');
-      const syncButton = findButton(wrapper, '同步 LDAP 用户');
+      const syncButton = findButton(wrapper, '同步LDAP');
 
       expect(addButton).toBeTruthy();
       expect(syncButton).toBeTruthy();
@@ -206,7 +209,7 @@ describe('user management LDAP sync contracts', () => {
       });
       await flushPromises();
 
-      const syncButton = findButton(wrapper, '同步 LDAP 用户');
+      const syncButton = findButton(wrapper, '同步LDAP');
       expect(syncButton).toBeTruthy();
       await syncButton.trigger('click');
       await flushPromises();

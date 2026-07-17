@@ -69,11 +69,17 @@ vi.mock('vue-router', async () => {
 });
 
 vi.mock('@/composables/query', () => ({
-  useQuery: (_request, initialValue = []) => ({
-    result: ref(initialValue),
-    querying: ref(false),
-    query: vi.fn(() => Promise.resolve(initialValue)),
-  }),
+  useQuery: (request, initialValue = []) => {
+    const result = ref(initialValue);
+    return {
+      result,
+      querying: ref(false),
+      query: vi.fn(async () => {
+        result.value = await request();
+        return result.value;
+      }),
+    };
+  },
   useQueryParams: (provider) => {
     const queryParams = ref(provider());
 
@@ -197,6 +203,7 @@ function resolvePropValue(path, name, definition) {
   if (name === 'title') return 'Title';
   if (name === 'tip') return 'Tip';
   if (name === 'src') return 'avatar.png';
+  if (name === 'resourceType') return 'group';
   if (name === 'modelValue') {
     const type = Array.isArray(definition?.type) ? definition.type[0] : definition?.type;
 

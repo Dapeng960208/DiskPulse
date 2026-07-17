@@ -1,5 +1,6 @@
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { commonDirectives } from '../helpers/mount';
 
 const { aiApi, router } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn() },
@@ -98,7 +99,9 @@ describe('AI pages interactions', () => {
   });
 
   it('creates, updates, tests, deletes models and loads audit filters', async () => {
-    const wrapper = shallowMount(AiCenterPage);
+    const wrapper = shallowMount(AiCenterPage, {
+      global: { directives: commonDirectives },
+    });
     await flushPromises();
     wrapper.vm.addModel();
     wrapper.vm.form.name = 'New Model';

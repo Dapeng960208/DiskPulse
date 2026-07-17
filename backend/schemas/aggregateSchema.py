@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional
 from schemas.storageClusterSchema import StorageCluster
@@ -26,5 +26,4 @@ class Aggregate(AggregateBase):
     id: int
     storage_cluster: StorageCluster|None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

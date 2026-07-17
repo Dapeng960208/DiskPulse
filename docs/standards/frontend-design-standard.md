@@ -59,8 +59,8 @@
 
 - 任务修复或者新增行为必须 TDD：先补失败测试，再实现，再验证。
 - 涉及 API client、Mock、权限、公共组件、路由、状态管理、校验或序列化时，必须补单测。
-- 全局覆盖率门槛为 Statements、Branches、Functions、Lines 均不低于 90%；核心分层目录目标不低于 95%。（门禁数值以 vitest coverage 配置为准，本文档仅作参考）
-- 日常开发默认使用轻量测试命令：`cd frontend && npm test`。`npm test` — 全量用例，不附带覆盖率门禁；`npm run test:coverage` — 全量用例 + 90%/95% 门禁；`npx vitest run <file> --coverage.enabled=false` — 聚焦测试，无门禁。
+- 全局覆盖率门槛为 Statements、Branches、Functions、Lines 均不低于 80%；核心分层目录目标不低于 80%。（门禁数值以 vitest coverage 配置为准，本文档仅作参考）
+- 日常开发默认使用轻量测试命令：`cd frontend && npm test`。`npm test` — 全量用例，不附带覆盖率门禁；`npm run test:coverage` — 全量用例 + 80% 门禁；`npx vitest run <file> --coverage.enabled=false` — 聚焦测试，无门禁。
 - 小问题修复只跑改动文件或影响模块的聚焦测试，不把覆盖率和长时间全量验证当作日常默认命令。
 - 全量验证和覆盖率门禁只在显式验证时运行：`cd frontend && npm run test:coverage`。
 - 聚焦测试优先使用 `npx vitest run <file> --coverage.enabled=false`；不要把 `npm test -- <file>` 当作跳过全局 coverage 门禁的方式。

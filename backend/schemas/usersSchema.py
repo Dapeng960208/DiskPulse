@@ -9,6 +9,7 @@ from pydantic import (
     Field,
     StrictBool,
     StringConstraints,
+    field_serializer,
 )
 
 
@@ -42,8 +43,7 @@ class OnlyUser(BaseModel):
     user_type: int | None = 2
     quit_days: int | None = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class User(UserBase):
@@ -51,11 +51,11 @@ class User(UserBase):
 
     user_group_ids: List[int] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
-        json_encoders = {
-            datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S"),
-        }
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("updated_at", when_used="json")
+    def serialize_updated_at(self, value: datetime | None) -> str | None:
+        return value.strftime("%Y-%m-%d %H:%M:%S") if value else None
 
 
 class UserCreate(BaseModel):
@@ -95,8 +95,7 @@ class LoginIn(BaseModel):
 class UserId(BaseModel):
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_serializer
 from datetime import datetime
 from schemas import usersSchema, groupSchema
 
@@ -17,8 +17,7 @@ class StorageUsageBase(BaseModel):
     updated_at: datetime
     storage_cluster_id: int | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class StorageUsageCreate(BaseModel):
@@ -69,11 +68,18 @@ class StorageUsage(StorageUsageBase):
     storage_cluster: groupSchema.StorageClusterSummary | None = None
     storage_target: groupSchema.StorageTargetSummary | None = None
 
-    class Config:
-        from_attributes = True
-        json_encoders = {
-            datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S")
-        }
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer(
+        "updated_at",
+        "access_time",
+        "modify_time",
+        "change_time",
+        "birth_time",
+        when_used="json",
+    )
+    def serialize_datetime(self, value: datetime | None) -> str | None:
+        return value.strftime("%Y-%m-%d %H:%M:%S") if value else None
 
 
 StorageUsage.model_rebuild()

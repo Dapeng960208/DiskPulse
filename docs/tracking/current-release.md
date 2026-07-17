@@ -1,5 +1,12 @@
 # 当前交付记录
 
+## 2026-07-17：前后端覆盖率门禁与 CI 基线调整
+
+- 覆盖率规范调整为后端全局门禁 `85%`、前端四项指标门禁 `80%`；代码、项目规范和 GitHub Actions 统一使用该口径。
+- GitHub Actions 固定 Node `22.14.0` 与 Python `3.13.0`，执行后端全量测试/coverage、前端全量 coverage、lint 和生产构建。
+- 本轮验证：后端 `363 passed`、coverage `91%`；前端 `294 passed`，Statements/Lines `98.40%`、Branches `89.84%`、Functions `83.95%`，在新门禁下通过；前端 lint 和生产构建通过。
+- 后端重复 warning 已从全量测试输出中清除；前端仅保留负向网络用例产生的预期错误日志和构建既有大 chunk 提示。GitHub-hosted runner 尚未实际执行，需以远端 Actions 结果为最终环境验证。
+
 ## 2026-07-16：项目组与用户目录配额调整
 
 - NetApp/Isilon 所有设备 HTTP 调用统一保留厂商错误响应：登录、探测、读取、写入、异步任务查询、写后读回和注销均记录原始状态码与消息，不再吞成 `False` 或空结果；同步配额接口原样返回状态码、响应体和 `Content-Type`，JSON 与纯文本均不包装。只有设备无 HTTP 响应的连接、DNS、TLS、超时等错误才返回 `502`。

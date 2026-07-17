@@ -30,6 +30,14 @@ Object.defineProperty(window, 'open', {
   value: vi.fn(),
 });
 
+Object.defineProperty(document, 'startViewTransition', {
+  writable: true,
+  value: vi.fn((callback) => ({
+    ready: Promise.resolve().then(callback),
+  })),
+});
+document.documentElement.animate = vi.fn();
+
 afterEach(() => {
   document.body.innerHTML = '';
   document.head.innerHTML = '';

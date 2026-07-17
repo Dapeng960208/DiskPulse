@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_serializer
 from datetime import datetime
 from schemas.usersSchema import OnlyUser
 
@@ -19,8 +19,8 @@ class StorageBackUpRecord(StorageBackUpRecordBase):
     user_id: int
     user: OnlyUser | None = None
 
-    class Config:
-        from_attributes = True
-        json_encoders = {
-            datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S")
-        }
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("start_time", "end_time", when_used="json")
+    def serialize_datetime(self, value: datetime | None) -> str | None:
+        return value.strftime("%Y-%m-%d %H:%M:%S") if value else None

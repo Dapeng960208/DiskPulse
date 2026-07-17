@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from schemas.storageAlertRuleSchema import DEFAULT_STORAGE_ALERT_RULE, StorageAlertRule
 
 
@@ -25,8 +25,7 @@ class StorageConf(BaseModel):
     back_up_quit_days: int | None = 30
     storage_alert_rule: StorageAlertRule = StorageAlertRule.model_validate(DEFAULT_STORAGE_ALERT_RULE)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class StorageConfPublic(BaseModel):
@@ -49,5 +48,4 @@ class StorageConfPublic(BaseModel):
     back_up_quit_days: int | None = 30
     storage_alert_rule: StorageAlertRule = StorageAlertRule.model_validate(DEFAULT_STORAGE_ALERT_RULE)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
