@@ -5,7 +5,7 @@ describe('quota display helpers', () => {
   it('formats hard and soft quota values with explicit empty text', () => {
     expect(formatQuotaLimit(2048)).toBe('2.0 T');
     expect(formatQuotaLimit(512)).toBe('512 G');
-    expect(formatQuotaLimit(null)).toBe('无限额');
+    expect(formatQuotaLimit(null)).toBe('无硬限额');
     expect(formatQuotaLimit(0, { emptyText: '无软限额' })).toBe('无软限额');
   });
 

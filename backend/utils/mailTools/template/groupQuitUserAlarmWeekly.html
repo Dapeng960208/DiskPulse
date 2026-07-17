@@ -74,7 +74,7 @@ a {
                     <td><a href="{{data.domain_name}}/usage/{{item.user.id}}">{{ item.user.rd_username }}</a></td>
                     <td>{{ item.user.get('quit_days')| default(0) }}</td>
                     <td>{{ item.get('linux_path')| default('') }}</td>
-                    <td>{{ item.get('limit')| default('无限额') }}</td>
+                    <td>{{ item.get('limit')| default('无硬限额') }}</td>
                     <td>{{ item.get('used')| default(0) }}</td>
                     <td>{{ item.get('use_ratio')| default(0) }}</td>
                     <td>{{ item.get('modify_time')| default('') }}</td>

@@ -42,9 +42,7 @@ onMounted(loadGroups);
       <ElTableColumn label="存储集群">
         <template #default="scope">
           {{ scope?.row?.storage_cluster?.name || '-' }}
-          <ElTag
-            type="info"
-            class="storage-info-tag">{{ scope?.row?.storage_cluster?.storage_type || '-' }}</ElTag>
+          <ElTag type="info"> {{ scope?.row?.storage_cluster?.storage_type || '-' }}</ElTag>
         </template>
       </ElTableColumn>
       <ElTableColumn label="存储目标"><template #default="scope">{{ formatStorageTargetType(scope?.row?.storage_target?.type) }} / {{ scope?.row?.storage_target?.name || '-' }}</template></ElTableColumn>

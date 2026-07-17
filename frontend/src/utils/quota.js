@@ -1,4 +1,4 @@
-export function formatQuotaLimit(value, { emptyText = '无限额' } = {}) {
+export function formatQuotaLimit(value, { emptyText = '无硬限额' } = {}) {
   if (value === null || value === undefined || Number(value) <= 0) {
     return emptyText;
   }

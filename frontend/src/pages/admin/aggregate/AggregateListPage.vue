@@ -111,7 +111,7 @@ query();
           <span v-if="row.limit">{{ row.limit>=1024 ? `${(row.limit/1024).toFixed(1)} T`: `${row.limit} G` }}</span>
           <ElTag
             v-else
-            type="danger">无限额</ElTag>
+            type="danger">无硬限额</ElTag>
         </template>
       </ElTableColumn>
       <ElTableColumn
