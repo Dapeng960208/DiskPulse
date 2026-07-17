@@ -161,12 +161,17 @@ def test_business_api_accepts_bearer_token_and_logout_returns_null_result(api_cl
         "/storage-pulse/api/users/",
         headers={"Authorization": f"Bearer {token}"},
     )
+    projects_response = client.get(
+        "/storage-pulse/api/projects/",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     logout_response = client.post(
         "/storage-pulse/api/users/logout",
         headers={"Authorization": f"Bearer {token}"},
     )
 
-    assert users_response.status_code == 200
+    assert users_response.status_code == 403
+    assert projects_response.status_code == 200
     assert logout_response.status_code == 200
     assert logout_response.json()["result"] is None
 
