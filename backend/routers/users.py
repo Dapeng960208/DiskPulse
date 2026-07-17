@@ -106,6 +106,7 @@ def create_user(user: usersSchema.UserCreate, _admin: AdminDep, db: DBDep):
     },
 )
 async def read_users(
+    _admin: AdminDep,
     db: DBDep,
     page: int = 1,
     size: int = 20,
@@ -139,7 +140,7 @@ async def read_users(
         "ai_description": "查询指定用户",
     },
 )
-def read_user(user_id: int, db: DBDep):
+def read_user(user_id: int, _admin: AdminDep, db: DBDep):
     return usersService.get_user(db, user_id)
 
 
