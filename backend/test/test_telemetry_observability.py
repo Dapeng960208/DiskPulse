@@ -68,6 +68,19 @@ def test_telemetry_run_lifecycle_uses_utc_and_persists_only_safe_outcome_fields(
     assert (failed.data_state, failed.records_written, failed.error_code) == (None, None, None)
 
 
+def test_pending_telemetry_run_cannot_persist_terminal_fields(session_factory):
+    from sqlalchemy.exc import IntegrityError
+
+    with pytest.raises(IntegrityError):
+        with session_factory() as db:
+            db.add(
+                models.TelemetryCollectionRun(
+                    **_run_payload(task_id="pending-terminal-fields", finished_at=UTC_NOW)
+                )
+            )
+            db.commit()
+
+
 @pytest.mark.parametrize(
     ("component", "age_seconds", "expected"),
     [
