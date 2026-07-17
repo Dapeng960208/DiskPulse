@@ -628,7 +628,16 @@ def test_storage_health_read_endpoints_return_service_results(
         )
 
     assert response.status_code == 200
-    assert response.json() == payload
+    body = response.json()
+    if endpoint == "capacity-change":
+        assert body.pop("trend_meta") == {
+            "quota_basis": "hard",
+            "rule_source": "system",
+            "thresholds": {"important": 80, "serious": 90, "emergency": 95},
+            "quota_limit_gb": None,
+            "ratio_indicator": "used_ratio",
+        }
+    assert body == payload
 
 
 def test_system_events_endpoint_forwards_search_and_pagination(analytics_client):

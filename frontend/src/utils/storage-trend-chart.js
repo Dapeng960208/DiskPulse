@@ -158,7 +158,7 @@ export function buildStorageTrendOption({
     emphasis: { focus: 'series' },
     lineStyle: {
       width: 2.5,
-      color: multiple ? palette.series[index % palette.series.length] : palette.normal,
+      ...(multiple ? { color: palette.series[index % palette.series.length] } : {}),
     },
     data: !multiple && pieces.length
       ? insertThresholdCrossings(item.data, values.map(({ value }) => value))

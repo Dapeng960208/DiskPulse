@@ -64,6 +64,7 @@ describe('storage trend option', () => {
       palette.serious,
       palette.emergency,
     ]);
+    expect(option.series[0].lineStyle.color).toBeUndefined();
     expect(option.series[0].areaStyle).toBeUndefined();
     expect(option.series[0].markPoint).toBeUndefined();
     expect(option.series[0].markLine.data.map((line) => line.label.formatter)).toEqual([
