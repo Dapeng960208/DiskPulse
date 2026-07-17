@@ -3,7 +3,13 @@ import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElMessage } from 'element-plus';
 
-const dashboardApi = { fetchOverview: vi.fn() };
+const dashboardApi = {
+  fetchSummary: vi.fn(),
+  fetchCapacityTrend: vi.fn(),
+  fetchCapacityItems: vi.fn(),
+  fetchAlertTrend: vi.fn(),
+  fetchTopUsers: vi.fn(),
+};
 
 vi.mock('@/api/dashboard-api.js', () => ({ default: dashboardApi }));
 vi.mock('@/api/project-api.js', () => ({ default: { fetchById: vi.fn(), fetch: vi.fn() } }));
@@ -39,7 +45,7 @@ const DashboardChart = defineComponent({
   template: '<div class="dashboard-chart-stub" />',
 });
 
-const response = (mode = 'global') => ({
+const summaryResponse = (mode = 'global') => ({
   scope: {
     mode,
     project_id: mode === 'project' ? 7 : null,
@@ -54,17 +60,18 @@ const response = (mode = 'global') => ({
     storage_cluster_count: mode === 'project' ? 1 : 6,
     alert_count: 3,
   },
-  capacity_trend: [
-    { timestamp: '2026-07-16T00:00:00', used_gb: 620 },
-    { timestamp: '2026-07-17T00:00:00', used_gb: 640 },
-  ],
-  capacity_items: [
-    { id: 1, name: mode === 'project' ? '项目组 A' : '项目 A', limit_gb: 100, used_gb: 70, available_gb: 30, use_ratio: 70 },
-  ],
-  alert_trend: [{ date: '2026-07-17', count: 3 }],
 });
+const capacityTrend = [
+  { timestamp: '2026-07-16T00:00:00', used_gb: 620 },
+  { timestamp: '2026-07-17T00:00:00', used_gb: 640 },
+];
+const capacityItems = (mode = 'global') => [
+  { id: 1, name: mode === 'project' ? '项目组 A' : '项目 A', limit_gb: 100, used_gb: 70, available_gb: 30, use_ratio: 70 },
+];
+const alertTrend = [{ date: '2026-07-17', count: 3 }];
+const topUsers = [{ id: 9, name: 'alice', used_gb: 40 }];
 
-async function mountPage() {
+async function mountPage({ flush = true } = {}) {
   const { default: DashboardPage } = await import('@/pages/dashboard/DashboardPage.vue');
   const wrapper = shallowMount(DashboardPage, {
     global: {
@@ -77,20 +84,28 @@ async function mountPage() {
       },
     },
   });
-  await flushPromises();
+  if (flush) await flushPromises();
   return wrapper;
 }
 
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    dashboardApi.fetchOverview.mockResolvedValue(response());
+    dashboardApi.fetchSummary.mockResolvedValue(summaryResponse());
+    dashboardApi.fetchCapacityTrend.mockResolvedValue(capacityTrend);
+    dashboardApi.fetchCapacityItems.mockResolvedValue(capacityItems());
+    dashboardApi.fetchAlertTrend.mockResolvedValue(alertTrend);
+    dashboardApi.fetchTopUsers.mockResolvedValue(topUsers);
   });
 
   it('loads the global overview and renders the approved chart layout', async () => {
     const wrapper = await mountPage();
 
-    expect(dashboardApi.fetchOverview).toHaveBeenCalledWith({});
+    expect(dashboardApi.fetchSummary).toHaveBeenCalledWith({});
+    expect(dashboardApi.fetchCapacityTrend).toHaveBeenCalledWith({});
+    expect(dashboardApi.fetchCapacityItems).toHaveBeenCalledWith({});
+    expect(dashboardApi.fetchAlertTrend).toHaveBeenCalledWith({});
+    expect(dashboardApi.fetchTopUsers).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('物理总容量');
     expect(wrapper.text()).toContain('项目容量对比');
     expect(wrapper.text()).toContain('1.00 TB');
@@ -102,26 +117,50 @@ describe('DashboardPage', () => {
   });
 
   it('reloads the same workspace as a project drill-down', async () => {
-    dashboardApi.fetchOverview
-      .mockResolvedValueOnce(response())
-      .mockResolvedValueOnce(response('project'));
+    dashboardApi.fetchSummary
+      .mockResolvedValueOnce(summaryResponse())
+      .mockResolvedValueOnce(summaryResponse('project'));
+    dashboardApi.fetchCapacityItems
+      .mockResolvedValueOnce(capacityItems())
+      .mockResolvedValueOnce(capacityItems('project'));
     const wrapper = await mountPage();
 
     await wrapper.findComponent(ProjectSelect).vm.$emit('update:modelValue', 7);
     await flushPromises();
 
-    expect(dashboardApi.fetchOverview).toHaveBeenLastCalledWith({ project_id: 7 });
+    expect(dashboardApi.fetchSummary).toHaveBeenLastCalledWith({ project_id: 7 });
+    expect(dashboardApi.fetchCapacityTrend).toHaveBeenLastCalledWith({ project_id: 7 });
+    expect(dashboardApi.fetchCapacityItems).toHaveBeenLastCalledWith({ project_id: 7 });
+    expect(dashboardApi.fetchAlertTrend).toHaveBeenLastCalledWith({ project_id: 7 });
+    expect(dashboardApi.fetchTopUsers).toHaveBeenCalledWith({ project_id: 7 });
     expect(wrapper.text()).toContain('项目限额');
     expect(wrapper.text()).toContain('项目组容量对比');
+    expect(wrapper.text()).toContain('用户使用 Top 10');
+    expect(wrapper.findAllComponents(DashboardChart)).toHaveLength(4);
   });
 
-  it('shows a stable empty state when loading fails', async () => {
+  it('keeps the dashboard structure visible while project data is loading', async () => {
+    dashboardApi.fetchSummary.mockReturnValue(new Promise(() => {}));
+    dashboardApi.fetchCapacityTrend.mockReturnValue(new Promise(() => {}));
+    dashboardApi.fetchCapacityItems.mockReturnValue(new Promise(() => {}));
+    dashboardApi.fetchAlertTrend.mockReturnValue(new Promise(() => {}));
+
+    const wrapper = await mountPage({ flush: false });
+
+    expect(wrapper.text()).toContain('容量趋势');
+    expect(wrapper.text()).toContain('项目容量对比');
+    expect(wrapper.text()).toContain('告警趋势');
+    expect(wrapper.findAll('.skeleton').length).toBeGreaterThan(1);
+  });
+
+  it('keeps successful panels visible when one chart request fails', async () => {
     const error = vi.spyOn(ElMessage, 'error').mockImplementation(() => undefined);
-    dashboardApi.fetchOverview.mockRejectedValue(new Error('failed'));
+    dashboardApi.fetchCapacityTrend.mockRejectedValue(new Error('failed'));
 
     const wrapper = await mountPage();
 
     expect(error).toHaveBeenCalledWith('加载存储概览失败，请稍后重试');
-    expect(wrapper.text()).toContain('暂无概览数据');
+    expect(wrapper.text()).toContain('物理总容量');
+    expect(wrapper.text()).toContain('暂无容量趋势');
   });
 });
