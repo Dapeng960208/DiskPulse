@@ -14,6 +14,7 @@ import models
 from appConfig import base_config
 from schemas.quotaSchema import QuotaAdjustmentRequest
 from services import quotaService
+from services.audit_service import AuditContext
 from utils.isilonClient import IsilonClient
 from utils.netAppClient import NetAppClient
 from utils.security import issue_token
@@ -214,6 +215,58 @@ def test_netapp_qtree_group_adjustment_updates_device_and_local_state(db_session
     alert = db_session.query(models.StorageAlerts).filter_by(alert_type="quota_adjustment").one()
     assert alert.related_info["old_hard_limit"] == 100
     assert client.closed is True
+
+
+@pytest.mark.parametrize(
+    ("resource_type", "adjust"),
+    [
+        (
+            "group",
+            lambda db, context: quotaService.adjust_group_quota(
+                db,
+                group_id=1,
+                request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+                audit_context=context,
+            ),
+        ),
+        (
+            "storage_usage",
+            lambda db, context: quotaService.adjust_storage_usage_quota(
+                db,
+                storage_usage_id=1,
+                request=QuotaAdjustmentRequest(hard_limit=80, unit="GiB"),
+                audit_context=context,
+            ),
+        ),
+    ],
+)
+def test_quota_adjustment_writes_correlated_attempt_and_result_events(
+    db_session,
+    monkeypatch,
+    resource_type,
+    adjust,
+):
+    seed_quota_target(db_session)
+    client = FakeQuotaClient()
+    context = AuditContext(
+        request_id="3efc3f58-4342-4c4d-97ee-c498087cb655",
+        trace_id="70e1b4cd-e97a-4725-a750-fbd6f0e91f5f",
+        operation_id="10a021fb-c3cd-4299-8947-93c9f52fd540",
+    )
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+    monkeypatch.setattr(quotaService, "_send_adjustment_email", lambda *args, **kwargs: None)
+
+    adjust(db_session, context)
+
+    events = db_session.query(models.AuditEvent).order_by(models.AuditEvent.occurred_at, models.AuditEvent.id).all()
+    assert [(event.phase, event.outcome) for event in events] == [("attempt", "success"), ("result", "success")]
+    assert all(event.action == "quota.adjust" and event.resource_type == resource_type for event in events)
+    assert {event.operation_id for event in events} == {context.operation_id}
+    assert all(event.project_id == 1 for event in events)
+    assert "/data/group-1" not in json.dumps(
+        [(event.before_summary, event.after_summary, event.event_metadata) for event in events],
+        ensure_ascii=False,
+    )
 
 
 def test_quota_adjustments_queue_feishu_for_group_owner_and_directory_user(db_session, monkeypatch):
