@@ -180,6 +180,30 @@ def test_readyz_has_stable_ready_degraded_and_not_ready_responses(monkeypatch):
     assert (response.status_code, response.json()) == (503, {"status": "not_ready"})
 
 
+def test_dependency_checks_run_concurrently(monkeypatch):
+    import time
+
+    from services import observabilityService
+
+    def slow_check(*_args, **_kwargs):
+        time.sleep(0.2)
+        return True
+
+    class SlowRedis:
+        def ping(self):
+            time.sleep(0.2)
+            return True
+
+    monkeypatch.setattr(observabilityService, "_check_sqlalchemy", slow_check)
+    monkeypatch.setattr(observabilityService.redis, "Redis", lambda **_kwargs: SlowRedis())
+
+    started = time.perf_counter()
+    result = observabilityService.check_dependencies()
+
+    assert result == {"postgres": True, "redis": True, "questdb": True}
+    assert time.perf_counter() - started < 0.5
+
+
 def test_metrics_requires_file_token_and_hides_postgres_failure(tmp_path, monkeypatch):
     import main
     from services import observabilityService
@@ -205,6 +229,24 @@ def test_metrics_requires_file_token_and_hides_postgres_failure(tmp_path, monkey
     assert "diskpulse_dependency_ready{cluster_id=\"\",component=\"postgres\"} 0.0" in response.text
     assert "diskpulse_http_requests_total" in response.text
     assert "postgresql" not in response.text.lower()
+
+
+def test_metrics_removes_cached_freshness_when_postgres_becomes_unavailable(monkeypatch):
+    from services import observabilityService
+
+    observabilityService._telemetry_metric_labels = {("capacity", "1")}
+    observabilityService.TELEMETRY_STATUS.labels(component="capacity", cluster_id="1").set(1)
+    observabilityService.TELEMETRY_FRESHNESS.labels(component="capacity", cluster_id="1").set(5)
+    observabilityService.TELEMETRY_LAST_SUCCESS.labels(component="capacity", cluster_id="1").set(UTC_NOW.timestamp())
+    monkeypatch.setattr(
+        observabilityService,
+        "check_dependencies",
+        lambda: {"postgres": False, "redis": True, "questdb": True},
+    )
+
+    response = observabilityService.render_metrics(Mock())
+
+    assert b'diskpulse_telemetry_status{cluster_id="1"' not in response
 
 
 def test_telemetry_runs_api_requires_super_admin_and_returns_safe_paginated_fields(
@@ -303,6 +345,65 @@ def test_isolated_vendor_collection_records_cluster_success_and_failure(session_
     ]
 
 
+def test_explicitly_unsupported_collection_is_a_success_without_samples(session_factory):
+    from celery_tasks.tasks import storage_health
+
+    with session_factory() as db:
+        db.add(models.StorageCluster(id=1, name="cluster-a", storage_type="netapp"))
+        db.commit()
+
+    summary = storage_health.run_isolated(
+        [1],
+        lambda _cluster_id: (_ for _ in ()).throw(ValueError("Unsupported storage type: legacy")),
+        telemetry_context={
+            "task_id": "unsupported-task",
+            "attempt": 1,
+            "trace_id": "bd0c4595-6eef-44b0-8411-91e6d6bb778d",
+        },
+        component="performance",
+        session_factory=session_factory,
+    )
+
+    assert summary == {"succeeded_clusters": (1,), "failed_clusters": ()}
+    with session_factory() as db:
+        run = db.query(models.TelemetryCollectionRun).one()
+    assert (run.outcome, run.data_state, run.records_written) == ("success", "unsupported", 0)
+
+
+def test_explicitly_unsupported_capacity_collection_is_a_success_without_samples(session_factory):
+    from celery_tasks.tasks import storages
+
+    with session_factory() as db:
+        db.add(models.StorageCluster(id=1, name="cluster-a", storage_type="netapp"))
+        db.commit()
+
+    class UnsupportedMonitor:
+        def __init__(self, _db, _logger, _cluster):
+            pass
+
+        def collect_postgres(self):
+            raise ValueError("Unsupported storage type: legacy")
+
+        def close(self):
+            pass
+
+    summary = storages.run_collection_round(
+        ({"storage_cluster_id": 1},),
+        session_factory=session_factory,
+        monitor_factory=UnsupportedMonitor,
+        telemetry_context={
+            "task_id": "capacity-unsupported-task",
+            "attempt": 1,
+            "trace_id": "cd40a2d4-59c4-4412-bc20-9a1ed01edbc2",
+        },
+    )
+
+    assert summary["succeeded_clusters"] == (1,)
+    with session_factory() as db:
+        run = db.query(models.TelemetryCollectionRun).one()
+    assert (run.outcome, run.data_state, run.records_written) == ("success", "unsupported", 0)
+
+
 def test_telemetry_cleanup_deletes_expired_rows_in_batches_and_retries_on_failure(
     session_factory, monkeypatch
 ):
@@ -333,3 +434,111 @@ def test_telemetry_cleanup_deletes_expired_rows_in_batches_and_retries_on_failur
     assert telemetry_tasks.telemetry_collection_runs_cleanup_task.run() == {"deleted": 1}
     with session_factory() as db:
         assert db.query(models.TelemetryCollectionRun).count() == 0
+
+
+def test_telemetry_cleanup_rethrows_after_safe_notification_failure(monkeypatch):
+    from celery_tasks.tasks import telemetry as telemetry_tasks
+
+    @contextmanager
+    def lock(_name, expires):
+        assert expires == 1800
+        yield True
+
+    monkeypatch.setattr(telemetry_tasks, "redis_lock", lock)
+    monkeypatch.setattr(telemetry_tasks, "purge_expired_collection_runs", Mock(side_effect=RuntimeError("db down")))
+    monkeypatch.setattr(telemetry_tasks, "_notify_cleanup_failure", Mock(side_effect=RuntimeError("notify down")))
+
+    with pytest.raises(RuntimeError, match="db down"):
+        telemetry_tasks.telemetry_collection_runs_cleanup_task.run()
+
+
+def test_telemetry_cleanup_processes_all_expired_batches(session_factory, monkeypatch):
+    from celery_tasks.tasks import telemetry as telemetry_tasks
+
+    with session_factory() as db:
+        db.add_all(
+            models.TelemetryCollectionRun(
+                **_run_payload(task_id=f"expired-{index}"),
+                outcome="success",
+                data_state="empty",
+                records_written=0,
+                finished_at=UTC_NOW,
+                created_at=UTC_NOW - timedelta(days=91),
+            )
+            for index in range(1001)
+        )
+        db.commit()
+
+    @contextmanager
+    def lock(_name, expires):
+        assert expires == 1800
+        yield True
+
+    monkeypatch.setattr(telemetry_tasks, "SessionLocal", session_factory)
+    monkeypatch.setattr(telemetry_tasks, "redis_lock", lock)
+    monkeypatch.setattr(telemetry_tasks, "utc_now", lambda: UTC_NOW)
+
+    assert telemetry_tasks.telemetry_collection_runs_cleanup_task.run() == {"deleted": 1001}
+    with session_factory() as db:
+        assert db.query(models.TelemetryCollectionRun).count() == 0
+
+
+def test_telemetry_model_contract_and_migration_compile_for_supported_dialects():
+    import importlib.util
+    import io
+
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    migration_path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000008_telemetry_collection_runs.py"
+    spec = importlib.util.spec_from_file_location("telemetry_migration", migration_path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    assert models.TelemetryCollectionRun.__tablename__ == "telemetry_collection_runs"
+    assert {"trace_id", "started_at", "finished_at", "outcome", "data_state"} <= set(
+        models.TelemetryCollectionRun.__table__.columns.keys()
+    )
+    for dialect_name in ("sqlite", "postgresql", "mysql"):
+        output = io.StringIO()
+        migration.op = Operations(
+            MigrationContext.configure(
+                dialect_name=dialect_name,
+                opts={"as_sql": True, "output_buffer": output},
+            )
+        )
+        migration.upgrade()
+        sql = output.getvalue().lower()
+        assert "telemetry_collection_runs" in sql
+        assert "trace_id" in sql
+        assert "storage_cluster_id" in sql
+
+
+def test_telemetry_migration_upgrades_and_downgrades_sqlite():
+    import importlib.util
+
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    migration_path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000008_telemetry_collection_runs.py"
+    spec = importlib.util.spec_from_file_location("telemetry_migration_sqlite", migration_path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    with sa.create_engine("sqlite://").begin() as connection:
+        connection.execute(sa.text("CREATE TABLE storage_clusters (id INTEGER PRIMARY KEY)"))
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        inspector = sa.inspect(connection)
+        columns = {column["name"] for column in inspector.get_columns("telemetry_collection_runs")}
+        assert {"id", "trace_id", "storage_cluster_id", "started_at", "created_at"} <= columns
+        assert {
+            "ix_telemetry_run_component_cluster_finished",
+            "ix_telemetry_run_created_at",
+        } <= {index["name"] for index in inspector.get_indexes("telemetry_collection_runs")}
+
+        migration.downgrade()
+        inspector.clear_cache()
+        assert "telemetry_collection_runs" not in inspector.get_table_names()

@@ -224,30 +224,44 @@ def run_collection_round(
                     monitor.write_questdb(metrics)
                 else:
                     questdb_writer(cluster, metrics)
-            except Exception as exc:
+            except Exception:
                 logger.error(
-                    "QuestDB write failed for cluster %s: %s",
+                    "QuestDB write failed for cluster %s: error_code=questdb",
                     cluster["storage_cluster_id"],
-                    exc,
                 )
         except Exception as exc:
+            if telemetryObservabilityService.is_explicitly_unsupported(exc):
+                cluster_results[cluster_id] = True
+                succeeded_clusters.append(cluster_id)
+                if run is not None:
+                    telemetryObservabilityService.safe_complete_collection_run(
+                        session_factory,
+                        logger,
+                        run.id,
+                        outcome="success",
+                        data_state="unsupported",
+                        records_written=0,
+                    )
+                logger.info("Storage collection is unsupported for cluster %s", cluster_id)
+                continue
             cluster_results[cluster_id] = False
             failed_clusters.append(cluster_id)
+            error_code = telemetryObservabilityService.classify_error_code(
+                exc,
+                phase="vendor",
+            )
             if run is not None:
                 telemetryObservabilityService.safe_complete_collection_run(
                     session_factory,
                     logger,
                     run.id,
                     outcome="failed",
-                    error_code=telemetryObservabilityService.classify_error_code(
-                        exc,
-                        phase="vendor",
-                    ),
+                    error_code=error_code,
                 )
             logger.error(
-                "Error monitoring cluster %s: %s",
+                "Storage collection failed for cluster %s: error_code=%s",
                 cluster["storage_cluster_id"],
-                exc,
+                error_code,
             )
         finally:
             if monitor is not None:
@@ -255,20 +269,18 @@ def run_collection_round(
                 if close is not None:
                     try:
                         close()
-                    except Exception as exc:
+                    except Exception:
                         logger.error(
-                            "Failed to close monitor for cluster %s: %s",
+                            "Failed to close monitor for cluster %s",
                             cluster["storage_cluster_id"],
-                            exc,
                         )
             if db is not None:
                 try:
                     db.close()
-                except Exception as exc:
+                except Exception:
                     logger.error(
-                        "Failed to close session for cluster %s: %s",
+                        "Failed to close session for cluster %s",
                         cluster["storage_cluster_id"],
-                        exc,
                     )
     if failed_clusters and not succeeded_clusters:
         raise RuntimeError(
@@ -288,8 +300,9 @@ def storages_schedule_fetching_task(self, storage_cluster_id=None):
     try:
         telemetry_context = telemetryObservabilityService.task_execution_context(self)
         logger.info(
-            "Storage collection task started: cluster=%s",
+            "Storage collection task started: cluster=%s trace_id=%s",
             "all" if storage_cluster_id is None else storage_cluster_id,
+            telemetry_context["trace_id"],
         )
         with redis_lock('storages_schedule_fetching_task_lock', expires=240) as have_lock:
             if have_lock:
@@ -322,8 +335,11 @@ def storages_schedule_fetching_task(self, storage_cluster_id=None):
                     **telemetry_context,
                 )
                 logger.info("Storages schedule fetching task is already running.")
-    except Exception as e:
-        logger.error(f"Error in storages fetching task: {e}")
+    except Exception as error:
+        logger.error(
+            "Storage collection task failed: error_code=%s",
+            telemetryObservabilityService.classify_error_code(error, phase="vendor"),
+        )
         raise
 
 

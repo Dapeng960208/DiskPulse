@@ -81,19 +81,26 @@ app.add_middleware(
 
 @app.middleware("http")
 async def db_session_middleware(request: Request, call_next):
+    request.scope["path"] = request.scope["path"].replace("//", "/")
     if request.url.path in {
         "/storage-pulse/api/v1/healthz",
         "/storage-pulse/api/v1/readyz",
         "/storage-pulse/api/v1/metrics",
     }:
-        return await call_next(request)
+        started = time.perf_counter()
+        response = await call_next(request)
+        observabilityService.record_http_request(
+            request,
+            response,
+            time.perf_counter() - started,
+        )
+        return response
 
     started = time.perf_counter()
     response = Response("Internal server error", status_code=500)
     request.state.db = SessionLocal()
     try:
         try:
-            request.scope["path"] = request.scope["path"].replace("//", "/")
             response = await call_next(request)
         except DisconnectionError:
             request.state.db.close()

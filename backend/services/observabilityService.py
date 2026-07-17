@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import hmac
+import threading
 from pathlib import Path
 
 import redis
@@ -64,36 +65,61 @@ def _probe_engine(url: str, *, connect_args: dict | None = None):
 
 
 def _check_sqlalchemy(url: str, *, connect_args: dict | None = None) -> bool:
-    engine = None
-    try:
-        engine = _probe_engine(url, connect_args=connect_args)
-        with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
-        return True
-    except Exception:
-        return False
-    finally:
-        if engine is not None:
-            engine.dispose()
+    result = {"ready": False}
+
+    def check() -> None:
+        engine = None
+        try:
+            engine = _probe_engine(url, connect_args=connect_args)
+            with engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+            result["ready"] = True
+        except Exception:
+            result["ready"] = False
+        finally:
+            if engine is not None:
+                engine.dispose()
+
+    worker = threading.Thread(target=check, daemon=True)
+    worker.start()
+    worker.join(timeout=1)
+    return bool(result["ready"]) if not worker.is_alive() else False
 
 
 def check_dependencies() -> dict[str, bool]:
-    postgres = _check_sqlalchemy(
-        base_config.get_sqlalchemy_database_url(),
-        connect_args={"connect_timeout": 1},
-    )
-    try:
-        redis.Redis(
-            host=base_config.get("redis.host"),
-            port=base_config.get("redis.port", 6379),
-            socket_connect_timeout=1,
-            socket_timeout=1,
-        ).ping()
-        redis_ready = True
-    except Exception:
-        redis_ready = False
-    questdb = _check_sqlalchemy(base_config.get_quest_db_url())
-    return {"postgres": postgres, "redis": redis_ready, "questdb": questdb}
+    readiness = {"postgres": False, "redis": False, "questdb": False}
+
+    def check_postgres() -> None:
+        readiness["postgres"] = _check_sqlalchemy(
+            base_config.get_sqlalchemy_database_url(),
+            connect_args={"connect_timeout": 1},
+        )
+
+    def check_redis() -> None:
+        try:
+            redis.Redis(
+                host=base_config.get("redis.host"),
+                port=base_config.get("redis.port", 6379),
+                socket_connect_timeout=1,
+                socket_timeout=1,
+            ).ping()
+            readiness["redis"] = True
+        except Exception:
+            readiness["redis"] = False
+
+    def check_questdb() -> None:
+        readiness["questdb"] = _check_sqlalchemy(base_config.get_quest_db_url())
+
+    workers = [
+        threading.Thread(target=check_postgres, daemon=True),
+        threading.Thread(target=check_redis, daemon=True),
+        threading.Thread(target=check_questdb, daemon=True),
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=1)
+    return readiness
 
 
 def update_dependency_metrics(dependencies: dict[str, bool]) -> None:
@@ -181,6 +207,15 @@ def refresh_telemetry_metrics(session_factory) -> None:
         )
 
 
+def clear_telemetry_metrics() -> None:
+    global _telemetry_metric_labels
+    for component, cluster_id in _telemetry_metric_labels:
+        TELEMETRY_FRESHNESS.remove(component, cluster_id)
+        TELEMETRY_STATUS.remove(component, cluster_id)
+        TELEMETRY_LAST_SUCCESS.remove(component, cluster_id)
+    _telemetry_metric_labels = set()
+
+
 def render_metrics(session_factory) -> bytes:
     dependencies = check_dependencies()
     update_dependency_metrics(dependencies)
@@ -189,4 +224,7 @@ def render_metrics(session_factory) -> bytes:
             refresh_telemetry_metrics(session_factory)
         except Exception:
             DEPENDENCY_READY.labels(component="postgres", cluster_id="").set(0)
+            clear_telemetry_metrics()
+    else:
+        clear_telemetry_metrics()
     return generate_latest(METRICS_REGISTRY)

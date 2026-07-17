@@ -198,19 +198,40 @@ def run_isolated(
                     records_written=records_written,
                 )
         except Exception as exc:
+            if telemetryObservabilityService.is_explicitly_unsupported(exc):
+                succeeded.append(cluster_id)
+                if run is not None:
+                    telemetryObservabilityService.safe_complete_collection_run(
+                        session_factory,
+                        task_logger,
+                        run.id,
+                        outcome="success",
+                        data_state="unsupported",
+                        records_written=0,
+                    )
+                task_logger.info(
+                    "Storage health collection is unsupported for cluster %s",
+                    cluster_id,
+                )
+                continue
             failed.append(cluster_id)
+            error_code = telemetryObservabilityService.classify_error_code(
+                exc,
+                phase="vendor",
+            )
             if run is not None:
                 telemetryObservabilityService.safe_complete_collection_run(
                     session_factory,
                     task_logger,
                     run.id,
                     outcome="failed",
-                    error_code=telemetryObservabilityService.classify_error_code(
-                        exc,
-                        phase="vendor",
-                    ),
+                    error_code=error_code,
                 )
-            task_logger.error("Storage health collection failed for cluster %s: %s", cluster_id, exc)
+            task_logger.error(
+                "Storage health collection failed for cluster %s: error_code=%s",
+                cluster_id,
+                error_code,
+            )
     return {
         "succeeded_clusters": tuple(succeeded),
         "failed_clusters": tuple(failed),
@@ -407,10 +428,14 @@ def _write_performance_rows(rows: list[dict]) -> int:
         "VALUES (:storage_cluster_id, :vendor, :object_type, :object_id, :object_name, "
         ":latency_read, :latency_write, :latency_total, :iops_total, :throughput_total, :collected_at)"
     )
-    with QuestDBSession() as connection:
-        transaction = connection.begin()
-        connection.execute(statement, rows)
-        transaction.commit()
+    try:
+        with QuestDBSession() as connection:
+            transaction = connection.begin()
+            connection.execute(statement, rows)
+            transaction.commit()
+    except Exception as error:
+        error.telemetry_phase = "questdb"
+        raise
     return len(rows)
 
 
@@ -448,6 +473,7 @@ def _collect_performance(storage_cluster_id: int) -> int:
 @diskpulse_app.task(bind=True, soft_time_limit=50, time_limit=60, expires=60)
 def storage_events_schedule_fetching_task(self):
     telemetry_context = telemetryObservabilityService.task_execution_context(self)
+    logger.info("Storage vendor event collection started: trace_id=%s", telemetry_context["trace_id"])
     with redis_lock("storage_events_schedule_fetching_task_lock", expires=60) as have_lock:
         if not have_lock:
             telemetryObservabilityService.safe_record_scheduler_skip(
@@ -468,6 +494,7 @@ def storage_events_schedule_fetching_task(self):
 @diskpulse_app.task(bind=True, soft_time_limit=240, time_limit=300, expires=300)
 def storage_performance_schedule_fetching_task(self):
     telemetry_context = telemetryObservabilityService.task_execution_context(self)
+    logger.info("Storage performance collection started: trace_id=%s", telemetry_context["trace_id"])
     with redis_lock("storage_performance_schedule_fetching_task_lock", expires=300) as have_lock:
         if not have_lock:
             telemetryObservabilityService.safe_record_scheduler_skip(

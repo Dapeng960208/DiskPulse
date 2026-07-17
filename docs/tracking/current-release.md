@@ -1,5 +1,25 @@
 # 当前交付记录
 
+## 2026-07-18：遥测新鲜度与平台可观测
+
+### 已完成
+
+- 新增 `telemetry_collection_runs` PostgreSQL 运行账本及 `000000000008` Alembic 迁移；记录容量、厂商事件、性能采集的集群级生命周期、UTC 时间、`trace_id`、安全结果和成功写入计数。集群删除后历史外键置空，但保留 `scope_key` 可查询。
+- 容量、厂商事件、性能任务均保持既有设备调用、周期、锁和部分集群失败隔离语义；旁路账本短事务失败不会阻塞采集或改变采集异常。锁冲突只记录 scheduler 级跳过，不覆盖集群最后成功。
+- 新增 `/storage-pulse/api/v1/healthz`、`/readyz`、`/metrics`、`/telemetry-runs`；前 3 条探针在常规数据库 session middleware 前短路，指标 Token 从文件读取并使用常量时间比较。
+- 新增每天 03:17 执行的 90 天账本清理任务，带 30 分钟 Redis 单例锁、1000 条批处理和不写 `StorageAlerts` 的飞书直发失败通知。
+- 新增功能专题、配置样例和文档索引；不新增前端页面、设备 API 调用、业务域表写入或仓库内 Prometheus/CIDR 部署模板。
+
+### 验证状态
+
+- RED：新增账本、新鲜度、探针、指标、授权 API、任务隔离、清理和迁移跨方言测试在实现前按预期失败。
+- GREEN：`D:\\dev\\DiskPulse\\.venv\\Scripts\\python.exe -m pytest backend/test/test_telemetry_observability.py backend/test/test_storage_collection_trigger.py backend/test/test_storage_health_analytics.py -q` 通过 `122 passed`；账本专题测试随后扩展至 `20 passed`。
+
+### 风险与后续
+
+- 未连接真实 PostgreSQL、Redis、QuestDB、Celery Beat/Worker 或飞书通知服务；未在真实网络策略下验证 metrics Token 文件权限、监控 CIDR 限制和 100 次抓取 P95。
+- 部署后先暗运行 7 天观察 `not_ready` 和 `stale`，再由外部 Prometheus/告警平台启用告警；Celery 队列深度与 Worker 心跳仍由独立 `celery-exporter` 提供。
+
 ## 2026-07-17：企业级 AI 存储智能运维调研基线
 
 ### 已完成

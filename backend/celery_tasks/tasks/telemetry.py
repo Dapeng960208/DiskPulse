@@ -34,16 +34,21 @@ def telemetry_collection_runs_cleanup_task(self):
             logger.info("Telemetry collection run cleanup is already running")
             return {"deleted": 0, "status": "skipped"}
         try:
-            deleted = purge_expired_collection_runs(
-                SessionLocal,
-                cutoff=utc_now() - timedelta(days=RETENTION_DAYS),
-                batch_size=PURGE_BATCH_SIZE,
-            )
+            deleted = 0
+            while True:
+                deleted_batch = purge_expired_collection_runs(
+                    SessionLocal,
+                    cutoff=utc_now() - timedelta(days=RETENTION_DAYS),
+                    batch_size=PURGE_BATCH_SIZE,
+                )
+                deleted += deleted_batch
+                if deleted_batch < PURGE_BATCH_SIZE:
+                    break
         except Exception:
-            logger.exception("Telemetry collection run cleanup failed")
+            logger.error("Telemetry collection run cleanup failed")
             try:
                 _notify_cleanup_failure()
             except Exception:
-                logger.exception("Telemetry collection run cleanup notification failed")
+                logger.error("Telemetry collection run cleanup notification failed")
             raise
         return {"deleted": deleted}
