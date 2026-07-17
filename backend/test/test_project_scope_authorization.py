@@ -283,6 +283,35 @@ def test_project_reader_cannot_list_storage_backup_records(
     assert reader.get(f"{API_PREFIX}/storage-back-up-records/").status_code == 403
 
 
+def test_project_reader_cannot_list_system_users_or_group_tags(
+    api_client_factory,
+    session_factory,
+):
+    from routers import group_tag, users
+
+    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("super_admin_usernames", ["admin"])
+    session = session_factory()
+    try:
+        session.add_all(
+            [
+                models.User(id=1, rd_username="reader", username="Reader"),
+                models.User(id=2, rd_username="other", username="Other"),
+                models.GroupTag(id=1, name="production"),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    reader = _client(api_client_factory, [users.router, group_tag.router], user_id=1)
+
+    assert reader.get(f"{API_PREFIX}/users/").status_code == 403
+    assert reader.get(f"{API_PREFIX}/users/2").status_code == 403
+    assert reader.get(f"{API_PREFIX}/group-tags").status_code == 403
+    assert reader.get(f"{API_PREFIX}/group-tags/1").status_code == 403
+
+
 def test_unscoped_device_resource_routes_are_limited_to_super_admin(
     api_client_factory,
     session_factory,
