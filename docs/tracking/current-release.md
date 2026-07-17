@@ -1,5 +1,12 @@
 # 当前交付记录
 
+## 2026-07-17：用户目录详情暂时隐藏第 2–4 行字段
+
+- `UsageDetailPage.vue` 已用 Vue 模板注释保留文件数量、目录权限、访问/修改/改变时间、创建时间、权限组、Inode、硬链接、IO 块和设备标识等 12 个扩展字段，页面暂时只展示第一行摘要。
+- `ElDescriptionsItem` 导入同步保留为代码注释；共享实时趋势、接口、数据和告警逻辑不变。
+- TDD RED 提交为 `8e604f4`，GREEN 提交为 `c23026f`。用户目录详情、页面烟测和路由依赖组合验证为 `4 files / 17 passed`，目标 ESLint、生产构建通过；按用户要求未执行浏览器验证。
+- 设计与恢复方式见 [用户目录详情扩展字段隐藏设计](../features/storage-trends/usage-detail-field-visibility.md)。
+
 ## 2026-07-17：修复项目组与用户目录详情动态加载
 
 - 在当前 `localhost:5173` 新浏览器会话中复现：`element-plus_es_components_row_style_css.js` 和 `...col_style_css.js` 返回 `504 Outdated Optimize Dep`，随后 Vue Router 报 `GroupDetailPage.vue` / `UsageDetailPage.vue` 动态导入失败。

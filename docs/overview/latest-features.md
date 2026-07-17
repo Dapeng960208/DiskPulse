@@ -1,5 +1,10 @@
 # 最新功能与修复
 
+## 2026-07-17：用户目录详情暂时隐藏扩展字段
+
+- 用户目录实时监控详情暂时只展示目录、限额、使用量和利用率；原第 2–4 行的文件数量、权限、时间、inode、IO 块等 12 个扩展字段不再渲染。
+- 字段组件和数据绑定完整保留在 Vue 模板注释中，恢复时无需重写；后端接口、采集数据、趋势图和告警列表均未修改。完整边界见 [用户目录详情扩展字段隐藏设计](../features/storage-trends/usage-detail-field-visibility.md)。
+
 ## 2026-07-17：修复项目组与用户目录详情页动态加载失败
 
 - 修复开发服务器中点击项目组或用户目录“详情”后出现的 `Failed to fetch dynamically imported module`；根因是详情页和共享实时趋势页的无用 `ElRow`、`ElCol` 导入触发过期的 Element Plus 优化样式依赖并返回 `504 Outdated Optimize Dep`。
