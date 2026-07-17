@@ -500,6 +500,18 @@ def test_telemetry_model_contract_and_migration_compile_for_supported_dialects()
     assert {"trace_id", "started_at", "finished_at", "outcome", "data_state"} <= set(
         models.TelemetryCollectionRun.__table__.columns.keys()
     )
+    terminal_constraint = next(
+        constraint
+        for constraint in models.TelemetryCollectionRun.__table__.constraints
+        if constraint.name == "ck_telemetry_run_terminal_fields"
+    )
+    assert "finished_at is not null" in str(terminal_constraint.sqltext).lower()
+    ledger_index = next(
+        index
+        for index in models.TelemetryCollectionRun.__table__.indexes
+        if index.name == "ix_telemetry_run_component_cluster_finished"
+    )
+    assert str(ledger_index.expressions[-1]).lower() == "finished_at desc"
     for dialect_name in ("sqlite", "postgresql", "mysql"):
         output = io.StringIO()
         migration.op = Operations(
@@ -513,6 +525,7 @@ def test_telemetry_model_contract_and_migration_compile_for_supported_dialects()
         assert "telemetry_collection_runs" in sql
         assert "trace_id" in sql
         assert "storage_cluster_id" in sql
+        assert "finished_at is not null" in sql
 
 
 def test_telemetry_migration_upgrades_and_downgrades_sqlite():
