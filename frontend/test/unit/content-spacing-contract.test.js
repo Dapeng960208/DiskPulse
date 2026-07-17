@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const frontendRoot = resolve(import.meta.dirname, '../..');
 
 const readFrontendSource = (relativePath) =>
-  readFileSync(resolve(frontendRoot, relativePath), 'utf8');
+  readFileSync(resolve(frontendRoot, relativePath), 'utf8').replace(/\r\n/g, '\n');
 
 function extractBlocks(source, selector) {
   const blocks = [];
