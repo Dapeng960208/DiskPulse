@@ -153,6 +153,45 @@ def test_list_runs_matches_deleted_cluster_history_by_scope_key(session_factory)
     assert content[0].scope_key == "1"
 
 
+def test_latest_success_runs_returns_only_each_component_cluster_latest_row(session_factory):
+    from crud import telemetryCollectionRunCrud
+    from services import telemetryObservabilityService as telemetry
+
+    with session_factory() as db:
+        db.add(models.StorageCluster(id=1, name="cluster-a", storage_type="netapp"))
+        db.commit()
+
+    older = telemetry.start_collection_run(
+        session_factory,
+        **_run_payload(task_id="older-success", started_at=UTC_NOW - timedelta(minutes=2)),
+    )
+    telemetry.complete_collection_run(
+        session_factory,
+        older.id,
+        outcome="success",
+        data_state="data",
+        records_written=1,
+        finished_at=UTC_NOW - timedelta(minutes=1),
+    )
+    latest = telemetry.start_collection_run(
+        session_factory,
+        **_run_payload(task_id="latest-success", started_at=UTC_NOW - timedelta(seconds=30)),
+    )
+    telemetry.complete_collection_run(
+        session_factory,
+        latest.id,
+        outcome="success",
+        data_state="empty",
+        records_written=0,
+        finished_at=UTC_NOW,
+    )
+
+    with session_factory() as db:
+        rows = telemetryCollectionRunCrud.list_latest_success_runs(db, (1,))
+
+    assert [row.id for row in rows] == [latest.id]
+
+
 def test_probe_endpoints_short_circuit_database_middleware(monkeypatch):
     import main
 
