@@ -1,5 +1,10 @@
 # 最新功能与修复
 
+## 2026-07-17：修复项目组与用户目录详情页动态加载失败
+
+- 修复开发服务器中点击项目组或用户目录“详情”后出现的 `Failed to fetch dynamically imported module`；根因是详情页和共享实时趋势页的无用 `ElRow`、`ElCol` 导入触发过期的 Element Plus 优化样式依赖并返回 `504 Outdated Optimize Dep`。
+- 删除三处无用导入，不修改路由、字段、接口、权限或趋势图业务；全新浏览器会话已确认两个详情路由不再请求 Row/Col 样式依赖，也不再出现动态导入错误。完整边界见 [详情路由加载修复设计](../features/storage-trends/detail-route-loading-fix.md)。
+
 ## 2026-07-17：全站存储趋势图统一为阈值分段曲线
 
 - 容量池、存储空间、Qtree、项目、项目组、用户目录、存储集群容量分析和 Dashboard 统一使用 `StorageTrendChart`，明暗主题、响应式、Tooltip、工具箱和无数据画布采用同一实现。

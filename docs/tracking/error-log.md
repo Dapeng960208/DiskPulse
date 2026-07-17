@@ -1,5 +1,14 @@
 # 错误记录
 
+### 2026-07-17：项目组和用户目录详情动态模块加载失败
+
+- 触发：在项目组或用户目录列表点击“详情”，或在全新浏览器会话直接打开 `/group/1`、`/usage/1`。
+- 现象：Row/Col 的 Element Plus 样式优化依赖返回 `504 Outdated Optimize Dep`，Vue Router 随后报 `Failed to fetch dynamically imported module`，详情页无法进入。
+- 根因：`GroupDetailPage.vue`、`UsageDetailPage.vue` 和共享 `RealTimePage.vue` 都保留了模板未使用的 `ElRow`、`ElCol` 导入；Element Plus 插件为它们生成样式请求，而浏览器持有的 Vite optimize-deps 版本已经失效。
+- 修复：删除三处无用 Row/Col 导入；未通过路由重试或异常吞并掩盖问题，也未修改页面字段和接口。
+- 验证：静态契约先得到 `2 failed`，补充共享页后再次得到 `1 failed, 2 passed`；修复后为 `3 passed`。详情路由组合测试共 `14 passed`，目标 ESLint、生产构建通过；全新浏览器访问两个详情路由均无 `504` 和动态导入错误。
+- 风险：浏览器复验未携带登录令牌，真实业务 API 返回 `401`，因此只验证了路由模块加载；用户现有标签页需要刷新一次。
+
 ### 2026-07-17：趋势图视觉验收发现分段色被固定线色覆盖
 
 - 触发：使用 Mock API 在 `1440×900` 浏览器中验收 Dashboard 容量趋势，并执行后端全量 `uv run pytest -q`。

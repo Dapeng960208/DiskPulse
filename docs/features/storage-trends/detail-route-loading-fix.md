@@ -2,17 +2,17 @@
 
 ## 问题
 
-项目组和用户目录列表点击“详情”后，Vue Router 报动态导入失败。全新浏览器会话复现时，两个页面模块本身可由 Vite 转换，但页面无用的 `ElRow`、`ElCol` 导入会触发对应 Element Plus 样式依赖，请求返回 `504 Outdated Optimize Dep`，进而导致整个详情页动态模块加载失败。
+项目组和用户目录列表点击“详情”后，Vue Router 报动态导入失败。全新浏览器会话复现时，两个页面模块本身可由 Vite 转换，但详情页及其共享 `RealTimePage` 中无用的 `ElRow`、`ElCol` 导入会触发对应 Element Plus 样式依赖，请求返回 `504 Outdated Optimize Dep`，进而导致整个详情页动态模块加载失败。
 
 ## 修复边界
 
-- 仅删除 `GroupDetailPage.vue` 和 `UsageDetailPage.vue` 中未被模板或脚本使用的 `ElRow`、`ElCol` 导入。
+- 仅删除 `GroupDetailPage.vue`、`UsageDetailPage.vue` 和共享 `RealTimePage.vue` 中未被模板或脚本使用的 `ElRow`、`ElCol` 导入。
 - 保留 `ElDescriptionsItem`、共享 `RealTimePage`、路由、字段、接口和权限逻辑不变。
 - 不增加路由自动重试，不修改 Vite 依赖优化配置，也不通过吞掉异常掩盖开发服务器错误。
 
 ## 验证
 
-- RED：静态契约测试确认两个详情页仍引入无用的 Row/Col 样式依赖。
+- RED：静态契约测试确认两个详情页及共享实时趋势页仍引入无用的 Row/Col 样式依赖。
 - GREEN：相同测试通过，并执行详情路由相关 Vitest、ESLint 和生产构建。
 - 浏览器：在全新会话中分别打开项目组和用户目录详情，确认不再请求 Row/Col 样式依赖，不出现动态导入失败。
 

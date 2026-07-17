@@ -1,5 +1,12 @@
 # 当前交付记录
 
+## 2026-07-17：修复项目组与用户目录详情动态加载
+
+- 在当前 `localhost:5173` 新浏览器会话中复现：`element-plus_es_components_row_style_css.js` 和 `...col_style_css.js` 返回 `504 Outdated Optimize Dep`，随后 Vue Router 报 `GroupDetailPage.vue` / `UsageDetailPage.vue` 动态导入失败。
+- 删除两个详情页及共享 `RealTimePage` 中未使用的 `ElRow`、`ElCol`，保留描述字段、实时趋势、接口和路由不变；没有增加自动重试或修改 Vite 依赖优化配置。
+- TDD RED 提交为 `d9b1d2f`、`007ffc3`，GREEN 提交为 `ed54e81`。聚焦测试 `3 files / 14 passed`，目标 ESLint 和生产构建通过；浏览器复验两个路由均不再出现 `504` 或动态导入失败。
+- 浏览器使用无登录令牌的新会话，因此业务 API 返回 `401`，没有验证真实详情数据；当前已经打开的旧标签页需刷新一次以丢弃失败的模块请求。
+
 ## 2026-07-17：全站存储趋势图重设计
 
 - 新增共享 `StorageTrendChart` 和统一 option 构建器，替换实时趋势、Dashboard 容量趋势和存储集群容量分析中的旧存储趋势组件；旧 `LineCharts`、`MultipleLineCharts` 已退出生产使用。
