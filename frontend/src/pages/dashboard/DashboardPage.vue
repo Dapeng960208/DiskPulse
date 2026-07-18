@@ -7,6 +7,7 @@ import DashboardChart from '@/components/dashboard/DashboardChart.vue';
 import StorageTrendChart from '@/components/dashboard/StorageTrendChart.vue';
 import ProjectSelect from '@/components/form/ProjectSelect.vue';
 import { getCssColor } from '@/lib/echarts.js';
+import { hasRole } from '@/utils/authorization';
 
 const projectId = ref(null);
 const summaryResponse = ref(null);
@@ -28,6 +29,8 @@ const gridColor = () => token('--border-light', '#F1F5F9');
 const axisColor = () => token('--text-tertiary', '#94A3B8');
 
 const isProject = computed(() => Boolean(projectId.value));
+const canViewGlobalDashboard = computed(() => hasRole('superadmin'));
+const needsProjectSelection = computed(() => !canViewGlobalDashboard.value && !isProject.value);
 const scope = computed(() => summaryResponse.value?.scope || {});
 const summary = computed(() => summaryResponse.value?.summary || {});
 const limitLabel = computed(() => (isProject.value ? '项目限额' : '物理总容量'));
@@ -115,6 +118,16 @@ const alertOption = computed(() => ({
 
 async function loadDashboard() {
   const currentRequest = ++requestId;
+  if (needsProjectSelection.value) {
+    // Review fix: project members must not issue dashboard requests without project scope.
+    summaryResponse.value = null;
+    capacityTrend.value = [];
+    capacityItems.value = [];
+    alertLevels.value = [];
+    topUsers.value = [];
+    Object.assign(loading, { summary: false, trend: false, items: false, alerts: false, users: false });
+    return;
+  }
   const params = projectId.value ? { project_id: projectId.value } : {};
   summaryResponse.value = null;
   capacityTrend.value = [];
@@ -210,7 +223,7 @@ onMounted(loadDashboard);
       <ElEmpty
         v-else
         class="summary-empty"
-        description="暂无摘要数据" />
+        :description="needsProjectSelection ? '请选择项目以查看存储概览' : '暂无摘要数据'" />
     </section>
 
     <section class="dashboard-grid dashboard-grid-main">
