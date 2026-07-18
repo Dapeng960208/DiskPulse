@@ -113,7 +113,7 @@ onMounted(query);
       :data="incidents"
       :loading="loading"
       :error="error"
-      :pagination="{ page: queryParams.page, pageSize: queryParams.size, total, pageSizes: [20, 50, 100], showJumper: true }"
+      :pagination="{ page: queryParams.page, pageSize: queryParams.size, total, pageSizes: [20, 50, 100], hideOnSinglePage: true, showJumper: true }"
       @update:pagination="updatePagination">
       <ElTableColumn
         label="资产"
@@ -160,6 +160,6 @@ onMounted(query);
 </template>
 
 <style scoped>
-.incident-center-page { display: grid; gap: var(--spacing-md); }
+.incident-center-page { display: flex; flex-direction: column; gap: var(--spacing-md); }
 .incident-center-page__table { min-height: 420px; }
 </style>

@@ -1600,13 +1600,15 @@ npm test -- --coverage.enabled=false
 - 移除事件中心与统一操作审计内容区的重复标题和副标题。
 - 事件中心使用共享 `QueryForm` 标准操作区，移除页面自定义的重复搜索按钮。
 - 事件中心结果区改用共享 `DataTable`，统一空态、错误态、表格密度和分页布局；原有查询、翻页和详情抽屉行为保持不变。
+- 两个页面根容器改为与其他列表页一致的纵向 `flex` 布局，避免固定工作区高度将筛选栏拉伸；总数未超过每页条数时隐藏分页组件。
 
 ### 验证状态
 
 - RED：新增列表布局回归测试 `2 failed`，分别复现重复标题区和事件中心未使用共享表格分页合同。
-- GREEN：`pnpm test -- incident-and-audit-list-layout.test.js`，`2 passed`。
+- GREEN：`pnpm test -- incident-and-audit-list-layout.test.js`，`3 passed`。
 - 受影响页面及测试文件 ESLint 通过。
+- 浏览器核验：`http://localhost:5174/incidents` 与 `http://localhost:5174/admin/audit-events` 首屏筛选栏高度恢复紧凑，5 条数据时分页隐藏，搜索后页面状态正常。
 
 ### 风险与待验证范围
 
-- 尚待本地登录态浏览器完成桌面端与窄屏视觉验收；自动化测试已锁定页面结构和共享组件合同。
+- 尚未验证窄屏视口；自动化测试已锁定页面结构和共享组件合同。

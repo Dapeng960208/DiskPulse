@@ -116,7 +116,7 @@ onMounted(query);
       :events="events"
       :loading="loading"
       :error="error"
-      :pagination="{ page: queryParams.page, pageSize: queryParams.size, total, pageSizes: [20, 50, 100], showJumper: true }"
+      :pagination="{ page: queryParams.page, pageSize: queryParams.size, total, pageSizes: [20, 50, 100], hideOnSinglePage: true, showJumper: true }"
       show-details
       @update:pagination="updatePagination"
       @show-detail="showDetail" />
@@ -124,6 +124,6 @@ onMounted(query);
 </template>
 
 <style scoped>
-.audit-event-list-page { display: grid; gap: var(--spacing-md); }
+.audit-event-list-page { display: flex; flex-direction: column; gap: var(--spacing-md); }
 .audit-event-list-page__table { min-height: 420px; }
 </style>
