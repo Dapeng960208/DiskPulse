@@ -85,6 +85,48 @@ def test_ai_candidate_accepts_a_valid_30_day_prediction_curve():
     assert len(result.curve) == 30
 
 
+def test_candidate_prediction_persists_curve_and_fallback_provenance(db_session):
+    import models
+    from services.capacityPredictionGovernanceService import (
+        CandidateCurveResult,
+        persist_candidate_prediction,
+    )
+
+    db_session.add(models.AIConfig(
+        id=1,
+        name="forecast-private-model",
+        provider="ollama",
+        base_url="http://forecast.internal",
+        model="forecast-model",
+        enabled=True,
+        enable_chat=False,
+    ))
+    db_session.commit()
+    candidate = models.CapacityPredictionCandidate(version="capacity-ai-v1", ai_model_id=1)
+    db_session.add(candidate)
+    db_session.commit()
+
+    record = persist_candidate_prediction(
+        db_session,
+        candidate_id=candidate.id,
+        asset_type="group",
+        asset_id=7,
+        project_id=4,
+        forecast_start=UTC_NOW,
+        baseline_curve=_curve(UTC_NOW),
+        result=CandidateCurveResult(
+            curve=_curve(UTC_NOW),
+            source="baseline_fallback",
+            fallback_reason="invalid_output",
+        ),
+    )
+
+    assert record.candidate_id == candidate.id
+    assert record.source == "baseline_fallback"
+    assert record.fallback_reason == "invalid_output"
+    assert record.asset_id == "7"
+
+
 def test_candidate_activation_needs_three_windows_ten_percent_mape_gain_and_risk_coverage():
     from services.capacityPredictionGovernanceService import candidate_meets_activation_gate
 
