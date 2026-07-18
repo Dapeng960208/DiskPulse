@@ -101,6 +101,13 @@ describe('IncidentDetailDrawer', () => {
   });
 
   it('explains the effective capacity alert threshold precedence', async () => {
+    incidentApi.fetchIncident.mockResolvedValueOnce({
+      ...incident,
+      category: 'capacity_pressure',
+      evidence: [],
+      timeline: [],
+      diagnosis: null,
+    });
     const wrapper = await mountDrawer();
 
     const tooltipContents = wrapper.findAllComponents({ name: 'ElTooltip' })

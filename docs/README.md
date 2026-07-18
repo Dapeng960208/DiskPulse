@@ -46,7 +46,7 @@ docs/
 | 项目级 RBAC 与统一操作审计 | [设计](./features/project-rbac/design.md) · [功能](./features/project-rbac/requirements.md) · [实施](./features/project-rbac/implementation.md) · [验收](./features/project-rbac/verification.md) |
 | 企业级 AI 存储智能运维 | [调研报告与建设基线](./features/ai-storage-management/research.md) |
 | 遥测新鲜度与平台可观测 | [总览](./features/telemetry-observability/overview.md) · [设计复盘](./features/telemetry-observability/design.md) · [功能说明](./features/telemetry-observability/feature.md) · [实施复盘](./features/telemetry-observability/implementation.md) · [验收复盘](./features/telemetry-observability/acceptance.md) |
-| 预测、RCA 与事件中心 | [总览](./features/forecast-incident-center/overview.md) |
+| 预测、RCA 与事件中心 | [总览](./features/forecast-incident-center/overview.md) · [操作指南](./features/forecast-incident-center/operations-guide.md) |
 | 2026-07-18 代码审查修复 | [问题与验证复盘](./features/review-remediation/verification.md) |
 
 ## 规范

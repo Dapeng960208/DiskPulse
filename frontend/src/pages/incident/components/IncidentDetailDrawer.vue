@@ -10,9 +10,11 @@ import {
   ElForm,
   ElFormItem,
   ElInput,
+  ElMessage,
   ElTable,
   ElTableColumn,
   ElTag,
+  ElTooltip,
 } from 'element-plus';
 import incidentApi from '@/api/incident-api.js';
 
@@ -26,6 +28,7 @@ const detail = ref(null);
 const loading = ref(false);
 const error = ref('');
 const comment = ref('');
+const activeAction = ref('');
 const maintenanceVisible = ref(false);
 const maintenanceForm = reactive({
   starts_at: null,
@@ -45,6 +48,7 @@ const nextStatus = computed(() => ({
   investigating: 'mitigated',
   mitigated: 'resolved',
 })[current.value.status] || null);
+const isUpdating = computed(() => Boolean(activeAction.value));
 
 const categoryLabels = {
   capacity_pressure: '容量压力',
@@ -52,6 +56,29 @@ const categoryLabels = {
   performance_contention: '性能争用',
   telemetry_blindspot: '遥测盲区',
 };
+const categoryDescriptions = {
+  capacity_pressure: '容量预测显示可能耗尽，或当前资源的有效告警规则达到阈值。默认按硬限额 80%/90%/95%；用户目录优先采用项目组规则，其次项目规则，最后系统规则。',
+  device_fault: '严重厂商事件、重复故障指纹或采集错误表明设备可能异常。',
+  performance_contention: '同一指标连续三个相邻 5 分钟桶偏离 28 天同星期同小时基线，且鲁棒 Z 分数绝对值均不低于 3.5。',
+  telemetry_blindspot: '监控盲区：容量、厂商事件或性能遥测过期、采集失败或覆盖率不足，当前数据不足以可靠判断资产状态。',
+};
+const statusLabels = {
+  open: '未处理',
+  acknowledged: '已确认',
+  investigating: '调查中',
+  mitigated: '已缓解',
+  resolved: '已解决',
+};
+const statusDescriptions = {
+  open: '系统已创建事件，尚未确认由谁处理。',
+  acknowledged: '已确认收到事件，下一步应开始分析。',
+  investigating: '正在核对原始告警、厂商事件、预测和遥测数据。',
+  mitigated: '影响已缓解，仍需观察是否出现新证据。',
+  resolved: '处理完成；若 24 小时内出现同类新证据，系统会重新打开事件。',
+};
+const nextStatusTooltip = computed(() => nextStatus.value
+  ? `仅允许相邻推进至“${statusLabels[nextStatus.value]}”，${statusDescriptions[nextStatus.value]}`
+  : '事件已解决，不能继续推进状态。');
 
 async function load() {
   if (!props.incident?.id || !visible.value) return;
@@ -66,14 +93,20 @@ async function load() {
   }
 }
 
-async function updateIncident(payload) {
+async function updateIncident(payload, action, successMessage) {
   if (!current.value.id) return;
+  activeAction.value = action;
+  error.value = '';
   try {
     await incidentApi.updateIncident(current.value.id, payload);
     await load();
+    ElMessage.success(successMessage);
     emit('updated');
   } catch {
     error.value = '更新事件失败，请确认当前项目权限后重试';
+    ElMessage.error(error.value);
+  } finally {
+    activeAction.value = '';
   }
 }
 
@@ -110,8 +143,10 @@ async function submitMaintenance() {
       reason: maintenanceForm.reason.trim(),
     });
     maintenanceVisible.value = false;
+    ElMessage.success('维护窗口已创建');
   } catch {
     error.value = '创建维护窗口失败，请确认项目管理员权限后重试';
+    ElMessage.error(error.value);
   }
 }
 
@@ -134,45 +169,54 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
         :column="2"
         border>
         <ElDescriptionsItem label="资产">{{ current.display_name }}</ElDescriptionsItem>
-        <ElDescriptionsItem label="类别">{{ categoryLabels[current.category] || current.category }}</ElDescriptionsItem>
-        <ElDescriptionsItem label="状态">{{ current.status }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="类别"><ElTooltip :content="categoryDescriptions[current.category] || '未知事件类别。'"><span>{{ categoryLabels[current.category] || current.category }}</span></ElTooltip></ElDescriptionsItem>
+        <ElDescriptionsItem label="状态"><ElTooltip :content="statusDescriptions[current.status] || '未知事件状态。'"><span>{{ statusLabels[current.status] || current.status }}（{{ current.status }}）</span></ElTooltip></ElDescriptionsItem>
         <ElDescriptionsItem label="严重度"><ElTag :type="current.severity === 'critical' ? 'danger' : 'warning'">{{ current.severity }}</ElTag></ElDescriptionsItem>
       </ElDescriptions>
 
       <div
         v-if="capabilities.edit"
         class="incident-detail__actions list-row-actions">
-        <ElButton
+        <ElTooltip content="将事件指派给当前登录用户，明确处理责任。"><ElButton
           data-testid="incident-claim"
           size="small"
-          @click="updateIncident({ claim: true })">认领</ElButton>
-        <ElButton
+          :loading="activeAction === 'claim'"
+          :disabled="isUpdating"
+          @click="updateIncident({ claim: true }, 'claim', '事件已认领')">认领</ElButton></ElTooltip>
+        <ElTooltip content="取消当前认领；仅认领人或超级管理员可以释放。"><ElButton
           size="small"
-          @click="updateIncident({ claim: false })">释放</ElButton>
-        <ElButton
+          :loading="activeAction === 'release'"
+          :disabled="isUpdating"
+          @click="updateIncident({ claim: false }, 'release', '事件已释放')">释放</ElButton></ElTooltip>
+        <ElTooltip
           v-if="nextStatus"
-          type="primary"
+          :content="nextStatusTooltip"><ElButton
+            type="primary"
+            size="small"
+            :loading="activeAction === 'status'"
+            :disabled="isUpdating"
+            @click="updateIncident({ status: nextStatus }, 'status', `事件已推进为${statusLabels[nextStatus]}`)">推进为 {{ statusLabels[nextStatus] }}</ElButton></ElTooltip>
+        <ElTooltip content="恢复派生事件的后续通知，不删除事件、证据或原始告警。"><ElButton
           size="small"
-          @click="updateIncident({ status: nextStatus })">推进为 {{ nextStatus }}</ElButton>
-        <ElButton
-          size="small"
-          @click="updateIncident({ silenced_until: null })">取消静默</ElButton>
+          :loading="activeAction === 'unsilence'"
+          :disabled="isUpdating"
+          @click="updateIncident({ silenced_until: null }, 'unsilence', '事件静默已取消')">取消静默</ElButton></ElTooltip>
       </div>
       <div
         v-if="capabilities.create_maintenance_window"
         class="incident-detail__actions">
-        <ElButton
+        <ElTooltip content="在指定 UTC 时间段内抑制该资产的派生事件创建、重开和通知；采集、原始告警及厂商事件仍会保留。"><ElButton
           type="warning"
           plain
           size="small"
-          @click="openMaintenance">创建维护窗口</ElButton>
+          @click="openMaintenance">创建维护窗口</ElButton></ElTooltip>
       </div>
 
       <section class="incident-detail__section">
-        <h3>确定性诊断</h3>
+        <ElTooltip content="由服务端按固定证据权重计算，不使用 AI 自由生成结论。"><h3>确定性诊断</h3></ElTooltip>
         <p v-if="!current.diagnosis">尚无足够证据生成诊断。</p>
         <template v-else>
-          <p>置信度：<ElTag>{{ current.diagnosis.confidence }}</ElTag></p>
+          <p>置信度：<ElTooltip content="高置信度要求回放验证开关已启用、候选分数至少 0.8，且至少有两类独立证据。"><ElTag>{{ current.diagnosis.confidence }}</ElTag></ElTooltip></p>
           <ul class="incident-detail__candidate-list">
             <li
               v-for="candidate in current.diagnosis.candidates || []"
