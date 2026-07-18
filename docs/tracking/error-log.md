@@ -1,5 +1,14 @@
 # 错误记录
 
+### 2026-07-18：事件中心新增后路由测试契约未同步
+
+- 触发：运行 `content-spacing-contract.test.js` 与 `routes-dynamic-import.test.js` 聚焦测试。
+- 现象：在用页面矩阵期望 24、实际 25；懒加载组件期望 28、实际 29。
+- 根因：事件中心已经注册为新的懒加载页面，但两个穷举式路由测试仍保留新增前的固定集合和数量。
+- 修复：页面矩阵显式加入 `IncidentCenterPage`，懒加载测试增加对应模块 Mock，并同步两个精确数量断言。
+- 验证：同一聚焦命令通过 `2 files / 12 tests`。
+- 风险：固定数量契约仍要求以后新增或移除路由时显式更新测试，这是有意保留的审查门禁。
+
 ### 2026-07-18：已移除的功能 worktree 被 CodeGraph 与 Vite 进程占用
 
 - 触发：完成 `main` 本地合并后删除 `codex/project-rbac-unified-audit` worktree。

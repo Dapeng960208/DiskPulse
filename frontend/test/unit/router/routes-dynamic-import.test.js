@@ -35,6 +35,9 @@ vi.mock('@/pages/project/ProjectListPage.vue', () => ({ default: createRoutePage
 vi.mock('@/pages/project/ProjectDetailPage.vue', () => ({ default: createRoutePageStub('ProjectDetailPage') }));
 vi.mock('@/pages/group/GroupListPage.vue', () => ({ default: createRoutePageStub('GroupListPage') }));
 vi.mock('@/pages/group/GroupDetailPage.vue', () => ({ default: createRoutePageStub('GroupDetailPage') }));
+// Review source: IncidentCenter became a lazy route after this exhaustive loader contract was written.
+// Resolution: mock the new page and include its loader in the guarded route total.
+vi.mock('@/pages/incident/IncidentCenterPage.vue', () => ({ default: createRoutePageStub('IncidentCenterPage') }));
 vi.mock('@/pages/alert/AlertListPage.vue', () => ({ default: createRoutePageStub('AlertListPage') }));
 vi.mock('@/pages/admin/storage-cluster/StorageClusterListPage.vue', () => ({ default: createRoutePageStub('StorageClusterListPage') }));
 vi.mock('@/pages/admin/storage-cluster/StorageClusterDetailPage.vue', () => ({ default: createRoutePageStub('StorageClusterDetailPage') }));
@@ -71,7 +74,7 @@ describe('router lazy route components', () => {
   it('invokes every lazy route component loader', async () => {
     const lazyComponents = collectLazyComponents(routes);
 
-    expect(lazyComponents).toHaveLength(28);
+    expect(lazyComponents).toHaveLength(29);
 
     await Promise.all(lazyComponents.map((loadComponent) => loadComponent().catch(() => null)));
   });
