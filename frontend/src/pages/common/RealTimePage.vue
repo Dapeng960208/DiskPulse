@@ -45,6 +45,10 @@ const props = defineProps({
   attributeId: {
     type: [Number, Array],
   },
+  showHeader: {
+    type: Boolean,
+    default: true,
+  },
 });
 
 function normalizeResourceIds(value) {
@@ -216,7 +220,9 @@ const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThre
 </script>
 <template>
   <div class="real-time-page flex flex-col flex-1 min-h-0">
-    <section class="real-time-page__header">
+    <section
+      v-if="showHeader"
+      class="real-time-page__header">
       <div>
         <h1>{{ props.label }}实时监控</h1>
         <p>查看指定时间范围内的容量指标趋势和最近告警。</p>

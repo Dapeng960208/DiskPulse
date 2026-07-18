@@ -39,13 +39,9 @@
   --danger-light: #F87171;
   --danger-bg: #FEE2E2;
 
-  --info-color: #06B6D4;
-  --info-light: #22D3EE;
-  --info-bg: #CFFAFE;
-
-  --tag-info-color: #7C3AED;
-  --tag-info-border: #C4B5FD;
-  --tag-info-bg: #F5F3FF;
+  --info-color: #64748B;
+  --info-light: #94A3B8;
+  --info-bg: #F1F5F9;
 
   // ==================== 图表色 ====================
   --chart-color-primary: var(--primary-color);
@@ -56,7 +52,7 @@
   --chart-color-success: var(--success-color);
   --chart-color-warning: var(--warning-color);
   --chart-color-danger: var(--danger-color);
-  --chart-color-info: var(--info-color);
+  --chart-color-info: #06B6D4;
   --chart-color-muted: var(--text-secondary);
 
   // ==================== 阴影系统 ====================
@@ -135,15 +131,16 @@ html.dark {
   --text-tertiary: #94A3B8;
   --text-disabled: #64748B;
 
-  --tag-info-color: #DDD6FE;
-  --tag-info-border: #7C3AED;
-  --tag-info-bg: #2E1065;
+  --info-color: #94A3B8;
+  --info-light: #CBD5E1;
+  --info-bg: #334155;
 
   --chart-color-muted: var(--text-secondary);
   --chart-color-normal: #6789FF;
   --chart-color-important: #EFB83E;
   --chart-color-serious: #FF7A45;
   --chart-color-emergency: #FF635B;
+  --chart-color-info: #22D3EE;
 
   --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
   --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4);

@@ -1,7 +1,9 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import {
   ElButton,
+  ElDialog,
+  ElForm,
   ElFormItem,
   ElOption,
   ElSelect,
@@ -12,6 +14,7 @@ import DataTable from '@/components/data/DataTable.vue';
 import QueryForm from '@/components/form/QueryForm.vue';
 import incidentApi from '@/api/incident-api.js';
 import IncidentDetailDrawer from './components/IncidentDetailDrawer.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 
 const queryParams = reactive({ page: 1, size: 20, status: '', category: '' });
 const incidents = ref([]);
@@ -20,6 +23,10 @@ const loading = ref(false);
 const error = ref('');
 const selectedIncident = ref(null);
 const detailVisible = ref(false);
+const editingIncident = ref(null);
+const editVisible = ref(false);
+const savingEdit = ref(false);
+const editForm = reactive({ severity: 'warning', status: 'open' });
 
 const statusLabels = {
   open: '未处理',
@@ -35,6 +42,17 @@ const categoryLabels = {
   performance_contention: '性能争用',
   telemetry_blindspot: '遥测盲区',
 };
+
+const editableStatusOptions = computed(() => {
+  const currentStatus = editingIncident.value?.status;
+  const nextStatus = {
+    open: 'acknowledged',
+    acknowledged: 'investigating',
+    investigating: 'mitigated',
+    mitigated: 'resolved',
+  }[currentStatus];
+  return Object.entries(statusLabels).filter(([value]) => value === currentStatus || value === nextStatus);
+});
 
 async function query() {
   loading.value = true;
@@ -73,6 +91,37 @@ function updatePagination(next) {
 function openDetail(incident) {
   selectedIncident.value = incident;
   detailVisible.value = true;
+}
+
+function openEdit(incident) {
+  editingIncident.value = incident;
+  editForm.severity = incident.severity;
+  editForm.status = incident.status;
+  error.value = '';
+  editVisible.value = true;
+}
+
+async function saveEdit() {
+  const incident = editingIncident.value;
+  if (!incident?.id) return;
+  const payload = {};
+  if (editForm.severity !== incident.severity) payload.severity = editForm.severity;
+  if (editForm.status !== incident.status) payload.status = editForm.status;
+  if (Object.keys(payload).length === 0) {
+    editVisible.value = false;
+    return;
+  }
+  savingEdit.value = true;
+  error.value = '';
+  try {
+    await incidentApi.updateIncident(incident.id, payload);
+    editVisible.value = false;
+    await query();
+  } catch {
+    error.value = '更新事件失败，请稍后重试';
+  } finally {
+    savingEdit.value = false;
+  }
 }
 
 onMounted(query);
@@ -142,13 +191,17 @@ onMounted(query);
       <ElTableColumn
         label="操作"
         align="right"
-        width="100"
+        width="150"
         fixed="right">
         <template #default="{ row }">
-          <ElButton
-            size="small"
-            plain
-            @click="openDetail(row)">查看</ElButton>
+          <div class="list-row-actions">
+            <TableActionButton
+              action="detail"
+              @click="openDetail(row)">详情</TableActionButton>
+            <TableActionButton
+              action="edit"
+              @click="openEdit(row)">编辑</TableActionButton>
+          </div>
         </template>
       </ElTableColumn>
     </DataTable>
@@ -156,6 +209,40 @@ onMounted(query);
       v-model="detailVisible"
       :incident="selectedIncident"
       @updated="query" />
+    <ElDialog
+      v-model="editVisible"
+      title="编辑事件"
+      width="420px"
+      :close-on-click-modal="false">
+      <ElForm label-position="top">
+        <ElFormItem label="严重度">
+          <ElSelect v-model="editForm.severity">
+            <ElOption
+              label="warning"
+              value="warning" />
+            <ElOption
+              label="critical"
+              value="critical" />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem label="状态">
+          <ElSelect v-model="editForm.status">
+            <ElOption
+              v-for="([value, label]) in editableStatusOptions"
+              :key="value"
+              :label="label"
+              :value="value" />
+          </ElSelect>
+        </ElFormItem>
+      </ElForm>
+      <template #footer>
+        <ElButton @click="editVisible = false">取消</ElButton>
+        <ElButton
+          type="primary"
+          :loading="savingEdit"
+          @click="saveEdit">保存</ElButton>
+      </template>
+    </ElDialog>
   </section>
 </template>
 

@@ -22,11 +22,15 @@ import { formatStorageTargetType } from '@/utils/storage-resource';
 import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
+import capacityPredictionApi from '@/api/capacity-prediction-api.js';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
+import AccessibleResourceLink from '@/components/basic/AccessibleResourceLink.vue';
 const exportRef =ref(null);
 const currentUser = useCurrentUser();
 const router = useRouter();
 const storageUsageFormDialogRef = ref();
 const quotaAdjustmentDialogRef = ref();
+const predictionEnabled = ref(false);
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
@@ -100,6 +104,12 @@ const openExport = () => exportRef.value?.open?.();
 function canAdjustQuota(row) {
   return row?.capabilities?.adjust_quota === true;
 }
+function openCapacityPrediction(row) {
+  router.push({ name: 'UsageCapacityPrediction', params: { id: row.id } });
+}
+capacityPredictionApi.visibility().then((value) => {
+  predictionEnabled.value = value.visible === true;
+}).catch(() => { predictionEnabled.value = false; });
 query();
 </script>
 
@@ -279,7 +289,7 @@ query();
         align="center"
         min-width="80">
         <template #default="{ row }">
-          <span>{{ row.project?.name || '-' }}</span>
+          <AccessibleResourceLink :to="{ name: 'ProjectDetail', params: { id: row.project?.id } }">{{ row.project?.name || '-' }}</AccessibleResourceLink>
         </template>
       </ElTableColumn>
       <ElTableColumn
@@ -298,9 +308,9 @@ query();
         min-width="80"
       >
         <template #default="{ row }">
-          <ElTag v-if="row.group">
-            {{ row.group.name }}
-          </ElTag>
+          <AccessibleResourceLink
+            v-if="row.group"
+            :to="{ name: 'GroupDetail', params: { id: row.group.id } }">{{ row.group.name }}</AccessibleResourceLink>
           <ElTag v-else>默认</ElTag>
         </template>
       </ElTableColumn>
@@ -313,7 +323,7 @@ query();
         min-width="100"
       >
         <template #default="{ row }">
-          <span>{{ row.storage_cluster?.name || '-' }}</span>
+          <AccessibleResourceLink :to="{ name: 'StorageClusterDetail', params: { id: row.storage_cluster?.id } }">{{ row.storage_cluster?.name || '-' }}</AccessibleResourceLink>
         </template>
       </ElTableColumn>
       <ElTableColumn
@@ -334,8 +344,9 @@ query();
         sortable="custom"
         prop="linux_path"
         min-width="220"
-        show-overflow-tooltip
-      />
+        show-overflow-tooltip>
+        <template #default="{ row }"><AccessibleResourceLink :to="{ name: 'UsagesDetail', params: { id: row.id } }">{{ row.linux_path }}</AccessibleResourceLink></template>
+      </ElTableColumn>
       <ElTableColumn
         v-if="showCapacityColumns"
         label="硬限额"
@@ -416,25 +427,22 @@ query();
         width="132"
         fixed="right">
         <template #header>
-          <ElButton
+          <TableActionButton
             v-if="hasRole('disk-monitor:admin')"
-            size="small"
-            plain
-            type="primary"
+            action="create"
             @click="storageUsageFormDialogRef.edit()">
             新增
-          </ElButton>
+          </TableActionButton>
         </template>
         <template #default="{ row }">
           <div class="list-row-actions">
-            <ElButton
-              size="small"
-              plain
+            <TableActionButton
+              action="detail"
               @click="router.push({path: `/usage/${row.id}`})">
               详情
-            </ElButton>
+            </TableActionButton>
             <ElDropdown
-              v-if="hasRole('disk-monitor:admin') || canAdjustQuota(row)"
+              v-if="hasRole('disk-monitor:admin') || canAdjustQuota(row) || predictionEnabled"
               trigger="click"
               placement="bottom-end">
               <ElButton
@@ -446,6 +454,11 @@ query();
               </ElButton>
               <template #dropdown>
                 <ElDropdownMenu>
+                  <ElDropdownItem
+                    v-if="predictionEnabled"
+                    @click="openCapacityPrediction(row)">
+                    容量预测
+                  </ElDropdownItem>
                   <ElDropdownItem
                     v-if="canAdjustQuota(row)"
                     @click="quotaAdjustmentDialogRef.open(row)">

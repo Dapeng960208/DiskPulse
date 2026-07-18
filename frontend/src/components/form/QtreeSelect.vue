@@ -94,6 +94,7 @@ function emitSelectedLabel(value) {
     :remote-method="searchQtree"
     placeholder="根据 Qtree（NetApp）模糊搜索"
     :multiple="multiple"
+    tag-type="info"
     :multiple-limit="multipleLimit"
     :reserve-keyword="false"
     :max-collapse-tags="10"

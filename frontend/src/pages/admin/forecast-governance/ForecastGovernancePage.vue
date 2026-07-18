@@ -8,18 +8,23 @@ import {
   ElForm,
   ElFormItem,
   ElInput,
-  ElInputNumber,
+  ElOption,
+  ElSelect,
   ElSwitch,
   ElTable,
   ElTableColumn,
   ElTag,
+  ElTooltip,
 } from 'element-plus';
 import capacityPredictionApi from '@/api/capacity-prediction-api.js';
+import aiApi from '@/api/ai-api.js';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 
 const visible = ref(false);
 const loading = ref(false);
 const error = ref('');
 const candidates = ref([]);
+const configuredModels = ref([]);
 const activatingId = ref(null);
 const createDialogVisible = ref(false);
 const creating = ref(false);
@@ -62,9 +67,17 @@ async function update(value) {
   }
 }
 
-function openCreateDialog() {
+async function openCreateDialog() {
   candidateForm.version = '';
   candidateForm.aiModelId = null;
+  error.value = '';
+  try {
+    const models = await aiApi.listAdminModels();
+    configuredModels.value = Array.isArray(models) ? models : [];
+  } catch {
+    configuredModels.value = [];
+    error.value = '加载 AI 中心模型失败';
+  }
   createDialogVisible.value = true;
 }
 
@@ -80,7 +93,7 @@ async function createCandidate() {
     createDialogVisible.value = false;
     await load();
   } catch {
-    error.value = '创建候选模型失败；仅可使用已启用的私有模型';
+    error.value = '创建候选模型失败';
   } finally {
     creating.value = false;
   }
@@ -106,16 +119,6 @@ onMounted(load);
   <section
     v-loading="loading"
     class="forecast-governance-page">
-    <header class="forecast-governance-page__header">
-      <div>
-        <h2>容量预测治理</h2>
-        <p>后台预测和评估持续运行；发布开关仅控制拥有项目权限的成员能否查看资源级预测。</p>
-      </div>
-      <ElButton
-        type="primary"
-        @click="openCreateDialog">新增候选模型</ElButton>
-    </header>
-
     <ElAlert
       v-if="error"
       :title="error"
@@ -123,20 +126,20 @@ onMounted(load);
       :closable="false" />
 
     <section class="forecast-governance-page__setting">
-      <div>
-        <strong>全局用户可见性</strong>
-        <p>关闭后普通用户的页签和读取接口均不可用；超级管理员仍可治理和查看。</p>
-      </div>
+      <strong>全局用户可见性</strong>
       <ElSwitch
         :model-value="visible"
         :loading="loading"
         active-text="向项目成员发布"
         inactive-text="仅超级管理员可见"
         @change="update" />
+      <ElButton
+        type="primary"
+        @click="openCreateDialog">新增候选模型</ElButton>
     </section>
 
     <section class="forecast-governance-page__section">
-      <h3>模型状态</h3>
+      <h3 class="forecast-governance-page__section-heading">模型状态</h3>
       <ElTable
         :data="candidates"
         empty-text="暂无候选预测模型">
@@ -176,21 +179,21 @@ onMounted(load);
           width="120"
           align="right">
           <template #default="{ row }">
-            <ElButton
+            <TableActionButton
               v-if="!row.enabled"
-              size="small"
+              action="activate"
               :disabled="!row.activation_ready"
               :loading="activatingId === row.id"
               @click="activateCandidate(row)">
               启用
-            </ElButton>
+            </TableActionButton>
           </template>
         </ElTableColumn>
       </ElTable>
     </section>
 
     <section class="forecast-governance-page__section">
-      <h3>跨资源滚动回测评估</h3>
+      <h3 class="forecast-governance-page__section-heading">跨资源滚动回测评估</h3>
       <ElEmpty
         v-if="evaluationRows.length === 0"
         description="暂无完成的 30 天评估窗口"
@@ -208,13 +211,35 @@ onMounted(load);
           <template #default="{ row }">{{ row.window_start }} 至 {{ row.window_end }}</template>
         </ElTableColumn>
         <ElTableColumn
-          label="基线 MAPE"
           prop="baseline_mape"
-          width="120" />
+          width="120">
+          <template #header>
+            <span class="forecast-governance-page__metric-header">
+              基线 MAPE
+              <ElTooltip content="基线 MAPE：当前基线预测与实际容量的平均绝对百分比误差，数值越低越准确。">
+                <span
+                  class="forecast-governance-page__metric-help i-ri-question-line"
+                  tabindex="0"
+                  aria-label="基线 MAPE 说明" />
+              </ElTooltip>
+            </span>
+          </template>
+        </ElTableColumn>
         <ElTableColumn
-          label="候选 MAPE"
           prop="candidate_mape"
-          width="120" />
+          width="120">
+          <template #header>
+            <span class="forecast-governance-page__metric-header">
+              候选 MAPE
+              <ElTooltip content="候选 MAPE：候选 AI 模型预测与实际容量的平均绝对百分比误差，数值越低越准确。">
+                <span
+                  class="forecast-governance-page__metric-help i-ri-question-line"
+                  tabindex="0"
+                  aria-label="候选 MAPE 说明" />
+              </ElTooltip>
+            </span>
+          </template>
+        </ElTableColumn>
         <ElTableColumn
           label="耗尽风险覆盖"
           width="130">
@@ -234,12 +259,17 @@ onMounted(load);
             maxlength="64"
             placeholder="例如 capacity-ai-v2" />
         </ElFormItem>
-        <ElFormItem label="已启用私有模型 ID">
-          <ElInputNumber
+        <ElFormItem label="AI 中心模型">
+          <ElSelect
             v-model="candidateForm.aiModelId"
-            :min="1"
-            :precision="0"
-            class="!w-full" />
+            class="!w-full"
+            placeholder="请选择已配置模型">
+            <ElOption
+              v-for="model in configuredModels"
+              :key="model.id"
+              :label="`${model.name}（${model.model}）`"
+              :value="model.id" />
+          </ElSelect>
         </ElFormItem>
       </ElForm>
       <template #footer>
@@ -254,14 +284,13 @@ onMounted(load);
 </template>
 
 <style scoped>
-.forecast-governance-page { display: grid; gap: var(--spacing-lg); }
-.forecast-governance-page__header,
-.forecast-governance-page__setting { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-md); }
-.forecast-governance-page__header h2,
-.forecast-governance-page__section h3 { margin: 0; }
-.forecast-governance-page__header p,
-.forecast-governance-page__setting p { margin: var(--spacing-xs) 0 0; color: var(--text-secondary); }
+.forecast-governance-page { display: grid; align-content: start; gap: var(--spacing-lg); }
+.forecast-governance-page__setting { display: flex; align-items: center; gap: var(--spacing-md); height: 60px; }
+.forecast-governance-page__setting strong { margin-right: auto; }
+.forecast-governance-page__section-heading { display: flex; align-items: center; justify-content: flex-start; height: 40px; text-align: left; }
 .forecast-governance-page__setting,
 .forecast-governance-page__section { padding: var(--spacing-md); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); }
-.forecast-governance-page__section { display: grid; gap: var(--spacing-md); }
+.forecast-governance-page__section { display: grid; align-content: start; gap: var(--spacing-md); }
+.forecast-governance-page__metric-header { display: inline-flex; align-items: center; gap: var(--spacing-xs); }
+.forecast-governance-page__metric-help { color: var(--text-tertiary); cursor: help; outline-offset: 2px; }
 </style>

@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from 'vue';
 import { ElButton, ElPagination, ElTable, ElTableColumn, ElTag } from 'element-plus';
 import incidentApi from '@/api/incident-api.js';
 import IncidentDetailDrawer from '@/pages/incident/components/IncidentDetailDrawer.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 
 const props = defineProps({
   clusterId: { type: Number, required: true },
@@ -97,9 +98,9 @@ onMounted(load);
         align="right"
         width="90"
         fixed="right">
-        <template #default="{ row }"><ElButton
-          size="small"
-          @click="openDetail(row)">查看</ElButton></template>
+        <template #default="{ row }"><TableActionButton
+          action="detail"
+          @click="openDetail(row)">查看</TableActionButton></template>
       </ElTableColumn>
     </ElTable>
     <ElPagination

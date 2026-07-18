@@ -15,6 +15,7 @@ import {
 } from 'element-plus';
 import membershipApi from '@/api/project-membership-api.js';
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 
 const props = defineProps({
   projectId: {
@@ -150,15 +151,12 @@ onMounted(loadMembers);
           <div
             v-if="canManage(row)"
             class="list-row-actions">
-            <ElButton
-              size="small"
-              plain
-              @click="openEdit(row)">编辑</ElButton>
-            <ElButton
-              size="small"
-              plain
-              type="danger"
-              @click="confirmRemove(row)">移除</ElButton>
+            <TableActionButton
+              action="edit"
+              @click="openEdit(row)">编辑</TableActionButton>
+            <TableActionButton
+              action="remove"
+              @click="confirmRemove(row)">移除</TableActionButton>
           </div>
         </template>
       </ElTableColumn>

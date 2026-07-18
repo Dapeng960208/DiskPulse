@@ -90,6 +90,30 @@ describe('frontend mock runtime', () => {
     expect(events.map((event) => event.event)).toContain('completed');
   });
 
+  it('returns complete incident detail mock data for the incident drawer', async () => {
+    const gateway = createMockGateway();
+    const admin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const detail = await gateway.request('get', '/v1/incidents/301', undefined, admin.token);
+
+    expect(detail).toMatchObject({
+      id: 301,
+      capabilities: { edit: true, create_maintenance_window: true },
+      diagnosis: { confidence: expect.any(String), candidates: expect.any(Array) },
+    });
+    expect(detail.evidence).toHaveLength(2);
+    expect(detail.evidence[0]).toMatchObject({
+      evidence_type: expect.any(String),
+      source: expect.any(String),
+      source_ref: expect.any(String),
+      observed_at: expect.any(String),
+    });
+    expect(detail.timeline).toHaveLength(2);
+    expect(detail.timeline[0]).toMatchObject({
+      event_type: expect.any(String),
+      occurred_at: expect.any(String),
+    });
+  });
+
   it('serves chart datasets and complete CRUD for every seeded table', async () => {
     const gateway = createMockGateway();
     const admin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
@@ -102,6 +126,23 @@ describe('frontend mock runtime', () => {
     expect(trend.length).toBeGreaterThan(1);
     expect(updated.name).toBe('Mock 已更新标签');
     expect(tags.content.some((tag) => tag.id === created.id)).toBe(false);
+  });
+
+  it('supplies candidate models and completed evaluation windows for capacity prediction governance', async () => {
+    const gateway = createMockGateway();
+    const admin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    const settings = await gateway.request('get', '/v1/admin/capacity-prediction-settings', undefined, admin.token);
+    const candidates = await gateway.request('get', '/v1/admin/capacity-prediction-candidates', undefined, admin.token);
+
+    expect(settings.visible).toBe(true);
+    expect(candidates).toHaveLength(2);
+    expect(candidates[0]).toMatchObject({
+      version: 'capacity-ai-v2',
+      ai_model_id: 1,
+      activation_ready: true,
+    });
+    expect(candidates[0].evaluations).toHaveLength(3);
   });
 
   it('gives the superadmin five or more records for every visible mock data source', async () => {
@@ -202,6 +243,27 @@ describe('frontend mock runtime', () => {
       threshold: expect.any(Number),
       avg_use_ratio: expect.any(Number),
       related_info: { context: { group_tag: expect.any(String), linux_path: expect.any(String) } },
+    });
+  });
+
+  it('provides complete audit-event details for the right-side drawer', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const event = await gateway.request('get', '/v1/audit-events/1', undefined, superadmin.token);
+
+    expect(event).toMatchObject({
+      occurred_at: expect.any(String),
+      outcome: expect.any(String),
+      action: expect.any(String),
+      actor: { rd_username: expect.any(String) },
+      project: { name: expect.any(String) },
+      resource_type: expect.any(String),
+      resource_id: expect.any(Number),
+      trace_id: expect.any(String),
+      request_id: expect.any(String),
+      before_summary: expect.any(Object),
+      after_summary: expect.any(Object),
+      metadata: expect.objectContaining({ client_ip: expect.any(String) }),
     });
   });
 });

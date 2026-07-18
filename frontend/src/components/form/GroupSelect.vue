@@ -108,6 +108,7 @@ function emitSelectedLabel(value) {
     :remote-method="searchUserGroups"
     placeholder="根据项目组模糊搜索"
     :multiple="multiple"
+    tag-type="info"
     :multiple-limit="multipleLimit"
     :reserve-keyword="false"
     :max-collapse-tags="10"

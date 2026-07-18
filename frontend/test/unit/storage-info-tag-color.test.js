@@ -22,6 +22,21 @@ const storageTypeContracts = [
 const source = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
 describe('storage information tag colors', () => {
+  it('uses slate info tokens for native info controls while keeping charts cyan', () => {
+    const variables = source('src/styles/variables.scss');
+
+    expect(variables).toContain('--info-color: #64748B;');
+    expect(variables).toContain('--info-bg: #F1F5F9;');
+    expect(variables).toContain('--chart-color-info: #06B6D4;');
+    expect(variables).not.toContain('--tag-info-color:');
+    expect(source('src/styles/style.scss')).not.toContain('.storage-info-tag');
+  });
+
+  it('keeps selectable relationship tags on the native gray info type', () => {
+    expect(source('src/components/form/GroupSelect.vue')).toContain('tag-type="info"');
+    expect(source('src/components/form/QtreeSelect.vue')).toContain('tag-type="info"');
+  });
+
   it('uses semantic tag types for storage types and missing soft limits', () => {
     for (const [path, expectedCount] of softLimitContracts) {
       const page = source(path);

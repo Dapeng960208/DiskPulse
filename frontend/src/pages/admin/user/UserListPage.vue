@@ -8,6 +8,7 @@ import DataTable from '@/components/data/DataTable.vue';
 import { useQuery, useQueryParams } from '@/composables/query';
 import UserFormDialog from './components/UserFormDialog.vue';
 import UserAvatar from '@/components/data/UserAvatar.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 // 定义引用
 const userFormDialogRef = ref();
 const syncing = ref(false);
@@ -221,40 +222,32 @@ onBeforeMount(() => {
         width="196"
         fixed="right">
         <template #header>
-          <ElButton
-            size="small"
-            plain
-            type="primary"
+          <TableActionButton
+            action="create"
             @click="userFormDialogRef.edit()">
             新增用户
-          </ElButton>
-          <ElButton
-            size="small"
-            plain
-            type="success"
+          </TableActionButton>
+          <TableActionButton
+            action="sync"
             :disabled="syncing"
             :loading="syncing"
             @click="syncLdapUsers">
             同步LDAP
-          </ElButton>
+          </TableActionButton>
         </template>
 
         <template #default="{ row }">
-          <ElButton
-            size="small"
-            type="primary"
-            link
+          <TableActionButton
+            action="edit"
             @click="userFormDialogRef.edit(row)">
             编辑
-          </ElButton>
-          <ElButton
-            type="danger"
-            size="small"
-            link
+          </TableActionButton>
+          <TableActionButton
+            action="delete"
             @click="confirmDelete(row)"
           >
             删除
-          </ElButton>
+          </TableActionButton>
         </template>
       </ElTableColumn>
     </DataTable>

@@ -54,6 +54,17 @@ export default [
           breadcrumb: ['用户目录', '使用详情'],
         },
       },
+      {
+        path: 'usage/:id/capacity-prediction',
+        name: 'UsageCapacityPrediction',
+        component: () => import('@/pages/capacity-prediction/CapacityPredictionDetailPage.vue'),
+        props: { assetType: 'storage_usage', listRouteName: 'Usages', listLabel: '用户目录' },
+        meta: {
+          title: '容量预测',
+          isHidden: true,
+          breadcrumb: ['用户目录', '容量预测'],
+        },
+      },
     ],
   },
   {
@@ -108,6 +119,17 @@ export default [
           breadcrumb: ['项目组', '项目组详情'],
         },
       },
+      {
+        path: 'group/:id/capacity-prediction',
+        name: 'GroupCapacityPrediction',
+        component: () => import('@/pages/capacity-prediction/CapacityPredictionDetailPage.vue'),
+        props: { assetType: 'group', listRouteName: 'Groups', listLabel: '项目组' },
+        meta: {
+          title: '容量预测',
+          isHidden: true,
+          breadcrumb: ['项目组', '容量预测'],
+        },
+      },
     ],
   },
   {
@@ -134,17 +156,6 @@ export default [
           isRoot: true,
           menuOrder: 50,
           icon: 'i-ri-robot-2-line',
-        },
-      },
-      {
-        path: 'incidents',
-        name: 'IncidentCenter',
-        component: () => import('@/pages/incident/IncidentCenterPage.vue'),
-        meta: {
-          title: '事件中心',
-          isRoot: true,
-          menuOrder: 55,
-          icon: 'i-ri-alarm-warning-line',
         },
       },
     ],
@@ -291,6 +302,16 @@ export default [
         component: () => import('@/pages/admin/forecast-governance/ForecastGovernancePage.vue'),
         meta: {
           title: '容量预测治理', icon: 'i-ri-line-chart-line',
+          isAccessible: () => hasRole('superadmin') ? 200 : 403,
+        },
+      },
+      {
+        path: 'incidents',
+        name: 'IncidentCenter',
+        component: () => import('@/pages/incident/IncidentCenterPage.vue'),
+        meta: {
+          title: '事件中心',
+          icon: 'i-ri-alarm-warning-line',
           isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },

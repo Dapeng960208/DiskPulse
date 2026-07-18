@@ -36,7 +36,7 @@ describe('role-aware list actions', () => {
     expect(actions).toContain('class="list-row-actions"');
     expect(actions.indexOf('详情')).toBeLessThan(actions.indexOf('<ElDropdown'));
     if (source === groupSource || source === usageSource) {
-      expect(actions).toMatch(/<ElDropdown[\s\S]*?v-if="hasRole\('disk-monitor:admin'\) \|\| canAdjustQuota\(row\)"/);
+    expect(actions).toMatch(/<ElDropdown[\s\S]*?v-if="hasRole\('disk-monitor:admin'\) \|\| canAdjustQuota\(row\) \|\| predictionEnabled"/);
     }
     expect(actions).toContain('aria-label="更多操作"');
   });
@@ -63,7 +63,7 @@ describe('role-aware list actions', () => {
 
     expect(usageSource).toContain('function canAdjustQuota(row)');
     expect(usageSource).toContain('row?.capabilities?.adjust_quota === true');
-    expect(actions).toMatch(/v-if="hasRole\('disk-monitor:admin'\) \|\| canAdjustQuota\(row\)"/);
+    expect(actions).toMatch(/v-if="hasRole\('disk-monitor:admin'\) \|\| canAdjustQuota\(row\) \|\| predictionEnabled"/);
   });
 
   it('does not render user-directory quota adjustment for an admin without resource capability', () => {
@@ -72,9 +72,10 @@ describe('role-aware list actions', () => {
     expect(actions).toMatch(/<ElDropdownItem\s+v-if="canAdjustQuota\(row\)"[\s\S]*?>\s*调整配额/);
   });
 
-  it('keeps only quota adjustment in the usage admin menu', () => {
+  it('keeps capacity prediction and quota adjustment in the usage more-actions menu', () => {
     const actions = actionColumn(usageSource);
 
+    expect(actions).toContain('容量预测');
     expect(actions).toContain('调整配额');
     expect(actions).not.toContain('编辑');
     expect(actions).not.toContain('删除');
@@ -164,5 +165,40 @@ describe('global list row actions', () => {
     expect(actions).toContain('删除');
     expect(actions).toContain('class="list-row-actions__danger"');
     expect(aiSource).toContain('ElMessageBox.confirm');
+  });
+});
+
+describe('unified list action adoption', () => {
+  const semanticActionContracts = [
+    ['src/components/audit/AuditEventTable.vue', ['detail']],
+    ['src/pages/admin/aggregate/AggregateListPage.vue', ['detail']],
+    ['src/pages/admin/ai/AiCenterPage.vue', ['create', 'edit']],
+    ['src/pages/admin/backup/BackUpListPage.vue', ['delete', 'rollback']],
+    ['src/pages/admin/forecast-governance/ForecastGovernancePage.vue', ['activate']],
+    ['src/pages/admin/qtree/QtreeListPage.vue', ['detail']],
+    ['src/pages/admin/storage-cluster/components/ClusterIncidentsTab.vue', ['detail']],
+    ['src/pages/admin/storage-cluster/StorageClusterListPage.vue', ['create', 'detail']],
+    ['src/pages/admin/user/UserListPage.vue', ['create', 'sync', 'edit', 'delete']],
+    ['src/pages/admin/volume/VolumeListPage.vue', ['detail']],
+    ['src/pages/capacity-prediction/CapacityPredictionPanel.vue', ['create']],
+    ['src/pages/group/GroupListPage.vue', ['create', 'detail']],
+    ['src/pages/group-tag/GroupTagListPage.vue', ['create', 'edit', 'delete']],
+    ['src/pages/incident/IncidentCenterPage.vue', ['detail', 'edit']],
+    ['src/pages/project/components/ProjectMembersTab.vue', ['edit', 'remove']],
+    ['src/pages/project/components/ProjectTable.vue', ['create', 'edit', 'detail']],
+    ['src/pages/usage/UsageListPage.vue', ['create', 'detail']],
+  ];
+
+  it.each(semanticActionContracts)('%s uses semantic small plain actions', (file, actions) => {
+    const source = readPage(file);
+
+    expect(source).toContain("@/components/basic/TableActionButton.vue");
+    for (const action of actions) {
+      expect(source).toContain(`action="${action}"`);
+    }
+  });
+
+  it('removes link-style buttons from the group-tag operation column', () => {
+    expect(readPage('src/pages/group-tag/GroupTagListPage.vue')).not.toMatch(/<ElButton\s+link/);
   });
 });

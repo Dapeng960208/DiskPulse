@@ -25,6 +25,7 @@ import {
 } from 'element-plus';
 import aiApi from '@/api/ai-api';
 import { useDialog } from '@/composables/dialog';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -205,18 +206,15 @@ onMounted(async () => {
             width="132"
             fixed="right">
             <template #header>
-              <ElButton
-                type="primary"
-                plain
-                size="small"
-                @click="addModel">新增模型</ElButton>
+              <TableActionButton
+                action="create"
+                @click="addModel">新增模型</TableActionButton>
             </template>
             <template #default="{ row }">
               <div class="list-row-actions">
-                <ElButton
-                  size="small"
-                  plain
-                  @click="editModel(row)">编辑</ElButton>
+                <TableActionButton
+                  action="edit"
+                  @click="editModel(row)">编辑</TableActionButton>
                 <ElDropdown
                   trigger="click"
                   placement="bottom-end">

@@ -66,10 +66,6 @@ onMounted(load);
 
 <template>
   <section class="volume-monitoring-page">
-    <header class="volume-monitoring-page__header">
-      <h1>存储空间性能监控</h1>
-      <p>查看存储空间容量变化和关联存储集群的实时性能指标。</p>
-    </header>
     <FilterForm
       @query="load"
       @reset="load">
@@ -165,8 +161,7 @@ onMounted(load);
 
 <style lang="scss" scoped>
 .volume-monitoring-page { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: var(--spacing-md); }
-.volume-monitoring-page__header h1 { font-size: var(--font-size-2xl); }
-.volume-monitoring-page__header p, .volume-monitoring-page__section-heading span { margin-top: 4px; color: var(--text-secondary); font-size: var(--font-size-sm); }
+.volume-monitoring-page__section-heading span { margin-top: 4px; color: var(--text-secondary); font-size: var(--font-size-sm); }
 .volume-monitoring-page__resource-name { min-width: 220px; padding: 0 11px; color: var(--text-secondary); }
 .volume-monitoring-page__binding { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-secondary); }
 .volume-monitoring-page__binding--empty { color: var(--text-tertiary); }

@@ -20,9 +20,13 @@ import { formatStorageTargetType } from '@/utils/storage-resource';
 import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
+import capacityPredictionApi from '@/api/capacity-prediction-api.js';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
+import AccessibleResourceLink from '@/components/basic/AccessibleResourceLink.vue';
 
 const groupFormDialogRef = ref();
 const quotaAdjustmentDialogRef = ref();
+const predictionEnabled = ref(false);
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
@@ -126,6 +130,12 @@ function confirmDelete(row) {
 function canAdjustQuota(row) {
   return row?.capabilities?.adjust_quota === true;
 }
+function openCapacityPrediction(row) {
+  router.push({ name: 'GroupCapacityPrediction', params: { id: row.id } });
+}
+capacityPredictionApi.visibility().then((value) => {
+  predictionEnabled.value = value.visible === true;
+}).catch(() => { predictionEnabled.value = false; });
 </script>
 
 <template>
@@ -256,7 +266,7 @@ function canAdjustQuota(row) {
         min-width="140"
       >
         <template #default="{ row }">
-          <span>{{ row.storage_cluster?.name || '-' }}</span>
+          <AccessibleResourceLink :to="{ name: 'StorageClusterDetail', params: { id: row.storage_cluster?.id } }">{{ row.storage_cluster?.name || '-' }}</AccessibleResourceLink>
         </template>
       </ElTableColumn>
       <ElTableColumn
@@ -282,8 +292,9 @@ function canAdjustQuota(row) {
         align="center"
         prop="name"
         min-width="160"
-        show-overflow-tooltip
-      />
+        show-overflow-tooltip>
+        <template #default="{ row }"><AccessibleResourceLink :to="{ name: 'GroupDetail', params: { id: row.id } }">{{ row.name }}</AccessibleResourceLink></template>
+      </ElTableColumn>
 
       <ElTableColumn
         v-if="showCapacityColumns"
@@ -293,9 +304,9 @@ function canAdjustQuota(row) {
         min-width="60"
       >
         <template #default="{ row }">
-          <ElTag v-if="row.project">
-            {{ row.project.name }}
-          </ElTag>
+          <AccessibleResourceLink
+            v-if="row.project"
+            :to="{ name: 'ProjectDetail', params: { id: row.project.id } }">{{ row.project.name }}</AccessibleResourceLink>
           <ElTag v-else>默认</ElTag>
         </template>
       </ElTableColumn>
@@ -410,25 +421,22 @@ function canAdjustQuota(row) {
         width="132"
         fixed="right">
         <template #header>
-          <ElButton
+          <TableActionButton
             v-if="hasRole('disk-monitor:admin')"
-            size="small"
-            plain
-            type="primary"
+            action="create"
             @click="groupFormDialogRef.edit()">
             添加项目组
-          </ElButton>
+          </TableActionButton>
         </template>
         <template #default="{ row }">
           <div class="list-row-actions">
-            <ElButton
-              size="small"
-              plain
+            <TableActionButton
+              action="detail"
               @click="router.push({path: `/group/${row.id}`})">
               详情
-            </ElButton>
+            </TableActionButton>
             <ElDropdown
-              v-if="hasRole('disk-monitor:admin') || canAdjustQuota(row)"
+              v-if="hasRole('disk-monitor:admin') || canAdjustQuota(row) || predictionEnabled"
               trigger="click"
               placement="bottom-end">
               <ElButton
@@ -440,6 +448,11 @@ function canAdjustQuota(row) {
               </ElButton>
               <template #dropdown>
                 <ElDropdownMenu>
+                  <ElDropdownItem
+                    v-if="predictionEnabled"
+                    @click="openCapacityPrediction(row)">
+                    容量预测
+                  </ElDropdownItem>
                   <ElDropdownItem
                     v-if="canAdjustQuota(row)"
                     :disabled="row.associate_multiple_groups"

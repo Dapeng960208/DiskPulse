@@ -512,7 +512,7 @@ def test_only_candidate_with_passing_evaluations_can_be_enabled(db_session):
         activate_capacity_prediction_candidate(db_session, candidate_id=rejected.id)
 
 
-def test_candidate_cannot_be_activated_after_its_ai_model_is_disabled(db_session):
+def test_candidate_can_be_activated_after_its_ai_model_is_disabled(db_session):
     import models
     from services.capacityPredictionGovernanceService import (
         activate_capacity_prediction_candidate,
@@ -540,8 +540,9 @@ def test_candidate_cannot_be_activated_after_its_ai_model_is_disabled(db_session
     model.enabled = False
     db_session.flush()
 
-    with pytest.raises(HTTPException, match="approved AI model"):
-        activate_capacity_prediction_candidate(db_session, candidate_id=candidate.id)
+    activate_capacity_prediction_candidate(db_session, candidate_id=candidate.id)
+
+    assert db_session.get(models.CapacityPredictionCandidate, candidate.id).enabled is True
 
 
 def test_duplicate_candidate_version_returns_a_stable_conflict(db_session):
@@ -700,7 +701,7 @@ def test_stale_candidate_curve_does_not_override_the_current_baseline(db_session
     assert "candidate_version" not in result.input_quality
 
 
-def test_candidate_requires_private_ollama_model(db_session):
+def test_candidate_accepts_any_configured_ai_center_model(db_session):
     import models
     from services.capacityPredictionGovernanceService import create_capacity_prediction_candidate
 
@@ -715,12 +716,13 @@ def test_candidate_requires_private_ollama_model(db_session):
     ))
     db_session.commit()
 
-    with pytest.raises(HTTPException, match="private AI model"):
-        create_capacity_prediction_candidate(
-            db_session,
-            version="capacity-ai-public-v1",
-            ai_model_id=1,
-        )
+    candidate = create_capacity_prediction_candidate(
+        db_session,
+        version="capacity-ai-public-v1",
+        ai_model_id=1,
+    )
+
+    assert candidate.ai_model_id == 1
 
 
 def test_governance_router_exposes_safe_candidate_lifecycle_only_to_super_admins():

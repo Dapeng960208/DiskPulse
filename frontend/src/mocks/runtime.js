@@ -107,16 +107,81 @@ const seed = () => {
     storage_cluster_id: clusters[index].id,
     capabilities: {},
   }));
-  const incidents = ['容量压力', '磁盘故障', '性能争用', '遥测延迟', '复制滞后'].map((display_name, index) => ({
-    id: 301 + index,
-    project_id: projects[index].id,
-    storage_cluster_id: 1,
-    display_name,
-    category: ['capacity_pressure', 'device_fault', 'performance_contention', 'telemetry_blindspot', 'capacity_pressure'][index],
-    severity: index === 1 ? 'critical' : 'warning',
-    status: ['open', 'acknowledged', 'investigating', 'mitigated', 'resolved'][index],
-    last_evidence_at: `2026-07-18 0${9 + index}:30:00`,
-  }));
+  const incidents = ['容量压力', '磁盘故障', '性能争用', '遥测延迟', '复制滞后'].map((display_name, index) => {
+    const category = ['capacity_pressure', 'device_fault', 'performance_contention', 'telemetry_blindspot', 'capacity_pressure'][index];
+    const status = ['open', 'acknowledged', 'investigating', 'mitigated', 'resolved'][index];
+    const lastEvidenceAt = `2026-07-18 0${9 + index}:30:00`;
+    const evidence = [
+      {
+        id: 1001 + index * 10,
+        source: 'capacity_prediction',
+        source_ref: `forecast:capacity-${index + 1}`,
+        evidence_type: 'forecast_exhaustion',
+        observed_at: `2026-07-18 0${8 + index}:30:00`,
+        data_gaps: [],
+      },
+      {
+        id: 1002 + index * 10,
+        source: 'storage_alert',
+        source_ref: `alert:storage-${index + 1}`,
+        evidence_type: index === 1 ? 'severe_vendor_event' : 'threshold_breach',
+        observed_at: lastEvidenceAt,
+        data_gaps: [],
+      },
+    ];
+    return {
+      id: 301 + index,
+      project_id: projects[index].id,
+      storage_cluster_id: 1,
+      asset_type: 'storage_usage',
+      asset_id: String(101 + index),
+      vendor: index === 1 ? 'netapp' : 'diskpulse',
+      display_name,
+      category,
+      severity: index === 1 ? 'critical' : 'warning',
+      status,
+      opened_at: `2026-07-18 0${8 + index}:00:00`,
+      last_evidence_at: lastEvidenceAt,
+      resolved_at: status === 'resolved' ? lastEvidenceAt : null,
+      created_at: `2026-07-18 0${8 + index}:00:00`,
+      updated_at: lastEvidenceAt,
+      evidence,
+      timeline: [
+        {
+          id: 2001 + index * 10,
+          event_type: 'opened',
+          actor_user_id: null,
+          from_status: null,
+          to_status: 'open',
+          comment: '已根据关联遥测创建事件',
+          occurred_at: `2026-07-18 0${8 + index}:00:00`,
+        },
+        {
+          id: 2002 + index * 10,
+          event_type: 'evidence_added',
+          actor_user_id: null,
+          from_status: null,
+          to_status: null,
+          comment: '已关联最新证据',
+          occurred_at: lastEvidenceAt,
+        },
+      ],
+      diagnosis: {
+        id: 4001 + index,
+        algorithm_version: 'forecast-incident-v1',
+        candidates: [{
+          category,
+          score: index === 1 ? 0.91 : 0.78,
+          evidence_refs: evidence.map((item) => item.source_ref),
+          data_gaps: [],
+        }],
+        confidence: index === 1 ? 'high' : 'medium',
+        evidence_ids: evidence.map((item) => String(item.id)),
+        data_gaps: [],
+        created_at: lastEvidenceAt,
+      },
+    };
+  });
 const alerts = incidents.map((incident, index) => ({
   id: index + 1,
   project_id: incident.project_id,
@@ -148,17 +213,40 @@ const alerts = incidents.map((incident, index) => ({
   updated_at: incident.last_evidence_at,
   created_at: incident.last_evidence_at,
 }));
-  const audits = incidents.map((incident, index) => ({
-    id: index + 1,
-    action: ['project.member.read', 'storage.usage.update', 'group.quota.adjust', 'storage.alert.read', 'ai.conversation.create'][index],
-    outcome: 'success',
-    result: 'success',
-    project_id: incident.project_id,
-    actor_user_id: users[index].id,
-    actor: users[index],
-    created_at: incident.last_evidence_at,
-    detail: 'Mock 演示审计记录',
-  }));
+  const audits = incidents.map((incident, index) => {
+    const resource = [projects[index], usages[index], groups[index], alerts[index], { id: index + 1, title: `AI 会话 ${index + 1}` }][index];
+    const resourceType = ['ProjectMembership', 'StorageUsage', 'Group', 'StorageAlert', 'AIConversation'][index];
+    const action = ['project.member.read', 'storage.usage.update', 'group.quota.adjust', 'storage.alert.read', 'ai.conversation.create'][index];
+    const resourceId = resource?.id || index + 1;
+    return {
+      id: index + 1,
+      action,
+      outcome: 'success',
+      result: 'success',
+      occurred_at: incident.last_evidence_at,
+      created_at: incident.last_evidence_at,
+      project_id: incident.project_id,
+      project: projects[index],
+      actor_user_id: users[index].id,
+      actor: users[index],
+      resource_type: resourceType,
+      resource_id: resourceId,
+      resource_name: resource?.name || resource?.title || incident.display_name,
+      resource_path: resource?.linux_path || resource?.path || null,
+      trace_id: `audit-trace-${index + 1}`,
+      request_id: `mock-request-${index + 1}`,
+      reason_code: null,
+      before_summary: { action, version: 1, resource_id: resourceId },
+      after_summary: { action, version: 2, resource_id: resourceId, outcome: 'success' },
+      metadata: {
+        client_ip: `10.20.0.${index + 11}`,
+        endpoint: `/v1/${resourceType.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`).replace(/^-/, '')}/${resourceId}`,
+        request_method: index === 0 || index === 3 ? 'GET' : 'PATCH',
+        user_agent: 'DiskPulse Mock Console/1.0',
+      },
+      detail: 'Mock 演示审计记录',
+    };
+  });
   const aiModels = ['容量助手', '告警分析', '运维问答', '归档顾问', '报表生成'].map((name, index) => ({
     id: index + 1,
     name,
@@ -171,6 +259,34 @@ const alerts = incidents.map((incident, index) => ({
     temperature: 0.3,
     max_tokens: 2048,
   }));
+  const capacityPredictionCandidates = [
+    {
+      id: 1,
+      version: 'capacity-ai-v2',
+      ai_model_id: 1,
+      enabled: true,
+      activation_ready: true,
+      forecast_count: 18,
+      fallback_count: 1,
+      evaluations: [
+        { baseline_mape: 12.4, candidate_mape: 9.8, risk_coverage_ok: true, window_start: '2026-04-01T00:00:00Z', window_end: '2026-05-01T00:00:00Z' },
+        { baseline_mape: 11.9, candidate_mape: 9.2, risk_coverage_ok: true, window_start: '2026-05-01T00:00:00Z', window_end: '2026-05-31T00:00:00Z' },
+        { baseline_mape: 12.1, candidate_mape: 9.4, risk_coverage_ok: true, window_start: '2026-05-31T00:00:00Z', window_end: '2026-06-30T00:00:00Z' },
+      ],
+    },
+    {
+      id: 2,
+      version: 'capacity-ai-v3',
+      ai_model_id: 3,
+      enabled: false,
+      activation_ready: false,
+      forecast_count: 6,
+      fallback_count: 0,
+      evaluations: [
+        { baseline_mape: 10.8, candidate_mape: 9.9, risk_coverage_ok: true, window_start: '2026-06-01T00:00:00Z', window_end: '2026-07-01T00:00:00Z' },
+      ],
+    },
+  ];
   const conversations = aiModels.map((model, index) => ({
     id: index + 1,
     title: `${model.name}会话`,
@@ -197,6 +313,12 @@ const alerts = incidents.map((incident, index) => ({
     alerts,
     audits,
     aiModels,
+    capacityPredictionSettings: { visible: true },
+    capacityPredictionPlans: [
+      { id: 1, asset_type: 'storage_usage', asset_id: '101', project_id: 1, effective_at: '2026-08-01T00:00:00Z', capacity_delta: 80, reason: 'Mock 演示扩容计划', created_at: '2026-07-18T09:00:00Z' },
+      { id: 2, asset_type: 'group', asset_id: '11', project_id: 1, effective_at: '2026-08-15T00:00:00Z', capacity_delta: 150, reason: 'Mock 演示项目组扩容计划', created_at: '2026-07-18T09:30:00Z' },
+    ],
+    capacityPredictionCandidates,
     conversations,
     backups: usages.map((usage, index) => ({
       id: index + 1,
@@ -258,6 +380,30 @@ export function createMockGateway() {
     `2026-07-${String(13 + index).padStart(2, '0')} 09:00:00`,
     Math.round((Number(item.used) || 200) * (0.82 + index * 0.035)),
   ]);
+  const capacityPredictionResource = (assetType, assetId) => {
+    const records = assetType === 'group' ? state.groups : state.usages;
+    const item = records.find((record) => record.id === Number(assetId));
+    if (!item) throw error(404, '容量预测资源不存在');
+    return item;
+  };
+  const capacityPrediction = (assetType, item) => ({
+    id: 1000 + item.id,
+    asset_type: assetType,
+    asset_id: String(item.id),
+    storage_cluster_id: item.storage_cluster_id,
+    project_id: item.project_id,
+    vendor: 'mock',
+    display_name: item.linux_path || item.name,
+    training_start: '2026-06-13T09:00:00Z',
+    training_end: '2026-07-18T09:00:00Z',
+    hard_limit: item.limit,
+    curve: resourceTrend(item).map(([observed_at, p50]) => ({ observed_at, p10: Math.round(p50 * 0.95), p50, p90: Math.round(p50 * 1.05) })),
+    exhaustion_dates: { p10: '2026-09-08', p50: '2026-09-22', p90: '2026-10-06' },
+    algorithm_version: 'capacity-ai-v2',
+    input_quality: { status: 'ready', coverage_ratio: 0.98, sample_count: 36, latest_observed_at: '2026-07-18T09:00:00Z', forecast_fresh_at: '2026-07-18T09:05:00Z', prediction_source: 'ai_candidate', candidate_version: 'capacity-ai-v2' },
+    backtest_mape: 9.8,
+    created_at: '2026-07-18T09:05:00Z',
+  });
   const findResource = (path, suffix) => {
     const match = path.match(new RegExp(`^/(projects|groups|storage-usages|aggregates|volumes|qtrees)/(\\d+)/${suffix}$`));
     if (!match) return null;
@@ -304,8 +450,43 @@ export function createMockGateway() {
       id: `${path.includes('forecasts') ? 'forecast' : 'anomaly'}-${index + 1}`,
       predicted_at: incident.last_evidence_at,
     })));
+    if (path === '/v1/capacity-predictions/visibility') return { visible: state.capacityPredictionSettings.visible === true };
+    const capacityPredictionResourcePath = path.match(/^\/v1\/capacity-predictions\/(group|storage_usage)\/(\d+)(?:\/(access|plans|related-incidents))?$/);
+    if (capacityPredictionResourcePath) {
+      const [, assetType, assetId, endpoint] = capacityPredictionResourcePath;
+      const item = capacityPredictionResource(assetType, assetId);
+      if (!allowed(account, item.project_id)) throw error(403);
+      if (state.capacityPredictionSettings.visible !== true) throw error(403, '容量预测已停用');
+      const canManagePlans = capabilities(account, item.project_id).adjust_quota;
+      if (endpoint === 'access') return { visible: true, can_manage_plans: canManagePlans };
+      if (endpoint === 'plans') {
+        if (verb === 'post') {
+          if (!canManagePlans) throw error(403);
+          const plan = { id: state.capacityPredictionPlans.length + 1, asset_type: assetType, asset_id: String(assetId), project_id: item.project_id, effective_at: body?.effective_at, capacity_delta: body?.capacity_delta, reason: body?.reason, created_at: '2026-07-18T10:00:00Z' };
+          state.capacityPredictionPlans.push(plan);
+          return plan;
+        }
+        return state.capacityPredictionPlans.filter((plan) => plan.asset_type === assetType && plan.asset_id === String(assetId));
+      }
+      if (endpoint === 'related-incidents') return state.incidents
+        .filter((incident) => incident.project_id === item.project_id && incident.category === 'capacity_pressure')
+        .map((incident) => ({ id: incident.id, category: incident.category, severity: incident.severity, status: incident.status, updated_at: incident.last_evidence_at, rca_confidence: 'high' }));
+      return capacityPrediction(assetType, item);
+    }
     const incident = path.match(/^\/v1\/incidents\/(\d+)(?:\/(diagnosis|comments))?$/);
-    if (incident) { const item = state.incidents.find((record) => record.id === Number(incident[1])); if (!item || !allowed(account, item.project_id)) throw error(403); if (verb === 'patch' && !capabilities(account, item.project_id).edit) throw error(403); Object.assign(item, body || {}); return item; }
+    if (incident) {
+      const item = state.incidents.find((record) => record.id === Number(incident[1]));
+      if (!item || !allowed(account, item.project_id)) throw error(403);
+      if (verb === 'patch' && !capabilities(account, item.project_id).edit) throw error(403);
+      Object.assign(item, body || {});
+      return {
+        ...item,
+        capabilities: {
+          ...capabilities(account, item.project_id),
+          create_maintenance_window: ['superadmin', 'project_admin'].includes(account.role),
+        },
+      };
+    }
     const realtimeItem = findResource(path, 'realtime') || findResource(path, 'storage');
     if (realtimeItem) return {
       info: realtimeItem,
@@ -354,6 +535,25 @@ export function createMockGateway() {
     if (projectMatch) { const item = state.projects.find((record) => record.id === Number(projectMatch[1])); if (!item || !allowed(account, item.id)) throw error(403); return { ...item, capabilities: capabilities(account, item.id) }; }
     if (path === '/projects') return page(scoped(account, state.projects.map((item) => ({ ...item, project_id: item.id, capabilities: capabilities(account, item.id) }))));
     if (path === '/ai/models') return state.aiModels.filter((model) => model.enabled && model.enable_chat);
+    if (path === '/v1/admin/capacity-prediction-settings') {
+      if (verb === 'patch') Object.assign(state.capacityPredictionSettings, { visible: body?.user_visible === true });
+      return state.capacityPredictionSettings;
+    }
+    if (path === '/v1/admin/capacity-prediction-candidates') {
+      if (verb === 'post') {
+        const item = { id: state.capacityPredictionCandidates.length + 1, version: body?.version, ai_model_id: body?.ai_model_id, enabled: false, activation_ready: false, forecast_count: 0, fallback_count: 0, evaluations: [] };
+        state.capacityPredictionCandidates.push(item);
+        return item;
+      }
+      return state.capacityPredictionCandidates;
+    }
+    const capacityPredictionCandidate = path.match(/^\/v1\/admin\/capacity-prediction-candidates\/(\d+)\/activate$/);
+    if (capacityPredictionCandidate && verb === 'post') {
+      const item = state.capacityPredictionCandidates.find((record) => record.id === Number(capacityPredictionCandidate[1]));
+      if (!item) throw error(404);
+      state.capacityPredictionCandidates.forEach((record) => { record.enabled = record.id === item.id; });
+      return item;
+    }
     if (path === '/ai/conversations') {
       if (verb === 'post') { const item = { id: state.conversations.length + 1, title: body?.title || '新对话', model_id: body?.model_id || 1, messages: [] }; state.conversations.unshift(item); return item; }
       return state.conversations;

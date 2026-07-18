@@ -698,6 +698,7 @@ def update_incident(
     current_user,
     incident_id: int,
     target_status: str | None = None,
+    target_severity: str | None = None,
     claim: bool | None = None,
     silenced_until: datetime | None = None,
     silence_reason: str | None = None,
@@ -705,8 +706,23 @@ def update_incident(
     audit_context=None,
 ) -> Incident:
     incident = require_visible_incident(db, current_user, incident_id, "editor")
-    before = {"status": incident.status, "assigned_user_id": incident.assigned_user_id, "silenced_until": incident.silenced_until}
+    before = {
+        "severity": incident.severity,
+        "status": incident.status,
+        "assigned_user_id": incident.assigned_user_id,
+        "silenced_until": incident.silenced_until,
+    }
     changed = False
+    if target_severity is not None and target_severity != incident.severity:
+        old_severity = incident.severity
+        incident.severity = target_severity
+        db.add(IncidentTimeline(
+            incident_id=incident.id,
+            event_type="severity_changed",
+            actor_user_id=current_user.id,
+            comment=f"severity changed from {old_severity} to {target_severity}",
+        ))
+        changed = True
     if target_status is not None:
         require_incident_transition(incident.status, target_status)
         old_status = incident.status
@@ -749,7 +765,12 @@ def update_incident(
         incident=incident,
         action="incident.update",
         before=before,
-        after={"status": incident.status, "assigned_user_id": incident.assigned_user_id, "silenced_until": incident.silenced_until},
+        after={
+            "severity": incident.severity,
+            "status": incident.status,
+            "assigned_user_id": incident.assigned_user_id,
+            "silenced_until": incident.silenced_until,
+        },
     )
     db.commit()
     db.refresh(incident)

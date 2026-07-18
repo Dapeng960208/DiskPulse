@@ -1,6 +1,7 @@
 <script setup>
 import { ElButton, ElTableColumn, ElTag } from 'element-plus';
 import DataTable from '@/components/data/DataTable.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 
 defineProps({
   events: {
@@ -85,10 +86,9 @@ function outcomeType(outcome) {
       width="88"
       fixed="right">
       <template #default="{ row }">
-        <ElButton
-          size="small"
-          plain
-          @click="emit('show-detail', row)">详情</ElButton>
+        <TableActionButton
+          action="detail"
+          @click="emit('show-detail', row)">详情</TableActionButton>
       </template>
     </ElTableColumn>
   </DataTable>
