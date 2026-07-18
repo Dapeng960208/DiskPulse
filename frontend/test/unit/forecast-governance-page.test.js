@@ -46,6 +46,18 @@ describe('ForecastGovernancePage', () => {
     expect(wrapper.vm.error).toBe('保存预测可见性失败');
   });
 
+  it('keeps visibility and candidate creation in one compact control row', async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const controlRow = wrapper.find('.forecast-governance-page__setting');
+    expect(wrapper.find('.forecast-governance-page__header').exists()).toBe(false);
+    expect(wrapper.find('h2').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('后台预测和评估持续运行');
+    expect(controlRow.text()).toContain('全局用户可见性');
+    expect(controlRow.text()).toContain('新增候选模型');
+  });
+
   it('creates a trimmed candidate and reloads governance state', async () => {
     const wrapper = mountPage();
     await flushPromises();
