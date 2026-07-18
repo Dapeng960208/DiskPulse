@@ -5,7 +5,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { commonDirectives } from '../helpers/mount';
 
-const { aiApi, router } = vi.hoisted(() => ({
+const { aiApi, currentUser, router } = vi.hoisted(() => ({
+  currentUser: {
+    avatarUrl: 'https://example.test/current-user.png',
+    displayName: '当前用户',
+    username: 'current-user',
+  },
   router: { push: vi.fn(), replace: vi.fn() },
   aiApi: {
     listModels: vi.fn(),
@@ -28,6 +33,9 @@ vi.mock('@/api/ai-api', () => ({ default: aiApi }));
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {}, params: { id: '9' } }),
   useRouter: () => router,
+}));
+vi.mock('@/stores/current-user', () => ({
+  useCurrentUser: () => currentUser,
 }));
 
 const { default: AiChatPage } = await import('@/pages/ai/AiChatPage.vue');
@@ -510,11 +518,15 @@ describe('AI pages interactions', () => {
     expect(wrapper.find('.composer-actions').exists()).toBe(false);
   });
 
-  it('renders distinct animated avatars for user and AI messages', async () => {
+  it('uses the header avatar source for user messages and top-aligns message rows', async () => {
     const wrapper = shallowMount(AiChatPage, {
       global: {
         stubs: {
           ElScrollbar: { template: '<div><slot /></div>' },
+          UserAvatar: {
+            props: ['src'],
+            template: '<img class="user-avatar" :src="src" />',
+          },
         },
       },
     });
@@ -525,9 +537,12 @@ describe('AI pages interactions', () => {
     ];
     await flushPromises();
 
+    expect(wrapper.find('.message-avatar--user').attributes('src')).toBe(currentUser.avatarUrl);
     expect(wrapper.find('.message-avatar--user').attributes('aria-label')).toBe('你的头像');
     expect(wrapper.find('.message-avatar--assistant').attributes('aria-label')).toBe('AI 助手头像');
     expect(wrapper.find('.message-avatar--assistant .message-avatar__pulse').exists()).toBe(true);
+    const source = readFileSync(resolve(process.cwd(), 'src/pages/ai/AiChatPage.vue'), 'utf8');
+    expect(source).toMatch(/\.message\s*\{[^}]*align-items:\s*start;/);
   });
 
   it('keeps model selection beside the composer action and simplifies chat chrome', async () => {
