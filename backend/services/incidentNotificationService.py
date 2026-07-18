@@ -101,15 +101,16 @@ def notify_incident(db, incident, *, event: str) -> tuple[str, ...]:
         project_owner=owner,
         project_members=members,
     )
-    if not recipients or not config["feishu_enabled"]:
+    if not recipients:
         return recipients
-    feishu = base_config.get("feishu_notification", {}) or {}
-    if feishu.get("enabled"):
-        FeishuNotificationService(feishu).send(
-            usernames=recipients,
-            title=f"Incident {event}",
-            paragraphs=[[{"tag": "text", "text": f"{incident.display_name}：{incident.category} / {incident.severity}"}]],
-        )
+    if config["feishu_enabled"]:
+        feishu = base_config.get("feishu_notification", {}) or {}
+        if feishu.get("enabled"):
+            FeishuNotificationService(feishu).send(
+                usernames=recipients,
+                title=f"Incident {event}",
+                paragraphs=[[{"tag": "text", "text": f"{incident.display_name}：{incident.category} / {incident.severity}"}]],
+            )
     if config["email_enabled"]:
         emails = _recipient_emails(db, recipients)
         if emails:
