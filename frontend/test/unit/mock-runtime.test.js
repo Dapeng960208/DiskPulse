@@ -90,6 +90,30 @@ describe('frontend mock runtime', () => {
     expect(events.map((event) => event.event)).toContain('completed');
   });
 
+  it('returns complete incident detail mock data for the incident drawer', async () => {
+    const gateway = createMockGateway();
+    const admin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const detail = await gateway.request('get', '/v1/incidents/301', undefined, admin.token);
+
+    expect(detail).toMatchObject({
+      id: 301,
+      capabilities: { edit: true, create_maintenance_window: true },
+      diagnosis: { confidence: expect.any(String), candidates: expect.any(Array) },
+    });
+    expect(detail.evidence).toHaveLength(2);
+    expect(detail.evidence[0]).toMatchObject({
+      evidence_type: expect.any(String),
+      source: expect.any(String),
+      source_ref: expect.any(String),
+      observed_at: expect.any(String),
+    });
+    expect(detail.timeline).toHaveLength(2);
+    expect(detail.timeline[0]).toMatchObject({
+      event_type: expect.any(String),
+      occurred_at: expect.any(String),
+    });
+  });
+
   it('serves chart datasets and complete CRUD for every seeded table', async () => {
     const gateway = createMockGateway();
     const admin = await gateway.login('demo-superadmin', DEMO_PASSWORD);

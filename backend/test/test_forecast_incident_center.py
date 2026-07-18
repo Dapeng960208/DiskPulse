@@ -228,6 +228,15 @@ def test_invalid_state_transition_is_a_conflict(next_status):
         analytics.require_incident_transition("open", next_status)
 
 
+def test_incident_patch_accepts_only_supported_manual_severity_values():
+    from pydantic import ValidationError
+    from schemas.forecastIncidentSchema import IncidentPatch
+
+    assert IncidentPatch(severity="critical").severity == "critical"
+    with pytest.raises(ValidationError):
+        IncidentPatch(severity="emergency")
+
+
 def test_incident_api_filters_before_pagination_and_enforces_project_roles(
     db_session, api_client_factory
 ):
@@ -290,9 +299,13 @@ def test_incident_api_filters_before_pagination_and_enforces_project_roles(
         [forecast_incidents.router],
         headers={"Authorization": f"Bearer {issue_token(3)}"},
     )
-    updated = editor.patch("/storage-pulse/api/v1/incidents/1", json={"status": "acknowledged"})
+    updated = editor.patch(
+        "/storage-pulse/api/v1/incidents/1",
+        json={"status": "acknowledged", "severity": "critical"},
+    )
     assert updated.status_code == 200
     assert updated.json()["status"] == "acknowledged"
+    assert updated.json()["severity"] == "critical"
     db_session.expire_all()
     assert db_session.query(models.AuditEvent).filter(models.AuditEvent.action == "incident.update").count() == 1
 

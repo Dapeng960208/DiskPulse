@@ -28,6 +28,8 @@ async function mountPage() {
           template: '<div>{{ JSON.stringify(data) }}<slot /></div>',
         },
         ElFormItem: passthrough('ElFormItem'),
+        ElForm: passthrough('ElForm', 'form'),
+        ElDialog: passthrough('ElDialog'),
         ElInput: passthrough('ElInput', 'input'),
         ElSelect: passthrough('ElSelect', 'select'),
         ElOption: passthrough('ElOption', 'option'),
@@ -98,5 +100,22 @@ describe('IncidentCenterPage', () => {
       status: 'resolved',
       category: 'capacity_pressure',
     }));
+  });
+
+  it('edits an incident severity and status, then refreshes the list', async () => {
+    incidentApi.updateIncident.mockResolvedValue({ id: 9, severity: 'critical', status: 'investigating' });
+    const wrapper = await mountPage();
+
+    wrapper.vm.openEdit({ id: 9, severity: 'warning', status: 'open' });
+    wrapper.vm.editForm.severity = 'critical';
+    wrapper.vm.editForm.status = 'investigating';
+    await wrapper.vm.saveEdit();
+
+    expect(wrapper.vm.editVisible).toBe(false);
+    expect(incidentApi.updateIncident).toHaveBeenCalledWith(9, {
+      severity: 'critical',
+      status: 'investigating',
+    });
+    expect(incidentApi.fetchIncidents).toHaveBeenCalledTimes(2);
   });
 });
