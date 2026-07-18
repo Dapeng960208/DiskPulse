@@ -136,17 +136,6 @@ export default [
           icon: 'i-ri-robot-2-line',
         },
       },
-      {
-        path: 'incidents',
-        name: 'IncidentCenter',
-        component: () => import('@/pages/incident/IncidentCenterPage.vue'),
-        meta: {
-          title: '事件中心',
-          isRoot: true,
-          menuOrder: 55,
-          icon: 'i-ri-alarm-warning-line',
-        },
-      },
     ],
   },
   {
@@ -291,6 +280,16 @@ export default [
         component: () => import('@/pages/admin/forecast-governance/ForecastGovernancePage.vue'),
         meta: {
           title: '容量预测治理', icon: 'i-ri-line-chart-line',
+          isAccessible: () => hasRole('superadmin') ? 200 : 403,
+        },
+      },
+      {
+        path: 'incidents',
+        name: 'IncidentCenter',
+        component: () => import('@/pages/incident/IncidentCenterPage.vue'),
+        meta: {
+          title: '事件中心',
+          icon: 'i-ri-alarm-warning-line',
           isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },

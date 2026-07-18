@@ -110,6 +110,7 @@ describe('router/routes and app shell', () => {
   it('places Incident Center under System Management for super administrators only', () => {
     const adminRoute = routes.find((route) => route.path === '/admin');
     const rootIncidentRoute = routes
+      .filter((route) => route.path !== '/admin')
       .flatMap((route) => route.children || [])
       .find((route) => route.name === 'IncidentCenter');
     const incidentRoute = adminRoute.children.find((route) => route.name === 'IncidentCenter');
@@ -198,6 +199,7 @@ describe('router/routes and app shell', () => {
       'Settings',
       'AICenter',
       'ForecastGovernance',
+      'IncidentCenter',
       'AuditEvents',
     ]);
     expect(Object.fromEntries(visibleRoutes.map((route) => [route.name, route.meta.icon]))).toEqual({
@@ -210,6 +212,7 @@ describe('router/routes and app shell', () => {
       Settings: 'i-ri-settings-3-line',
       AICenter: 'i-ri-robot-2-line',
       ForecastGovernance: 'i-ri-line-chart-line',
+      IncidentCenter: 'i-ri-alarm-warning-line',
       AuditEvents: 'i-ri-file-search-line',
     });
   });
