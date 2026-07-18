@@ -258,6 +258,17 @@ def test_forecast_incident_migration_compiles_and_upgrades_sqlite():
         assert "incidents" not in inspector.get_table_names()
 
 
+def test_forecast_incident_migration_consolidates_telemetry_fix_into_one_revision():
+    versions = Path(__file__).resolve().parents[1] / "migrate" / "versions"
+    migration_path = versions / "000000000010_forecast_incidents.py"
+    source = migration_path.read_text(encoding="utf-8")
+
+    assert [item.name for item in versions.glob("000000000010_*.py")] == [
+        "000000000010_forecast_incidents.py"
+    ]
+    assert "ck_telemetry_run_terminal_fields" in source
+
+
 def test_incident_notification_defaults_to_administrators_and_requires_explicit_other_audiences():
     from services import incidentNotificationService as notifications
 
@@ -559,6 +570,43 @@ def test_performance_task_writes_only_after_three_consecutive_five_minute_anomal
 
     assert {item["metric"] for item in findings} == {"latency", "iops", "throughput"}
     assert all(item["window_start"] == UTC_NOW for item in findings)
+
+
+def test_performance_task_rejects_anomalies_with_a_missing_five_minute_window():
+    from celery_tasks.tasks import forecast_incidents
+
+    rows = []
+    for offset in range(28, 0, -1):
+        observed_at = UTC_NOW - timedelta(days=offset)
+        rows.append(
+            {
+                "storage_cluster_id": "7",
+                "object_type": "volume",
+                "object_id": "volume-a",
+                "object_name": "volume-a",
+                "latency_total": 1.0,
+                "iops_total": 1.0,
+                "throughput_total": 1.0,
+                "collected_at": observed_at,
+            }
+        )
+    for minutes in (0, 5, 15):
+        rows.append(
+            {
+                "storage_cluster_id": "7",
+                "object_type": "volume",
+                "object_id": "volume-a",
+                "object_name": "volume-a",
+                "latency_total": 100.0,
+                "iops_total": 100.0,
+                "throughput_total": 100.0,
+                "collected_at": UTC_NOW + timedelta(minutes=minutes),
+            }
+        )
+
+    assert forecast_incidents._performance_findings(
+        rows, now=UTC_NOW + timedelta(minutes=15)
+    ) == []
 
 
 def test_capacity_forecast_task_is_registered_for_daily_utc_aligned_execution():
