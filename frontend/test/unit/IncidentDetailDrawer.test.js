@@ -1,4 +1,5 @@
 import { flushPromises, shallowMount } from '@vue/test-utils';
+import { ElMessage } from 'element-plus';
 import { vi } from 'vitest';
 import IncidentDetailDrawer from '@/pages/incident/components/IncidentDetailDrawer.vue';
 
@@ -42,6 +43,7 @@ async function mountDrawer() {
         ElDatePicker: passthrough('ElDatePicker', 'input'),
         ElForm: passthrough('ElForm', 'form'),
         ElFormItem: passthrough('ElFormItem'),
+        ElTooltip: passthrough('ElTooltip'),
       },
       directives: { loading: () => {} },
     },
@@ -52,6 +54,8 @@ async function mountDrawer() {
 
 describe('IncidentDetailDrawer', () => {
   beforeEach(() => {
+    vi.spyOn(ElMessage, 'success').mockImplementation(() => {});
+    vi.spyOn(ElMessage, 'error').mockImplementation(() => {});
     incidentApi.fetchIncident.mockResolvedValue({
       ...incident,
       evidence: [{ id: 1, source: 'vendor_event', source_ref: 'netapp:1', evidence_type: 'severe_vendor_event' }],
@@ -66,6 +70,10 @@ describe('IncidentDetailDrawer', () => {
     incidentApi.createMaintenanceWindow.mockResolvedValue({ id: 3 });
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('loads the immutable evidence summary and exposes only permitted lifecycle controls', async () => {
     const wrapper = await mountDrawer();
 
@@ -75,6 +83,20 @@ describe('IncidentDetailDrawer', () => {
     expect(wrapper.text()).toContain('创建维护窗口');
 
     await wrapper.get('[data-testid="incident-claim"]').trigger('click');
+    await flushPromises();
     expect(incidentApi.updateIncident).toHaveBeenCalledWith(9, { claim: true });
+    expect(ElMessage.success).toHaveBeenCalledWith('事件已认领');
+  });
+
+  it('explains incident actions in tooltips', async () => {
+    const wrapper = await mountDrawer();
+
+    const tooltipContents = wrapper.findAllComponents({ name: 'ElTooltip' })
+      .map((tooltip) => tooltip.props('content'));
+    expect(tooltipContents).toEqual(expect.arrayContaining([
+      '将事件指派给当前登录用户，明确处理责任。',
+      '取消当前认领；仅认领人或超级管理员可以释放。',
+      '恢复派生事件的后续通知，不删除事件、证据或原始告警。',
+    ]));
   });
 });
