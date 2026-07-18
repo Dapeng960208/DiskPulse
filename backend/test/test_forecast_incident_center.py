@@ -437,6 +437,36 @@ def test_incident_notification_only_triggers_for_create_reopen_or_severity_escal
     ) is False
 
 
+def test_expired_incident_silence_does_not_suppress_a_new_severity_notification(monkeypatch):
+    from types import SimpleNamespace
+
+    from services import incidentNotificationService as notifications
+
+    monkeypatch.setattr(
+        notifications,
+        "incident_notification_config",
+        lambda: {
+            "enabled": True,
+            "notify_administrators": True,
+            "notify_project_owner": False,
+            "notify_project_members": False,
+            "extra_usernames": (),
+            "feishu_enabled": False,
+            "email_enabled": False,
+        },
+    )
+    monkeypatch.setattr(notifications, "base_config", {"super_admin_usernames": ("admin",)})
+    monkeypatch.setattr(notifications, "_project_recipients", lambda db, project_id: (None, ()))
+
+    recipients = notifications.notify_incident(
+        None,
+        SimpleNamespace(project_id=1, silenced_until=UTC_NOW - timedelta(minutes=1)),
+        event="severity_escalated",
+    )
+
+    assert recipients == ("admin",)
+
+
 def test_workload_adapter_only_returns_aggregated_time_window_asset_evidence():
     from services.workloadStorageAdapter import WorkloadRun, aggregate_workload_evidence
 
