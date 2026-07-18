@@ -23,4 +23,16 @@ describe('resource capacity prediction detail contracts', () => {
     expect(panel).toContain('assetType');
     expect(api).toContain('/capacity-predictions/');
   });
+
+  it('lets project administrators maintain structured plans and super administrators govern candidates', () => {
+    const panel = source('src/pages/capacity-prediction/CapacityPredictionPanel.vue');
+    const governance = source('src/pages/admin/forecast-governance/ForecastGovernancePage.vue');
+    const api = source('src/api/capacity-prediction-api.js');
+
+    expect(panel).toContain('createPlan');
+    expect(panel).toContain('canManagePlans');
+    expect(governance).toContain('fetchCandidates');
+    expect(governance).toContain('activateCandidate');
+    expect(api).toContain('capacity-prediction-candidates');
+  });
 });
