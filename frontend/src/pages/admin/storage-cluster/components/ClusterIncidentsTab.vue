@@ -72,11 +72,11 @@ onMounted(load);
       :data="incidents"
       empty-text="暂无关联事件">
       <ElTableColumn
-        label="资产"
+        label="受影响对象"
         prop="display_name"
         min-width="180" />
       <ElTableColumn
-        label="类别"
+        label="事件类型"
         prop="category"
         min-width="160" />
       <ElTableColumn

@@ -478,12 +478,23 @@ export function createMockGateway() {
       const item = state.incidents.find((record) => record.id === Number(incident[1]));
       if (!item || !allowed(account, item.project_id)) throw error(403);
       if (verb === 'patch' && !capabilities(account, item.project_id).edit) throw error(403);
-      Object.assign(item, body || {});
+      if (verb === 'patch' && body?.claim === true) {
+        item.assigned_user_id = account.id;
+      } else if (verb === 'patch' && body?.claim === false) {
+        if (item.assigned_user_id != null && item.assigned_user_id !== account.id && account.role !== 'superadmin') throw error(403, '仅认领人或超级管理员可以释放事件');
+        item.assigned_user_id = null;
+      } else if (verb === 'patch') {
+        Object.assign(item, body || {});
+      }
+      const incidentCapabilities = capabilities(account, item.project_id);
       return {
         ...item,
         capabilities: {
-          ...capabilities(account, item.project_id),
+          ...incidentCapabilities,
           create_maintenance_window: ['superadmin', 'project_admin'].includes(account.role),
+          claim: incidentCapabilities.edit && item.assigned_user_id == null,
+          release: incidentCapabilities.edit && item.assigned_user_id != null
+            && (item.assigned_user_id === account.id || account.role === 'superadmin'),
         },
       };
     }

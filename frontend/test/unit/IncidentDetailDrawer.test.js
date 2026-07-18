@@ -79,6 +79,7 @@ describe('IncidentDetailDrawer', () => {
 
     expect(incidentApi.fetchIncident).toHaveBeenCalledWith(9);
     expect(wrapper.text()).toContain('确定性诊断');
+    expect(wrapper.text()).toContain('这是基于已记录证据生成的规则化排查建议，不是 AI 自由生成的故障结论。');
     expect(wrapper.text()).toContain('认领');
     expect(wrapper.text()).toContain('创建维护窗口');
 
@@ -88,6 +89,25 @@ describe('IncidentDetailDrawer', () => {
     expect(ElMessage.success).toHaveBeenCalledWith('事件已认领');
   });
 
+  it('only shows claim before assignment and only shows release when the current user can release it', async () => {
+    incidentApi.fetchIncident.mockResolvedValueOnce({
+      ...incident,
+      assigned_user_id: 7,
+      capabilities: { edit: true, claim: false, release: true, create_maintenance_window: true },
+      evidence: [],
+      timeline: [],
+      diagnosis: null,
+    });
+    const wrapper = await mountDrawer();
+
+    expect(wrapper.find('[data-testid="incident-claim"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="incident-release"]').trigger('click');
+    await flushPromises();
+
+    expect(incidentApi.updateIncident).toHaveBeenCalledWith(9, { claim: false });
+    expect(ElMessage.success).toHaveBeenCalledWith('事件已释放');
+  });
+
   it('explains incident actions in tooltips', async () => {
     const wrapper = await mountDrawer();
 
@@ -95,7 +115,6 @@ describe('IncidentDetailDrawer', () => {
       .map((tooltip) => tooltip.attributes('content'));
     expect(tooltipContents).toEqual(expect.arrayContaining([
       '将事件指派给当前登录用户，明确处理责任。',
-      '取消当前认领；仅认领人或超级管理员可以释放。',
       '恢复派生事件的后续通知，不删除事件、证据或原始告警。',
     ]));
   });
@@ -113,5 +132,21 @@ describe('IncidentDetailDrawer', () => {
     const tooltipContents = wrapper.findAllComponents({ name: 'ElTooltip' })
       .map((tooltip) => tooltip.attributes('content'));
     expect(tooltipContents).toContain('容量预测显示可能耗尽，或当前资源的有效告警规则达到阈值。默认按硬限额 80%/90%/95%；用户目录优先采用项目组规则，其次项目规则，最后系统规则。');
+  });
+
+  it('uses clear Chinese terms for the affected object, event type, and monitoring blind spot', async () => {
+    incidentApi.fetchIncident.mockResolvedValueOnce({
+      ...incident,
+      category: 'telemetry_blindspot',
+      evidence: [],
+      timeline: [],
+      diagnosis: null,
+    });
+    const wrapper = await mountDrawer();
+
+    const descriptionLabels = wrapper.findAllComponents({ name: 'ElDescriptionsItem' })
+      .map((item) => item.attributes('label'));
+    expect(descriptionLabels).toEqual(expect.arrayContaining(['受影响对象', '事件类型']));
+    expect(wrapper.text()).toContain('监控盲区');
   });
 });
