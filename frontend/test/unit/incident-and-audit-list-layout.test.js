@@ -26,9 +26,16 @@ describe('事件中心和统一操作审计列表布局', () => {
 
     expect(source).toContain("import DataTable from '@/components/data/DataTable.vue';");
     expect(source).toContain('<DataTable');
-    expect(source).toContain(':pagination="{ page: queryParams.page, pageSize: queryParams.size, total, pageSizes: [20, 50, 100], showJumper: true }"');
+    expect(source).toContain(':pagination="{ page: queryParams.page, pageSize: queryParams.size, total, pageSizes: [20, 50, 100], hideOnSinglePage: true, showJumper: true }"');
+    expect(source).toContain('.incident-center-page { display: flex; flex-direction: column; gap: var(--spacing-md); }');
     expect(source).not.toContain('<ElCard');
     expect(source).not.toContain('<ElPagination');
     expect(source).not.toMatch(/<ElTable\s/);
+  });
+
+  it('keeps the unified audit filter bar compact with the same layout contract', () => {
+    const source = sourceFor(auditPage);
+
+    expect(source).toContain('.audit-event-list-page { display: flex; flex-direction: column; gap: var(--spacing-md); }');
   });
 });
