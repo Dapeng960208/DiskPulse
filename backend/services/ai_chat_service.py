@@ -315,6 +315,9 @@ def _message_turn_metadata(message: AIMessage, audits_by_message: dict[int, AIAu
             "action": recovery["action"],
             "label": recovery["label"],
         }
+    pending_confirmation = ai_quota_confirmation_service.pending_confirmation_from_audit(audit)
+    if pending_confirmation is not None:
+        metadata["quota_confirmation"] = pending_confirmation
     return metadata
 
 

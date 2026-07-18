@@ -80,6 +80,37 @@ describe('AI pages interactions', () => {
     expect(aiApi.streamMessage).toHaveBeenCalledTimes(3);
   });
 
+  it('restores a persisted quota confirmation card when opening conversation history', async () => {
+    // Review source: quota confirmation existed only in the live SSE event.
+    // Resolution contract: the safe confirmation payload returned by history
+    // renders through the same card without a second stream request.
+    aiApi.listConversations.mockResolvedValue([{ id: 10, model_id: 1, title: '配额确认' }]);
+    aiApi.getConversation.mockResolvedValue({
+      id: 10,
+      model_id: 1,
+      title: '配额确认',
+      messages: [{
+        id: 2,
+        role: 'assistant',
+        content: '请确认',
+        status: 'awaiting_confirmation',
+        tool_calls: [],
+        quota_confirmation: {
+          confirmation_id: 'confirmation-owner-only',
+          expires_at: 4102444800,
+          expires_in_seconds: 300,
+          preview: { resource: 'project-alpha', old_hard_limit: 100, new_hard_limit: 200, unit: 'GB' },
+        },
+      }],
+    });
+
+    const wrapper = shallowMount(AiChatPage);
+    await flushPromises();
+
+    expect(wrapper.vm.messages[0].quota_confirmation.confirmation_id).toBe('confirmation-owner-only');
+    expect(wrapper.vm.messages[0].status).toBe('awaiting_confirmation');
+  });
+
   it('streams text and tool status into the assistant message accepted for its turn', async () => {
     const acceptedMessage = {
       id: 12,

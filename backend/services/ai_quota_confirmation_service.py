@@ -18,6 +18,11 @@ from utils.auth_service import is_super_admin
 _QUOTA_TOOL_NAMES = frozenset({"adjust_group_quota", "adjust_storage_usage_quota"})
 _TTL_SECONDS = 300
 _KEY_PREFIX = "diskpulse:ai-quota-confirmation:"
+_PREVIEW_FIELDS = frozenset({
+    "resource_id", "resource_type", "resource", "storage_type",
+    "old_hard_limit", "old_soft_limit", "new_hard_limit", "new_soft_limit",
+    "unit", "change_reason",
+})
 _CONSUME_SCRIPT = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
     return redis.call('del', KEYS[1])
@@ -67,6 +72,53 @@ def _preview(db: Session, *, tool_name: str, normalized: dict) -> dict:
     }
 
 
+def pending_confirmation_from_audit(
+    audit: AIAuditLog,
+    *,
+    now: datetime | None = None,
+) -> dict | None:
+    """Return only the safe, still-valid confirmation metadata persisted in an audit."""
+    if audit.status != "awaiting_confirmation":
+        return None
+    try:
+        detail = json.loads(audit.detail_payload or "[]")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(detail, list):
+        return None
+    current_epoch = int((now or datetime.now()).timestamp())
+    for entry in reversed(detail):
+        if not isinstance(entry, dict) or entry.get("status") != "awaiting_confirmation":
+            continue
+        candidate = entry
+        result = entry.get("result")
+        if isinstance(result, dict):
+            data = result.get("data")
+            if isinstance(data, dict) and isinstance(data.get("confirmation_required"), dict):
+                candidate = data["confirmation_required"]
+        confirmation_id = candidate.get("confirmation_id")
+        expires_at = candidate.get("expires_at")
+        preview = candidate.get("preview")
+        if (
+            not isinstance(confirmation_id, str)
+            or not isinstance(expires_at, int)
+            or expires_at <= current_epoch
+            or not isinstance(preview, dict)
+        ):
+            continue
+        # Review source: SSE-only confirmation cards vanished on reload.
+        # Resolution: restore only whitelisted preview fields from the owning
+        # audit; normalized tool arguments remain Redis-only.
+        safe_preview = {key: preview[key] for key in _PREVIEW_FIELDS if key in preview}
+        return {
+            "confirmation_id": confirmation_id,
+            "expires_at": expires_at,
+            "expires_in_seconds": expires_at - current_epoch,
+            "preview": safe_preview,
+        }
+    return None
+
+
 def prepare_confirmation(
     db: Session,
     *,
@@ -81,6 +133,7 @@ def prepare_confirmation(
     normalized = _normalise(definition, arguments)
     confirmation_id = str(uuid4())
     preview = _preview(db, tool_name=definition.name, normalized=normalized)
+    expires_at = int(datetime.now().timestamp()) + _TTL_SECONDS
     record = {
         "confirmation_id": confirmation_id,
         "user_id": user_id,
@@ -89,19 +142,25 @@ def prepare_confirmation(
         "tool_name": definition.name,
         "arguments": normalized,
         "preview": preview,
-        "expires_at": int(datetime.now().timestamp()) + _TTL_SECONDS,
+        "expires_at": expires_at,
     }
     try:
         _quota_redis_client().setex(_key(confirmation_id), _TTL_SECONDS, json.dumps(record, ensure_ascii=False))
     except redis.RedisError as error:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="AI quota confirmation unavailable") from error
     detail = json.loads(audit.detail_payload or "[]")
-    detail.append({"confirmation_id": confirmation_id, "status": "awaiting_confirmation", "preview": preview})
+    pending = {
+        "confirmation_id": confirmation_id,
+        "expires_at": expires_at,
+        "expires_in_seconds": _TTL_SECONDS,
+        "preview": preview,
+    }
+    detail.append({"status": "awaiting_confirmation", **pending})
     audit.status = "awaiting_confirmation"
     audit.detail_payload = json.dumps(detail, ensure_ascii=False)
     audit.updated_at = datetime.now()
     db.commit()
-    return {"confirmation_id": confirmation_id, "expires_in_seconds": _TTL_SECONDS, "preview": preview}
+    return pending
 
 
 def decide_confirmation(

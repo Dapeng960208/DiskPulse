@@ -729,6 +729,64 @@ def test_tool_iteration_limit_completes_as_degraded_and_persists_recovery_metada
     assert history["messages"][-1]["recovery"] == completed["message"]["recovery"]
 
 
+def test_history_restores_unfinished_quota_confirmation_for_owner(db_session):
+    """Review source: live SSE confirmation cards were absent from history reloads.
+
+    Resolution contract: persist and serialize only the safe, unexpired preview
+    for the owning conversation; a different user continues to receive 404.
+    """
+    seed_user(db_session, user_id=1, username="owner")
+    seed_user(db_session, user_id=2, username="other")
+    configured = seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, title="配额确认")
+    db_session.add(conversation)
+    db_session.flush()
+    assistant = AIMessage(conversation_id=conversation.id, role="assistant", content="请确认")
+    db_session.add(assistant)
+    db_session.flush()
+    pending = {
+        "confirmation_id": "confirmation-owner-only",
+        "expires_at": 4102444800,
+        "expires_in_seconds": 300,
+        "preview": {
+            "resource": "project-alpha",
+            "old_hard_limit": 100,
+            "new_hard_limit": 200,
+            "unit": "GB",
+        },
+    }
+    db_session.add(AIAuditLog(
+        model_id=configured.id,
+        conversation_id=conversation.id,
+        user_id=1,
+        source="chat",
+        source_ref=str(conversation.id),
+        request_payload="{}",
+        response_payload=json.dumps({
+            "message_id": assistant.id,
+            "visibility": {"known": True, "project_scope_ids": [], "requires_super_admin": False},
+        }),
+        detail_payload=json.dumps([{
+            "status": "awaiting_confirmation",
+            "result": {"ok": True, "data": {"confirmation_required": pending}},
+            "visibility": {"known": True, "project_scope_ids": [], "requires_super_admin": False},
+        }]),
+        status="awaiting_confirmation",
+    ))
+    db_session.commit()
+
+    history = ai_chat_service.get_conversation(db_session, conversation.id, 1)
+
+    restored = history["messages"][-1]["quota_confirmation"]
+    assert restored["confirmation_id"] == pending["confirmation_id"]
+    assert restored["expires_at"] == pending["expires_at"]
+    assert restored["expires_in_seconds"] > 0
+    assert restored["preview"] == pending["preview"]
+    with pytest.raises(HTTPException) as denied:
+        ai_chat_service.get_conversation(db_session, conversation.id, 2)
+    assert denied.value.status_code == 404
+
+
 def test_invalid_json_tool_argument_repairs_stop_after_two_attempts_and_degrade_safely(db_session, monkeypatch):
     seed_user(db_session)
     configured = seed_model(db_session)

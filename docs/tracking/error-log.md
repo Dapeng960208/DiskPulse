@@ -1,5 +1,23 @@
 # 错误记录
 
+### 2026-07-18：AI 页面聚焦测试从仓库根目录启动导致别名解析失败
+
+- 触发：在仓库根目录调用主工作区 Vitest 二进制运行 `frontend/test/unit/ai-pages.test.js`。
+- 现象：Vite 报 `Failed to load url @/pages/ai/AiChatPage.vue`，测试文件显示 `0 test`。
+- 根因：前端 Vite 配置和 `@/` 别名以 `frontend/` 为项目根；从仓库根启动使配置根目录错误。
+- 修复：将工作目录切换到目标 worktree 的 `frontend/` 后运行相同相对测试路径。
+- 验证：`ai-pages.test.js` 通过 `16 tests`。
+- 风险：独立 worktree 仍复用主工作区 `node_modules`；命令必须保持目标 `frontend/` 为当前目录。
+
+### 2026-07-18：AI 配额确认卡片无法从会话历史恢复
+
+- 触发：生成 AI 配额确认后刷新页面或重新打开所属会话。
+- 现象：实时 SSE 曾显示确认卡片，但历史助手消息不包含 `quota_confirmation`。
+- 根因：会话序列化只恢复工具轨迹和状态，没有从持久化审计提取待确认元数据；原返回值也缺少绝对过期时间。
+- 修复：审计持久化绝对 `expires_at` 和安全预览；历史只对会话所有者序列化未过期确认，并对白名单预览字段过滤，不读取 Redis 工具参数。
+- 验证：后端 AI/配额聚焦 `48 passed`，前端 AI 页面 `16 passed`。
+- 风险：未连接真实 Redis 或 Provider 验证刷新后点击确认；Redis 一次性消费和确认时超级管理员复验逻辑未改变。
+
 ### 2026-07-18：r10 降级无法接纳已分类的失败遥测行
 
 - 触发：r8 账本升级 r10、写入带 `vendor_timeout` 的失败行后执行 r10 downgrade。
