@@ -54,6 +54,17 @@ export default [
           breadcrumb: ['用户目录', '使用详情'],
         },
       },
+      {
+        path: 'usage/:id/capacity-prediction',
+        name: 'UsageCapacityPrediction',
+        component: () => import('@/pages/capacity-prediction/CapacityPredictionDetailPage.vue'),
+        props: { assetType: 'storage_usage', listRouteName: 'Usages', listLabel: '用户目录' },
+        meta: {
+          title: '容量预测',
+          isHidden: true,
+          breadcrumb: ['用户目录', '容量预测'],
+        },
+      },
     ],
   },
   {
@@ -106,6 +117,17 @@ export default [
           title: '项目组详情',
           isHidden: true,
           breadcrumb: ['项目组', '项目组详情'],
+        },
+      },
+      {
+        path: 'group/:id/capacity-prediction',
+        name: 'GroupCapacityPrediction',
+        component: () => import('@/pages/capacity-prediction/CapacityPredictionDetailPage.vue'),
+        props: { assetType: 'group', listRouteName: 'Groups', listLabel: '项目组' },
+        meta: {
+          title: '容量预测',
+          isHidden: true,
+          breadcrumb: ['项目组', '容量预测'],
         },
       },
     ],

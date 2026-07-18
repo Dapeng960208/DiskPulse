@@ -20,9 +20,11 @@ import { formatStorageTargetType } from '@/utils/storage-resource';
 import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
+import capacityPredictionApi from '@/api/capacity-prediction-api.js';
 
 const groupFormDialogRef = ref();
 const quotaAdjustmentDialogRef = ref();
+const predictionEnabled = ref(false);
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
@@ -126,6 +128,12 @@ function confirmDelete(row) {
 function canAdjustQuota(row) {
   return row?.capabilities?.adjust_quota === true;
 }
+function openCapacityPrediction(row) {
+  router.push({ name: 'GroupCapacityPrediction', params: { id: row.id } });
+}
+capacityPredictionApi.visibility().then((value) => {
+  predictionEnabled.value = value.visible === true;
+}).catch(() => { predictionEnabled.value = false; });
 </script>
 
 <template>
@@ -428,7 +436,7 @@ function canAdjustQuota(row) {
               详情
             </ElButton>
             <ElDropdown
-              v-if="hasRole('disk-monitor:admin') || canAdjustQuota(row)"
+              v-if="hasRole('disk-monitor:admin') || canAdjustQuota(row) || predictionEnabled"
               trigger="click"
               placement="bottom-end">
               <ElButton
@@ -440,6 +448,11 @@ function canAdjustQuota(row) {
               </ElButton>
               <template #dropdown>
                 <ElDropdownMenu>
+                  <ElDropdownItem
+                    v-if="predictionEnabled"
+                    @click="openCapacityPrediction(row)">
+                    容量预测
+                  </ElDropdownItem>
                   <ElDropdownItem
                     v-if="canAdjustQuota(row)"
                     :disabled="row.associate_multiple_groups"

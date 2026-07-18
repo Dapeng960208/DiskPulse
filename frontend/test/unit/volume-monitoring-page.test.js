@@ -23,4 +23,12 @@ describe('volume performance monitoring detail', () => {
     expect(page).toContain('performance-grid');
     expect(page).toContain('monitoring.value.performance || []');
   });
+
+  it('starts with the filter toolbar instead of a duplicate page header', () => {
+    const page = source('src/pages/admin/volume/VolumeMonitoringPage.vue');
+
+    expect(page).not.toContain('volume-monitoring-page__header');
+    expect(page).not.toContain('存储空间性能监控');
+    expect(page).not.toContain('查看存储空间容量变化和关联存储集群的实时性能指标。');
+  });
 });

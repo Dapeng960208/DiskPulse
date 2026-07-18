@@ -56,24 +56,20 @@ describe('detail capacity prediction navigation', () => {
     accessMock.mockReset();
   });
 
-  it('shows a user-directory capacity prediction entry only when access is enabled and opens it', async () => {
+  it('keeps the user-directory detail focused on realtime monitoring', async () => {
     accessMock.mockResolvedValue({ visible: true, can_manage_plans: false });
 
     const wrapper = mount(UsageDetailPage, { global });
     await flushPromises();
 
     expect(wrapper.find('.real-time-page-stub').attributes('data-show-header')).toBe('false');
-    expect(wrapper.find('.detail-monitor-page__actions').exists()).toBe(true);
-    const entry = wrapper.get('[data-testid="capacity-prediction-entry"]');
-    expect(entry.text()).toContain('容量预测');
-
-    await entry.trigger('click');
-
-    expect(wrapper.get('[data-testid="capacity-prediction-panel"]').text()).toContain('容量预测内容');
+    expect(wrapper.find('.detail-monitor-page__actions').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="capacity-prediction-entry"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="capacity-prediction-panel"]').exists()).toBe(false);
   });
 
-  it('does not render the project-group capacity prediction entry when access is disabled', async () => {
-    accessMock.mockResolvedValue({ visible: false, can_manage_plans: false });
+  it('keeps the project-group detail focused on realtime monitoring', async () => {
+    accessMock.mockResolvedValue({ visible: true, can_manage_plans: true });
 
     const wrapper = mount(GroupDetailPage, { global });
     await flushPromises();
@@ -81,6 +77,7 @@ describe('detail capacity prediction navigation', () => {
     expect(wrapper.find('.real-time-page-stub').attributes('data-show-header')).toBe('false');
     expect(wrapper.find('.detail-monitor-page__actions').exists()).toBe(false);
     expect(wrapper.find('[data-testid="capacity-prediction-entry"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="capacity-prediction-panel"]').exists()).toBe(false);
   });
 
   it('hides the repeated monitoring title and subtitle in the capacity-pool detail page', () => {
