@@ -18,7 +18,7 @@ from appConfig import base_config
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 VERSIONS_ROOT = BACKEND_ROOT / "migrate" / "versions"
 UNIFIED_REVISION = "000000000009"
-HEAD_REVISION = "000000000011"
+HEAD_REVISION = "000000000012"
 UNIFIED_MIGRATION = VERSIONS_ROOT / "000000000009_project_rbac_unified_audit.py"
 TELEMETRY_MIGRATION = VERSIONS_ROOT / "000000000008_telemetry_collection_runs.py"
 RELEASE_TRACKING = BACKEND_ROOT.parent / "docs" / "tracking" / "current-release.md"

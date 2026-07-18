@@ -13,6 +13,8 @@ describe('resource capacity prediction detail contracts', () => {
     expect(usage).toContain('CapacityPredictionPanel');
     expect(group).toContain('容量预测');
     expect(usage).toContain('容量预测');
+    expect(group).toMatch(/<ElTabPane[\s\S]*?v-if="predictionVisible"[\s\S]*?lazy[\s\S]*?label="容量预测"/);
+    expect(usage).toMatch(/<ElTabPane[\s\S]*?v-if="predictionVisible"[\s\S]*?lazy[\s\S]*?label="容量预测"/);
   });
 
   it('keeps prediction visibility server-driven and scoped by resource type', () => {
@@ -32,8 +34,14 @@ describe('resource capacity prediction detail contracts', () => {
     expect(panel).toContain('createPlan');
     expect(panel).toContain('canManagePlans');
     expect(governance).toContain('fetchCandidates');
+    expect(governance).toContain('createCandidate');
     expect(governance).toContain('activateCandidate');
+    expect(governance).toContain('评估窗口');
+    expect(governance).toContain('AI 回退');
+    expect(governance).toContain('fallback_count');
+    expect(governance).toContain('Array.isArray');
     expect(api).toContain('capacity-prediction-candidates');
+    expect(api).toContain('createCandidate');
   });
 
   it('explains prediction confidence, model fallback, and related incident boundaries', () => {
@@ -43,5 +51,7 @@ describe('resource capacity prediction detail contracts', () => {
     expect(panel).toContain('模型版本');
     expect(panel).toContain('关联事件');
     expect(panel).toContain('基线回退');
+    expect(panel).toContain('auditSummary');
+    expect(panel).toContain('relatedIncidents');
   });
 });

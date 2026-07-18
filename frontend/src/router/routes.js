@@ -286,6 +286,15 @@ export default [
         },
       },
       {
+        path: 'forecast-governance',
+        name: 'ForecastGovernance',
+        component: () => import('@/pages/admin/forecast-governance/ForecastGovernancePage.vue'),
+        meta: {
+          title: '容量预测治理', icon: 'i-ri-line-chart-line',
+          isAccessible: () => hasRole('superadmin') ? 200 : 403,
+        },
+      },
+      {
         path: 'ai-center/audits/:id',
         name: 'AIAuditDetail',
         component: () => import('@/pages/admin/ai/AiAuditDetailPage.vue'),

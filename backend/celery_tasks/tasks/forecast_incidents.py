@@ -25,6 +25,7 @@ from dependencies import QuestDBSession
 from models import (
     AnomalyObservation,
     CapacityForecast,
+    AIConfig,
     Group,
     StorageAlerts,
     StorageCluster,
@@ -33,7 +34,8 @@ from models import (
     Volume,
     Qtree,
 )
-from services import forecastIncidentService, incidentNotificationService
+from services import capacityPredictionGovernanceService, forecastIncidentService, incidentNotificationService
+from crud import capacityPredictionCrud
 from services.forecastIncidentService import AssetRef, TelemetryEnvelope
 
 
@@ -253,12 +255,15 @@ def _forecast_curve_json(result) -> list[dict]:
 
 
 def _capacity_forecast_for_target(db, target: CapacityTarget, *, now: datetime) -> CapacityForecast:
+    points = _quest_capacity_points(
+        target,
+        cutoff=_utc_day(now) - timedelta(
+            days=forecastIncidentService.FORECAST_TRAINING_DAYS + forecastIncidentService.FORECAST_DAYS - 1
+        ),
+    )
     result = forecastIncidentService.build_capacity_forecast(
         target.asset_ref,
-        points=_quest_capacity_points(
-            target,
-            cutoff=_utc_day(now) - timedelta(days=forecastIncidentService.FORECAST_TRAINING_DAYS - 1),
-        ),
+        points=points,
         hard_limit=target.hard_limit,
         now=now,
     )
@@ -286,10 +291,115 @@ def _capacity_forecast_for_target(db, target: CapacityTarget, *, now: datetime) 
                 "status": result.status,
                 "coverage_ratio": result.coverage_ratio,
                 "data_gaps": result.data_gaps,
+                "sample_count": len({observed_at.date() for observed_at, _used in points}),
+                "latest_observed_at": (
+                    max((observed_at for observed_at, _used in points), default=None).isoformat()
+                    if points else None
+                ),
+                "forecast_fresh_at": training_end.isoformat(),
             },
-            backtest_mape=None,
+            backtest_mape=forecastIncidentService.capacity_forecast_backtest_mape(
+                target.asset_ref,
+                points=points,
+                hard_limit=target.hard_limit,
+            ),
         ),
     )
+
+
+def _persist_active_candidate_prediction(db, *, target: CapacityTarget, baseline: CapacityForecast, now: datetime) -> None:
+    candidate = capacityPredictionCrud.active_candidate(db)
+    if candidate is None:
+        return
+    model = db.get(AIConfig, candidate.ai_model_id)
+    if model is None or model.enabled is not True:
+        return
+    points = _quest_capacity_points(
+        target,
+        cutoff=_utc_day(now) - timedelta(days=forecastIncidentService.FORECAST_TRAINING_DAYS - 1),
+    )
+    plans = [
+        {"effective_at": plan.effective_at, "capacity_delta": plan.capacity_delta}
+        for plan in capacityPredictionCrud.list_plans(
+            db,
+            asset_type=target.asset_ref.asset_type,
+            asset_id=target.asset_ref.asset_id,
+        )
+    ]
+    result = capacityPredictionGovernanceService.generate_candidate_curve_with_fallback(
+        model=model,
+        asset_type=target.asset_ref.asset_type,
+        points=points,
+        hard_limit=target.hard_limit,
+        approved_plans=plans,
+        quality_summary=baseline.input_quality,
+        forecast_start=baseline.training_end,
+        baseline_curve=baseline.curve,
+    )
+    capacityPredictionGovernanceService.persist_candidate_prediction(
+        db,
+        candidate_id=candidate.id,
+        asset_type=target.asset_ref.asset_type,
+        asset_id=int(target.asset_ref.asset_id),
+        project_id=target.asset_ref.project_id,
+        forecast_start=baseline.training_end,
+        baseline_curve=baseline.curve,
+        result=result,
+    )
+
+
+def _record_rolling_candidate_evaluations(db, *, now: datetime) -> None:
+    """Persist only aggregate, resource-identity-free evidence for inactive candidates."""
+    targets = [
+        target
+        for target in _capacity_targets(db)
+        if target.asset_ref.asset_type in {"group", "storage_usage"}
+    ]
+    history_cutoff = _utc_day(now) - timedelta(
+        days=forecastIncidentService.FORECAST_TRAINING_DAYS + forecastIncidentService.FORECAST_DAYS * 3 - 1
+    )
+    for candidate in capacityPredictionCrud.list_candidates(db):
+        if candidate.enabled:
+            continue
+        model = db.get(AIConfig, candidate.ai_model_id)
+        if model is None or model.enabled is not True:
+            continue
+        by_window: dict[tuple[datetime, datetime], list[dict]] = {}
+        for target in targets:
+            plans = [
+                {"effective_at": plan.effective_at, "capacity_delta": plan.capacity_delta}
+                for plan in capacityPredictionCrud.list_plans(
+                    db,
+                    asset_type=target.asset_ref.asset_type,
+                    asset_id=target.asset_ref.asset_id,
+                )
+            ]
+            for evaluation in capacityPredictionGovernanceService.rolling_candidate_evaluations(
+                model=model,
+                asset_ref=target.asset_ref,
+                points=_quest_capacity_points(target, cutoff=history_cutoff),
+                hard_limit=target.hard_limit,
+                approved_plans=plans,
+            ):
+                key = (evaluation["window_start"], evaluation["window_end"])
+                by_window.setdefault(key, []).append(evaluation)
+        for (window_start, window_end), rows in by_window.items():
+            if capacityPredictionCrud.has_candidate_evaluation(
+                db,
+                candidate_id=candidate.id,
+                window_start=window_start,
+                window_end=window_end,
+            ):
+                continue
+            capacityPredictionGovernanceService.record_capacity_prediction_evaluation(
+                db,
+                candidate_id=candidate.id,
+                baseline_mape=round(sum(row["baseline_mape"] for row in rows) / len(rows), 4),
+                candidate_mape=round(sum(row["candidate_mape"] for row in rows) / len(rows), 4),
+                risk_coverage_ok=all(row["risk_coverage_ok"] for row in rows),
+                window_start=window_start,
+                window_end=window_end,
+            )
 
 
 def run_capacity_forecasts(*, now: datetime | None = None) -> int:
@@ -302,6 +412,8 @@ def run_capacity_forecasts(*, now: datetime | None = None) -> int:
             for target in _capacity_targets(db):
                 forecast = _capacity_forecast_for_target(db, target, now=now)
                 persisted.append(forecast)
+                if target.asset_ref.asset_type in {"group", "storage_usage"}:
+                    _persist_active_candidate_prediction(db, target=target, baseline=forecast, now=now)
                 exhaustion_p90 = (forecast.exhaustion_dates or {}).get("p90")
                 if exhaustion_p90 is None:
                     continue
@@ -320,6 +432,7 @@ def run_capacity_forecasts(*, now: datetime | None = None) -> int:
                     category="capacity_pressure",
                     notifications=notifications,
                 )
+            _record_rolling_candidate_evaluations(db, now=now)
             db.commit()
             committed = True
             return len(persisted)

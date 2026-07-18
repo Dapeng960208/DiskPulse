@@ -564,6 +564,110 @@ class CapacityForecast(Base):
     created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
 
 
+class CapacityPredictionSettings(Base):
+    __tablename__ = "capacity_prediction_settings"
+
+    id = Column(Integer, primary_key=True)
+    user_visible = Column(Boolean, nullable=False, default=False)
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class CapacityPredictionPlan(Base):
+    __tablename__ = "capacity_prediction_plans"
+    __table_args__ = (
+        CheckConstraint("asset_type IN ('group', 'storage_usage')", name="ck_capacity_prediction_plan_asset_type"),
+        Index("ix_capacity_prediction_plan_asset_effective", "asset_type", "asset_id", "effective_at"),
+        Index("ix_capacity_prediction_plan_project_effective", "project_id", "effective_at"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    asset_type = Column(String(32), nullable=False)
+    asset_id = Column(String(128), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    effective_at = Column(UTCDateTime(), nullable=False)
+    capacity_delta = Column(Float, nullable=False)
+    reason = Column(String(500), nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+
+
+class CapacityPredictionCandidate(Base):
+    __tablename__ = "capacity_prediction_candidates"
+    __table_args__ = (UniqueConstraint("version", name="uq_capacity_prediction_candidate_version"),)
+
+    id = Column(Integer, primary_key=True)
+    version = Column(String(64), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=False)
+    ai_model_id = Column(Integer, ForeignKey("ai_configs.id", ondelete="RESTRICT"), nullable=False)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+
+
+class CapacityPredictionEvaluation(Base):
+    __tablename__ = "capacity_prediction_evaluations"
+    __table_args__ = (
+        UniqueConstraint(
+            "candidate_id",
+            "window_start",
+            "window_end",
+            name="uq_capacity_prediction_evaluation_window",
+        ),
+        Index("ix_capacity_prediction_eval_candidate_created", "candidate_id", desc("created_at")),
+    )
+
+    id = Column(Integer, primary_key=True)
+    candidate_id = Column(Integer, ForeignKey("capacity_prediction_candidates.id", ondelete="CASCADE"), nullable=False)
+    baseline_mape = Column(Float, nullable=False)
+    candidate_mape = Column(Float, nullable=False)
+    risk_coverage_ok = Column(Boolean, nullable=False)
+    window_start = Column(UTCDateTime(), nullable=False)
+    window_end = Column(UTCDateTime(), nullable=False)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+
+
+class CapacityPredictionCandidateForecast(Base):
+    __tablename__ = "capacity_prediction_candidate_forecasts"
+    __table_args__ = (
+        UniqueConstraint(
+            "candidate_id",
+            "asset_type",
+            "asset_id",
+            "forecast_start",
+            name="uq_capacity_prediction_candidate_forecast",
+        ),
+        CheckConstraint(
+            "asset_type IN ('group', 'storage_usage')",
+            name="ck_capacity_prediction_candidate_forecast_asset_type",
+        ),
+        CheckConstraint(
+            "source IN ('ai_candidate', 'baseline_fallback')",
+            name="ck_capacity_prediction_candidate_forecast_source",
+        ),
+        Index(
+            "ix_capacity_prediction_candidate_forecast_asset_start",
+            "asset_type",
+            "asset_id",
+            desc("forecast_start"),
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    candidate_id = Column(
+        Integer,
+        ForeignKey("capacity_prediction_candidates.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    asset_type = Column(String(32), nullable=False)
+    asset_id = Column(String(128), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    forecast_start = Column(UTCDateTime(), nullable=False)
+    baseline_curve = Column(JSON, nullable=False)
+    curve = Column(JSON, nullable=False)
+    source = Column(String(32), nullable=False)
+    fallback_reason = Column(String(64), nullable=True)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+
+
 class AnomalyObservation(Base):
     __tablename__ = "anomaly_observations"
     __table_args__ = (

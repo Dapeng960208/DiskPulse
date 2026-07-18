@@ -15,6 +15,9 @@ _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _AUTH_LIFECYCLE_PATHS = frozenset({"/users/login", "/users/logout"})
 _PROJECT_MEMBERSHIP_PATH = re.compile(r"^/projects/[^/]+/members(?:/[^/]+)?$")
 _QUOTA_PATH = re.compile(r"^/(?:groups|storage-usages)/[^/]+/quota$")
+_CAPACITY_PREDICTION_PATH = re.compile(
+    r"^/v1/(?:capacity-predictions(?:/.*)?|admin/capacity-prediction(?:s|[-/]).*)$"
+)
 
 
 def _normalise_api_path(path: str) -> str:
@@ -38,6 +41,7 @@ def _has_specialized_lifecycle_audit(path: str) -> bool:
     return bool(
         _PROJECT_MEMBERSHIP_PATH.fullmatch(normalised)
         or _QUOTA_PATH.fullmatch(normalised)
+        or _CAPACITY_PREDICTION_PATH.fullmatch(normalised)
         or normalised == "/ai"
         or normalised.startswith("/ai/")
         or normalised.startswith("/admin/ai")

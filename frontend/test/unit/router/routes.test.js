@@ -49,6 +49,7 @@ describe('router/routes and app shell', () => {
         'BackUp',
         'Settings',
         'AICenter',
+        'ForecastGovernance',
         'AIAuditDetail',
       ]),
     );
@@ -97,6 +98,7 @@ describe('router/routes and app shell', () => {
       '用户信息管理',
       '系统设置',
       'AI 中心',
+      '容量预测治理',
     ]));
     expect([...rootTitles, ...adminTitles]).not.toEqual(expect.arrayContaining(['用户', 'Volume', 'Qtree']));
   });
@@ -169,6 +171,7 @@ describe('router/routes and app shell', () => {
       'UsersManagement',
       'Settings',
       'AICenter',
+      'ForecastGovernance',
       'AuditEvents',
     ]);
     expect(Object.fromEntries(visibleRoutes.map((route) => [route.name, route.meta.icon]))).toEqual({
@@ -180,6 +183,7 @@ describe('router/routes and app shell', () => {
       UsersManagement: 'i-ri-team-line',
       Settings: 'i-ri-settings-3-line',
       AICenter: 'i-ri-robot-2-line',
+      ForecastGovernance: 'i-ri-line-chart-line',
       AuditEvents: 'i-ri-file-search-line',
     });
   });

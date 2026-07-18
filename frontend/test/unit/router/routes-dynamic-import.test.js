@@ -51,6 +51,7 @@ vi.mock('@/pages/admin/qtree/QtreeDetailPage.vue', () => ({ default: createRoute
 vi.mock('@/pages/admin/user/UserListPage.vue', () => ({ default: createRoutePageStub('UserListPage') }));
 vi.mock('@/pages/admin/backup/BackUpListPage.vue', () => ({ default: createRoutePageStub('BackUpListPage') }));
 vi.mock('@/pages/admin/settings/SettingsPage.vue', () => ({ default: createRoutePageStub('SettingsPage') }));
+vi.mock('@/pages/admin/forecast-governance/ForecastGovernancePage.vue', () => ({ default: createRoutePageStub('ForecastGovernancePage') }));
 vi.mock('@/pages/error/UnauthorizedPage.vue', () => ({ default: createRoutePageStub('UnauthorizedPage') }));
 vi.mock('@/pages/error/NotFoundPage.vue', () => ({ default: createRoutePageStub('NotFoundPage') }));
 
@@ -74,7 +75,7 @@ describe('router lazy route components', () => {
   it('invokes every lazy route component loader', async () => {
     const lazyComponents = collectLazyComponents(routes);
 
-    expect(lazyComponents).toHaveLength(29);
+    expect(lazyComponents).toHaveLength(30);
 
     await Promise.all(lazyComponents.map((loadComponent) => loadComponent().catch(() => null)));
   });

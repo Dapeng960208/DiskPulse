@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, sta
 from sqlalchemy.orm import Session
 
 from crud import forecastIncidentCrud
-from dependencies import CurrentUserDep, get_db
+from dependencies import CurrentUserDep, get_db, require_super_admin
 from schemas.forecastIncidentSchema import (
     AnomalyOut,
     AnomalyPage,
@@ -24,10 +24,208 @@ from schemas.forecastIncidentSchema import (
     MaintenanceWindowCreate,
 )
 from services import audit_service, forecastIncidentService
+from services import capacityPredictionGovernanceService
+from schemas.capacityPredictionSchema import (
+    CapacityPredictionAccessOut,
+    CapacityPredictionCandidateCreate,
+    CapacityPredictionCandidateOut,
+    CapacityPredictionPlanCreate,
+    CapacityPredictionPlanOut,
+    CapacityPredictionRelatedIncidentOut,
+    CapacityPredictionSettingsPatch,
+    CapacityPredictionVisibilityOut,
+)
 
 
 router = APIRouter(prefix="/v1", tags=["forecast-incidents"])
 DBDep = Annotated[Session, Depends(get_db)]
+
+
+@router.get("/capacity-predictions/visibility", response_model=CapacityPredictionVisibilityOut)
+def capacity_prediction_visibility(current_user: CurrentUserDep, db: DBDep) -> CapacityPredictionVisibilityOut:
+    return CapacityPredictionVisibilityOut(
+        visible=capacityPredictionGovernanceService.prediction_visible_to_user(db, current_user=current_user)
+    )
+
+
+@router.get("/capacity-predictions/{asset_type}/{asset_id}", response_model=ForecastOut)
+def resource_capacity_prediction(
+    asset_type: Annotated[str, Path(pattern="^(group|storage_usage)$")],
+    asset_id: Annotated[int, Path(ge=1)],
+    current_user: CurrentUserDep,
+    db: DBDep,
+) -> ForecastOut:
+    forecast = capacityPredictionGovernanceService.get_resource_prediction(
+        db, current_user=current_user, asset_type=asset_type, asset_id=asset_id
+    )
+    return ForecastOut.model_validate(forecast)
+
+
+@router.get("/capacity-predictions/{asset_type}/{asset_id}/access", response_model=CapacityPredictionAccessOut)
+def resource_capacity_prediction_access(
+    asset_type: Annotated[str, Path(pattern="^(group|storage_usage)$")],
+    asset_id: Annotated[int, Path(ge=1)],
+    current_user: CurrentUserDep,
+    db: DBDep,
+) -> CapacityPredictionAccessOut:
+    return CapacityPredictionAccessOut(**capacityPredictionGovernanceService.resource_prediction_access(
+        db, current_user=current_user, asset_type=asset_type, asset_id=asset_id
+    ))
+
+
+@router.get("/capacity-predictions/{asset_type}/{asset_id}/plans", response_model=list[CapacityPredictionPlanOut])
+def resource_capacity_prediction_plans(
+    asset_type: Annotated[str, Path(pattern="^(group|storage_usage)$")],
+    asset_id: Annotated[int, Path(ge=1)],
+    current_user: CurrentUserDep,
+    db: DBDep,
+) -> list[CapacityPredictionPlanOut]:
+    plans = capacityPredictionGovernanceService.list_resource_capacity_plans(
+        db, current_user=current_user, asset_type=asset_type, asset_id=asset_id
+    )
+    return [CapacityPredictionPlanOut.model_validate(item) for item in plans]
+
+
+@router.get(
+    "/capacity-predictions/{asset_type}/{asset_id}/related-incidents",
+    response_model=list[CapacityPredictionRelatedIncidentOut],
+)
+def resource_capacity_prediction_related_incidents(
+    asset_type: Annotated[str, Path(pattern="^(group|storage_usage)$")],
+    asset_id: Annotated[int, Path(ge=1)],
+    current_user: CurrentUserDep,
+    db: DBDep,
+) -> list[CapacityPredictionRelatedIncidentOut]:
+    return [
+        CapacityPredictionRelatedIncidentOut(**item)
+        for item in capacityPredictionGovernanceService.list_resource_related_incidents(
+            db,
+            current_user=current_user,
+            asset_type=asset_type,
+            asset_id=asset_id,
+        )
+    ]
+
+
+@router.post("/capacity-predictions/{asset_type}/{asset_id}/plans", response_model=CapacityPredictionPlanOut, status_code=status.HTTP_201_CREATED)
+def create_resource_capacity_prediction_plan(
+    asset_type: Annotated[str, Path(pattern="^(group|storage_usage)$")],
+    asset_id: Annotated[int, Path(ge=1)],
+    payload: CapacityPredictionPlanCreate,
+    request: Request,
+    current_user: CurrentUserDep,
+    db: DBDep,
+) -> CapacityPredictionPlanOut:
+    plan = capacityPredictionGovernanceService.create_capacity_plan(
+        db, current_user=current_user, asset_type=asset_type, asset_id=asset_id,
+        effective_at=payload.effective_at, capacity_delta=payload.capacity_delta, reason=payload.reason,
+    )
+    audit_service.append_audit_event(
+        db, context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
+        phase="result", action="capacity_prediction_plan.create", resource_type="capacity_prediction_plan",
+        resource_id=plan.id, project_id=plan.project_id, outcome="success",
+        after_summary={"asset_type": asset_type, "asset_id": asset_id, "capacity_delta": payload.capacity_delta},
+    )
+    db.commit()
+    db.refresh(plan)
+    return CapacityPredictionPlanOut.model_validate(plan)
+
+
+@router.get("/admin/capacity-prediction-settings", response_model=CapacityPredictionVisibilityOut, dependencies=[Depends(require_super_admin)])
+def capacity_prediction_settings(_current_user: CurrentUserDep, db: DBDep) -> CapacityPredictionVisibilityOut:
+    return CapacityPredictionVisibilityOut(visible=capacityPredictionGovernanceService.get_prediction_settings(db))
+
+
+@router.patch("/admin/capacity-prediction-settings", response_model=CapacityPredictionVisibilityOut, dependencies=[Depends(require_super_admin)])
+def update_capacity_prediction_settings(
+    payload: CapacityPredictionSettingsPatch, request: Request, current_user: CurrentUserDep, db: DBDep
+) -> CapacityPredictionVisibilityOut:
+    settings = capacityPredictionGovernanceService.update_prediction_settings(
+        db,
+        user_id=current_user.id,
+        user_visible=payload.user_visible,
+    )
+    audit_service.append_audit_event(
+        db, context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
+        phase="result", action="capacity_prediction_visibility.update", resource_type="capacity_prediction_settings",
+        resource_id=1, outcome="success", after_summary={"user_visible": payload.user_visible},
+    )
+    db.commit()
+    return CapacityPredictionVisibilityOut(visible=settings.user_visible)
+
+
+@router.get(
+    "/admin/capacity-prediction-candidates",
+    response_model=list[CapacityPredictionCandidateOut],
+    dependencies=[Depends(require_super_admin)],
+)
+def list_capacity_prediction_candidates(_current_user: CurrentUserDep, db: DBDep) -> list[CapacityPredictionCandidateOut]:
+    return [
+        CapacityPredictionCandidateOut(**item)
+        for item in capacityPredictionGovernanceService.list_candidate_governance(db)
+    ]
+
+
+@router.post(
+    "/admin/capacity-prediction-candidates",
+    response_model=CapacityPredictionCandidateOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_super_admin)],
+)
+def create_capacity_prediction_candidate(
+    payload: CapacityPredictionCandidateCreate,
+    request: Request,
+    current_user: CurrentUserDep,
+    db: DBDep,
+) -> CapacityPredictionCandidateOut:
+    candidate = capacityPredictionGovernanceService.create_capacity_prediction_candidate(
+        db,
+        version=payload.version,
+        ai_model_id=payload.ai_model_id,
+    )
+    audit_service.append_audit_event(
+        db,
+        context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
+        phase="result",
+        action="capacity_prediction_candidate.create",
+        resource_type="capacity_prediction_candidate",
+        resource_id=candidate.id,
+        outcome="success",
+        after_summary={"version": candidate.version, "ai_model_id": candidate.ai_model_id},
+    )
+    db.commit()
+    db.refresh(candidate)
+    return CapacityPredictionCandidateOut.model_validate(candidate)
+
+
+@router.post(
+    "/admin/capacity-prediction-candidates/{candidate_id}/activate",
+    response_model=CapacityPredictionCandidateOut,
+    dependencies=[Depends(require_super_admin)],
+)
+def activate_capacity_prediction_candidate(
+    candidate_id: Annotated[int, Path(ge=1)],
+    request: Request,
+    current_user: CurrentUserDep,
+    db: DBDep,
+) -> CapacityPredictionCandidateOut:
+    candidate = capacityPredictionGovernanceService.activate_capacity_prediction_candidate(
+        db,
+        candidate_id=candidate_id,
+    )
+    audit_service.append_audit_event(
+        db,
+        context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
+        phase="result",
+        action="capacity_prediction_candidate.activate",
+        resource_type="capacity_prediction_candidate",
+        resource_id=candidate.id,
+        outcome="success",
+        after_summary={"version": candidate.version, "ai_model_id": candidate.ai_model_id},
+    )
+    db.commit()
+    db.refresh(candidate)
+    return CapacityPredictionCandidateOut.model_validate(candidate)
 
 
 def _utc_or_422(value: datetime | None, name: str) -> datetime | None:

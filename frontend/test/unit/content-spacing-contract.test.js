@@ -54,6 +54,7 @@ const expectedInUsePageComponents = [
   '@/pages/admin/ai/AiCenterPage.vue',
   '@/pages/admin/audit/AuditEventDetailPage.vue',
   '@/pages/admin/audit/AuditEventListPage.vue',
+  '@/pages/admin/forecast-governance/ForecastGovernancePage.vue',
   '@/pages/admin/qtree/QtreeDetailPage.vue',
   '@/pages/admin/qtree/QtreeListPage.vue',
   '@/pages/admin/settings/SettingsPage.vue',
@@ -139,7 +140,7 @@ describe('shared page layout spacing contract', () => {
 });
 
 describe('in-use routed page matrix', () => {
-  it('covers exactly the 25 approved page components and excludes inactive shells', () => {
+  it('covers exactly the 26 approved page components and excludes inactive shells', () => {
     const routesSource = readFrontendSource('src/router/routes.js');
     const routedComponents = [...routesSource.matchAll(
       /component:\s*\(\)\s*=>\s*import\(['"](@\/pages\/[^'"]+\.vue)['"]\)/g,
@@ -148,7 +149,7 @@ describe('in-use routed page matrix', () => {
       .filter((component) => !excludedPageComponents.includes(component))
       .sort();
 
-    expect(inUseComponents).toHaveLength(25);
+    expect(inUseComponents).toHaveLength(26);
     expect(inUseComponents).toEqual(expectedInUsePageComponents);
     expect(routedComponents.filter((component) => excludedPageComponents.includes(component)).sort())
       .toEqual([...excludedPageComponents].sort());

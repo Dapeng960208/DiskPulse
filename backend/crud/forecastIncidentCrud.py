@@ -46,6 +46,15 @@ def list_incidents(
     return rows, int(total)
 
 
+def list_resource_incidents(db: Session, *, asset_type: str, asset_id: str, limit: int = 5) -> list[Incident]:
+    return db.execute(
+        select(Incident)
+        .where(Incident.asset_type == asset_type, Incident.asset_id == asset_id)
+        .order_by(Incident.updated_at.desc(), Incident.id.desc())
+        .limit(limit)
+    ).scalars().all()
+
+
 def get_incident(db: Session, incident_id: int) -> Incident | None:
     return db.get(Incident, incident_id)
 
