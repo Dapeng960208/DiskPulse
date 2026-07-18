@@ -524,8 +524,8 @@ describe('AI pages interactions', () => {
         stubs: {
           ElScrollbar: { template: '<div><slot /></div>' },
           UserAvatar: {
-            props: ['src'],
-            template: '<img class="user-avatar" :src="src" />',
+            props: ['size', 'src'],
+            template: '<img class="user-avatar" :src="src" :data-size="size" />',
           },
         },
       },
@@ -538,10 +538,12 @@ describe('AI pages interactions', () => {
     await flushPromises();
 
     expect(wrapper.find('.message-avatar--user').attributes('src')).toBe(currentUser.avatarUrl);
+    expect(wrapper.find('.message-avatar--user').attributes('data-size')).toBe('32');
     expect(wrapper.find('.message-avatar--user').attributes('aria-label')).toBe('你的头像');
     expect(wrapper.find('.message-avatar--assistant').attributes('aria-label')).toBe('AI 助手头像');
     expect(wrapper.find('.message-avatar--assistant .message-avatar__pulse').exists()).toBe(true);
     const source = readFileSync(resolve(process.cwd(), 'src/pages/ai/AiChatPage.vue'), 'utf8');
+    expect(source).toContain('--message-avatar-size: 32px;');
     expect(source).toMatch(/\.message\s*\{[^}]*align-items:\s*start;/);
   });
 
