@@ -102,4 +102,52 @@ describe('frontend mock runtime', () => {
     expect(updated.name).toBe('Mock 已更新标签');
     expect(tags.content.some((tag) => tag.id === created.id)).toBe(false);
   });
+
+  it('gives the superadmin five or more records for every visible mock data source', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const listPaths = [
+      '/projects',
+      '/groups',
+      '/storage-usages',
+      '/storage-alerts',
+      '/v1/incidents',
+      '/storage-clusters',
+      '/aggregates',
+      '/volumes',
+      '/qtrees',
+      '/group-tags',
+      '/users',
+      '/storage-back-up-records',
+      '/v1/audit-events',
+      '/ai/models',
+      '/ai/conversations',
+      '/admin/ai-models',
+      '/admin/ai-audits',
+    ];
+    const dashboardPaths = [
+      '/dashboard/capacity-trend',
+      '/dashboard/capacity-items',
+      '/dashboard/alert-levels',
+      '/dashboard/top-users',
+    ];
+
+    for (const path of listPaths) {
+      const response = await gateway.request('get', path, undefined, superadmin.token);
+      expect(response.content, path).toEqual(expect.any(Array));
+      expect(response.content.length, path).toBeGreaterThanOrEqual(5);
+    }
+    for (const path of dashboardPaths) {
+      const response = await gateway.request('get', path, undefined, superadmin.token);
+      expect(response.content.length, path).toBeGreaterThanOrEqual(5);
+    }
+
+    const summary = await gateway.request('get', '/dashboard/summary', undefined, superadmin.token);
+    const configuration = await gateway.request('get', '/config/storage', undefined, superadmin.token);
+    const conversation = await gateway.request('get', '/ai/conversations/1', undefined, superadmin.token);
+
+    expect(summary.summary.alert_count).toBeGreaterThanOrEqual(5);
+    expect(configuration.storage_alert_rule).toBeTruthy();
+    expect(conversation.messages.length).toBeGreaterThanOrEqual(5);
+  });
 });
