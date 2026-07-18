@@ -680,6 +680,50 @@ def test_group_alert_cc_users_are_deduplicated_and_must_exist(db_session):
     assert group.alert_cc_user_ids == [1]
 
 
+def test_delivery_lease_prevents_duplicate_claims_and_recovers_after_expiry(
+    db_session, session_factory, monkeypatch
+):
+    import models
+
+    tasks = _module("celery_tasks.tasks.storage_alerts")
+    monkeypatch.setattr(tasks, "SessionLocal", session_factory)
+    event = models.StorageAlerts(
+        source="diskpulse",
+        severity="important",
+        alert_level="important",
+        alert_type="usage",
+        description="test",
+        threshold=80,
+        avg_use_ratio=81,
+        related_type="group",
+        event_type="trigger",
+        quota_basis="hard",
+        delivery_status="pending",
+        recipient_usernames=["alice"],
+        next_attempt_at=datetime.now() - timedelta(seconds=1),
+        related_info={"title": "告警", "paragraphs": []},
+    )
+    db_session.add(event)
+    db_session.commit()
+
+    config = {"enabled": True}
+    context = tasks._delivery_audit_context()
+    first = tasks._prepare_delivery_attempt(event.id, context=context, config=config)
+    second = tasks._prepare_delivery_attempt(event.id, context=context, config=config)
+
+    db_session.refresh(event)
+    assert first["attempt"] == 1
+    assert second is None
+    assert (event.delivery_status, event.delivery_attempts) == ("delivering", 1)
+
+    event.next_attempt_at = datetime.now() - timedelta(seconds=1)
+    db_session.commit()
+
+    recovered = tasks._prepare_delivery_attempt(event.id, context=context, config=config)
+
+    assert recovered["attempt"] == 2
+
+
 def test_delivery_marks_failed_after_initial_attempt_and_three_retries(
     db_session, session_factory, monkeypatch
 ):
@@ -719,8 +763,12 @@ def test_delivery_marks_failed_after_initial_attempt_and_three_retries(
     db_session.commit()
 
     with patch.object(tasks.FeishuNotificationService, "send", side_effect=RuntimeError("down")):
-        for _ in range(4):
+        for attempt in range(4):
             tasks.deliver_storage_alert_task.run(event.id)
+            if attempt < 3:
+                db_session.refresh(event)
+                event.next_attempt_at = datetime.now() - timedelta(seconds=1)
+                db_session.commit()
 
     db_session.refresh(event)
     assert event.delivery_attempts == 4
