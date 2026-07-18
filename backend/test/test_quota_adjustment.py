@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
+from contextlib import contextmanager
 from datetime import datetime
 from unittest.mock import MagicMock
 
@@ -52,6 +53,19 @@ class FailingQuotaClient(FakeQuotaClient):
 
     def update_quota(self, **kwargs):
         raise self.error
+
+
+class TimeoutThenReadbackQuotaClient(FakeQuotaClient):
+    def __init__(self, result):
+        super().__init__()
+        self.result = result
+
+    def update_quota(self, **kwargs):
+        self.calls.append(("quota", kwargs))
+        raise requests.Timeout("device response was interrupted")
+
+    def read_quota(self, **_kwargs):
+        return self.result
 
 
 def seed_quota_target(db, *, storage_type="netapp", volume_target=False):
@@ -163,6 +177,138 @@ def test_quota_request_validates_limits_and_grace_pair():
         )
     with pytest.raises(ValidationError):
         QuotaAdjustmentRequest(hard_limit=float("inf"), unit="GiB")
+
+
+def test_quota_request_accepts_force_fields_only_with_a_bounded_reason():
+    request = QuotaAdjustmentRequest(
+        hard_limit=10,
+        unit="GiB",
+        force_below_usage=True,
+        change_reason="释放未使用的项目容量",
+    )
+    assert request.force_below_usage is True
+    assert request.change_reason == "释放未使用的项目容量"
+
+    with pytest.raises(ValidationError):
+        QuotaAdjustmentRequest(
+            hard_limit=10,
+            unit="GiB",
+            force_below_usage=True,
+            change_reason="x" * 257,
+        )
+
+
+def test_quota_adjustment_requires_force_before_lowering_below_used_capacity(db_session, monkeypatch):
+    seed_quota_target(db_session)
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: FakeQuotaClient())
+
+    with pytest.raises(HTTPException) as error:
+        quotaService.adjust_group_quota(
+            db_session,
+            group_id=1,
+            request=QuotaAdjustmentRequest(hard_limit=10, unit="GiB"),
+            current_user=quota_owner(db_session),
+        )
+
+    assert error.value.status_code == 422
+    assert error.value.detail["code"] == "quota_below_usage_requires_force"
+
+
+def test_only_super_admin_can_force_a_quota_below_used_capacity(db_session, monkeypatch):
+    seed_quota_target(db_session)
+    db_session.add(models.User(id=2, username="admin", rd_username="admin"))
+    db_session.commit()
+    base_config.set("super_admin_usernames", ["admin"])
+    client = FakeQuotaClient()
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+    request = QuotaAdjustmentRequest(
+        hard_limit=10,
+        unit="GiB",
+        force_below_usage=True,
+        change_reason="释放未使用的项目容量",
+    )
+
+    with pytest.raises(HTTPException) as error:
+        quotaService.adjust_group_quota(
+            db_session,
+            group_id=1,
+            request=request,
+            current_user=quota_owner(db_session),
+        )
+    assert error.value.status_code == 403
+    assert error.value.detail["code"] == "quota_below_usage_requires_super_admin"
+
+    result = quotaService.adjust_group_quota(
+        db_session,
+        group_id=1,
+        request=request,
+        current_user=db_session.get(models.User, 2),
+    )
+    assert result.hard_limit == 10
+    assert client.calls
+
+
+def test_quota_adjustment_rejects_a_busy_target_before_device_write(db_session, monkeypatch):
+    seed_quota_target(db_session)
+    build_client = MagicMock(return_value=FakeQuotaClient())
+    monkeypatch.setattr(quotaService, "_build_client", build_client)
+
+    @contextmanager
+    def blocked_lock(**_kwargs):
+        yield False
+
+    monkeypatch.setattr(quotaService, "_quota_target_lock", blocked_lock, raising=False)
+
+    with pytest.raises(HTTPException) as error:
+        quotaService.adjust_group_quota(
+            db_session,
+            group_id=1,
+            request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+            current_user=quota_owner(db_session),
+        )
+
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "quota_adjustment_in_progress"
+    build_client.assert_not_called()
+
+
+def test_timeout_verifies_by_reading_device_without_repeating_the_write(db_session, monkeypatch):
+    seed_quota_target(db_session)
+    client = TimeoutThenReadbackQuotaClient(
+        {"hard_limit": 120 * GiB, "soft_limit": None, "soft_grace": None}
+    )
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+
+    result = quotaService.adjust_group_quota(
+        db_session,
+        group_id=1,
+        request=QuotaAdjustmentRequest(hard_limit=120, unit="GiB"),
+        current_user=quota_owner(db_session),
+    )
+
+    assert result.hard_limit == 120
+    assert result.verification_source == "post_timeout_readback"
+    assert [call[0] for call in client.calls] == ["quota"]
+
+
+def test_manual_reconciliation_syncs_local_quota_without_writing_device(db_session, monkeypatch):
+    seed_quota_target(db_session)
+    client = FakeQuotaClient()
+    client.read_quota = MagicMock(
+        return_value={"hard_limit": 140 * GiB, "soft_limit": None, "soft_grace": None}
+    )
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+
+    result = quotaService.reconcile_group_quota(
+        db_session,
+        group_id=1,
+        current_user=quota_owner(db_session),
+    )
+
+    assert result.hard_limit == 140
+    assert result.verification_source == "manual_reconciliation"
+    assert client.calls == []
+    assert db_session.get(models.Group, 1).limit == 140
 
 
 def test_group_adjustment_rejects_shared_target_before_device_call(db_session, monkeypatch):
