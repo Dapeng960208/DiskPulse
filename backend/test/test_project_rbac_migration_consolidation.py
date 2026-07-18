@@ -45,6 +45,30 @@ def test_branch_rbac_audit_migrations_are_a_single_forward_revision_after_teleme
         assert "audit_events" in sql
 
 
+def test_mysql_pt_user_fk_discovery_only_removes_the_obsolete_project_user_reference():
+    migration = _migration()
+
+    foreign_keys = [
+        {
+            "name": "fk_projects_in_charge_user_id_users",
+            "constrained_columns": ["in_charge_user_id"],
+            "referred_table": "users",
+        },
+        {
+            "name": "projects_ibfk_2",
+            "constrained_columns": ["pt_user_id"],
+            "referred_table": "users",
+        },
+        {
+            "name": "fk_projects_pt_user_id_other_table",
+            "constrained_columns": ["pt_user_id"],
+            "referred_table": "other_table",
+        },
+    ]
+
+    assert migration._mysql_pt_user_fk_names(foreign_keys) == ("projects_ibfk_2",)
+
+
 def test_immutable_audit_rows_keep_logical_actor_and_project_ids_when_subjects_are_deleted():
     migration = _migration()
     metadata = sa.MetaData()
