@@ -84,21 +84,30 @@ async function submit() {
     dialogVisible.value = false;
     ElMessage.success(editingUserId.value == null ? '项目成员已添加' : '项目成员角色已更新');
     await loadMembers();
+  } catch {
+    // Review fix: surface membership write failures instead of leaving rejected UI promises.
+    ElMessage.error('保存项目成员失败，请稍后重试');
   } finally {
     submitting.value = false;
   }
 }
 
-function confirmRemove(member) {
-  ElMessageBox.confirm(`确认移除项目成员「${member.user?.rd_username || member.user_id}」？`, '移除项目成员', {
+async function confirmRemove(member) {
+  try {
+    await ElMessageBox.confirm(`确认移除项目成员「${member.user?.rd_username || member.user_id}」？`, '移除项目成员', {
     type: 'warning',
     confirmButtonText: '移除成员',
     cancelButtonText: '取消',
-  }).then(async () => {
+    });
     await membershipApi.remove(props.projectId, member.user_id);
     ElMessage.success('项目成员已移除');
     await loadMembers();
-  }).catch(() => {});
+  } catch (error) {
+    // Review fix: confirmation cancellation is benign, but API failures must be visible.
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error('移除项目成员失败，请稍后重试');
+    }
+  }
 }
 
 onMounted(loadMembers);
