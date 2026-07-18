@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import logging
 from uuid import UUID, uuid4
 
 from starlette.datastructures import MutableHeaders
@@ -8,6 +9,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from services.audit_service import AuditContext
 
 
+logger = logging.getLogger(__name__)
 REQUEST_ID_HEADER = "X-Request-ID"
 TRACE_ID_HEADER = "X-Trace-ID"
 
@@ -53,6 +55,14 @@ class CorrelationIdMiddleware:
             await self.app(scope, receive, send_with_correlation)
         except Exception as error:
             if not response_started:
+                # Review source: this fallback consumed the exception without a
+                # server record. Resolution: log only trusted correlation IDs
+                # plus exception context, while the client still gets generic 500.
+                logger.exception(
+                    "Unhandled HTTP request error request_id=%s trace_id=%s",
+                    context.request_id,
+                    context.trace_id,
+                )
                 await PlainTextResponse("Internal Server Error", status_code=500)(
                     scope,
                     receive,

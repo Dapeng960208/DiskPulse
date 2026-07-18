@@ -15,7 +15,12 @@ from services import ai_config_service
 from services.ai_client import AIClientError
 
 
-def test_correlation_middleware_returns_ids_when_downstream_raises():
+def test_correlation_middleware_returns_ids_when_downstream_raises(caplog):
+    """Review source: fallback 500 responses swallowed the server exception.
+
+    Resolution contract: keep the generic client response while logging the
+    trusted request/trace IDs and exception context on the server.
+    """
     app = FastAPI()
     app.add_middleware(CorrelationIdMiddleware)
 
@@ -25,14 +30,22 @@ def test_correlation_middleware_returns_ids_when_downstream_raises():
 
     request_id = "2a48f1f1-78ea-49c1-b3bc-2712720e4c86"
     trace_id = "1e8de2cf-9bdf-4242-a40c-794ce52694ec"
-    response = TestClient(app, raise_server_exceptions=False).get(
-        "/boom",
-        headers={"X-Request-ID": request_id, "X-Trace-ID": trace_id},
-    )
+    with caplog.at_level("ERROR", logger="middleware.correlation"):
+        response = TestClient(app, raise_server_exceptions=False).get(
+            "/boom",
+            headers={"X-Request-ID": request_id, "X-Trace-ID": trace_id},
+        )
 
     assert response.status_code == 500
+    assert response.text == "Internal Server Error"
+    assert "boom" not in response.text
     assert response.headers["X-Request-ID"] == request_id
     assert response.headers["X-Trace-ID"] == trace_id
+    record = next(item for item in caplog.records if item.name == "middleware.correlation")
+    assert record.levelname == "ERROR"
+    assert request_id in record.getMessage()
+    assert trace_id in record.getMessage()
+    assert record.exc_info is not None
 
 
 def _ai_admin_client(session_factory, current_user) -> TestClient:
