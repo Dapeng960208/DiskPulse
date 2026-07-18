@@ -37,7 +37,7 @@ vi.mock('element-plus', () => ({
   ElMessageBox: { confirm: ui.confirm },
   ElOption: { name: 'ElOption', template: '<option><slot /></option>' },
   ElSelect: { name: 'ElSelect', template: '<select><slot /></select>' },
-  ElTable: { name: 'ElTable', template: '<div><slot /></div>' },
+  ElTable: { name: 'ElTable', props: { data: Array }, template: '<div><slot /></div>' },
   ElTableColumn: {
     name: 'ElTableColumn',
     template: '<div><slot :row="{ user_id: 7, role: \'reader\', user: { rd_username: \'alice\' } }" /></div>',
@@ -87,6 +87,15 @@ describe('ProjectMembersTab', () => {
 
     expect(wrapper.find('.member-dialog').exists()).toBe(true);
     expect(wrapper.findComponent({ name: 'ElDialog' }).props('appendToBody')).toBe(true);
+  });
+
+  it('renders members when the API returns a paginated response', async () => {
+    const members = [{ user_id: 9, role: 'editor', user: { rd_username: 'bob' } }];
+    membershipApi.list.mockResolvedValue({ content: members });
+
+    const wrapper = await mountTab();
+
+    expect(wrapper.findComponent({ name: 'ElTable' }).props('data')).toEqual(members);
   });
 
   it('shows an error when confirmed removal fails instead of treating it as cancellation', async () => {
