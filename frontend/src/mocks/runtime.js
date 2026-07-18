@@ -301,7 +301,10 @@ export function createMockGateway() {
     const clusterAnalytics = path.match(/^\/storage-clusters\/(\d+)\/analytics\/(capacity-change|error-severity|top-latency|repeated-faults|system-events|export)$/);
     if (clusterAnalytics) {
       const [, clusterId, endpoint] = clusterAnalytics;
-      const resources = state.volumes.filter((volume) => volume.storage_cluster_id === Number(clusterId));
+      const resources = Array.from({ length: 5 }, (_, index) => ({
+        id: Number(clusterId) * 100 + index + 1,
+        name: `vol_cluster_${clusterId}_${index + 1}`,
+      }));
       if (endpoint === 'capacity-change') return { data: Array.from({ length: 6 }, (_, index) => ({ updated_at: `2026-07-${String(13 + index).padStart(2, '0')} 09:00:00`, used: 420 + index * 22 })) };
       if (endpoint === 'error-severity') return { total: 5, counts: { critical: 1, error: 1, warning: 2, info: 1 }, sources: { netapp: 5 } };
       if (endpoint === 'top-latency') return { supported: true, data: resources.map((resource, index) => ({ object_id: resource.id, object_name: resource.name, p95_latency: 4 + index, avg_latency: 2 + index, max_latency: 8 + index, avg_read_latency: 1.5 + index, avg_write_latency: 2.5 + index, avg_iops: 800 + index * 120, avg_throughput: 1024 * 1024 * (index + 1) })) };
@@ -315,7 +318,7 @@ export function createMockGateway() {
     if (path === '/ai/models') return state.aiModels.filter((model) => model.enabled && model.enable_chat);
     if (path === '/ai/conversations') {
       if (verb === 'post') { const item = { id: state.conversations.length + 1, title: body?.title || '新对话', model_id: body?.model_id || 1, messages: [] }; state.conversations.unshift(item); return item; }
-      return page(state.conversations);
+      return state.conversations;
     }
     const conversation = path.match(/^\/ai\/conversations\/(\d+)(?:\/quota-confirmations\/[^/]+)?$/);
     if (conversation) {
