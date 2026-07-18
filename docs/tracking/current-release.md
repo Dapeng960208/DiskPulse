@@ -1640,3 +1640,21 @@ npm test -- --coverage.enabled=false
 - RED：项目组标签聚焦测试 `1 failed`，复现单页分页配置缺失。
 - GREEN：`pnpm test -- group-tag.test.js`，`4 passed`；受影响文件 ESLint 通过。
 - 浏览器核验：`http://localhost:5174/admin/group-tags` 在 5 条数据时不显示分页。
+
+## 2026-07-18：全站表格操作列固定展示
+
+### 已完成
+
+- 审计全部 15 个含行操作的表格列；所有列现在均使用 `fixed="right"`，横向滚动宽表时操作不会移出视区。
+- 统一操作列的明确宽度和右对齐；补齐用户目录、备份记录与存储集群事件明细的旧配置。
+- 前端设计规范新增操作列必须固定右侧的实现要求，并建立 15 个页面/组件的静态回归合同。
+
+### 验证状态
+
+- RED：`pnpm test -- test/unit/pages/list-action-permissions.test.js`，11 个失败，复现 8 个未固定列及 3 个未满足统一对齐/宽度的列。
+- GREEN：`pnpm test -- test/unit/pages/list-action-permissions.test.js`，`27 passed`；受影响 Vue 文件与测试的 ESLint 通过。
+- 浏览器核验：项目列表与存储集群列表在当前桌面视口正常渲染操作列；该视口未产生表格横向溢出，因此固定列 DOM 仅由静态回归合同验证。
+
+### 风险与待验证范围
+
+- 尚未逐页在窄屏及真实横向溢出状态下手工验证；自动化测试已覆盖全部已审计的操作列源代码合同。
