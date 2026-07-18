@@ -68,7 +68,7 @@ class NetAppClient:
         return self._get_all_records('storage/aggregates', params={'fields': 'name,space'})
 
     def get_volumes(self) -> List[Dict]:
-        return self._get_all_records('storage/volumes', params={'fields': 'name,svm,aggregates,state,type,space,style'})
+        return self._get_all_records('storage/volumes', params={'fields': 'uuid,name,svm,aggregates,state,type,space,style'})
 
     def get_qtrees(self) -> List[Dict]:
         return self._get_all_records('storage/qtrees', params={'fields': 'name,volume,security_style,unix_permissions,statistics,svm'})

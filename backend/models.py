@@ -313,6 +313,7 @@ class Volume(Base):
     use_ratio = Column(Float, default=0)
     soft_use_ratio = Column(Float, nullable=True)
     allocated = Column(Float, default=0)
+    performance_object_id = Column(String(255), nullable=True)
     updated_at = Column(DateTime, default=datetime.now)
 
     qtrees = relationship("Qtree", back_populates="volume", lazy=True)

@@ -166,8 +166,18 @@ def get_top_latency_rows(
     end_time: datetime,
     limit: int,
     object_type: str | None = None,
+    object_ids: set[str] | None = None,
 ) -> list[dict]:
     object_filter = "AND object_type = :object_type" if object_type else ""
+    identity_parameters = {
+        f"object_id_{index}": object_id
+        for index, object_id in enumerate(sorted(object_ids or ()))
+    }
+    identity_filter = (
+        f"AND object_id IN ({', '.join(f':{name}' for name in identity_parameters)})"
+        if identity_parameters
+        else ""
+    )
     statement = text(
         "SELECT object_id, object_name, object_type, "
         "approx_percentile(latency_total, 0.95) AS p95_latency, "
@@ -182,6 +192,7 @@ def get_top_latency_rows(
         "AND collected_at BETWEEN :start_time AND :end_time "
         "AND latency_total IS NOT NULL "
         f"{object_filter} "
+        f"{identity_filter} "
         "GROUP BY object_id, object_name, object_type "
         "ORDER BY p95_latency DESC LIMIT :limit"
     )
@@ -190,6 +201,7 @@ def get_top_latency_rows(
         "start_time": str(start_time),
         "end_time": str(end_time),
         "limit": limit,
+        **identity_parameters,
     }
     if object_type:
         parameters["object_type"] = object_type

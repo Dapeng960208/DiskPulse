@@ -1,5 +1,11 @@
 # 最新功能与修复
 
+## 2026-07-18：存储空间性能自动关联
+
+- 容量采集会为 NetApp Volume 保存设备 UUID，为 PowerScale Directory Quota 保存 quota ID（设备未返回 ID 时使用路径），作为 `Volume.performance_object_id`。
+- 性能采集只写入能够关联到当前集群 `Volume` 的卷指标；存储集群性能分析和存储空间详情按同一稳定身份读取，未关联对象保持空数据，不再按名称猜测或回退到节点指标。
+- 存储空间详情新增独立性能监控工作区，将容量趋势与总延迟、IOPS、吞吐量等性能曲线分图展示；部署迁移后需先完成一次容量采集以回填已有卷身份。详见[存储集群健康分析](../features/storage-cluster/health-analytics.md)。
+
 ## 2026-07-18：预测、RCA 与事件中心
 
 - 新增版本化容量预测、性能异常、遥测质量、Incident、不可变证据引用、操作时间线、维护窗口和确定性 Diagnosis 数据模型，以及后续 `000000000011_forecast_incidents` 和 `/v1/forecasts`、`/v1/anomalies`、`/v1/incidents`、诊断、评论与维护窗口接口；列表始终先按项目作用域过滤、再数据库分页。

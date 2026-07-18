@@ -312,6 +312,19 @@ export function createMockGateway() {
       data: resourceTrend(realtimeItem),
       trend_meta: { indicator: 'used', unit: 'GiB' },
     };
+    const volumeMonitoring = path.match(/^\/volumes\/(\d+)\/monitoring$/);
+    if (volumeMonitoring) {
+      const volume = state.volumes.find((item) => item.id === Number(volumeMonitoring[1]));
+      if (!volume) throw error(404);
+      const metrics = options.params?.metrics || ['latency_total', 'iops_total', 'throughput_total'];
+      const points = resourceTrend(volume);
+      return {
+        info: volume,
+        binding: { group_id: 1, group_name: '项目目录', project_id: 1, project_name: '演示项目', linux_path: '/proj/demo' },
+        capacity: points,
+        performance: metrics.map((metric, metricIndex) => ({ metric, unit: metric.includes('latency') ? 'ms' : metric === 'iops_total' ? 'IOPS' : 'B/s', status: 'data', match_source: 'stable_id', data: points.map(([time, value], index) => [time, Math.round(value / (metricIndex + 2) + index * 3)]) })),
+      };
+    }
     const projectTree = path.match(/^\/projects\/(\d+)\/storage-tree$/);
     if (projectTree) return { data: state.groups.filter((group) => group.project_id === Number(projectTree[1])) };
     const projectMembers = path.match(/^\/projects\/(\d+)\/members(?:\/(\d+))?$/);

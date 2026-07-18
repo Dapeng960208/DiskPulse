@@ -402,7 +402,7 @@ def test_top_latency_crud_returns_standard_performance_metrics():
         patch.object(storageHealthAnalyticsCrud, "QuestDBSession", return_value=session),
     ):
         rows = storageHealthAnalyticsCrud.get_top_latency_rows(
-            Mock(), 7, START, END, 10, "volume"
+            Mock(), 7, START, END, 10, "volume", {"volume-1"}
         )
 
     statement = str(connection.execute.call_args.args[0])
@@ -410,6 +410,8 @@ def test_top_latency_crud_returns_standard_performance_metrics():
     assert "avg(latency_write) AS avg_write_latency" in statement
     assert "avg(iops_total) AS avg_iops" in statement
     assert "avg(throughput_total) AS avg_throughput" in statement
+    assert "object_id IN (:object_id_0)" in statement
+    assert connection.execute.call_args.args[1]["object_id_0"] == "volume-1"
     assert rows == [
         {
             "object_id": "volume-1",
@@ -538,6 +540,7 @@ def test_top_latency_volume_filter_excludes_non_storage_space_paths(db_session):
         models.Volume(
             storage_cluster_id=7,
             name="/ifs/data/project-a",
+            performance_object_id="quota-42",
             vserver="",
             aggregate="",
             type="directory_quota",
@@ -552,14 +555,14 @@ def test_top_latency_volume_filter_excludes_non_storage_space_paths(db_session):
         "get_top_latency_rows",
         return_value=[
             {
-                "object_id": path,
-                "object_name": path,
+                "object_id": object_id,
+                "object_name": object_name,
                 "object_type": "volume",
                 "p95_latency": latency,
             }
-            for path, latency in (
-                ("/ifs/data/parent", 20.0),
-                ("/ifs/data/project-a", 10.0),
+            for object_id, object_name, latency in (
+                ("unmatched-object", "/ifs/data/parent", 20.0),
+                ("quota-42", "/ifs/data/project-a", 10.0),
             )
         ],
     ):

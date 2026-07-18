@@ -12,7 +12,7 @@ def test_volume_monitoring_metrics_are_allowlisted_and_limited():
         validate_metrics(["latency_read"] * 6)
 
 
-def test_performance_identity_prefers_stable_id_then_same_cluster_name_fallback():
+def test_performance_identity_requires_stable_id_and_leaves_unmatched_volume_empty():
     from services.volumeMonitoringService import resolve_performance_identity
 
     assert resolve_performance_identity(
@@ -20,7 +20,7 @@ def test_performance_identity_prefers_stable_id_then_same_cluster_name_fallback(
     ) == ("netapp-uuid", "stable_id")
     assert resolve_performance_identity(
         performance_object_id="netapp-uuid", volume_name="vol-a", candidate_ids=set(), candidate_names={"vol-a"}
-    ) == ("vol-a", "name_fallback")
+    ) == (None, "unmatched")
     assert resolve_performance_identity(
         performance_object_id=None, volume_name="vol-a", candidate_ids=set(), candidate_names=set()
     ) == (None, "unmatched")
