@@ -2,14 +2,19 @@
 
 ## 2026-07-18：前端 Mock 数据与四角色演示
 
-### 进行中
+### 已完成
 
-- 已在隔离 worktree `codex/frontend-mock-rbac` 固化设计与实施计划；将新增仅前端的 `VITE_USE_MOCKS=true` 内存 Mock 运行时。
-- 目标账户为 `demo-superadmin`、`demo-project-admin`、`demo-editor`、`demo-reader`，用于演示现有项目级 RBAC；真实后端、LDAP、设备与通知链路不改动。
+- 已在隔离 worktree `codex/frontend-mock-rbac` 固化设计与实施计划，并新增仅前端的 `VITE_USE_MOCKS=true` 内存 Mock 运行时。
+- `demo-superadmin`、`demo-project-admin`、`demo-editor`、`demo-reader` 可在 Mock 模式从登录页一键填充；Mock 传输层覆盖常规 Axios 请求、导出和 AI SSE，并按项目范围返回虚构关联数据。
+- 系统管理路由统一限制为 `superadmin`；项目数据以既有 `capabilities` 模型区分读取、编辑、成员、审计和限额操作。真实后端、LDAP、设备与通知链路不改动。
 
 ### 验证状态
 
-- 待执行：Mock/RBAC RED-GREEN 聚焦 Vitest、前端全量测试、测试构建和 diff 检查。
+- RED：`mock-runtime.test.js` 在 Mock 模块缺失时按预期失败；GREEN：Mock、登录、路由和 AI 流式聚焦 Vitest 共 `19` 条通过，`npm run build:test` 通过。
+
+### 风险与待完成
+
+- 当前验证覆盖 Mock 网关的授权和核心传输路径；未运行浏览器 E2E 或真实后端联调。Mock 仅用于本地演示，刷新浏览器会丢弃内存写入。
 
 ## 2026-07-18：预测/RCA/事件中心合并前审查与迁移收口
 

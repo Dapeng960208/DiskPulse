@@ -1,4 +1,5 @@
 import { getToken } from '@/utils/authorization';
+import { mockEnabled, mockGateway } from '@/mocks/runtime';
 
 const KNOWN_SSE_EVENTS = new Set([
   'accepted',
@@ -94,6 +95,15 @@ async function responseError(response) {
 }
 
 export async function streamConversationMessage(conversationId, content, { signal, onEvent }) {
+  if (mockEnabled()) {
+    const events = await mockGateway().streamAiMessage(getToken(), conversationId, content);
+    const state = { accepted: false, terminal: false };
+    for (const parsed of events) {
+      if (signal?.aborted) throw new DOMException('请求已取消', 'AbortError');
+      dispatchSseEvent(parsed, state, onEvent);
+    }
+    return;
+  }
   // Native fetch exposes the response body stream; the shared Axios wrapper buffers browser responses.
   const response = await fetch(apiUrl(`/ai/conversations/${conversationId}/messages/stream`), {
     method: 'POST',

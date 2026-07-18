@@ -116,6 +116,10 @@
         </ElForm>
 
         <p class="login-panel__meta">身份认证由 LDAP 提供</p>
+        <div v-if="mockEnabled" class="demo-accounts" aria-label="Mock 演示账户">
+          <p>演示账户（仅 Mock 模式）</p>
+          <ElButton v-for="account in demoUsers" :key="account.username" text @click="fillDemo(account)">{{ account.commonName }}</ElButton>
+        </div>
       </div>
     </section>
   </main>
@@ -132,6 +136,7 @@ import { useCurrentUser } from '@/stores/current-user';
 import ThemeSwitch from '@/components/basic/ThemeSwitch.vue';
 import brandLogo from '@/assets/logo.png';
 import storageClusterBackground from '@/assets/images/storage-cluster-login.webp';
+import { DEMO_PASSWORD, DEMO_USERS, mockEnabled } from '@/mocks/runtime';
 
 const appTitle = import.meta.env.VITE_APP_TITLE || 'DiskPulse 管理后台';
 
@@ -147,6 +152,8 @@ const loginForm = reactive({
   username: '',
   password: '',
 });
+const demoUsers = DEMO_USERS;
+function fillDemo(account) { loginForm.username = account.username; loginForm.password = DEMO_PASSWORD; }
 
 const loginRules = {
   username: [
@@ -466,6 +473,7 @@ onMounted(() => {
   font-size: var(--font-size-sm);
   text-align: center;
 }
+.demo-accounts { margin-top: var(--spacing-lg); text-align: center; color: var(--text-secondary); font-size: var(--font-size-sm); }
 
 @keyframes visual-reveal {
   from { opacity: 0; }

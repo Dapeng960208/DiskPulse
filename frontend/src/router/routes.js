@@ -158,6 +158,7 @@ export default [
       isRoot: true,
       menuOrder: 70,
       // isAccessible: () => hasRole('diskpulse:admin') ? 200 : 403,
+      isAccessible: () => hasRole('superadmin') ? 200 : 403,
     },
     children: [
       {

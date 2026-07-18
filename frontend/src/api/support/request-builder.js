@@ -3,6 +3,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import router from '@/router';
 import { toLoginPage } from '@/utils';
 import { getToken } from '@/utils/authorization';
+import { mockAxiosAdapter, mockEnabled } from '@/mocks/runtime';
 
 class RequestBuilder {
   constructor(options) {
@@ -11,7 +12,7 @@ class RequestBuilder {
 
   build() {
     // create an axios instance
-    const service = axios.create(this.options);
+    const service = axios.create({ ...this.options, ...(mockEnabled() ? { adapter: mockAxiosAdapter } : {}) });
 
     // request interceptor
     service.interceptors.request.use(
