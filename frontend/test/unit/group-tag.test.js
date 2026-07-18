@@ -35,6 +35,7 @@ describe('group tags', () => {
 
     expect(source).toMatch(/<template #header>[\s\S]*?新增标签[\s\S]*?<\/template>/);
     expect(source).not.toMatch(/<\/QueryForm>\s*<div[^>]*flex justify-end/);
+    expect(source).toContain(':pagination="{ page: queryParams.page, pageSize: queryParams.size, total: result.total, hideOnSinglePage: true }"');
   });
 
   it('submits project, cluster, and environment tag ids from the group form', () => {

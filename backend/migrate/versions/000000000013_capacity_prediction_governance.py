@@ -1,14 +1,14 @@
 """add capacity prediction governance
 
-Revision ID: 000000000012
-Revises: 000000000011
+Revision ID: 000000000013
+Revises: 000000000012
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "000000000012"
-down_revision = "000000000011"
+revision = "000000000013"
+down_revision = "000000000012"
 branch_labels = None
 depends_on = None
 

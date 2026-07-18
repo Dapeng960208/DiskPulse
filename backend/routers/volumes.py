@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import Annotated, List
 from datetime import datetime
 from schemas import volumeSchema, commonSchema, storageTrendSchema
 from crud import volumeCrud
@@ -77,6 +77,23 @@ def read_volume_realtime_data(volume_id: int, start_time: datetime | None = None
     return commonSchema.ResponseStorageUsageModel[volumeSchema.Volume](data=real_time_data,
                                                                        info=db_volume,
                                                                        trend_meta=trend_meta)
+
+
+@router.get("/{volume_id}/monitoring", response_model=volumeSchema.VolumeMonitoring)
+def read_volume_monitoring(
+    volume_id: int,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+    metrics: Annotated[list[str] | None, Query(alias="metrics[]")] = None,
+    db: Session = Depends(get_db),
+) -> volumeSchema.VolumeMonitoring:
+    try:
+        result = volumeCrud.get_volume_monitoring(db, volume_id, start_time, end_time, metrics)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    if result is None:
+        raise HTTPException(status_code=404, detail="Volume not found")
+    return result
 
 
 @router.put(

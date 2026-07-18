@@ -13,7 +13,7 @@
 | 存储分布 | PostgreSQL 中当前集群的存储资源 | 按当前 `storage_cluster_id` 返回存储空间/Qtree（NetApp）容量树；不使用健康分析时间范围。 |
 | 容量变化 | QuestDB `storage_cluster_storage_usages` | 所选范围最后一个已用容量减去第一个已用容量；期初为零时变化率为 `null`。 |
 | 严重级别统计 | PostgreSQL `storage_alerts` | 合并可归属当前集群的 DiskPulse 容量告警与 NetApp/Isilon 设备事件，按 `critical`、`error`、`warning`、`info` 汇总。 |
-| 存储空间性能 | QuestDB `storage_performance_metrics` | 按 P95 延迟降序返回最多 100 个存储空间，页面可选择 10、20、50、100 条；返回 P95、平均、最大、读、写延迟，以及平均 IOPS、平均吞吐量和样本数。NetApp 使用 Volume；PowerScale 使用已固定的 path workload，并映射为对应 Directory Quota 路径。 |
+| 存储空间性能 | QuestDB `storage_performance_metrics` | 按 P95 延迟降序返回最多 100 个已关联存储空间，页面可选择 10、20、50、100 条；返回 P95、平均、最大、读、写延迟，以及平均 IOPS、平均吞吐量和样本数。NetApp 使用 Volume UUID；PowerScale 使用已固定的 path workload，并映射为对应 Directory Quota quota ID。 |
 | 重复故障 | PostgreSQL `storage_alerts` | 仅统计 `source=netapp` 或 `source=isilon` 的设备事件；同一 `fingerprint` 在所选范围出现至少两次时计为重复故障。 |
 | 系统事件 | PostgreSQL `storage_alerts` | 按当前集群、时间范围、关键字和日志等级查询 NetApp/Isilon 原生事件；数据库分页默认每页 20 条，包含来源、严重级别、事件代码、事件对象、内容和发生时间。 |
 
@@ -23,7 +23,9 @@ NetApp 事件来自 ONTAP EMS，性能来自 Volume `metric`。ONTAP 返回的 V
 
 PowerScale 事件来自 event group/list。逐存储空间性能先通过 `/platform/latest` 发现资源版本，再从 `/{version}/performance/datasets` 选择包含 `path` 识别维度的 dataset，读取 `/{version}/performance/datasets/{id}/workloads` 建立 workload ID 到完整路径的映射，最后使用 dataset 的 `statkey` 请求 `/{version}/statistics/current`。每条 workload 的 `latency_read`、`latency_write` 和 `latency_other` 按 `sum/count` 求平均，OneFS 该计数使用微秒口径，写入 QuestDB 前统一除以 `1000` 转为毫秒；综合延迟使用三类请求的加权平均，`protocol_ops`（兼容 `ops`）映射到 IOPS，`bytes_in + bytes_out` 映射到吞吐量，`time` Unix 时间戳作为设备采集时间。不能用节点磁盘延迟替代目录延迟，也不能按容量或 IOPS 推算未返回路径的延迟。
 
-采集和查询都会用当前集群 PostgreSQL `Volume.name` 校验 workload 路径，仅保留已经同步为 Directory Quota 存储空间的对象。父目录或其他已固定 workload 即使存在性能数据，也不会误标成 DiskPulse Volume；该校验同时屏蔽修复前已写入的错误节点/父路径样本。
+容量采集会把 NetApp Volume UUID、PowerScale Directory Quota ID（设备未返回 ID 时使用 quota 路径）写入 PostgreSQL `Volume.performance_object_id`。性能采集只为当前集群中已存在该稳定身份的 `Volume` 写入 `object_type=volume` 样本；PowerScale workload 仍以完整路径匹配 Directory Quota，但 QuestDB `object_id` 统一写入关联后的 quota ID，`object_name` 保留路径用于展示。父目录、节点指标和其他未关联 workload 即使存在性能数据，也不会误标成 DiskPulse Volume。
+
+存储集群性能分析和存储空间性能监控都按同一个 `Volume.performance_object_id` 查询。缺少稳定身份或采集记录无法关联时不做名称猜测，对应卷性能返回空数据；容量趋势仍可独立展示。部署迁移后需要先成功执行一次容量采集，现有 `Volume` 才会补齐厂商身份。
 
 OneFS event list 外层记录中的 `events[]` 按单条设备事件展开；event group 使用 `last_event`（缺失时使用 `time_noticed`）作为发生时间，并从 `causes` 取得事件代码和描述。OneFS 整数 Unix 时间戳统一换算为系统本地 naive 时间后入库。
 

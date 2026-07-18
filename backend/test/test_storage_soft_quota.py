@@ -65,6 +65,7 @@ class FakeIsilonClient:
                 "usage": {"logical": 20 * GB},
             },
             {
+                "id": "quota-team",
                 "type": "directory",
                 "path": "/ifs/team",
                 "linked": False,
@@ -193,6 +194,7 @@ def test_isilon_linked_user_and_directory_quotas_capture_soft_limits(db_session)
     assert quotas[0].soft_use_ratio == 25
     assert len(volumes) == 1
     assert volumes[0].limit == 500
+    assert volumes[0].performance_object_id == "quota-team"
     assert volumes[0].soft_limit == 400
     assert volumes[0].soft_use_ratio == 31.25
 

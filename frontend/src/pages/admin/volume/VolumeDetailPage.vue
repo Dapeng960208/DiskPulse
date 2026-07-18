@@ -1,19 +1,7 @@
 <script setup>
-import { ElRow,ElCol } from 'element-plus';
-import { ref,onBeforeMount} from 'vue';
-import RealTimePage from '@/pages/common/RealTimePage.vue';
-import { useRoute } from 'vue-router';
-const route = useRoute();
-const attributeId = ref(null);
-onBeforeMount(() => {
-  attributeId.value = parseInt(route.params?.id);
-});
-
+import VolumeMonitoringPage from './VolumeMonitoringPage.vue';
 </script>
 
 <template>
-  <RealTimePage
-    :attribute-id="attributeId"
-    :api-type="'volume'"
-    :label="'存储空间名'"></RealTimePage>
+  <VolumeMonitoringPage />
 </template>

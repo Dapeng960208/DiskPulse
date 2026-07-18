@@ -47,7 +47,13 @@ const props = defineProps({
   },
 });
 
-const attributeId = ref(Array.isArray(props.attributeId) ? props.attributeId : [props.attributeId]);
+function normalizeResourceIds(value) {
+  return (Array.isArray(value) ? value : [value])
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0);
+}
+
+const attributeId = ref(normalizeResourceIds(props.attributeId));
 const route = useRoute();
 const breadcrumbs = useBreadcrumbs();
 const dateRange = ref(getDefaultTime(8));
@@ -99,6 +105,9 @@ const alertLevelLabel = (level) => alertLevelLabels[level] || level || '-';
 const selectedApi = computed(() => apiMap[props.apiType]);
 const selectedSelect = computed(() => selectMap[props.apiType]);
 const relatedType = computed(() => relatedTypeMap[props.apiType]);
+const resourceIds = computed(() => attributeId.value
+  .map(Number)
+  .filter((id) => Number.isInteger(id) && id > 0));
 const alertThresholds = useStorageAlertThresholds();
 alertThresholds.load();
 const { queryParams, reset } = useQueryParams(() => ({
@@ -113,7 +122,8 @@ const indicatorOptions = computed(() => {
 });
 
 const fetchData = async () => {
-  const promises = attributeId.value.map(id =>
+  if (resourceIds.value.length === 0) return { data: {}, info: {}, trend_meta: null };
+  const promises = resourceIds.value.map(id =>
     selectedApi.value.fetchStorageRealTimeDataById(id, queryParams.value)
   );
 
@@ -151,7 +161,8 @@ watch(breadcrumbDetailTitle, (title) => {
 
 // Fetch alerts and merge results
 const fetchAlerts = async () => {
-  const promises = attributeId.value.map(id =>
+  if (resourceIds.value.length === 0) return { content: [] };
+  const promises = resourceIds.value.map(id =>
     alertApi.fetch({ 'related_type': relatedType.value, 'related_id': id })
   );
 
@@ -192,7 +203,7 @@ watch(attributeId, () => {
   alertQuery();
 }, { deep: true });
 watch(() => props.attributeId, (value) => {
-  attributeId.value = Array.isArray(value) ? value : [value];
+  attributeId.value = normalizeResourceIds(value);
 }, { deep: true });
 const yAxisUnit = computed(() => {
   return queryParams.value.indicator === 'used'
@@ -200,7 +211,7 @@ const yAxisUnit = computed(() => {
     : ['use_ratio', 'alert_ratio'].includes(queryParams.value.indicator) ? '%' : '';
 });
 const trendSeries = computed(() => Object.entries(result.value.data || {}).map(([name, data]) => ({ name, data })));
-const systemThresholds = computed(() => attributeId.value.length > 1 ? alertThresholds.thresholds : null);
+const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThresholds.thresholds : null);
 
 </script>
 <template>
@@ -251,7 +262,7 @@ const systemThresholds = computed(() => attributeId.value.length > 1 ? alertThre
     </FilterForm>
 
     <ElCard
-      v-if="attributeId.length === 1"
+      v-if="resourceIds.length === 1"
       class="mt-2.5">
       <ElDescriptions
         :column="4"

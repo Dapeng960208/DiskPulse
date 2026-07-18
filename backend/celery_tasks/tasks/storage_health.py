@@ -358,9 +358,17 @@ def _isilon_latency_milliseconds(value, unit):
     return None
 
 
-def _netapp_performance_rows(cluster_id: int, records: list[dict], now: datetime) -> list[dict]:
+def _netapp_performance_rows(
+    cluster_id: int,
+    records: list[dict],
+    now: datetime,
+    volume_identities: dict[str, str] | None = None,
+) -> list[dict]:
     rows = []
     for record in records:
+        vendor_object_id = str(record.get("uuid") or record.get("name") or "")
+        if volume_identities is not None and vendor_object_id not in volume_identities:
+            continue
         metrics = record.get("metric") or {}
         latency_total = _microseconds_to_milliseconds(metrics.get("latency"))
         if latency_total is None:
@@ -371,7 +379,11 @@ def _netapp_performance_rows(cluster_id: int, records: list[dict], now: datetime
                 "storage_cluster_id": str(cluster_id),
                 "vendor": "netapp",
                 "object_type": "volume",
-                "object_id": str(record.get("uuid") or record.get("name")),
+                "object_id": (
+                    volume_identities[vendor_object_id]
+                    if volume_identities is not None
+                    else vendor_object_id
+                ),
                 "object_name": str(record.get("name") or record.get("uuid")),
                 "latency_read": _microseconds_to_milliseconds(latency.get("read")),
                 "latency_write": _microseconds_to_milliseconds(latency.get("write")),
@@ -389,6 +401,7 @@ def _isilon_performance_rows(
     records: list[dict],
     now: datetime,
     volume_paths: set[str] | None = None,
+    volume_identities: dict[str, str] | None = None,
 ) -> list[dict]:
     rows = []
     for record in records:
@@ -396,19 +409,28 @@ def _isilon_performance_rows(
         if "latency" not in key:
             continue
         workload = record.get("workload")
+        workload_key = str(workload) if workload not in (None, "") else None
         if (
             workload not in (None, "")
             and volume_paths is not None
-            and str(workload) not in volume_paths
+            and workload_key not in volume_paths
+        ):
+            continue
+        if volume_identities is not None and (
+            workload_key is None or workload_key not in volume_identities
         ):
             continue
         object_type = "volume" if workload not in (None, "") else "node"
-        object_id = str(
-            workload
-            or record.get("devid")
-            or record.get("node")
-            or record.get("name")
-            or key
+        object_id = (
+            volume_identities[workload_key]
+            if volume_identities is not None
+            else str(
+                workload
+                or record.get("devid")
+                or record.get("node")
+                or record.get("name")
+                or key
+            )
         )
         value = _isilon_latency_milliseconds(record.get("value"), record.get("unit"))
         if value is None:
@@ -419,7 +441,7 @@ def _isilon_performance_rows(
                 "vendor": "isilon",
                 "object_type": object_type,
                 "object_id": object_id,
-                "object_name": str(record.get("name") or object_id),
+                "object_name": str(record.get("name") or workload_key or object_id),
                 "latency_read": _isilon_latency_milliseconds(
                     record.get("latency_read"), record.get("unit")
                 ),
@@ -464,23 +486,33 @@ def _collect_performance(storage_cluster_id: int) -> int:
             monitor = StoragePulseMonitor(db, logger, storage_cluster_id)
             monitor.setup()
             now = datetime.now()
+            volume_identities = {
+                str(name): str(performance_object_id)
+                for name, performance_object_id in db.execute(
+                    select(Volume.name, Volume.performance_object_id).where(
+                        Volume.storage_cluster_id == storage_cluster_id,
+                        Volume.performance_object_id.is_not(None),
+                    )
+                ).all()
+                if name and performance_object_id
+            }
             if monitor.storage_type == "netapp":
+                identities_by_device_id = {
+                    performance_object_id: performance_object_id
+                    for performance_object_id in volume_identities.values()
+                }
                 rows = _netapp_performance_rows(
-                    storage_cluster_id, monitor.client.get_volume_metrics(), now
+                    storage_cluster_id,
+                    monitor.client.get_volume_metrics(),
+                    now,
+                    volume_identities=identities_by_device_id,
                 )
             else:
-                volume_paths = set(
-                    db.execute(
-                        select(Volume.name).where(
-                            Volume.storage_cluster_id == storage_cluster_id
-                        )
-                    ).scalars()
-                )
                 rows = _isilon_performance_rows(
                     storage_cluster_id,
                     monitor.client.get_performance_statistics(),
                     now,
-                    volume_paths=volume_paths,
+                    volume_identities=volume_identities,
                 )
             return _write_performance_rows(rows)
         finally:

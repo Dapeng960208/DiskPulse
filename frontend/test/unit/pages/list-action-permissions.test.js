@@ -95,6 +95,30 @@ describe('global list row actions', () => {
   const storageSource = readPage('src/pages/admin/storage-cluster/StorageClusterListPage.vue');
   const aiSource = readPage('src/pages/admin/ai/AiCenterPage.vue');
 
+  it.each([
+    ['src/components/audit/AuditEventTable.vue', "emit('show-detail', row)"],
+    ['src/pages/usage/UsageListPage.vue', 'storageUsageFormDialogRef.edit()'],
+    ['src/pages/group-tag/GroupTagListPage.vue', 'dialogRef.edit()'],
+    ['src/pages/group/GroupListPage.vue', 'groupFormDialogRef.edit()'],
+    ['src/pages/project/components/ProjectTable.vue', 'projectFormDialogRef.edit()'],
+    ['src/pages/project/components/ProjectMembersTab.vue', 'class="list-row-actions"'],
+    ['src/pages/admin/backup/BackUpListPage.vue', '@click="confirmDeleteBackUp(row)"'],
+    ['src/pages/admin/aggregate/AggregateListPage.vue', '`/admin/aggregate/${row.id}`'],
+    ['src/pages/admin/volume/VolumeListPage.vue', '`/admin/volume/${row.id}`'],
+    ['src/pages/admin/qtree/QtreeListPage.vue', '`/admin/qtree/${row.id}`'],
+    ['src/pages/admin/user/UserListPage.vue', '@click="syncLdapUsers"'],
+    ['src/pages/admin/ai/AiCenterPage.vue', '@click="addModel"'],
+    ['src/pages/admin/storage-cluster/StorageClusterListPage.vue', 'formDialogRef.edit()'],
+    ['src/pages/admin/storage-cluster/components/ClusterIncidentsTab.vue', 'openDetail(row)'],
+    ['src/pages/incident/IncidentCenterPage.vue', 'openDetail(row)'],
+  ])('%s keeps the operation column fixed on the right', (file, marker) => {
+    const actions = columnContaining(readPage(file), marker);
+
+    expect(actions).toContain('fixed="right"');
+    expect(actions).toContain('align="right"');
+    expect(actions).toMatch(/\bwidth="\d+"/);
+  });
+
   it('never renders more than two direct controls in a table row action column', () => {
     const violations = [];
 

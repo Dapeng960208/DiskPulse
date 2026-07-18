@@ -5,6 +5,7 @@ import {
   DEMO_PASSWORD,
   DEMO_USERS,
   createMockGateway,
+  mockAxiosAdapter,
 } from '@/mocks/runtime.js';
 
 describe('frontend mock runtime', () => {
@@ -98,8 +99,109 @@ describe('frontend mock runtime', () => {
     await gateway.request('delete', `/group-tags/${created.id}`, undefined, admin.token);
     const tags = await gateway.request('get', '/group-tags', undefined, admin.token);
 
-    expect(trend.content.length).toBeGreaterThan(1);
+    expect(trend.length).toBeGreaterThan(1);
     expect(updated.name).toBe('Mock 已更新标签');
     expect(tags.content.some((tag) => tag.id === created.id)).toBe(false);
+  });
+
+  it('gives the superadmin five or more records for every visible mock data source', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const listPaths = [
+      '/projects',
+      '/groups',
+      '/storage-usages',
+      '/storage-alerts',
+      '/v1/incidents',
+      '/storage-clusters',
+      '/aggregates',
+      '/volumes',
+      '/qtrees',
+      '/group-tags',
+      '/users',
+      '/storage-back-up-records',
+      '/v1/audit-events',
+      '/ai/models',
+      '/ai/conversations',
+      '/admin/ai-models',
+      '/admin/ai-audits',
+    ];
+    const dashboardPaths = [
+      '/dashboard/capacity-trend',
+      '/dashboard/capacity-items',
+      '/dashboard/alert-levels',
+      '/dashboard/top-users',
+    ];
+
+    for (const path of listPaths.filter((path) => path !== '/ai/conversations')) {
+      const response = await gateway.request('get', path, undefined, superadmin.token);
+      const content = response.content ?? response;
+      expect(content, path).toEqual(expect.any(Array));
+      expect(content.length, path).toBeGreaterThanOrEqual(5);
+    }
+
+    const conversations = await gateway.request('get', '/ai/conversations', undefined, superadmin.token);
+    expect(conversations).toEqual(expect.any(Array));
+    expect(conversations).toHaveLength(5);
+    for (const path of dashboardPaths) {
+      const response = await gateway.request('get', path, undefined, superadmin.token);
+      const content = response.content ?? response;
+      expect(content.length, path).toBeGreaterThanOrEqual(5);
+    }
+
+    const summary = await gateway.request('get', '/dashboard/summary', undefined, superadmin.token);
+    const configuration = await gateway.request('get', '/config/storage', undefined, superadmin.token);
+    const conversation = await gateway.request('get', '/ai/conversations/1', undefined, superadmin.token);
+    const latency = await gateway.request('get', '/storage-clusters/1/analytics/top-latency', undefined, superadmin.token);
+
+    expect(summary.summary.alert_count).toBeGreaterThanOrEqual(5);
+    expect(configuration.storage_alert_rule).toMatchObject({
+      quota_basis: 'hard',
+      important: { threshold: expect.any(Number), repeat_hours: expect.any(Number) },
+      serious: { threshold: expect.any(Number), repeat_hours: expect.any(Number) },
+      emergency: { threshold: expect.any(Number), repeat_hours: expect.any(Number) },
+    });
+    expect(conversation.messages.length).toBeGreaterThanOrEqual(5);
+    expect(latency.data).toHaveLength(5);
+  });
+
+  it('passes mock list payloads to API clients without an extra result wrapper', async () => {
+    const login = await createMockGateway().login('demo-superadmin', DEMO_PASSWORD);
+    const response = await mockAxiosAdapter({
+      method: 'get',
+      url: '/projects',
+      headers: { Authorization: `Bearer ${login.token}` },
+    });
+
+    expect(response.data.content).toHaveLength(5);
+  });
+
+  it('accepts double-slash resource paths emitted by the shared API client', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    await expect(gateway.request('get', '/storage-usages//101/realtime', undefined, superadmin.token))
+      .resolves.toMatchObject({ info: { linux_path: '/data/demo/project-1/alice' } });
+    await expect(gateway.request('get', '/groups//11/realtime', undefined, superadmin.token))
+      .resolves.toMatchObject({ info: { name: '芯片设计项目组' } });
+  });
+
+  it('provides display fields for every mock alert table column', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const alerts = await gateway.request('get', '/storage-alerts', undefined, superadmin.token);
+
+    expect(alerts.content[0]).toMatchObject({
+      alert_type: 'alert',
+      cluster_name: expect.any(String),
+      project_name: expect.any(String),
+      related_type: 'StorageUsage',
+      event_type: 'trigger',
+      quota_basis: 'hard',
+      delivery_status: expect.any(String),
+      threshold: expect.any(Number),
+      avg_use_ratio: expect.any(Number),
+      related_info: { context: { group_tag: expect.any(String), linux_path: expect.any(String) } },
+    });
   });
 });

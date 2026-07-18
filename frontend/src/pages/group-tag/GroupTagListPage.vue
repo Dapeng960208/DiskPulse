@@ -54,14 +54,15 @@ query();
     <DataTable
       :data="result.content"
       :loading="querying"
-      :pagination="{ page: queryParams.page, pageSize: queryParams.size, total: result.total }"
+      :pagination="{ page: queryParams.page, pageSize: queryParams.size, total: result.total, hideOnSinglePage: true }"
       @update:pagination="({ page, pageSize }) => { queryParams.page = page; queryParams.size = pageSize; query(); }">
       <ElTableColumn
         label="标签名称"
         prop="name" />
       <ElTableColumn
         align="right"
-        width="160">
+        width="160"
+        fixed="right">
         <template #header>
           <ElButton
             size="small"

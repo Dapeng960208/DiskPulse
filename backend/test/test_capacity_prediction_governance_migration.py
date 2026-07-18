@@ -11,7 +11,7 @@ from alembic.config import Config
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-MIGRATION_PATH = BACKEND_ROOT / "migrate" / "versions" / "000000000012_capacity_prediction_governance.py"
+MIGRATION_PATH = BACKEND_ROOT / "migrate" / "versions" / "000000000013_capacity_prediction_governance.py"
 
 
 def _migration():
@@ -25,7 +25,7 @@ def _migration():
 def test_capacity_prediction_governance_is_the_alembic_head():
     scripts = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
 
-    assert scripts.get_heads() == ["000000000012"]
+    assert scripts.get_heads() == ["000000000013"]
 
 
 @pytest.mark.parametrize("dialect_name", ("sqlite", "postgresql", "mysql"))

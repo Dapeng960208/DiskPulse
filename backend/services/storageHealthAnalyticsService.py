@@ -146,22 +146,29 @@ def get_top_latency(
     limit: int = 10,
     object_type: str | None = None,
 ) -> dict:
-    volume_names = None
+    volume_identities = None
     query_limit = limit
     if object_type == "volume":
-        volume_names = set(
+        volume_identities = set(
             db.execute(
-                select(Volume.name).where(
-                    Volume.storage_cluster_id == storage_cluster_id
+                select(Volume.performance_object_id).where(
+                    Volume.storage_cluster_id == storage_cluster_id,
+                    Volume.performance_object_id.is_not(None),
                 )
             ).scalars()
         )
-        query_limit = max(limit, len(volume_names))
+        query_limit = max(limit, len(volume_identities))
     rows = storageHealthAnalyticsCrud.get_top_latency_rows(
-        db, storage_cluster_id, start_time, end_time, query_limit, object_type
+        db,
+        storage_cluster_id,
+        start_time,
+        end_time,
+        query_limit,
+        object_type,
+        volume_identities,
     )
-    if volume_names is not None:
-        rows = [row for row in rows if row.get("object_name") in volume_names]
+    if volume_identities is not None:
+        rows = [row for row in rows if row.get("object_id") in volume_identities]
     supported = bool(rows) or storageHealthAnalyticsCrud.has_performance_metrics(
         db, storage_cluster_id
     )

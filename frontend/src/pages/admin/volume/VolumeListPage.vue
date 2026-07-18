@@ -235,7 +235,8 @@ query();
       <ElTableColumn
         v-if="hasRole('disk-monitor:admin')"
         align="right"
-        width="132">
+        width="132"
+        fixed="right">
         <template #default="{ row }">
           <ElButton
             v-if="hasRole('disk-monitor:admin')"

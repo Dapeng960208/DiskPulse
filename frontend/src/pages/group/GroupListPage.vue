@@ -407,7 +407,8 @@ function canAdjustQuota(row) {
       </ElTableColumn>
       <ElTableColumn
         align="right"
-        width="132">
+        width="132"
+        fixed="right">
         <template #header>
           <ElButton
             v-if="hasRole('disk-monitor:admin')"

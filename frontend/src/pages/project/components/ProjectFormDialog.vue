@@ -31,12 +31,6 @@ const {
     name: [
       { type: 'string', required: true, message: '名称不能为空', trigger: 'blur' },
     ],
-    // pt_user_id: [
-    //   { type: 'number', required: true, message: 'PT经理不能为空', trigger: 'blur' },
-    // ],
-    // in_charge_user_id: [
-    //   { type: 'number', required: true, message: '开发代表不能为空', trigger: 'blur' },
-    // ],
   }),
   doSubmit(mode) {
       const modelValue = {
@@ -110,12 +104,7 @@ defineExpose({
         <ElInput v-model="model.name" />
       </ElFormItem>
       <ElFormItem
-        label="PT经理"
-        prop="pt_user_id">
-        <RdUserSelect v-model="model.pt_user_id" />
-      </ElFormItem>
-      <ElFormItem
-        label="开发代表"
+        label="项目负责人"
         prop="in_charge_user_id">
         <RdUserSelect v-model="model.in_charge_user_id" />
       </ElFormItem>

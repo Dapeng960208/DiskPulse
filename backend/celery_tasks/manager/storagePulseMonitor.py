@@ -308,6 +308,7 @@ class StoragePulseMonitor:
                 state=rec.get('state', ''),
                 type=rec.get('type', ''),
                 aggregate=agg_list[0].get('name', '') if agg_list else '',
+                performance_object_id=rec.get('uuid'),
                 limit=total,
                 used=used,
                 use_ratio=round(used * 100 / total, 2) if total else 0,
@@ -921,6 +922,7 @@ class StoragePulseMonitor:
                 used=used,
                 use_ratio=_calculate_use_ratio(used, limit),
                 soft_use_ratio=_calculate_use_ratio(used, soft_limit),
+                performance_object_id=quota.get('id') or quota.get('path'),
                 updated_at=datetime.now(),
             ))
         return spaces

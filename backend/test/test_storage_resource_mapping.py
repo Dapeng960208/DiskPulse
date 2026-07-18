@@ -197,6 +197,7 @@ def test_isilon_directory_quota_is_a_storage_space(db_session):
     monitor.client = Mock()
     monitor.client.get_quotas.return_value = [
         {
+            "id": "quota-42",
             "type": "directory",
             "path": "/ifs/team",
             "thresholds": {"hard": 500 * GB, "soft": 400 * GB},
@@ -211,6 +212,7 @@ def test_isilon_directory_quota_is_a_storage_space(db_session):
     assert spaces[0].name == "/ifs/team"
     assert spaces[0].type == "directory_quota"
     assert spaces[0].aggregate == ""
+    assert spaces[0].performance_object_id == "quota-42"
 
 
 def test_isilon_user_quota_uses_uid_persona_without_name_resolution(db_session):
@@ -315,6 +317,7 @@ def test_successful_netapp_collection_migrates_null_qtree_binding_to_volume(db_s
     ]
     monitor.client.get_volumes.return_value = [
         {
+            "uuid": "volume-uuid-a",
             "name": "vol-a",
             "state": "online",
             "type": "rw",
@@ -332,6 +335,7 @@ def test_successful_netapp_collection_migrates_null_qtree_binding_to_volume(db_s
     migrated = db_session.get(models.Group, 1)
     assert (migrated.volume_id, migrated.qtree_id) == (1, None)
     assert db_session.get(models.Qtree, 1) is None
+    assert db_session.get(models.Volume, 1).performance_object_id == "volume-uuid-a"
 
 
 @pytest.mark.parametrize(

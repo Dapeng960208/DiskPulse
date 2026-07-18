@@ -23,6 +23,7 @@ class VolumeBase(BaseModel):
     use_ratio: float | None = None
     soft_use_ratio: float | None = None
     allocated: float | None = None
+    performance_object_id: str | None = None
     updated_at: datetime
     storage_cluster_id: Optional[int] = None
 
@@ -44,3 +45,26 @@ class Volume(VolumeBase):
     model_config = ConfigDict(from_attributes=True)
 
 Volume.model_rebuild()
+
+
+class VolumeMonitoringBinding(BaseModel):
+    group_id: int
+    group_name: str
+    project_id: int
+    project_name: str
+    linux_path: str | None = None
+
+
+class VolumePerformanceSeries(BaseModel):
+    metric: str
+    unit: str
+    data: list[list]
+    status: str
+    match_source: str
+
+
+class VolumeMonitoring(BaseModel):
+    info: Volume
+    binding: VolumeMonitoringBinding | None = None
+    capacity: list[list]
+    performance: list[VolumePerformanceSeries]
