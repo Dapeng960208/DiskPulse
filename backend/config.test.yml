@@ -39,8 +39,11 @@ incident_notifications:
   notify_project_owner: false
   notify_project_members: false
   extra_usernames: []
-  feishu_enabled: true
+  feishu_enabled: false
   email_enabled: false
+
+incident_analytics:
+  replay_gate_verified: false
 
 ai:
   config_secret_key: test-ai-config-secret-key

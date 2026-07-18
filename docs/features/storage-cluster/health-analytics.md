@@ -84,6 +84,12 @@ section=capacity|severity|latency|faults|all
 
 真实 NetApp、PowerScale、PostgreSQL、MySQL、QuestDB 和登录浏览器的冒烟仍需在部署环境执行，重点确认设备权限、实际资源版本、事件字段、对象名称、延迟单位、指标可用性、QuestDB TTL、数据库迁移和浏览器下载行为。在这些验证完成前，不能把外部系统兼容性描述为已验证。
 
+## 派生预测与关联事件
+
+集群详情新增懒加载“关联事件”页签。该页签只读取项目作用域内的派生 Incident、容量预测数和性能异常数；打开后才请求 `/v1/incidents`、`/v1/forecasts` 和 `/v1/anomalies`。点击事件可查看不可变证据引用、确定性诊断与操作时间线。
+
+该页签不改变本页的“故障分析”与“系统事件”语义：厂商原始事件仍来自 `storage_alerts` 的 `netapp`/`isilon` 记录，既有告警页仍只显示 `source=diskpulse`。未映射的厂商对象只会在派生分析侧以集群级资产和 `asset_mapping_missing` 缺口出现，不会修改厂商原始记录。
+
 ## Dell 官方参考
 
 - [Performance datasets API resource](https://www.dell.com/support/manuals/en-us/isilon-onefs/ifs_pub_onefs_api_reference/performance-datasets-resource?guid=guid-f036e2e1-edff-43a6-b422-c27b6fe9d938&lang=en-us)

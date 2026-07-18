@@ -14,7 +14,7 @@ from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from crud import forecastIncidentCrud
-from models import Incident, IncidentEvidence, IncidentTimeline, MaintenanceWindow
+from models import Diagnosis, Incident, IncidentEvidence, IncidentTimeline, MaintenanceWindow
 from services import audit_service, project_access_service
 from utils.auth_service import is_super_admin
 
@@ -146,9 +146,11 @@ class DiagnosisResult(BaseModel):
 
 @dataclass(frozen=True)
 class CorrelationResult:
-    incident: Incident
+    incident: Incident | None
     created: bool
     reopened: bool
+    severity_escalated: bool = False
+    suppressed: bool = False
 
 
 def build_capacity_forecast(
@@ -221,6 +223,41 @@ def build_capacity_forecast(
     )
 
 
+def capacity_forecast_backtest_mape(
+    asset_ref: AssetRef,
+    *,
+    points: list[tuple[datetime, float]],
+    hard_limit: float,
+) -> float | None:
+    """Replay the final 30 UTC days without allowing future samples into training."""
+    daily: dict[datetime.date, tuple[datetime, float]] = {}
+    for observed_at, value in points:
+        observed_at = _utc(observed_at)
+        existing = daily.get(observed_at.date())
+        if existing is None or value > existing[1]:
+            daily[observed_at.date()] = (observed_at, float(value))
+    ordered = [daily[key] for key in sorted(daily)]
+    if len(ordered) < FORECAST_TRAINING_DAYS + FORECAST_DAYS:
+        return None
+    training = ordered[-(FORECAST_TRAINING_DAYS + FORECAST_DAYS):-FORECAST_DAYS]
+    actuals = ordered[-FORECAST_DAYS:]
+    forecast = build_capacity_forecast(
+        asset_ref,
+        points=training,
+        hard_limit=hard_limit,
+        now=training[-1][0],
+    )
+    if forecast.status != "ready":
+        return None
+    predicted = {point.observed_at.date(): point.p50 for point in forecast.curve}
+    percentage_errors = [
+        abs((predicted[observed_at.date()] - actual) / actual) * 100
+        for observed_at, actual in actuals
+        if actual > 0 and observed_at.date() in predicted
+    ]
+    return round(float(np.mean(percentage_errors)), 4) if percentage_errors else None
+
+
 def evaluate_telemetry_quality(
     *,
     component: Literal["capacity", "vendor_events", "performance"],
@@ -279,7 +316,7 @@ def build_diagnosis(
     evidences: list[DiagnosisEvidence],
     high_confidence_enabled: bool,
 ) -> DiagnosisResult:
-    candidates: list[DiagnosisCandidate] = []
+    ranked_candidates: list[tuple[DiagnosisCandidate, datetime]] = []
     all_gaps = sorted({gap for evidence in evidences for gap in evidence.data_gaps})
     for category, weights in _WEIGHTS.items():
         selected: dict[str, tuple[DiagnosisEvidence, float]] = {}
@@ -301,29 +338,28 @@ def build_diagnosis(
             gaps.append("conflicting_evidence")
         references = [item[0].evidence_ref for item in selected.values()]
         newest = max(item[0].observed_at for item in selected.values())
-        candidates.append(
-            DiagnosisCandidate(
+        ranked_candidates.append(
+            (
+                DiagnosisCandidate(
                 category=category,
                 score=round(score, 2),
                 evidence_refs=references,
                 independent_evidence_types=len(selected),
                 data_gaps=sorted(set(gaps)),
+                ),
+                newest,
             )
         )
-        # Store sort metadata without exposing it in the public schema.
-        candidates[-1].__dict__["_newest"] = newest
 
-    candidates.sort(
+    ranked_candidates.sort(
         key=lambda item: (
-            -item.score,
-            -item.independent_evidence_types,
-            -item.__dict__.get("_newest", datetime.min.replace(tzinfo=timezone.utc)).timestamp(),
-            _PRIORITY[item.category],
+            -item[0].score,
+            -item[0].independent_evidence_types,
+            -item[1].timestamp(),
+            _PRIORITY[item[0].category],
         )
     )
-    candidates = candidates[:3]
-    for candidate in candidates:
-        candidate.__dict__.pop("_newest", None)
+    candidates = [candidate for candidate, _ in ranked_candidates[:3]]
     lead = candidates[0] if candidates else None
     confidence: Literal["high", "medium", "low", "insufficient"]
     if lead is None:
@@ -341,6 +377,23 @@ def build_diagnosis(
         evidence_ids=[evidence.evidence_ref for evidence in evidences],
         data_gaps=all_gaps,
     )
+
+
+def rca_top_three_hit_rate(cases: list[dict[str, Any]]) -> float:
+    """Evaluate deterministic RCA against fixed labelled replay cases."""
+    if not cases:
+        return 0.0
+    hits = 0
+    for case in cases:
+        result = build_diagnosis(
+            incident_id=0,
+            evidences=list(case.get("evidences") or []),
+            high_confidence_enabled=False,
+        )
+        categories = {candidate.category for candidate in result.candidates[:3]}
+        if case.get("expected") in categories:
+            hits += 1
+    return hits / len(cases)
 
 
 def can_transition_incident(current: str, target: str, *, system_reopen: bool = False) -> bool:
@@ -377,45 +430,85 @@ def _append_evidence(db, incident: Incident, envelope: TelemetryEnvelope) -> Non
         source_ref=envelope.source_ref,
         evidence_type=envelope.metric_or_event,
         observed_at=_utc(envelope.observed_at),
-        data_gaps=[] if envelope.quality == "good" else [f"quality_{envelope.quality}"],
+        data_gaps=_evidence_data_gaps(envelope),
         evidence_hash=hashlib.sha256(f"{envelope.source}:{envelope.source_ref}".encode("utf-8")).hexdigest(),
     )
-    db.add(evidence)
-    db.add(IncidentTimeline(incident_id=incident.id, event_type="evidence_added"))
+    forecastIncidentCrud.add_incident_evidence(db, evidence)
+    forecastIncidentCrud.add_incident_timeline(
+        db, IncidentTimeline(incident_id=incident.id, event_type="evidence_added")
+    )
+
+
+def _evidence_data_gaps(envelope: TelemetryEnvelope) -> list[str]:
+    if envelope.quality == "good":
+        return []
+    if envelope.quality.startswith("data_gap:"):
+        return [envelope.quality.removeprefix("data_gap:")]
+    return [f"quality_{envelope.quality}"]
+
+
+def _maintenance_suppresses(db, *, asset: AssetRef, observed_at: datetime) -> bool:
+    return forecastIncidentCrud.matching_maintenance_window(
+        db,
+        project_id=asset.project_id,
+        storage_cluster_id=asset.storage_cluster_id,
+        asset_type=asset.asset_type,
+        asset_id=asset.asset_id,
+        observed_at=observed_at,
+    ) is not None
 
 
 def correlate_incident(db, envelope: TelemetryEnvelope, *, category: str) -> CorrelationResult:
     if category not in INCIDENT_CATEGORIES:
         raise ValueError("unsupported incident category")
-    existing_evidence = db.query(IncidentEvidence).filter(
-        IncidentEvidence.source == envelope.source,
-        IncidentEvidence.source_ref == envelope.source_ref,
-    ).one_or_none()
+    existing_evidence = forecastIncidentCrud.get_incident_evidence_by_source_ref(
+        db, source=envelope.source, source_ref=envelope.source_ref
+    )
     if existing_evidence is not None:
-        incident = db.get(Incident, existing_evidence.incident_id)
+        incident = forecastIncidentCrud.get_incident(db, existing_evidence.incident_id)
         return CorrelationResult(incident=incident, created=False, reopened=False)
 
     asset = envelope.asset_ref
     observed_at = _utc(envelope.observed_at)
+    if _maintenance_suppresses(db, asset=asset, observed_at=observed_at):
+        return CorrelationResult(
+            incident=None,
+            created=False,
+            reopened=False,
+            suppressed=True,
+        )
     correlation_key = _correlation_key(asset, category)
-    incident = db.query(Incident).filter(
-        Incident.correlation_key == correlation_key,
-        Incident.correlation_bucket_at == _bucket_start(observed_at),
-    ).one_or_none()
+    incident = forecastIncidentCrud.get_incident_by_correlation_bucket(
+        db,
+        correlation_key=correlation_key,
+        correlation_bucket_at=_bucket_start(observed_at),
+    )
     created = False
     reopened = False
+    severity_escalated = False
     if incident is None:
-        incident = db.query(Incident).filter(
-            Incident.correlation_key == correlation_key,
-            Incident.status == "resolved",
-            Incident.resolved_at >= observed_at - timedelta(hours=24),
-        ).order_by(Incident.resolved_at.desc()).first()
+        incident = forecastIncidentCrud.get_recent_resolved_incident(
+            db,
+            correlation_key=correlation_key,
+            resolved_since=observed_at - timedelta(hours=24),
+        )
         if incident is not None:
             require_incident_transition("resolved", "open", system_reopen=True)
             incident.status = "open"
             incident.resolved_at = None
             incident.last_evidence_at = observed_at
-            db.add(IncidentTimeline(incident_id=incident.id, event_type="reopened", from_status="resolved", to_status="open"))
+            if _severity(envelope) == "critical" and incident.severity != "critical":
+                incident.severity = "critical"
+                severity_escalated = True
+            forecastIncidentCrud.add_incident_timeline(
+                db,
+                IncidentTimeline(
+                    incident_id=incident.id,
+                    event_type="reopened",
+                    from_status="resolved",
+                    to_status="open",
+                ),
+            )
             reopened = True
         else:
             incident = Incident(
@@ -432,17 +525,88 @@ def correlate_incident(db, envelope: TelemetryEnvelope, *, category: str) -> Cor
                 opened_at=observed_at,
                 last_evidence_at=observed_at,
             )
-            db.add(incident)
-            db.flush()
-            db.add(IncidentTimeline(incident_id=incident.id, event_type="created", to_status="open"))
+            forecastIncidentCrud.add_incident(db, incident)
+            forecastIncidentCrud.add_incident_timeline(
+                db, IncidentTimeline(incident_id=incident.id, event_type="created", to_status="open")
+            )
             created = True
     else:
         incident.last_evidence_at = observed_at
-        if _severity(envelope) == "critical":
+        if _severity(envelope) == "critical" and incident.severity != "critical":
             incident.severity = "critical"
+            severity_escalated = True
     _append_evidence(db, incident, envelope)
     db.flush()
-    return CorrelationResult(incident=incident, created=created, reopened=reopened)
+    return CorrelationResult(
+        incident=incident,
+        created=created,
+        reopened=reopened,
+        severity_escalated=severity_escalated,
+    )
+
+
+def _diagnosis_evidence(evidence: IncidentEvidence) -> DiagnosisEvidence:
+    return DiagnosisEvidence(
+        evidence_type=evidence.evidence_type,
+        evidence_ref=evidence.source_ref,
+        observed_at=_utc(evidence.observed_at),
+        data_gaps=list(evidence.data_gaps or []),
+    )
+
+
+def _diagnosis_digest(evidence: list[IncidentEvidence]) -> str:
+    stable = [
+        {
+            "source": item.source,
+            "source_ref": item.source_ref,
+            "evidence_type": item.evidence_type,
+            "evidence_hash": item.evidence_hash,
+            "observed_at": _utc(item.observed_at).isoformat(),
+            "data_gaps": sorted(item.data_gaps or []),
+        }
+        for item in sorted(evidence, key=lambda value: (value.source, value.source_ref))
+    ]
+    encoded = repr(stable).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def persist_incident_diagnosis(
+    db,
+    *,
+    incident_id: int,
+    high_confidence_enabled: bool,
+) -> Diagnosis:
+    """Persist a deterministic, immutable diagnosis revision for current evidence."""
+    incident = forecastIncidentCrud.get_incident(db, incident_id)
+    if incident is None:
+        raise LookupError("incident was not found")
+    evidence = forecastIncidentCrud.list_incident_evidence(db, incident_id)
+    digest = _diagnosis_digest(evidence)
+    existing = forecastIncidentCrud.get_diagnosis_by_digest(
+        db,
+        incident_id=incident_id,
+        algorithm_version=ALGORITHM_VERSION,
+        evidence_digest=digest,
+    )
+    if existing is not None:
+        return existing
+    result = build_diagnosis(
+        incident_id=incident_id,
+        evidences=[_diagnosis_evidence(item) for item in evidence],
+        high_confidence_enabled=high_confidence_enabled,
+    )
+    return forecastIncidentCrud.add_diagnosis(
+        db,
+        Diagnosis(
+            incident_id=incident_id,
+            algorithm_version=result.algorithm_version,
+            candidates=[candidate.model_dump(mode="json") for candidate in result.candidates],
+            confidence=result.confidence,
+            evidence_ids=result.evidence_ids,
+            data_gaps=result.data_gaps,
+            evidence_digest=digest,
+        ),
+    )
 
 
 def visible_project_ids(db, current_user) -> set[int] | None:
@@ -482,6 +646,10 @@ def list_visible_incidents(
     )
 
 
+def incident_capabilities(db, *, current_user, incident: Incident) -> dict[str, bool]:
+    return project_access_service.incident_capabilities(db, current_user, incident.project_id)
+
+
 def incident_detail(db, *, current_user, incident_id: int) -> tuple[Incident, list[IncidentEvidence], list[IncidentTimeline], Any]:
     incident = require_visible_incident(db, current_user, incident_id)
     return (
@@ -518,6 +686,7 @@ def update_incident(
     claim: bool | None = None,
     silenced_until: datetime | None = None,
     silence_reason: str | None = None,
+    silence_requested: bool = False,
     audit_context=None,
 ) -> Incident:
     incident = require_visible_incident(db, current_user, incident_id, "editor")
@@ -546,15 +715,15 @@ def update_incident(
         incident.assigned_user_id = None
         db.add(IncidentTimeline(incident_id=incident.id, event_type="released", actor_user_id=current_user.id))
         changed = True
-    if silenced_until is not None:
-        incident.silenced_until = _utc(silenced_until)
-        incident.silence_reason = silence_reason
-        db.add(IncidentTimeline(incident_id=incident.id, event_type="silenced", actor_user_id=current_user.id))
-        changed = True
-    elif silence_reason is not None:
-        incident.silenced_until = None
-        incident.silence_reason = None
-        db.add(IncidentTimeline(incident_id=incident.id, event_type="unsilenced", actor_user_id=current_user.id))
+    if silence_requested:
+        if silenced_until is not None:
+            incident.silenced_until = _utc(silenced_until)
+            incident.silence_reason = silence_reason
+            db.add(IncidentTimeline(incident_id=incident.id, event_type="silenced", actor_user_id=current_user.id))
+        else:
+            incident.silenced_until = None
+            incident.silence_reason = None
+            db.add(IncidentTimeline(incident_id=incident.id, event_type="unsilenced", actor_user_id=current_user.id))
         changed = True
     if not changed:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="no incident update supplied")

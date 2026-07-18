@@ -437,6 +437,13 @@ def storages_schedule_fetching_task(self, storage_cluster_id=None, audit_context
                             cluster_results=summary["cluster_results"],
                             collected_at=collected_at,
                         )
+                try:
+                    from celery_tasks.tasks import forecast_incidents
+
+                    # Raw PostgreSQL/QuestDB collection has completed; derived work is async.
+                    forecast_incidents.telemetry_quality_snapshot_task.delay()
+                except Exception:
+                    logger.warning("Unable to enqueue telemetry quality snapshot after capacity collection")
             else:
                 telemetryObservabilityService.safe_record_scheduler_skip(
                     SessionLocal,

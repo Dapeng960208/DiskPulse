@@ -1,0 +1,30 @@
+{
+  "capacity_growth": {
+    "start_used": 10.0,
+    "daily_growth": 1.0,
+    "days": 75,
+    "hard_limit": 200.0
+  },
+  "rca_cases": [
+    {
+      "expected": "capacity_pressure",
+      "evidence_types": ["forecast_exhaustion", "hard_limit_alert"]
+    },
+    {
+      "expected": "device_fault",
+      "evidence_types": ["severe_vendor_event", "repeated_fingerprint"]
+    },
+    {
+      "expected": "performance_contention",
+      "evidence_types": ["continuous_performance_anomaly", "throughput_iops_deviation"]
+    },
+    {
+      "expected": "telemetry_blindspot",
+      "evidence_types": ["telemetry_stale", "collection_failure"]
+    },
+    {
+      "expected": "capacity_pressure",
+      "evidence_types": ["high_usage"]
+    }
+  ]
+}

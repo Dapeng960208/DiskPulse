@@ -97,3 +97,9 @@
 - 动态工具的注册、参数和权限契约包含在上述两个测试文件中。
 - 迁移检查：`alembic heads`、`alembic history`、`alembic upgrade head --sql`
 - 部署环境仍需验证真实 Provider、Redis DB 7、数据库迁移和不同权限用户的完整 SSE 对话。
+
+## 9. Incident 诊断工具约束
+
+`GET /storage-pulse/api/v1/incidents/{id}/diagnosis` 是显式注册的只读工具。内部 ASGI 调用继续携带当前用户 Bearer Token，因此诊断、候选、证据 ID 和数据缺口仍受项目作用域校验；工具不会返回原始厂商载荷、路径、作业环境、日志或设备凭据。
+
+模型在调用该工具后只能回传确定性 JSON 字段 `incident_id`、`confidence`、`candidates`、`evidence_ids`、`data_gaps`。服务端逐项比较候选、分数、证据 ID、数据缺口和置信度，并从确定性结果重新生成用户可见文本。任何未知引用、字段缺失、分数/置信度变化、额外事实或非 JSON 文本都会被拒绝并回退至确定性模板；模型不能增加证据或提高置信度。

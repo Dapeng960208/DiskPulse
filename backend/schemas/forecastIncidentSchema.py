@@ -59,6 +59,7 @@ class IncidentOut(AssetRefOut):
     silenced_until: datetime | None
     created_at: datetime
     updated_at: datetime
+    capabilities: dict[str, bool] = Field(default_factory=dict)
 
 
 class IncidentEvidenceOut(BaseModel):
@@ -94,6 +95,19 @@ class DiagnosisOut(BaseModel):
     evidence_ids: list[str]
     data_gaps: list[str]
     created_at: datetime
+
+
+class DiagnosisToolOut(BaseModel):
+    """Minimal, safe AI-tool payload; it intentionally excludes raw evidence payloads."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    incident_id: int
+    algorithm_version: str
+    candidates: list[dict]
+    confidence: str
+    evidence_ids: list[str]
+    data_gaps: list[str]
 
 
 class IncidentDetailOut(IncidentOut):

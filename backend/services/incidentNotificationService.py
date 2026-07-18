@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from appConfig import base_config
 from models import Project, ProjectMembership, User
 from services.feishuNotificationService import FeishuNotificationService
+from utils.mailTools.emailNotification import EmailNotification
 
 
 def resolve_recipient_usernames(
@@ -37,9 +38,16 @@ def incident_notification_config() -> dict:
         "notify_project_owner": bool(configured.get("notify_project_owner", False)),
         "notify_project_members": bool(configured.get("notify_project_members", False)),
         "extra_usernames": tuple(configured.get("extra_usernames", ()) or ()),
-        "feishu_enabled": bool(configured.get("feishu_enabled", True)),
+        "feishu_enabled": bool(configured.get("feishu_enabled", False)),
         "email_enabled": bool(configured.get("email_enabled", False)),
     }
+
+
+def should_send_incident_notification(
+    *, created: bool, reopened: bool, severity_escalated: bool
+) -> bool:
+    """Derived Incident delivery is limited to lifecycle changes worth paging."""
+    return created or reopened or severity_escalated
 
 
 def _project_recipients(db, project_id: int | None) -> tuple[str | None, tuple[str, ...]]:
@@ -58,9 +66,22 @@ def _project_recipients(db, project_id: int | None) -> tuple[str | None, tuple[s
     return (owner.rd_username if owner else None), tuple(row[0] for row in members)
 
 
+def _recipient_emails(db, usernames: Iterable[str]) -> tuple[str, ...]:
+    names = tuple(dict.fromkeys(item for item in usernames if item))
+    if not names:
+        return ()
+    emails = db.query(User.email).filter(
+        User.rd_username.in_(names),
+        User.email.is_not(None),
+    ).all()
+    return tuple(dict.fromkeys(str(row[0]) for row in emails if row[0]))
+
+
 def notify_incident(db, incident, *, event: str) -> tuple[str, ...]:
     """Best-effort derived notification; source alerts and vendor events are untouched."""
     config = incident_notification_config()
+    if event not in {"created", "reopened", "severity_escalated"}:
+        return ()
     if not config["enabled"] or (incident.silenced_until is not None):
         return ()
     owner, members = _project_recipients(db, incident.project_id)
@@ -79,4 +100,16 @@ def notify_incident(db, incident, *, event: str) -> tuple[str, ...]:
             title=f"Incident {event}",
             paragraphs=[[{"tag": "text", "text": f"{incident.display_name}：{incident.category} / {incident.severity}"}]],
         )
+    if config["email_enabled"]:
+        emails = _recipient_emails(db, recipients)
+        if emails:
+            EmailNotification(db=db, type="storage").send_email(
+                subject=f"DiskPulse Incident {event}",
+                content=(
+                    f"事件 {incident.id}：{incident.display_name} / "
+                    f"{incident.category} / {incident.severity}。"
+                ),
+                recipient=list(emails),
+                cc_admin=False,
+            )
     return recipients

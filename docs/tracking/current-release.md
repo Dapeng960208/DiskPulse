@@ -1,5 +1,28 @@
 # 当前交付记录
 
+## 2026-07-18：预测、RCA 与事件中心（隔离分支实现）
+
+### 已完成
+
+- 隔离分支 `codex/forecast-incident-center` 已新增 `000000000010_forecast_incidents` 对应的分析、事件、证据、时间线、维护窗口和版本化诊断模型、CRUD、服务与 `/v1` 只读/受控写 API。
+- 容量预测、遥测质量、性能异常、厂商事件及 DiskPulse 原始告警关联已实现为独立 Celery 任务与采集完成后的尽力异步交接；维护窗口、24 小时重开、状态相邻迁移、证据全局去重、确定性 RCA 和条件通知均由服务端处理。
+- 新增事件中心根路由、事件详情抽屉和集群详情懒加载“关联事件”页签；告警页与厂商系统事件页没有改写。
+- 新增 `incident_notifications` 与 `incident_analytics.replay_gate_verified` 配置样例；AI 诊断工具仅返回安全摘要，服务端强制确定性输出回退。新增只读 `WorkloadStorageAdapter` 与 Slurm/LSF/EDA 夹具契约，不含生产连接器。
+- 同步预测/RCA/事件中心专题、健康分析、遥测、AI、最新功能、错误记录和文档索引。
+
+### 验证状态
+
+- 基线：`D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test/test_storage_health_analytics.py backend/test/test_forecast_incident_center.py -q` 通过 `107 passed`；开始实现前前端命令仅发现 `IncidentCenterPage.test.js` 并通过。
+- RED：维护抑制、诊断幂等、通知触发条件、工作负载安全聚合和 AI 输出回退共 5 条新增后端用例按预期失败；详情抽屉组件缺失的前端用例按预期失败。
+- GREEN：`D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test/test_storage_health_analytics.py backend/test/test_forecast_incident_center.py backend/test/test_telemetry_observability.py -q` 通过 `144 passed`；后续扩大到采集、告警和 AI 关联回归为 `207 passed`；固定历史夹具验证 30 天 MAPE `<=15%` 和 RCA Top-3 `>=80%`；`D:\dev\DiskPulse\.venv\Scripts\python.exe -m compileall -q backend` 通过；事件中心前端聚焦 4 文件/4 用例及 scoped ESLint 均通过，`npm run build:test` 成功（保留既有构建 warning）。
+
+### 风险与待完成
+
+- 隔离 worktree 没有被忽略的真实 `backend/config.yml`，因此未执行连接真实 PostgreSQL 的 `alembic upgrade head` 或直接导入 Celery 任务；不复制凭据。迁移的 SQLite 升降级与 SQLite/PostgreSQL/MySQL 离线 DDL 编译已有自动化覆盖。
+- NetApp/PowerScale 只读历史回放、QuestDB/Redis/Celery 真实运行、邮件/飞书实际发送、Slurm/LSF/EDA 客户连接器、30 天预测 MAPE 和 RCA Top-3 回放阈值均未验证。`replay_gate_verified` 保持 `false`，不能声称或展示高置信度。
+- 应用内浏览器当前拦截 `127.0.0.1`（`ERR_BLOCKED_BY_CLIENT`），未绕过该策略执行截图或真实交互；前端浏览器验收待可访问本机/部署 URL 后补做。
+- 当前虚拟环境没有 Ruff，未新增依赖；Python 静态 lint 待 CI/依赖环境提供该工具后补跑。
+
 ## 2026-07-18：遥测可观测复查与复盘交付
 
 ### 已完成

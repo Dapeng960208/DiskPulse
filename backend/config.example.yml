@@ -79,3 +79,17 @@ feishu_notification:
   tls_verify: true
   debug: false
   cc_usernames: []
+
+# 仅控制派生 Incident，不影响既有 DiskPulse 告警或厂商系统事件。
+incident_notifications:
+  enabled: false
+  notify_administrators: true
+  notify_project_owner: false
+  notify_project_members: false
+  extra_usernames: []
+  email_enabled: false
+  feishu_enabled: false
+
+# 仅在固定历史回放验收完成后由部署人员显式开启高置信度标签。
+incident_analytics:
+  replay_gate_verified: false

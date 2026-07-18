@@ -95,6 +95,42 @@ def list_latest_success_runs(db: Session, active_cluster_ids: tuple[int, ...]) -
     ).scalars().all()
 
 
+def collection_run_quality_stats(
+    db: Session,
+    *,
+    cluster_id: int,
+    component: str,
+    started_at: datetime,
+) -> tuple[datetime | None, int, list[TelemetryCollectionRun]]:
+    """Return derived quality inputs without introducing another success authority."""
+    successes = select(TelemetryCollectionRun).where(
+        TelemetryCollectionRun.storage_cluster_id == cluster_id,
+        TelemetryCollectionRun.component == component,
+        TelemetryCollectionRun.outcome == "success",
+        TelemetryCollectionRun.finished_at.is_not(None),
+        TelemetryCollectionRun.finished_at >= started_at,
+    )
+    latest_success = db.scalar(
+        select(func.max(TelemetryCollectionRun.finished_at)).where(
+            TelemetryCollectionRun.storage_cluster_id == cluster_id,
+            TelemetryCollectionRun.component == component,
+            TelemetryCollectionRun.outcome == "success",
+            TelemetryCollectionRun.finished_at.is_not(None),
+        )
+    )
+    failure_rows = db.execute(
+        select(TelemetryCollectionRun)
+        .where(
+            TelemetryCollectionRun.storage_cluster_id == cluster_id,
+            TelemetryCollectionRun.component == component,
+            TelemetryCollectionRun.outcome == "failed",
+            TelemetryCollectionRun.finished_at >= started_at,
+        )
+        .order_by(TelemetryCollectionRun.finished_at.desc(), TelemetryCollectionRun.id.desc())
+    ).scalars().all()
+    return latest_success, int(db.scalar(select(func.count()).select_from(successes.subquery())) or 0), failure_rows
+
+
 def purge_collection_runs_before(db: Session, cutoff: datetime, *, batch_size: int) -> int:
     run_ids = db.execute(
         select(TelemetryCollectionRun.id)

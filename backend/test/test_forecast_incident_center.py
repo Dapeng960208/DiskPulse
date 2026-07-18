@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -479,3 +481,88 @@ def test_restricted_ai_diagnosis_rejects_unknown_evidence_and_uses_deterministic
     assert rendered.used_fallback is True
     assert "invented:2" not in rendered.text
     assert "0.5" in rendered.text
+
+
+def test_fixed_history_replay_meets_capacity_mape_and_rca_top_three_gates():
+    from services import forecastIncidentService as analytics
+
+    fixture_path = Path(__file__).parent / "fixtures" / "forecast-incident-replay.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    capacity = fixture["capacity_growth"]
+    points = [
+        (
+            UTC_NOW - timedelta(days=capacity["days"] - 1 - offset),
+            capacity["start_used"] + capacity["daily_growth"] * offset,
+        )
+        for offset in range(capacity["days"])
+    ]
+
+    mape = analytics.capacity_forecast_backtest_mape(
+        _asset(),
+        points=points,
+        hard_limit=capacity["hard_limit"],
+    )
+    hit_rate = analytics.rca_top_three_hit_rate(
+        [
+            {
+                "expected": case["expected"],
+                "evidences": [
+                    analytics.DiagnosisEvidence(
+                        evidence_type=evidence_type,
+                        evidence_ref=f"{case['expected']}:{index}",
+                        observed_at=UTC_NOW,
+                    )
+                    for index, evidence_type in enumerate(case["evidence_types"])
+                ],
+            }
+            for case in fixture["rca_cases"]
+        ]
+    )
+
+    assert mape is not None and mape <= 15.0
+    assert hit_rate >= 0.80
+
+
+def test_performance_task_writes_only_after_three_consecutive_five_minute_anomalies():
+    from celery_tasks.tasks import forecast_incidents
+
+    rows = []
+    for offset in range(28, 0, -1):
+        observed_at = UTC_NOW - timedelta(days=offset)
+        rows.append(
+            {
+                "storage_cluster_id": "7",
+                "object_type": "volume",
+                "object_id": "volume-a",
+                "object_name": "volume-a",
+                "latency_total": 1.0,
+                "iops_total": 1.0,
+                "throughput_total": 1.0,
+                "collected_at": observed_at,
+            }
+        )
+    for minutes in (0, 5, 10):
+        rows.append(
+            {
+                "storage_cluster_id": "7",
+                "object_type": "volume",
+                "object_id": "volume-a",
+                "object_name": "volume-a",
+                "latency_total": 100.0,
+                "iops_total": 100.0,
+                "throughput_total": 100.0,
+                "collected_at": UTC_NOW + timedelta(minutes=minutes),
+            }
+        )
+
+    findings = forecast_incidents._performance_findings(rows, now=UTC_NOW + timedelta(minutes=10))
+
+    assert {item["metric"] for item in findings} == {"latency", "iops", "throughput"}
+    assert all(item["window_start"] == UTC_NOW for item in findings)
+
+
+def test_capacity_forecast_task_is_registered_for_daily_utc_aligned_execution():
+    from celery_worker import diskpulse_app
+
+    entry = diskpulse_app.conf.beat_schedule["capacity_forecast_daily_task"]
+    assert entry["task"] == "celery_tasks.tasks.forecast_incidents.capacity_forecast_daily_task"

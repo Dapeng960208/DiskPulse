@@ -14,12 +14,15 @@ import {
 } from 'element-plus';
 import QueryForm from '@/components/form/QueryForm.vue';
 import incidentApi from '@/api/incident-api.js';
+import IncidentDetailDrawer from './components/IncidentDetailDrawer.vue';
 
 const queryParams = reactive({ page: 1, size: 20, status: '', category: '' });
 const incidents = ref([]);
 const total = ref(0);
 const loading = ref(false);
 const error = ref('');
+const selectedIncident = ref(null);
+const detailVisible = ref(false);
 
 const statusLabels = {
   open: '未处理',
@@ -75,6 +78,11 @@ function updateSize(size) {
   query();
 }
 
+function openDetail(incident) {
+  selectedIncident.value = incident;
+  detailVisible.value = true;
+}
+
 onMounted(query);
 </script>
 
@@ -90,33 +98,77 @@ onMounted(query);
       @query="{ queryParams.page = 1; query(); }"
       @reset="reset">
       <ElFormItem label="状态">
-        <ElSelect v-model="queryParams.status" clearable placeholder="全部状态">
-          <ElOption v-for="(label, value) in statusLabels" :key="value" :label="label" :value="value" />
+        <ElSelect
+          v-model="queryParams.status"
+          clearable
+          placeholder="全部状态">
+          <ElOption
+            v-for="(label, value) in statusLabels"
+            :key="value"
+            :label="label"
+            :value="value" />
         </ElSelect>
       </ElFormItem>
       <ElFormItem label="类别">
-        <ElSelect v-model="queryParams.category" clearable placeholder="全部类别">
-          <ElOption v-for="(label, value) in categoryLabels" :key="value" :label="label" :value="value" />
+        <ElSelect
+          v-model="queryParams.category"
+          clearable
+          placeholder="全部类别">
+          <ElOption
+            v-for="(label, value) in categoryLabels"
+            :key="value"
+            :label="label"
+            :value="value" />
         </ElSelect>
       </ElFormItem>
       <template #actions>
-        <ElButton type="primary" @click="query">搜索</ElButton>
+        <ElButton
+          type="primary"
+          @click="query">搜索</ElButton>
       </template>
     </QueryForm>
     <ElCard class="incident-center-page__table">
-      <p v-if="error" class="incident-center-page__error">{{ error }}</p>
-      <ElTable v-loading="loading" :data="incidents" empty-text="当前项目范围内暂无事件">
-        <ElTableColumn label="资产" prop="display_name" min-width="180" />
-        <ElTableColumn label="类别" min-width="120">
+      <p
+        v-if="error"
+        class="incident-center-page__error">{{ error }}</p>
+      <ElTable
+        v-loading="loading"
+        :data="incidents"
+        empty-text="当前项目范围内暂无事件">
+        <ElTableColumn
+          label="资产"
+          prop="display_name"
+          min-width="180" />
+        <ElTableColumn
+          label="类别"
+          min-width="120">
           <template #default="{ row }">{{ categoryLabels[row.category] || row.category }}</template>
         </ElTableColumn>
-        <ElTableColumn label="严重度" prop="severity" width="110">
+        <ElTableColumn
+          label="严重度"
+          prop="severity"
+          width="110">
           <template #default="{ row }"><ElTag :type="row.severity === 'critical' ? 'danger' : 'warning'">{{ row.severity }}</ElTag></template>
         </ElTableColumn>
-        <ElTableColumn label="状态" width="120">
+        <ElTableColumn
+          label="状态"
+          width="120">
           <template #default="{ row }">{{ statusLabels[row.status] || row.status }}</template>
         </ElTableColumn>
-        <ElTableColumn label="最近证据" prop="last_evidence_at" min-width="190" />
+        <ElTableColumn
+          label="最近证据"
+          prop="last_evidence_at"
+          min-width="190" />
+        <ElTableColumn
+          label="操作"
+          width="100"
+          fixed="right">
+          <template #default="{ row }">
+            <ElButton
+              size="small"
+              @click="openDetail(row)">查看</ElButton>
+          </template>
+        </ElTableColumn>
       </ElTable>
       <ElPagination
         v-if="total > 0"
@@ -130,6 +182,10 @@ onMounted(query);
         @current-change="updatePage"
         @size-change="updateSize" />
     </ElCard>
+    <IncidentDetailDrawer
+      v-model="detailVisible"
+      :incident="selectedIncident"
+      @updated="query" />
   </section>
 </template>
 

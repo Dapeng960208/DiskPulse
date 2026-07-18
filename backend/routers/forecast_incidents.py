@@ -11,6 +11,7 @@ from schemas.forecastIncidentSchema import (
     AnomalyOut,
     AnomalyPage,
     DiagnosisOut,
+    DiagnosisToolOut,
     ForecastOut,
     ForecastPage,
     IncidentCommentCreate,
@@ -42,10 +43,19 @@ def _incident_detail(db: Session, current_user, incident_id: int) -> IncidentDet
         db, current_user=current_user, incident_id=incident_id
     )
     return IncidentDetailOut(
-        **IncidentOut.model_validate(incident).model_dump(),
+        **_incident_out(db, current_user, incident).model_dump(),
         evidence=[IncidentEvidenceOut.model_validate(item) for item in evidence],
         timeline=[IncidentTimelineOut.model_validate(item) for item in timeline],
         diagnosis=DiagnosisOut.model_validate(diagnosis) if diagnosis is not None else None,
+    )
+
+
+def _incident_out(db: Session, current_user, incident) -> IncidentOut:
+    return IncidentOut(
+        **IncidentOut.model_validate(incident).model_dump(exclude={"capabilities"}),
+        capabilities=forecastIncidentService.incident_capabilities(
+            db, current_user=current_user, incident=incident
+        ),
     )
 
 
@@ -114,7 +124,7 @@ def list_incidents(
         page=page,
         size=size,
     )
-    return IncidentPage(content=[IncidentOut.model_validate(row) for row in rows], total=total)
+    return IncidentPage(content=[_incident_out(db, current_user, row) for row in rows], total=total)
 
 
 @router.get("/incidents/{incident_id}", response_model=IncidentDetailOut)
@@ -124,15 +134,26 @@ def get_incident(incident_id: Annotated[int, Path(ge=1)], current_user: CurrentU
 
 @router.get(
     "/incidents/{incident_id}/diagnosis",
-    response_model=IncidentDetailOut,
+    response_model=DiagnosisToolOut,
     openapi_extra={
         "ai_exposed": True,
         "ai_name": "get_incident_diagnosis",
         "ai_description": "读取当前用户有权查看的确定性 Incident 诊断与证据摘要",
     },
 )
-def get_incident_diagnosis(incident_id: int, current_user: CurrentUserDep, db: DBDep) -> IncidentDetailOut:
-    return _incident_detail(db, current_user, incident_id)
+def get_incident_diagnosis(incident_id: int, current_user: CurrentUserDep, db: DBDep) -> DiagnosisToolOut:
+    incident = forecastIncidentService.require_visible_incident(db, current_user, incident_id)
+    diagnosis = forecastIncidentCrud.latest_diagnosis(db, incident.id)
+    if diagnosis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="incident diagnosis was not found")
+    return DiagnosisToolOut(
+        incident_id=incident.id,
+        algorithm_version=diagnosis.algorithm_version,
+        candidates=diagnosis.candidates,
+        confidence=diagnosis.confidence,
+        evidence_ids=diagnosis.evidence_ids,
+        data_gaps=diagnosis.data_gaps,
+    )
 
 
 @router.patch("/incidents/{incident_id}", response_model=IncidentOut)
@@ -152,11 +173,12 @@ def patch_incident(
             claim=payload.claim,
             silenced_until=_utc_or_422(payload.silenced_until, "silenced_until"),
             silence_reason=payload.silence_reason,
+            silence_requested="silenced_until" in payload.model_fields_set,
             audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
-    return IncidentOut.model_validate(incident)
+    return _incident_out(db, current_user, incident)
 
 
 @router.post("/incidents/{incident_id}/comments", response_model=IncidentTimelineOut, status_code=status.HTTP_201_CREATED)

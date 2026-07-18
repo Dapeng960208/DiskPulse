@@ -17,6 +17,7 @@ from services.audit_service import AuditContext, append_audit_event, redact_audi
 from services.ai_client import AIClientError, AIClientToolArgumentsError, AIClientToolCall, chat_completion_stream
 from services.ai_config_service import serialize_model
 from services.ai_tool_service import build_tool_registry, execute_tool, tool_definitions
+from services.incidentAiService import render_restricted_diagnosis
 from services.project_access_service import accessible_project_ids
 from utils.auth_service import is_super_admin
 
@@ -770,6 +771,7 @@ def stream_message(
         exclude_audit_id=audit.id,
     )
     tool_trace: list[dict] = []
+    diagnosis_payloads: list[dict] = []
     emitted_text: list[str] = []
     final_text = ""
     recovery: dict | None = None
@@ -812,7 +814,8 @@ def stream_message(
                         if event.kind == "delta" and event.text:
                             streamed_text.append(event.text)
                             emitted_text.append(event.text)
-                            yield "delta", {"turn_id": turn_id, "text": event.text}
+                            if not diagnosis_payloads:
+                                yield "delta", {"turn_id": turn_id, "text": event.text}
                         elif event.kind == "completed":
                             completion = event
                     if completion is None:
@@ -840,7 +843,15 @@ def stream_message(
                 break
             calls = completion.tool_calls or []
             if not calls:
-                final_text = "".join(emitted_text) or completion.text or "".join(streamed_text)
+                raw_text = "".join(emitted_text) or completion.text or "".join(streamed_text)
+                if diagnosis_payloads:
+                    final_text = render_restricted_diagnosis(
+                        model_text=raw_text,
+                        diagnosis=diagnosis_payloads[-1],
+                    ).text
+                    yield "delta", {"turn_id": turn_id, "text": final_text}
+                else:
+                    final_text = raw_text
                 break
             for sequence, call in enumerate(calls, start=1):
                 audit.tool_call_count += 1
@@ -875,6 +886,12 @@ def stream_message(
                     user_id=user_id,
                     current_user=current_user,
                 )
+                if (
+                    call.name == "get_incident_diagnosis"
+                    and result.get("ok") is True
+                    and isinstance(result.get("data"), dict)
+                ):
+                    diagnosis_payloads.append(result["data"])
                 elapsed_ms = max(0, round((monotonic() - started_at) * 1000))
                 if result.get("ok") is False:
                     audit.tool_failed_count += 1
@@ -902,6 +919,17 @@ def stream_message(
                     "truncated": truncated,
                 }
                 messages.extend(_provider_tool_messages(model.provider, call, result))
+                if call.name == "get_incident_diagnosis" and result.get("ok") is True:
+                    messages.append(
+                        {
+                            "role": "system",
+                            "content": (
+                                "诊断工具结果是唯一事实来源。仅返回 JSON 对象，字段必须是 "
+                                "incident_id、confidence、candidates、evidence_ids、data_gaps；"
+                                "不得增加、删除或改写候选、分数、证据 ID、数据缺口或置信度。"
+                            ),
+                        }
+                    )
             yield "status", {"turn_id": turn_id, "status": "thinking"}
         else:
             recovery = dict(_RECOVERY_BY_REASON["tool_iteration_limit"])
@@ -910,19 +938,26 @@ def stream_message(
         if recovery is not None:
             summary_text: list[str] = []
             try:
-                summary_completion = None
-                summary_messages = [*messages, _tool_free_summary_instruction(recovery["reason"])]
-                for event in chat_completion_stream(model, summary_messages, tools=[]):
-                    if event.kind == "delta" and event.text:
-                        summary_text.append(event.text)
-                        yield "delta", {"turn_id": turn_id, "text": event.text}
-                    elif event.kind == "completed":
-                        summary_completion = event
-                if not summary_text and summary_completion is not None and summary_completion.text:
-                    summary_text.append(summary_completion.text)
+                if not diagnosis_payloads:
+                    summary_completion = None
+                    summary_messages = [*messages, _tool_free_summary_instruction(recovery["reason"])]
+                    for event in chat_completion_stream(model, summary_messages, tools=[]):
+                        if event.kind == "delta" and event.text:
+                            summary_text.append(event.text)
+                            yield "delta", {"turn_id": turn_id, "text": event.text}
+                        elif event.kind == "completed":
+                            summary_completion = event
+                    if not summary_text and summary_completion is not None and summary_completion.text:
+                        summary_text.append(summary_completion.text)
             except Exception:
                 degraded_error_message = f"{degraded_error_message}；无工具总结调用失败"
-            final_text = "".join(summary_text).strip() or _DEGRADED_FALLBACKS[recovery["reason"]]
+            if diagnosis_payloads:
+                final_text = render_restricted_diagnosis(
+                    model_text="".join(summary_text), diagnosis=diagnosis_payloads[-1]
+                ).text
+                yield "delta", {"turn_id": turn_id, "text": final_text}
+            else:
+                final_text = "".join(summary_text).strip() or _DEGRADED_FALLBACKS[recovery["reason"]]
             _append_message_lifecycle_result(
                 db,
                 context=audit_context,

@@ -20,6 +20,24 @@ from services import telemetryObservabilityService
 logger = get_task_logger(__name__)
 
 
+def _enqueue_derived_analytics(*, component: str, succeeded_clusters: tuple[int, ...]) -> None:
+    """Best-effort hand-off after raw facts have committed; never block collection."""
+    if not succeeded_clusters:
+        return
+    try:
+        from celery_tasks.tasks import forecast_incidents
+
+        telemetry_task = forecast_incidents.telemetry_quality_snapshot_task
+        telemetry_task.delay()
+        if component == "vendor_events":
+            for cluster_id in succeeded_clusters:
+                forecast_incidents.vendor_event_evidence_task.delay(cluster_id)
+        elif component == "performance":
+            forecast_incidents.performance_anomaly_scan_task.delay()
+    except Exception:
+        logger.warning("Unable to enqueue derived analytics after %s collection", component)
+
+
 def event_window_start(latest_event: datetime | None, now: datetime) -> datetime:
     return now - timedelta(hours=24) if latest_event is None else latest_event - timedelta(minutes=5)
 
@@ -483,12 +501,17 @@ def storage_events_schedule_fetching_task(self):
                 **telemetry_context,
             )
             return {"succeeded_clusters": (), "failed_clusters": ()}
-        return run_isolated(
+        result = run_isolated(
             _active_cluster_ids(),
             _collect_events,
             telemetry_context=telemetry_context,
             component="vendor_events",
         )
+        _enqueue_derived_analytics(
+            component="vendor_events",
+            succeeded_clusters=result["succeeded_clusters"],
+        )
+        return result
 
 
 @diskpulse_app.task(bind=True, soft_time_limit=240, time_limit=300, expires=300)
@@ -504,9 +527,14 @@ def storage_performance_schedule_fetching_task(self):
                 **telemetry_context,
             )
             return {"succeeded_clusters": (), "failed_clusters": ()}
-        return run_isolated(
+        result = run_isolated(
             _active_cluster_ids(),
             _collect_performance,
             telemetry_context=telemetry_context,
             component="performance",
         )
+        _enqueue_derived_analytics(
+            component="performance",
+            succeeded_clusters=result["succeeded_clusters"],
+        )
+        return result
