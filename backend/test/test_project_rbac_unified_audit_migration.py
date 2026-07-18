@@ -18,6 +18,7 @@ from appConfig import base_config
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 VERSIONS_ROOT = BACKEND_ROOT / "migrate" / "versions"
 UNIFIED_REVISION = "000000000009"
+HEAD_REVISION = "000000000010"
 UNIFIED_MIGRATION = VERSIONS_ROOT / "000000000009_project_rbac_unified_audit.py"
 TELEMETRY_MIGRATION = VERSIONS_ROOT / "000000000008_telemetry_collection_runs.py"
 RELEASE_TRACKING = BACKEND_ROOT.parent / "docs" / "tracking" / "current-release.md"
@@ -38,7 +39,7 @@ def _migration_module():
 def test_unified_rbac_audit_revision_is_the_only_head_and_replaces_old_split_file():
     scripts = ScriptDirectory.from_config(_alembic_config())
 
-    assert scripts.get_heads() == [UNIFIED_REVISION]
+    assert scripts.get_heads() == [HEAD_REVISION]
     assert not (VERSIONS_ROOT / "000000000008_project_memberships.py").exists()
     assert TELEMETRY_MIGRATION.exists()
 

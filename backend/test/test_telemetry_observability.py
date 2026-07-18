@@ -65,7 +65,11 @@ def test_telemetry_run_lifecycle_uses_utc_and_persists_only_safe_outcome_fields(
         outcome="failed",
         error_code="vendor_timeout",
     )
-    assert (failed.data_state, failed.records_written, failed.error_code) == (None, None, None)
+    assert (failed.data_state, failed.records_written, failed.error_code) == (
+        None,
+        None,
+        "vendor_timeout",
+    )
 
 
 def test_pending_telemetry_run_cannot_persist_terminal_fields(session_factory):
@@ -462,9 +466,9 @@ def test_isolated_vendor_collection_records_cluster_success_and_failure(session_
     assert summary == {"succeeded_clusters": (1,), "failed_clusters": (2,)}
     with session_factory() as db:
         rows = db.query(models.TelemetryCollectionRun).order_by(models.TelemetryCollectionRun.scope_key).all()
-    assert [(row.outcome, row.records_written, row.data_state) for row in rows] == [
-        ("success", 4, "data"),
-        ("failed", None, None),
+    assert [(row.outcome, row.records_written, row.data_state, row.error_code) for row in rows] == [
+        ("success", 4, "data", None),
+        ("failed", None, None, "vendor_timeout"),
     ]
 
 
@@ -651,6 +655,40 @@ def test_telemetry_model_contract_and_migration_compile_for_supported_dialects()
         assert "finished_at is not null" in sql
 
 
+@pytest.mark.parametrize("dialect_name", ("sqlite", "postgresql", "mysql"))
+def test_telemetry_failure_code_migration_replaces_terminal_constraint(dialect_name):
+    import importlib.util
+    import io
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "migrate"
+        / "versions"
+        / "000000000010_telemetry_failed_error_code.py"
+    )
+    spec = importlib.util.spec_from_file_location("telemetry_failure_code_migration", migration_path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    output = io.StringIO()
+    migration.op = Operations(
+        MigrationContext.configure(
+            dialect_name=dialect_name,
+            opts={"as_sql": True, "output_buffer": output},
+        )
+    )
+
+    migration.upgrade()
+    migration.downgrade()
+
+    sql = output.getvalue().lower()
+    assert "ck_telemetry_run_terminal_fields" in sql
+    assert "outcome = 'failed'" in sql
+    assert "error_code is not null" in sql
+
+
 def test_telemetry_migration_upgrades_and_downgrades_sqlite():
     import importlib.util
 
@@ -678,3 +716,54 @@ def test_telemetry_migration_upgrades_and_downgrades_sqlite():
         migration.downgrade()
         inspector.clear_cache()
         assert "telemetry_collection_runs" not in inspector.get_table_names()
+
+
+def test_telemetry_failure_code_migration_upgrades_existing_sqlite_ledger():
+    """Existing r8 ledgers accept classified failed runs after the r10 upgrade."""
+    import importlib.util
+    from uuid import uuid4
+
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    migrations_dir = Path(__file__).resolve().parents[1] / "migrate" / "versions"
+
+    def load_migration(filename, module_name):
+        spec = importlib.util.spec_from_file_location(module_name, migrations_dir / filename)
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+        return migration
+
+    r8 = load_migration("000000000008_telemetry_collection_runs.py", "telemetry_r8_sqlite")
+    r10 = load_migration("000000000010_telemetry_failed_error_code.py", "telemetry_r10_sqlite")
+
+    with sa.create_engine("sqlite://").begin() as connection:
+        connection.execute(sa.text("CREATE TABLE storage_clusters (id INTEGER PRIMARY KEY)"))
+        r8.op = Operations(MigrationContext.configure(connection))
+        r8.upgrade()
+        r10.op = Operations(MigrationContext.configure(connection))
+        r10.upgrade()
+        ledger = sa.Table("telemetry_collection_runs", sa.MetaData(), autoload_with=connection)
+
+        # Review fix verification: the upgraded constraint must retain a failed error code.
+        connection.execute(
+            ledger.insert().values(
+                id=str(uuid4()),
+                task_id="r8-upgrade-failure",
+                attempt=1,
+                scope_type="cluster",
+                scope_key="1",
+                component="capacity",
+                trace_id="f164d96d-647a-4303-82e8-5356031da939",
+                started_at=UTC_NOW,
+                finished_at=UTC_NOW,
+                outcome="failed",
+                error_code="vendor_timeout",
+                created_at=UTC_NOW,
+            )
+        )
+
+        assert connection.execute(
+            sa.select(ledger.c.error_code).where(ledger.c.task_id == "r8-upgrade-failure")
+        ).scalar_one() == "vendor_timeout"

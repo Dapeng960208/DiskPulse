@@ -39,7 +39,8 @@ def upgrade() -> None:
         sa.CheckConstraint("data_state IS NULL OR data_state IN ('data', 'empty', 'unsupported')", name="ck_telemetry_run_data_state"),
         sa.CheckConstraint("error_code IS NULL OR error_code IN ('vendor_auth', 'vendor_timeout', 'postgres', 'questdb', 'unknown')", name="ck_telemetry_run_error_code"),
         sa.CheckConstraint("(scope_type = 'cluster' AND scope_key <> '') OR (scope_type = 'scheduler' AND scope_key = 'scheduler' AND storage_cluster_id IS NULL)", name="ck_telemetry_run_scope"),
-        sa.CheckConstraint("(outcome IS NULL AND finished_at IS NULL AND data_state IS NULL AND records_written IS NULL AND error_code IS NULL) OR (outcome IS NOT NULL AND finished_at IS NOT NULL AND ((outcome = 'success' AND data_state IS NOT NULL AND records_written IS NOT NULL AND error_code IS NULL) OR (outcome IN ('failed', 'skipped') AND data_state IS NULL AND records_written IS NULL AND error_code IS NULL)))", name="ck_telemetry_run_terminal_fields"),
+        # Review fix: failed runs retain the safe classified error code for diagnosis.
+        sa.CheckConstraint("(outcome IS NULL AND finished_at IS NULL AND data_state IS NULL AND records_written IS NULL AND error_code IS NULL) OR (outcome IS NOT NULL AND finished_at IS NOT NULL AND ((outcome = 'success' AND data_state IS NOT NULL AND records_written IS NOT NULL AND error_code IS NULL) OR (outcome = 'failed' AND data_state IS NULL AND records_written IS NULL AND error_code IS NOT NULL) OR (outcome = 'skipped' AND data_state IS NULL AND records_written IS NULL AND error_code IS NULL)))", name="ck_telemetry_run_terminal_fields"),
         sa.ForeignKeyConstraint(["storage_cluster_id"], ["storage_clusters.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("task_id", "attempt", "component", "scope_key", name="uq_telemetry_run_task_attempt_scope"),
