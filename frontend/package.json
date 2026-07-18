@@ -17,6 +17,7 @@
     "lint:report": "eslint src/**/*.{js,jsx,vue,ts,tsx} -f node_modules/eslint-html-reporter/reporter.js -o lint-report.html"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "@vueuse/core": "^10.5.0",
     "axios": "^1.5.1",
     "dompurify": "^3.4.12",
