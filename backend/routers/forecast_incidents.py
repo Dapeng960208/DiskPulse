@@ -368,6 +368,7 @@ def patch_incident(
             current_user=current_user,
             incident_id=incident_id,
             target_status=payload.status,
+            target_severity=payload.severity,
             claim=payload.claim,
             silenced_until=_utc_or_422(payload.silenced_until, "silenced_until"),
             silence_reason=payload.silence_reason,

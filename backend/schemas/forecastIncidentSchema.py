@@ -118,6 +118,7 @@ class IncidentDetailOut(IncidentOut):
 
 class IncidentPatch(BaseModel):
     status: Literal["acknowledged", "investigating", "mitigated", "resolved"] | None = None
+    severity: Literal["warning", "critical"] | None = None
     claim: bool | None = None
     silenced_until: datetime | None = None
     silence_reason: str | None = Field(default=None, max_length=500)

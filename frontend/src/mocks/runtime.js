@@ -107,16 +107,81 @@ const seed = () => {
     storage_cluster_id: clusters[index].id,
     capabilities: {},
   }));
-  const incidents = ['容量压力', '磁盘故障', '性能争用', '遥测延迟', '复制滞后'].map((display_name, index) => ({
-    id: 301 + index,
-    project_id: projects[index].id,
-    storage_cluster_id: 1,
-    display_name,
-    category: ['capacity_pressure', 'device_fault', 'performance_contention', 'telemetry_blindspot', 'capacity_pressure'][index],
-    severity: index === 1 ? 'critical' : 'warning',
-    status: ['open', 'acknowledged', 'investigating', 'mitigated', 'resolved'][index],
-    last_evidence_at: `2026-07-18 0${9 + index}:30:00`,
-  }));
+  const incidents = ['容量压力', '磁盘故障', '性能争用', '遥测延迟', '复制滞后'].map((display_name, index) => {
+    const category = ['capacity_pressure', 'device_fault', 'performance_contention', 'telemetry_blindspot', 'capacity_pressure'][index];
+    const status = ['open', 'acknowledged', 'investigating', 'mitigated', 'resolved'][index];
+    const lastEvidenceAt = `2026-07-18 0${9 + index}:30:00`;
+    const evidence = [
+      {
+        id: 1001 + index * 10,
+        source: 'capacity_prediction',
+        source_ref: `forecast:capacity-${index + 1}`,
+        evidence_type: 'forecast_exhaustion',
+        observed_at: `2026-07-18 0${8 + index}:30:00`,
+        data_gaps: [],
+      },
+      {
+        id: 1002 + index * 10,
+        source: 'storage_alert',
+        source_ref: `alert:storage-${index + 1}`,
+        evidence_type: index === 1 ? 'severe_vendor_event' : 'threshold_breach',
+        observed_at: lastEvidenceAt,
+        data_gaps: [],
+      },
+    ];
+    return {
+      id: 301 + index,
+      project_id: projects[index].id,
+      storage_cluster_id: 1,
+      asset_type: 'storage_usage',
+      asset_id: String(101 + index),
+      vendor: index === 1 ? 'netapp' : 'diskpulse',
+      display_name,
+      category,
+      severity: index === 1 ? 'critical' : 'warning',
+      status,
+      opened_at: `2026-07-18 0${8 + index}:00:00`,
+      last_evidence_at: lastEvidenceAt,
+      resolved_at: status === 'resolved' ? lastEvidenceAt : null,
+      created_at: `2026-07-18 0${8 + index}:00:00`,
+      updated_at: lastEvidenceAt,
+      evidence,
+      timeline: [
+        {
+          id: 2001 + index * 10,
+          event_type: 'opened',
+          actor_user_id: null,
+          from_status: null,
+          to_status: 'open',
+          comment: '已根据关联遥测创建事件',
+          occurred_at: `2026-07-18 0${8 + index}:00:00`,
+        },
+        {
+          id: 2002 + index * 10,
+          event_type: 'evidence_added',
+          actor_user_id: null,
+          from_status: null,
+          to_status: null,
+          comment: '已关联最新证据',
+          occurred_at: lastEvidenceAt,
+        },
+      ],
+      diagnosis: {
+        id: 4001 + index,
+        algorithm_version: 'forecast-incident-v1',
+        candidates: [{
+          category,
+          score: index === 1 ? 0.91 : 0.78,
+          evidence_refs: evidence.map((item) => item.source_ref),
+          data_gaps: [],
+        }],
+        confidence: index === 1 ? 'high' : 'medium',
+        evidence_ids: evidence.map((item) => String(item.id)),
+        data_gaps: [],
+        created_at: lastEvidenceAt,
+      },
+    };
+  });
 const alerts = incidents.map((incident, index) => ({
   id: index + 1,
   project_id: incident.project_id,
@@ -358,7 +423,19 @@ export function createMockGateway() {
       predicted_at: incident.last_evidence_at,
     })));
     const incident = path.match(/^\/v1\/incidents\/(\d+)(?:\/(diagnosis|comments))?$/);
-    if (incident) { const item = state.incidents.find((record) => record.id === Number(incident[1])); if (!item || !allowed(account, item.project_id)) throw error(403); if (verb === 'patch' && !capabilities(account, item.project_id).edit) throw error(403); Object.assign(item, body || {}); return item; }
+    if (incident) {
+      const item = state.incidents.find((record) => record.id === Number(incident[1]));
+      if (!item || !allowed(account, item.project_id)) throw error(403);
+      if (verb === 'patch' && !capabilities(account, item.project_id).edit) throw error(403);
+      Object.assign(item, body || {});
+      return {
+        ...item,
+        capabilities: {
+          ...capabilities(account, item.project_id),
+          create_maintenance_window: ['superadmin', 'project_admin'].includes(account.role),
+        },
+      };
+    }
     const realtimeItem = findResource(path, 'realtime') || findResource(path, 'storage');
     if (realtimeItem) return {
       info: realtimeItem,
