@@ -24,7 +24,7 @@ const seed = () => ({
 });
 
 function error(status, message = '没有权限') { const value = new Error(message); value.status = status; value.response = { status, data: { message } }; return value; }
-function normalizePath(path) { return String(path || '').replace(/^https?:\/\/[^/]+/, '').replace(/^\/storage-pulse\/api/, '').split('?')[0]; }
+function normalizePath(path) { const value = String(path || '').replace(/^https?:\/\/[^/]+/, '').replace(/^\/storage-pulse\/api/, '').split('?')[0]; return value.length > 1 ? value.replace(/\/$/, '') : value; }
 function page(content) { return { content, total: content.length, totalElements: content.length, data: content, meta: { total: content.length }, traceId: traceId() }; }
 
 export function createMockGateway() {
@@ -53,6 +53,12 @@ export function createMockGateway() {
     const account = accountFor(token); if (!account) throw error(401, '请先登录');
     if (path === '/users/current/profile') return { result: profile(account), ...profile(account), meta: {}, traceId: traceId() };
     if (path.startsWith('/admin') && account.role !== 'superadmin') throw error(403);
+    if (path === '/dashboard/capacity-trend') return page([
+      { date: '2026-07-14', used: 580, limit: 1000 }, { date: '2026-07-15', used: 610, limit: 1000 }, { date: '2026-07-16', used: 645, limit: 1000 }, { date: '2026-07-17', used: 680, limit: 1000 }, { date: '2026-07-18', used: 720, limit: 1000 },
+    ]);
+    if (path === '/dashboard/capacity-items') return page([{ name: 'EDA 研发组', used: 320, limit: 500 }, { name: '验证平台', used: 230, limit: 300 }, { name: '基础服务', used: 170, limit: 200 }]);
+    if (path === '/dashboard/alert-levels') return page([{ name: 'warning', value: 4 }, { name: 'critical', value: 1 }]);
+    if (path === '/dashboard/top-users') return page([{ name: 'alice', used: 180 }, { name: 'bob', used: 140 }, { name: 'carol', used: 95 }]);
     if (path === '/v1/incidents') {
       const records = scoped(account, state.incidents);
       return page(records);
@@ -62,9 +68,21 @@ export function createMockGateway() {
     const projectMatch = path.match(/^\/projects\/(\d+)/);
     if (projectMatch) { const item = state.projects.find((record) => record.id === Number(projectMatch[1])); if (!item || !allowed(account, item.id)) throw error(403); return { ...item, capabilities: capabilities(account, item.id) }; }
     if (path === '/projects') return page(scoped(account, state.projects.map((item) => ({ ...item, project_id: item.id, capabilities: capabilities(account, item.id) }))));
-    const tableMap = { '/groups': 'groups', '/storage-usages': 'usages', '/storage-clusters': 'clusters', '/aggregates': 'aggregates', '/volumes': 'volumes', '/qtrees': 'qtrees', '/group-tags': 'tags', '/alerts': 'alerts', '/audit-events': 'audits', '/storage-back-up-records': 'usages', '/users': 'usages' };
+    const tableMap = { '/groups': 'groups', '/storage-usages': 'usages', '/storage-clusters': 'clusters', '/aggregates': 'aggregates', '/volumes': 'volumes', '/qtrees': 'qtrees', '/group-tags': 'tags', '/alerts': 'alerts', '/v1/audit-events': 'audits', '/storage-back-up-records': 'usages', '/users': 'usages' };
     if (path === '/storage-usages/export' && options.responseType === 'blob') return new Blob(['Linux路径,已用容量\n/data/eda/alice,320'], { type: 'text/csv' });
-    if (tableMap[path]) return page(scoped(account, state[tableMap[path]].map((item) => ({ ...item, capabilities: { ...item.capabilities, ...capabilities(account, item.project_id || 1) } }))));
+    if (tableMap[path]) {
+      const records = state[tableMap[path]];
+      if (verb === 'post') { if (account.role === 'reader') throw error(403); const item = { id: Math.max(0, ...records.map((record) => record.id || 0)) + 1, project_id: body?.project_id || 1, ...(body || {}), capabilities: capabilities(account, body?.project_id || 1) }; records.push(item); return item; }
+      return page(scoped(account, records.map((item) => ({ ...item, capabilities: { ...item.capabilities, ...capabilities(account, item.project_id || 1) } }))));
+    }
+    const resource = Object.entries(tableMap).find(([prefix]) => path.startsWith(`${prefix}/`));
+    if (resource) {
+      const [, key] = resource; const id = Number(path.slice(resource[0].length + 1)); const records = state[key]; const item = records.find((record) => record.id === id);
+      if (!item || !allowed(account, item.project_id || 1)) throw error(403);
+      if (verb === 'patch' || verb === 'put') { if (account.role === 'reader') throw error(403); Object.assign(item, body || {}); return item; }
+      if (verb === 'delete') { if (account.role === 'reader') throw error(403); records.splice(records.indexOf(item), 1); return {}; }
+      return { ...item, capabilities: { ...item.capabilities, ...capabilities(account, item.project_id || 1) } };
+    }
     if (path.includes('dashboard')) return { summary: { used_gb: 720, limit_gb: 1000, available_gb: 280 }, scope: { project_name: account.role === 'superadmin' ? '全局' : '芯片设计平台' }, content: [], data: [], meta: {}, traceId: traceId() };
     if (path.startsWith('/ai/')) return path.includes('conversations') ? page(state.conversations) : [];
     if (path.includes('export') && options.responseType === 'blob') return new Blob(['DiskPulse Mock export']);

@@ -44,4 +44,18 @@ describe('frontend mock runtime', () => {
     expect(exported).toBeInstanceOf(Blob);
     expect(events.map((event) => event.event)).toContain('completed');
   });
+
+  it('serves chart datasets and complete CRUD for every seeded table', async () => {
+    const gateway = createMockGateway();
+    const admin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const trend = await gateway.request('get', '/dashboard/capacity-trend', undefined, admin.token);
+    const created = await gateway.request('post', '/group-tags', { name: 'Mock 新标签' }, admin.token);
+    const updated = await gateway.request('patch', `/group-tags/${created.id}`, { name: 'Mock 已更新标签' }, admin.token);
+    await gateway.request('delete', `/group-tags/${created.id}`, undefined, admin.token);
+    const tags = await gateway.request('get', '/group-tags', undefined, admin.token);
+
+    expect(trend.content.length).toBeGreaterThan(1);
+    expect(updated.name).toBe('Mock 已更新标签');
+    expect(tags.content.some((tag) => tag.id === created.id)).toBe(false);
+  });
 });
