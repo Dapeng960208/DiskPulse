@@ -11,7 +11,10 @@ import {
   ElSelect,
 } from 'element-plus';
 import aiApi from '@/api/ai-api';
+import UserAvatar from '@/components/data/UserAvatar.vue';
 import { renderAiMarkdown } from '@/services/ai-markdown';
+import { useCurrentUser } from '@/stores/current-user';
+import { getDefaultAvatar } from '@/utils/default-avatar';
 
 const models = ref([]);
 const conversations = ref([]);
@@ -25,6 +28,7 @@ const streamStatus = ref('');
 const activeTurnId = ref(null);
 const autoFollowMessages = ref(true);
 const messageScroll = ref();
+const currentUser = useCurrentUser();
 let abortController = null;
 let activePrompt = '';
 
@@ -393,18 +397,23 @@ onMounted(loadInitial);
           :key="message.id"
           class="message"
           :class="message.role">
-          <div
-            class="message-avatar"
-            :class="`message-avatar--${message.role}`"
+          <UserAvatar
+            v-if="message.role === 'user'"
+            class="message-avatar message-avatar--user"
+            :src="currentUser.avatarUrl || getDefaultAvatar(currentUser.username || currentUser.displayName)"
+            :size="32"
             role="img"
-            :aria-label="message.role === 'user' ? '你的头像' : 'AI 助手头像'">
+            aria-label="你的头像" />
+          <div
+            v-else
+            class="message-avatar message-avatar--assistant"
+            role="img"
+            aria-label="AI 助手头像">
             <span class="message-avatar__orbit" />
             <i
-              :class="message.role === 'user' ? 'i-ri-user-3-fill' : 'i-ri-sparkling-2-fill'"
+              class="i-ri-sparkling-2-fill"
               aria-hidden="true" />
-            <span
-              v-if="message.role === 'assistant'"
-              class="message-avatar__pulse" />
+            <span class="message-avatar__pulse" />
           </div>
           <div
             v-if="message.role === 'assistant' && isWaitingForToolResult(message)"
@@ -563,9 +572,10 @@ onMounted(loadInitial);
 .chat-heading { flex: none; min-height: 56px; padding: 0 22px; }
 .live-status { color: var(--primary-color); font-size: 13px; }
 .message-list { flex: 1; min-height: 0; padding: 20px 0; }
-.message { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; max-width: 920px; margin: 0 auto 18px; padding: 0 24px; }
-.message-avatar { position: relative; display: grid; place-items: center; width: 32px; height: 32px; overflow: hidden; isolation: isolate; border: 1px solid var(--el-color-primary-light-5); border-radius: 50%; background: var(--el-color-primary-light-9); color: var(--primary-color); box-shadow: 0 2px 8px var(--el-color-primary-light-7); }
-.message-avatar > i { position: relative; z-index: 1; font-size: 16px; }
+.message { --message-avatar-size: 32px; display: grid; grid-template-columns: var(--message-avatar-size) minmax(0, 1fr); align-items: start; gap: 12px; max-width: 920px; margin: 0 auto 18px; padding: 0 24px; }
+.message-avatar { box-sizing: border-box; width: var(--message-avatar-size); height: var(--message-avatar-size); align-self: start; }
+.message-avatar--assistant { position: relative; display: grid; place-items: center; overflow: hidden; isolation: isolate; border: 1px solid var(--el-color-primary-light-5); border-radius: 50%; background: var(--el-color-primary-light-9); color: var(--primary-color); box-shadow: 0 2px 8px var(--el-color-primary-light-7); }
+.message-avatar--assistant > i { position: relative; z-index: 1; font-size: 16px; }
 .message-avatar__orbit { position: absolute; inset: 3px; border: 1px solid currentColor; border-radius: 50%; border-right-color: transparent; opacity: .6; animation: message-avatar-orbit 3s linear infinite; }
 .message-avatar--assistant { border-color: var(--el-color-success-light-5); background: var(--el-color-success-light-9); color: var(--el-color-success); box-shadow: 0 2px 10px var(--el-color-success-light-7); }
 .message-avatar--assistant .message-avatar__orbit { animation-duration: 1.8s; }
