@@ -26,7 +26,11 @@ vi.mock('@/components/form/RdUserSelect.vue', () => ({
 }));
 vi.mock('element-plus', () => ({
   ElButton: { name: 'ElButton', template: '<button><slot /></button>' },
-  ElDialog: { name: 'ElDialog', template: '<div><slot /><slot name="footer" /></div>' },
+  ElDialog: {
+    name: 'ElDialog',
+    props: { modelValue: Boolean, appendToBody: Boolean },
+    template: '<div v-if="modelValue" class="member-dialog"><slot /><slot name="footer" /></div>',
+  },
   ElForm: { name: 'ElForm', template: '<form><slot /></form>' },
   ElFormItem: { name: 'ElFormItem', template: '<div><slot /></div>' },
   ElMessage: { error: ui.error, success: ui.success, warning: vi.fn() },
@@ -73,6 +77,16 @@ describe('ProjectMembersTab', () => {
 
     expect(membershipApi.create).toHaveBeenCalledWith(1, { user_id: 2, role: 'reader' });
     expect(ui.error).toHaveBeenCalledWith('保存项目成员失败，请稍后重试');
+  });
+
+  it('opens the add-member form above the project tabs', async () => {
+    const wrapper = await mountTab();
+
+    expect(wrapper.find('.member-dialog').exists()).toBe(false);
+    await findButton(wrapper, '添加成员').trigger('click');
+
+    expect(wrapper.find('.member-dialog').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'ElDialog' }).props('appendToBody')).toBe(true);
   });
 
   it('shows an error when confirmed removal fails instead of treating it as cancellation', async () => {
