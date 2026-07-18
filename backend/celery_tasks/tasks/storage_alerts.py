@@ -423,6 +423,10 @@ def _prepare_delivery_attempt(event_id, *, context: AuditContext, config):
         event = db.query(StorageAlerts).filter_by(id=event_id).with_for_update().first()
         if event is None or event.delivery_status not in {"pending", "retrying"}:
             return None
+        # Enforce lease: skip if another worker holds the delivery attempt
+        now = datetime.now()
+        if event.next_attempt_at is not None and event.next_attempt_at > now:
+            return None
         if not event.recipient_usernames:
             event.delivery_status = "skipped"
             return None
@@ -430,7 +434,7 @@ def _prepare_delivery_attempt(event_id, *, context: AuditContext, config):
             event.delivery_status = "skipped"
             return None
         event.delivery_attempts += 1
-        event.next_attempt_at = datetime.now() + timedelta(seconds=DELIVERY_ATTEMPT_LEASE_SECONDS)
+        event.next_attempt_at = now + timedelta(seconds=DELIVERY_ATTEMPT_LEASE_SECONDS)
         append_audit_event(
             db,
             context=context,

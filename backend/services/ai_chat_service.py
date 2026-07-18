@@ -114,6 +114,11 @@ def _display_tool_result(result: object) -> tuple[object, bool]:
 
 
 def _as_project_id(value: object) -> int | None:
+    """Convert a value to a valid project ID, returning None for invalid values.
+
+    Explicitly rejects booleans first to avoid treating True/False as 1/0.
+    Returns None for zero and negative integers as they are not valid project IDs.
+    """
     if isinstance(value, bool):
         return None
     try:
