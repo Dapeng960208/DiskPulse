@@ -1,5 +1,16 @@
 # 当前交付记录
 
+## 2026-07-18：前端 Mock 数据与四角色演示
+
+### 进行中
+
+- 已在隔离 worktree `codex/frontend-mock-rbac` 固化设计与实施计划；将新增仅前端的 `VITE_USE_MOCKS=true` 内存 Mock 运行时。
+- 目标账户为 `demo-superadmin`、`demo-project-admin`、`demo-editor`、`demo-reader`，用于演示现有项目级 RBAC；真实后端、LDAP、设备与通知链路不改动。
+
+### 验证状态
+
+- 待执行：Mock/RBAC RED-GREEN 聚焦 Vitest、前端全量测试、测试构建和 diff 检查。
+
 ## 2026-07-18：预测/RCA/事件中心合并前审查与迁移收口
 
 ### 已完成
