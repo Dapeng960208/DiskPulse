@@ -148,17 +148,40 @@ const alerts = incidents.map((incident, index) => ({
   updated_at: incident.last_evidence_at,
   created_at: incident.last_evidence_at,
 }));
-  const audits = incidents.map((incident, index) => ({
-    id: index + 1,
-    action: ['project.member.read', 'storage.usage.update', 'group.quota.adjust', 'storage.alert.read', 'ai.conversation.create'][index],
-    outcome: 'success',
-    result: 'success',
-    project_id: incident.project_id,
-    actor_user_id: users[index].id,
-    actor: users[index],
-    created_at: incident.last_evidence_at,
-    detail: 'Mock 演示审计记录',
-  }));
+  const audits = incidents.map((incident, index) => {
+    const resource = [projects[index], usages[index], groups[index], alerts[index], { id: index + 1, title: `AI 会话 ${index + 1}` }][index];
+    const resourceType = ['ProjectMembership', 'StorageUsage', 'Group', 'StorageAlert', 'AIConversation'][index];
+    const action = ['project.member.read', 'storage.usage.update', 'group.quota.adjust', 'storage.alert.read', 'ai.conversation.create'][index];
+    const resourceId = resource?.id || index + 1;
+    return {
+      id: index + 1,
+      action,
+      outcome: 'success',
+      result: 'success',
+      occurred_at: incident.last_evidence_at,
+      created_at: incident.last_evidence_at,
+      project_id: incident.project_id,
+      project: projects[index],
+      actor_user_id: users[index].id,
+      actor: users[index],
+      resource_type: resourceType,
+      resource_id: resourceId,
+      resource_name: resource?.name || resource?.title || incident.display_name,
+      resource_path: resource?.linux_path || resource?.path || null,
+      trace_id: `audit-trace-${index + 1}`,
+      request_id: `mock-request-${index + 1}`,
+      reason_code: null,
+      before_summary: { action, version: 1, resource_id: resourceId },
+      after_summary: { action, version: 2, resource_id: resourceId, outcome: 'success' },
+      metadata: {
+        client_ip: `10.20.0.${index + 11}`,
+        endpoint: `/v1/${resourceType.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`).replace(/^-/, '')}/${resourceId}`,
+        request_method: index === 0 || index === 3 ? 'GET' : 'PATCH',
+        user_agent: 'DiskPulse Mock Console/1.0',
+      },
+      detail: 'Mock 演示审计记录',
+    };
+  });
   const aiModels = ['容量助手', '告警分析', '运维问答', '归档顾问', '报表生成'].map((name, index) => ({
     id: index + 1,
     name,

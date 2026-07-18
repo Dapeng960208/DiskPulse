@@ -1,21 +1,22 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import { ElDatePicker, ElFormItem, ElInput, ElOption, ElSelect } from 'element-plus';
-import { useRouter } from 'vue-router';
 import auditEventsApi from '@/api/audit-events-api.js';
 import AuditEventTable from '@/components/audit/AuditEventTable.vue';
 import ProjectSelect from '@/components/form/ProjectSelect.vue';
 import QueryForm from '@/components/form/QueryForm.vue';
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
 import { useQueryParams } from '@/composables/query';
+import AuditEventDetailDrawer from './components/AuditEventDetailDrawer.vue';
 
-const router = useRouter();
 const { queryParams, reset } = useQueryParams(() => ({ page: 1, size: 20 }));
 const timeRange = ref([]);
 const events = ref([]);
 const total = ref(0);
 const loading = ref(false);
 const error = ref('');
+const selectedEvent = ref(null);
+const detailVisible = ref(false);
 
 async function query() {
   loading.value = true;
@@ -54,7 +55,8 @@ function updatePagination(next) {
 }
 
 function showDetail(event) {
-  router.push(`/admin/audit-events/${event.id}`);
+  selectedEvent.value = event;
+  detailVisible.value = true;
 }
 
 onMounted(query);
@@ -120,6 +122,9 @@ onMounted(query);
       show-details
       @update:pagination="updatePagination"
       @show-detail="showDetail" />
+    <AuditEventDetailDrawer
+      v-model="detailVisible"
+      :event="selectedEvent" />
   </section>
 </template>
 
