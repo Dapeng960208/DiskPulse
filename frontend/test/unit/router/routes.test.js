@@ -6,6 +6,10 @@ import App from '@/App.vue';
 import RouteMenu from '@/layouts/components/RouteMenu.vue';
 import { commonStubs } from '../../helpers/mount';
 
+const hasRole = vi.hoisted(() => vi.fn(() => true));
+
+vi.mock('@/utils/authorization', () => ({ hasRole }));
+
 vi.mock('@/layouts/AppLayout.vue', () => ({
   default: {
     name: 'AppLayout',
@@ -101,6 +105,28 @@ describe('router/routes and app shell', () => {
       '容量预测治理',
     ]));
     expect([...rootTitles, ...adminTitles]).not.toEqual(expect.arrayContaining(['用户', 'Volume', 'Qtree']));
+  });
+
+  it('places Incident Center under System Management for super administrators only', () => {
+    const adminRoute = routes.find((route) => route.path === '/admin');
+    const rootIncidentRoute = routes
+      .flatMap((route) => route.children || [])
+      .find((route) => route.name === 'IncidentCenter');
+    const incidentRoute = adminRoute.children.find((route) => route.name === 'IncidentCenter');
+
+    expect(rootIncidentRoute).toBeUndefined();
+    expect(incidentRoute).toEqual(expect.objectContaining({
+      path: 'incidents',
+      meta: expect.objectContaining({
+        title: '事件中心',
+        icon: 'i-ri-alarm-warning-line',
+      }),
+    }));
+
+    hasRole.mockReturnValueOnce(false).mockReturnValueOnce(true);
+    expect(incidentRoute.meta.isAccessible()).toBe(403);
+    expect(incidentRoute.meta.isAccessible()).toBe(200);
+    expect(hasRole).toHaveBeenLastCalledWith('superadmin');
   });
 
   it('declares complete breadcrumb hierarchies for every detail route', () => {
