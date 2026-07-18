@@ -10,8 +10,10 @@ const dashboardApi = {
   fetchAlertLevels: vi.fn(),
   fetchTopUsers: vi.fn(),
 };
+const authorization = { hasRole: vi.fn() };
 
 vi.mock('@/api/dashboard-api.js', () => ({ default: dashboardApi }));
+vi.mock('@/utils/authorization', () => authorization);
 vi.mock('@/api/project-api.js', () => ({ default: { fetchById: vi.fn(), fetch: vi.fn() } }));
 vi.mock('@/api/group-api.js', () => ({ default: { fetch: vi.fn() } }));
 vi.mock('@/components/form/ProjectSelect.vue', () => ({
@@ -108,6 +110,7 @@ async function mountPage({ flush = true } = {}) {
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authorization.hasRole.mockReturnValue(true);
     dashboardApi.fetchSummary.mockResolvedValue(summaryResponse());
     dashboardApi.fetchCapacityTrend.mockResolvedValue(capacityTrend);
     dashboardApi.fetchCapacityItems.mockResolvedValue(capacityItems());
@@ -136,6 +139,18 @@ describe('DashboardPage', () => {
       trendMeta: summaryResponse().trend_meta,
       ariaLabel: '近 30 天容量趋势',
     });
+  });
+
+  it('waits for a project selection instead of requesting forbidden global data for a project member', async () => {
+    authorization.hasRole.mockReturnValue(false);
+
+    const wrapper = await mountPage();
+
+    expect(dashboardApi.fetchSummary).not.toHaveBeenCalled();
+    expect(dashboardApi.fetchCapacityTrend).not.toHaveBeenCalled();
+    expect(dashboardApi.fetchCapacityItems).not.toHaveBeenCalled();
+    expect(dashboardApi.fetchAlertLevels).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('请选择项目以查看存储概览');
   });
 
   it('reloads the same workspace as a project drill-down', async () => {
