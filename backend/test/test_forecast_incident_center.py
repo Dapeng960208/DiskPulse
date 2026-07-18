@@ -470,6 +470,55 @@ def test_expired_incident_silence_does_not_suppress_a_new_severity_notification(
     assert recipients == ("admin",)
 
 
+def test_incident_email_notification_does_not_require_feishu_to_be_enabled(monkeypatch):
+    from types import SimpleNamespace
+
+    from services import incidentNotificationService as notifications
+
+    sent = {}
+
+    class FakeEmailNotification:
+        def __init__(self, **kwargs):
+            sent["init"] = kwargs
+
+        def send_email(self, **kwargs):
+            sent["email"] = kwargs
+
+    monkeypatch.setattr(
+        notifications,
+        "incident_notification_config",
+        lambda: {
+            "enabled": True,
+            "notify_administrators": True,
+            "notify_project_owner": False,
+            "notify_project_members": False,
+            "extra_usernames": (),
+            "feishu_enabled": False,
+            "email_enabled": True,
+        },
+    )
+    monkeypatch.setattr(notifications, "base_config", {"super_admin_usernames": ("admin",)})
+    monkeypatch.setattr(notifications, "_project_recipients", lambda db, project_id: (None, ()))
+    monkeypatch.setattr(notifications, "_recipient_emails", lambda db, usernames: ("admin@example.com",))
+    monkeypatch.setattr(notifications, "EmailNotification", FakeEmailNotification)
+
+    recipients = notifications.notify_incident(
+        None,
+        SimpleNamespace(
+            id=7,
+            project_id=1,
+            silenced_until=None,
+            display_name="project-alpha",
+            category="device_fault",
+            severity="critical",
+        ),
+        event="created",
+    )
+
+    assert recipients == ("admin",)
+    assert sent["email"]["recipient"] == ["admin@example.com"]
+
+
 def test_workload_adapter_only_returns_aggregated_time_window_asset_evidence():
     from services.workloadStorageAdapter import WorkloadRun, aggregate_workload_evidence
 
