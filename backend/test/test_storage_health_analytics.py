@@ -1694,3 +1694,57 @@ def test_netapp_latency_metrics_are_converted_from_microseconds_to_milliseconds(
     assert rows[0]["latency_write"] == 3.5
     assert rows[0]["iops_total"] == 125.0
     assert rows[0]["throughput_total"] == 4096.0
+
+
+def test_netapp_performance_collection_links_only_known_volume_identities():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+
+    rows = storage_health._netapp_performance_rows(
+        7,
+        [
+            {
+                "uuid": "volume-1",
+                "name": "vol-a",
+                "metric": {"latency": {"total": 2500}},
+            },
+            {
+                "uuid": "unknown-volume",
+                "name": "vol-unknown",
+                "metric": {"latency": {"total": 1800}},
+            },
+        ],
+        datetime(2026, 7, 15, 10, 0, 0),
+        volume_identities={"volume-1": "volume-1"},
+    )
+
+    assert [(row["object_id"], row["object_name"]) for row in rows] == [
+        ("volume-1", "vol-a")
+    ]
+
+
+def test_isilon_performance_collection_uses_linked_volume_identity_and_drops_unmatched_workloads():
+    storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
+
+    rows = storage_health._isilon_performance_rows(
+        7,
+        [
+            {
+                "key": "cluster.performance.dataset.3.latency",
+                "workload": "/ifs/data/project-a",
+                "value": 2400,
+                "unit": "microseconds",
+            },
+            {
+                "key": "cluster.performance.dataset.3.latency",
+                "workload": "/ifs/data/unmatched",
+                "value": 1800,
+                "unit": "microseconds",
+            },
+        ],
+        datetime(2026, 7, 16, 10, 30),
+        volume_identities={"/ifs/data/project-a": "quota-42"},
+    )
+
+    assert [(row["object_id"], row["object_name"]) for row in rows] == [
+        ("quota-42", "/ifs/data/project-a")
+    ]
