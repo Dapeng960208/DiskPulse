@@ -1,5 +1,32 @@
 # 错误记录
 
+### 2026-07-18：前端 Mock 缺少一条命令可用的启动入口
+
+- 触发：在 `frontend/` 尝试直接通过包管理器启动 Mock 网页，并运行新增的启动契约测试。
+- 现象：只能手工设置 `VITE_USE_MOCKS=true`；RED 测试读取 `.env.mock` 时返回 `ENOENT`。
+- 根因：`package.json` 没有 Mock 专用脚本，仓库也没有为 Vite `mock` 模式提交环境文件。
+- 修复：新增 `pnpm mock` 对应的 `vite --host --mode mock` 脚本，并显式提交仅包含 `VITE_USE_MOCKS=true` 的 `.env.mock`。
+- 验证：Mock 运行时 `6 passed`；严格执行 `pnpm mock` 后自动端口返回 HTTP 200 且页面包含 Vue 应用根节点。
+- 风险：启动输出保留既有 `%VITE_APP_TITLE%` 未定义警告；Mock 仅用于本地演示，不连接真实后端。
+
+### 2026-07-18：Mock 启动探针把端口参数放在 Vite 分隔符之后
+
+- 触发：使用 `pnpm mock -- --host 127.0.0.1 --port 5192` 为自动探针指定端口。
+- 现象：Vite 输出中参数位于字面量 `--` 之后，忽略指定端口并按 5173 起自动选择可用端口。
+- 根因：`pnpm` 已把脚本后的参数传给 Vite，额外的 `--` 成为 Vite 参数分隔符，其后的 host/port 不再作为 CLI 选项解析。
+- 修复：验收严格执行原始 `pnpm mock`，从 Vite 启动输出提取实际自动端口后发起 HTTP 探针，并按精确进程树回收测试服务。
+- 验证：自动识别端口 5176，HTTP 状态为 200，页面含 `<div id="app"></div>`。
+- 风险：5173 至 5175 已被其他本地服务占用；本次未停止或修改这些既有进程。
+
+### 2026-07-18：分支全量 ESLint 被既有登录页模板格式阻塞
+
+- 触发：对 `codex/review-remediation-20260718` 执行前端全量 ESLint。
+- 现象：`LoginPage.vue` 第 119、121 行报告 5 个 `vue/max-attributes-per-line` 错误。
+- 根因：既有 Mock 快捷登录按钮把多个属性写在同一行，不符合当前 Vue ESLint 规则；本次 `pnpm mock` 入口没有修改该文件。
+- 修复：为保持“一项问题一个提交”和当前修复边界，本次未自动格式化该既有文件；错误作为独立待办保留。
+- 验证：前端全量单测仍为 `72 files / 426 tests passed`，生产构建通过；全量 ESLint 明确未通过。
+- 风险：CI 若强制全量 ESLint，该分支仍会被这 5 个既有格式错误阻塞。
+
 ### 2026-07-18：关联 ID 中间件 fallback 500 缺少服务端异常日志
 
 - 触发：下游在响应开始前抛出未处理异常，由 `CorrelationIdMiddleware` 发送 fallback 500。

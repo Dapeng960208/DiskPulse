@@ -2,7 +2,7 @@
 
 ## 启用
 
-在前端开发环境设置 `VITE_USE_MOCKS=true`。登录页显示四个快捷演示账户，密码均为 `Demo@2026`。
+在 `frontend/` 目录执行 `pnpm mock`。该命令使用已提交的 Vite `mock` 模式自动设置 `VITE_USE_MOCKS=true`，无需在 PowerShell 中手工声明环境变量；默认 `pnpm dev` 仍连接真实 API。登录页显示四个快捷演示账户，密码均为 `Demo@2026`。
 
 ## 行为
 

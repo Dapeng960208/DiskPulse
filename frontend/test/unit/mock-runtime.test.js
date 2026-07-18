@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   DEMO_PASSWORD,
   DEMO_USERS,
@@ -6,6 +8,18 @@ import {
 } from '@/mocks/runtime.js';
 
 describe('frontend mock runtime', () => {
+  it('exposes pnpm mock through a Vite mode that enables the mock runtime', () => {
+    // Review source: enabling Mock required manually setting VITE_USE_MOCKS.
+    // Resolution contract: `pnpm mock` selects a committed mock mode whose
+    // environment enables the in-memory gateway without extra shell syntax.
+    const frontendRoot = resolve(import.meta.dirname, '../..');
+    const packageJson = JSON.parse(readFileSync(resolve(frontendRoot, 'package.json'), 'utf8'));
+    const mockEnvironment = readFileSync(resolve(frontendRoot, '.env.mock'), 'utf8');
+
+    expect(packageJson.scripts.mock).toBe('vite --host --mode mock');
+    expect(mockEnvironment).toMatch(/^VITE_USE_MOCKS=true$/m);
+  });
+
   it('authenticates each documented demo account and returns its profile', async () => {
     const gateway = createMockGateway();
 

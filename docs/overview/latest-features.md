@@ -379,6 +379,6 @@
 
 ## 2026-07-18：前端 Mock 数据与四角色演示
 
-- 通过 `VITE_USE_MOCKS=true` 可在不连接后端的情况下演示 DiskPulse 业务页面数据；默认配置仍调用真实 API。
+- 在 `frontend/` 目录执行 `pnpm mock` 即可启动不连接后端的 DiskPulse Mock 网页；命令自动选择已提交的 Vite `mock` 模式并启用 `VITE_USE_MOCKS=true`，默认 `pnpm dev` 仍调用真实 API。
 - 登录页在 Mock 模式提供超级管理员、项目管理员、编辑成员和只读成员的快捷账户，页面数据、菜单和操作权限随角色及项目范围变化。
 - Mock 数据为虚构的内存数据，刷新后重置，不会执行 LDAP、设备、通知或生产写入。

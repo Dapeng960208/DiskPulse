@@ -12,6 +12,7 @@
 - P2 Mock 运行时集中限制系统资源 CRUD：存储集群、容量池、存储空间、Qtree、标签、用户和备份仅超级管理员可访问，项目资源能力保持不变。
 - P2 Incident 接受乱序唯一证据时以 `max(current, observed)` 维护 `last_evidence_at`，迟到证据仍保留原始观察时间。
 - P2 关联 ID 中间件在自行发送安全 fallback 500 前记录异常堆栈和可信 request/trace ID，客户端仍只收到通用错误文本。
+- Mock 网页增加独立启动入口：在 `frontend/` 执行 `pnpm mock` 即可通过已提交的 Vite `mock` 模式自动启用内存网关。
 
 ### 验证状态
 
@@ -24,10 +25,13 @@
 - Mock 系统资源 RED 用例确认项目管理员可读取系统清单；修复后 Mock 运行时 `5 passed`。
 - 乱序证据 RED 用例确认最近证据时间从 08:10 回拨到 08:05；修复后与重开回归合计 `3 passed`。
 - 中间件日志 RED 用例确认没有 ERROR 记录；修复后关联 ID 与 AI 管理审计文件 `2 passed`。
+- `pnpm mock` 入口 RED 用例因 `.env.mock` 缺失按预期失败；修复后 Mock 运行时 `6 passed`，严格执行 `pnpm mock` 后自动端口返回 HTTP 200 且包含 Vue 应用根节点。
+- 分支级回归：后端影响面 `132 passed`；前端全量 `72 files / 426 tests passed`；生产构建、Python `compileall` 通过；Alembic 唯一 head 为 `000000000011`。
 
 ### 风险与待完成
 
-- 8 项审查问题均已修复；仅剩 `pnpm mock` 启动入口待独立完成。
+- 8 项审查问题和新增的 `pnpm mock` 启动入口均已完成。未执行真实 PostgreSQL/MySQL、Redis/Celery、设备 API 或浏览器交互联调。
+- 前端全量 ESLint 仍被既有 `LoginPage.vue` 119、121 行的 5 个 `vue/max-attributes-per-line` 错误阻塞；该文件不属于本次入口修复，未混入当前提交。生产构建保留既有 `%VITE_APP_TITLE%` 和大 chunk 警告。
 
 ## 2026-07-18：直接配额调整可靠性与 AI 确认
 
