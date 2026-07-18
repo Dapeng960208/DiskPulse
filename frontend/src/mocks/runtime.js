@@ -215,7 +215,7 @@ const seed = () => {
 };
 
 function error(status, message = '没有权限') { const value = new Error(message); value.status = status; value.response = { status, data: { message } }; return value; }
-function normalizePath(path) { const value = String(path || '').replace(/^https?:\/\/[^/]+/, '').replace(/^\/storage-pulse\/api/, '').split('?')[0]; return value.length > 1 ? value.replace(/\/$/, '') : value; }
+function normalizePath(path) { const value = String(path || '').replace(/^https?:\/\/[^/]+/, '').replace(/^\/storage-pulse\/api/, '').split('?')[0].replace(/\/{2,}/g, '/'); return value.length > 1 ? value.replace(/\/$/, '') : value; }
 function page(content) { return { content, total: content.length, totalElements: content.length, data: content, meta: { total: content.length }, traceId: traceId() }; }
 
 export function createMockGateway() {
