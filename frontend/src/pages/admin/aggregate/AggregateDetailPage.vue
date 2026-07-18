@@ -1,5 +1,4 @@
 <script setup>
-import { ElRow,ElCol } from 'element-plus';
 import { ref,onBeforeMount} from 'vue';
 import RealTimePage from '@/pages/common/RealTimePage.vue';
 import { useRoute } from 'vue-router';
@@ -15,5 +14,6 @@ onBeforeMount(() => {
   <RealTimePage
     :attribute-id="attributeId"
     :api-type="'aggregate'"
-    :label="'容量池名'"></RealTimePage>
+    :label="'容量池名'"
+    :show-header="false"></RealTimePage>
 </template>
