@@ -185,4 +185,23 @@ describe('frontend mock runtime', () => {
     await expect(gateway.request('get', '/groups//11/realtime', undefined, superadmin.token))
       .resolves.toMatchObject({ info: { name: '芯片设计项目组' } });
   });
+
+  it('provides display fields for every mock alert table column', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const alerts = await gateway.request('get', '/storage-alerts', undefined, superadmin.token);
+
+    expect(alerts.content[0]).toMatchObject({
+      alert_type: 'alert',
+      cluster_name: expect.any(String),
+      project_name: expect.any(String),
+      related_type: 'StorageUsage',
+      event_type: 'trigger',
+      quota_basis: 'hard',
+      delivery_status: expect.any(String),
+      threshold: expect.any(Number),
+      avg_use_ratio: expect.any(Number),
+      related_info: { context: { group_tag: expect.any(String), linux_path: expect.any(String) } },
+    });
+  });
 });
