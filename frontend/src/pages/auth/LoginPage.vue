@@ -116,9 +116,22 @@
         </ElForm>
 
         <p class="login-panel__meta">身份认证由 LDAP 提供</p>
-        <div v-if="mockEnabled" class="demo-accounts" aria-label="Mock 演示账户">
+        <!-- Review source: Mock account markup violated vue/max-attributes-per-line. -->
+        <!-- Resolution: keep every multi-line component attribute on its own line. -->
+        <div
+          v-if="mockEnabled"
+          class="demo-accounts"
+          aria-label="Mock 演示账户"
+        >
           <p>演示账户（仅 Mock 模式）</p>
-          <ElButton v-for="account in demoUsers" :key="account.username" text @click="fillDemo(account)">{{ account.commonName }}</ElButton>
+          <ElButton
+            v-for="account in demoUsers"
+            :key="account.username"
+            text
+            @click="fillDemo(account)"
+          >
+            {{ account.commonName }}
+          </ElButton>
         </div>
       </div>
     </section>
