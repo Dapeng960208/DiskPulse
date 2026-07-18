@@ -67,6 +67,8 @@ router.beforeEach(async (to, from) => {
     }
   } catch (error) {
     console.error(error);
+    // A missing or expired session must resolve navigation, otherwise Vue Router leaves the first render blank.
+    return `/login?redirect=${encodeURIComponent(to.fullPath)}`;
   }
 });
 

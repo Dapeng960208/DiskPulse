@@ -38,16 +38,17 @@ class RequestBuilder {
           return Promise.reject(error);
         }
 
-        if (!error.config.errorHandlerDisabled) {
+        // Mock adapters can reject before Axios attaches config; preserve the original 401/403 instead of crashing the UI.
+        if (!error.config?.errorHandlerDisabled) {
           const status = error.response.status;
-          const customErrorHandler = error.config.errorHandlers?.[status];
+          const customErrorHandler = error.config?.errorHandlers?.[status];
 
           if (customErrorHandler) {
             customErrorHandler(error);
           } else {
             switch (status) {
               case 400: {
-                if (error.response.config.redirect) {
+                if (error.config?.redirect) {
                   router.push('/400');
                   break;
                 }
@@ -55,7 +56,7 @@ class RequestBuilder {
                 break;
               }
               case 401: {
-                if (error.response.config.redirect) {
+                if (error.config?.redirect) {
                   router.push('/401');
                   break;
                 }
@@ -64,7 +65,7 @@ class RequestBuilder {
                 break;
               }
               case 403: {
-                if (error.response.config.redirect) {
+                if (error.config?.redirect) {
                   router.push('/403');
                   break;
                 }
@@ -80,7 +81,7 @@ class RequestBuilder {
                 break;
               }
               case 500: {
-                if (error.response.config.redirect) {
+                if (error.config?.redirect) {
                   router.push('/500');
                   break;
                 }

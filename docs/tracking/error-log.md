@@ -1037,3 +1037,9 @@
 - 修复：后端显式使用主工作区只读解释器 `D:\dev\DiskPulse\.venv\Scripts\python.exe`；前端在隔离 worktree 执行 `npm ci` 恢复 lockfile 对应依赖。
 - 验证：后端全量 `530 passed`，前端 coverage `67 files / 412 passed`、lint 与生产构建通过。
 - 风险：依赖目录不应提交；后续新 worktree 仍需按环境初始化步骤准备。
+# 2026-07-18：Mock 未登录首屏空白
+
+- **现象**：`VITE_USE_MOCKS=true` 时直接访问 `/`，浏览器控制台出现 `Cannot read properties of undefined (reading 'errorHandlerDisabled')`，页面没有内容。
+- **原因**：Mock adapter 的 401 在 Axios 生成 `error.config` 前抛出，响应拦截器二次访问空配置；路由守卫捕获后也没有返回目标。
+- **修复**：响应拦截器使用可选链，守卫将认证失败显式重定向到带 `redirect` 的 `/login`。
+- **验证**：应用内浏览器重新访问根路由后应显示登录页和四个演示账户。
