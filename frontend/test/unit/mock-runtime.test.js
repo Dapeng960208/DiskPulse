@@ -221,4 +221,25 @@ describe('frontend mock runtime', () => {
       related_info: { context: { group_tag: expect.any(String), linux_path: expect.any(String) } },
     });
   });
+
+  it('provides complete audit-event details for the right-side drawer', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const event = await gateway.request('get', '/v1/audit-events/1', undefined, superadmin.token);
+
+    expect(event).toMatchObject({
+      occurred_at: expect.any(String),
+      outcome: expect.any(String),
+      action: expect.any(String),
+      actor: { rd_username: expect.any(String) },
+      project: { name: expect.any(String) },
+      resource_type: expect.any(String),
+      resource_id: expect.any(Number),
+      trace_id: expect.any(String),
+      request_id: expect.any(String),
+      before_summary: expect.any(Object),
+      after_summary: expect.any(Object),
+      metadata: expect.objectContaining({ client_ip: expect.any(String) }),
+    });
+  });
 });

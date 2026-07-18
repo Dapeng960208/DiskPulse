@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const incidentPage = 'src/pages/incident/IncidentCenterPage.vue';
 const auditPage = 'src/pages/admin/audit/AuditEventListPage.vue';
+const auditDrawer = 'src/pages/admin/audit/components/AuditEventDetailDrawer.vue';
 
 function sourceFor(file) {
   return readFileSync(file, 'utf8');
@@ -37,5 +38,20 @@ describe('事件中心和统一操作审计列表布局', () => {
     const source = sourceFor(auditPage);
 
     expect(source).toContain('.audit-event-list-page { display: flex; flex-direction: column; gap: var(--spacing-md); }');
+  });
+
+  it('opens complete audit details in a right-side drawer instead of navigating away', () => {
+    const listSource = sourceFor(auditPage);
+    const drawerSource = sourceFor(auditDrawer);
+
+    expect(listSource).toContain("import AuditEventDetailDrawer from './components/AuditEventDetailDrawer.vue';");
+    expect(listSource).not.toContain("import { useRouter } from 'vue-router';");
+    expect(listSource).not.toContain('router.push(`/admin/audit-events/${event.id}`)');
+    expect(listSource).toContain('<AuditEventDetailDrawer');
+    expect(drawerSource).toContain('<ElDrawer');
+    expect(drawerSource).toContain('direction="rtl"');
+    expect(drawerSource).toContain('变更前摘要');
+    expect(drawerSource).toContain('变更后摘要');
+    expect(drawerSource).toContain('附加元数据');
   });
 });
