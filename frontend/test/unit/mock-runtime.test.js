@@ -155,7 +155,12 @@ describe('frontend mock runtime', () => {
     const latency = await gateway.request('get', '/storage-clusters/1/analytics/top-latency', undefined, superadmin.token);
 
     expect(summary.summary.alert_count).toBeGreaterThanOrEqual(5);
-    expect(configuration.storage_alert_rule).toBeTruthy();
+    expect(configuration.storage_alert_rule).toMatchObject({
+      quota_basis: 'hard',
+      important: { threshold: expect.any(Number), repeat_hours: expect.any(Number) },
+      serious: { threshold: expect.any(Number), repeat_hours: expect.any(Number) },
+      emergency: { threshold: expect.any(Number), repeat_hours: expect.any(Number) },
+    });
     expect(conversation.messages.length).toBeGreaterThanOrEqual(5);
     expect(latency.data).toHaveLength(5);
   });
