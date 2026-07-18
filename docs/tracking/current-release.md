@@ -5,7 +5,7 @@
 ### 已完成
 
 - 将并行审查分支纳入 `codex/forecast-incident-integration`：事件中心、RBAC/告警安全修复和遥测/AI/前端复查修复在同一提交链中复核。
-- 保留已发布的 `000000000009`，将遥测失败运行 `error_code` 约束修复合入 `000000000010_forecast_incidents`，删除重复 revision 文件。Alembic 图现为唯一 `000000000010 (head)`。
+- 保留主线已发布的 `000000000010_telemetry_failed_error_code`，Incident 分析表使用后续 `000000000011_forecast_incidents`；迁移图现为唯一 `000000000011 (head)`，不会让已升级到 r10 的环境跳过 Incident 建表。
 - 以独立 RED/GREEN 检查点修复三项审查问题：性能异常必须是相邻 5 分钟的连续三点；过期 `silenced_until` 不再永久抑制通知；邮件投递不再依赖飞书通道启用。
 - 事件中心专题已同步连续异常、静默期限和独立通知通道的实际语义。
 
@@ -13,7 +13,7 @@
 
 - RED：迁移 revision 重复、采样空档异常、过期静默和仅邮件投递的回归用例均按预期失败；对应 GREEN 用例已通过。
 - `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test -q` 已完成通过；`D:\dev\DiskPulse\.venv\Scripts\python.exe -m compileall -q backend` 通过。
-- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic -c backend/alembic.ini heads` 显示唯一 `000000000010 (head)`；SQLite 升降级与 SQLite/PostgreSQL/MySQL 离线 DDL 编译由自动化迁移用例覆盖。
+- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic -c backend/alembic.ini heads` 显示唯一 `000000000011 (head)`；SQLite 升降级与 SQLite/PostgreSQL/MySQL 离线 DDL 编译由自动化迁移用例覆盖。
 - `cd frontend; npm exec vitest run test/unit/IncidentCenterPage.test.js test/unit/StorageClusterDetailPage.test.js test/unit/IncidentDetailDrawer.test.js test/unit/ClusterIncidentsTab.test.js --coverage.enabled=false` 为 `4 passed`；`npm run build:test` 通过，保留既有大 chunk warning。
 
 ### 风险与待完成
@@ -25,7 +25,7 @@
 
 ### 已完成
 
-- 隔离分支 `codex/forecast-incident-center` 已新增 `000000000010_forecast_incidents` 对应的分析、事件、证据、时间线、维护窗口和版本化诊断模型、CRUD、服务与 `/v1` 只读/受控写 API。
+- 隔离分支 `codex/forecast-incident-center` 已新增后续 `000000000011_forecast_incidents` 对应的分析、事件、证据、时间线、维护窗口和版本化诊断模型、CRUD、服务与 `/v1` 只读/受控写 API。
 - 容量预测、遥测质量、性能异常、厂商事件及 DiskPulse 原始告警关联已实现为独立 Celery 任务与采集完成后的尽力异步交接；维护窗口、24 小时重开、状态相邻迁移、证据全局去重、确定性 RCA 和条件通知均由服务端处理。
 - 新增事件中心根路由、事件详情抽屉和集群详情懒加载“关联事件”页签；告警页与厂商系统事件页没有改写。
 - 新增 `incident_notifications` 与 `incident_analytics.replay_gate_verified` 配置样例；AI 诊断工具仅返回安全摘要，服务端强制确定性输出回退。新增只读 `WorkloadStorageAdapter` 与 Slurm/LSF/EDA 夹具契约，不含生产连接器。
@@ -57,7 +57,7 @@
 
 - 合并安全审查遗留修复后的后端全量：`D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test -q`，`533 passed`；告警、路由错误路径和 AI 相关聚焦组合 `54 passed`。
 - 前端全量 coverage：`67 files / 412 passed`；Statements/Lines `97.90%`、Branches `87.24%`、Functions `82.51%`。`npm run lint` 和 `npm run build:prod` 通过。
-- 迁移：`compileall`、Alembic `heads/history` 与跨方言迁移编译通过；唯一 head 为 `000000000010`。
+- 迁移：`compileall`、Alembic `heads/history` 与跨方言迁移编译通过；遥测修复阶段的 head 为 `000000000010`，最终 Incident 整合后续推进为 `000000000011`。
 
 ### 风险与后续
 
