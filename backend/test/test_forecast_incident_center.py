@@ -269,13 +269,17 @@ def test_forecast_incident_migration_compiles_and_upgrades_sqlite():
 
 def test_forecast_incident_migration_consolidates_telemetry_fix_into_one_revision():
     versions = Path(__file__).resolve().parents[1] / "migrate" / "versions"
-    migration_path = versions / "000000000010_forecast_incidents.py"
-    source = migration_path.read_text(encoding="utf-8")
+    telemetry_migration = versions / "000000000010_telemetry_failed_error_code.py"
+    forecast_migration = versions / "000000000011_forecast_incidents.py"
 
     assert [item.name for item in versions.glob("000000000010_*.py")] == [
-        "000000000010_forecast_incidents.py"
+        "000000000010_telemetry_failed_error_code.py"
     ]
-    assert "ck_telemetry_run_terminal_fields" in source
+    assert telemetry_migration.exists()
+    assert "ck_telemetry_run_terminal_fields" in telemetry_migration.read_text(encoding="utf-8")
+    assert forecast_migration.exists()
+    assert 'revision: str = "000000000011"' in forecast_migration.read_text(encoding="utf-8")
+    assert 'down_revision: str = "000000000010"' in forecast_migration.read_text(encoding="utf-8")
 
 
 def test_incident_notification_defaults_to_administrators_and_requires_explicit_other_audiences():
