@@ -426,6 +426,10 @@ def _prepare_delivery_attempt(event_id, *, context: AuditContext, config):
         now = datetime.now()
         if event.next_attempt_at is None or event.next_attempt_at > now:
             return None
+        # Enforce lease: skip if another worker holds the delivery attempt
+        now = datetime.now()
+        if event.next_attempt_at is not None and event.next_attempt_at > now:
+            return None
         if not event.recipient_usernames:
             event.delivery_status = "skipped"
             return None

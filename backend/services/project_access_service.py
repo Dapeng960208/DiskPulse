@@ -104,11 +104,12 @@ def set_project_member(
 
 def require_project_permission(db, current_user, project_id: int, minimum_role: str) -> None:
     _validate_role(minimum_role)
-    if db.get(Project, project_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project was not found")
     if current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
     if is_super_admin(current_user):
+        # Verify project exists after confirming super admin authorization
+        if db.get(Project, project_id) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project was not found")
         return
 
     membership = (
@@ -120,6 +121,7 @@ def require_project_permission(db, current_user, project_id: int, minimum_role: 
         .one_or_none()
     )
     if membership is None or ROLE_RANK[membership.role] < ROLE_RANK[minimum_role]:
+        # Return 403 for both non-existent and unauthorized projects to prevent enumeration
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="project permission required")
 
 

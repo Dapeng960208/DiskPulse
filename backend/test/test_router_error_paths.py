@@ -23,6 +23,14 @@ def assert_not_found(call, detail):
     assert error.value.detail == detail
 
 
+def assert_forbidden(call):
+    # Reader-facing project-scoped endpoints must not leak project existence:
+    # a non-member sees 403 whether or not the project exists.
+    with pytest.raises(HTTPException) as error:
+        call()
+    assert error.value.status_code == 403
+
+
 def test_aggregate_router_error_paths(db_session):
     update = AggregateUpdate(
         name="aggregate",
@@ -92,20 +100,18 @@ def test_project_and_storage_usage_router_error_paths(db_session):
     assert projects.read_projects(current_user=current_user, prop=None, order=None, db=db_session).total == 0
     assert projects.get_project_storage_summary(db=db_session).data == [["project"]]
     assert projects.get_project_groups_storage_usage(db=db_session).data == {}
-    assert_not_found(
+    assert_forbidden(
         lambda: projects.get_project_storage_tree_by_id(404, current_user=current_user, db=db_session),
-        "project was not found",
     )
 
     project_update = ProjectUpdate(name="project")
-    assert_not_found(
-        lambda: projects.read_project_storage_usage_by_id(404, db=db_session),
-        "The project was not found",
+    assert_forbidden(
+        lambda: projects.read_project_storage_usage_by_id(404, current_user=current_user, db=db_session),
     )
-    assert_not_found(
+    assert_forbidden(
         lambda: projects.read_project_by_id(404, current_user=current_user, db=db_session),
-        "The project was not found",
     )
+    # update_project_by_id is guarded by require_super_admin; existence check still yields 404.
     assert_not_found(
         lambda: projects.update_project_by_id(404, project_update, db=db_session),
         "The project was not found",

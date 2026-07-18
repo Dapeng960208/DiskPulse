@@ -51,11 +51,14 @@ class CorrelationIdMiddleware:
 
         try:
             await self.app(scope, receive, send_with_correlation)
-        except Exception:
+        except Exception as error:
             if not response_started:
                 await PlainTextResponse("Internal Server Error", status_code=500)(
                     scope,
                     receive,
                     send_with_correlation,
                 )
+                # Return after sending fallback response to avoid double-response attempt
+                return
+            # Re-raise if response already started so the server logs the error
             raise

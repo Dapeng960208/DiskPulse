@@ -764,11 +764,12 @@ def test_delivery_marks_failed_after_initial_attempt_and_three_retries(
 
     with patch.object(tasks.FeishuNotificationService, "send", side_effect=RuntimeError("down")):
         for attempt in range(4):
-            tasks.deliver_storage_alert_task.run(event.id)
-            if attempt < 3:
+            # Review fix verification: each retry is dispatched only after its lease/backoff expires.
+            if attempt:
                 db_session.refresh(event)
                 event.next_attempt_at = datetime.now() - timedelta(seconds=1)
                 db_session.commit()
+            tasks.deliver_storage_alert_task.run(event.id)
 
     db_session.refresh(event)
     assert event.delivery_attempts == 4
