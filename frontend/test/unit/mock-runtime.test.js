@@ -133,12 +133,16 @@ describe('frontend mock runtime', () => {
       '/dashboard/top-users',
     ];
 
-    for (const path of listPaths) {
+    for (const path of listPaths.filter((path) => path !== '/ai/conversations')) {
       const response = await gateway.request('get', path, undefined, superadmin.token);
       const content = response.content ?? response;
       expect(content, path).toEqual(expect.any(Array));
       expect(content.length, path).toBeGreaterThanOrEqual(5);
     }
+
+    const conversations = await gateway.request('get', '/ai/conversations', undefined, superadmin.token);
+    expect(conversations).toEqual(expect.any(Array));
+    expect(conversations).toHaveLength(5);
     for (const path of dashboardPaths) {
       const response = await gateway.request('get', path, undefined, superadmin.token);
       const content = response.content ?? response;
@@ -148,10 +152,12 @@ describe('frontend mock runtime', () => {
     const summary = await gateway.request('get', '/dashboard/summary', undefined, superadmin.token);
     const configuration = await gateway.request('get', '/config/storage', undefined, superadmin.token);
     const conversation = await gateway.request('get', '/ai/conversations/1', undefined, superadmin.token);
+    const latency = await gateway.request('get', '/storage-clusters/1/analytics/top-latency', undefined, superadmin.token);
 
     expect(summary.summary.alert_count).toBeGreaterThanOrEqual(5);
     expect(configuration.storage_alert_rule).toBeTruthy();
     expect(conversation.messages.length).toBeGreaterThanOrEqual(5);
+    expect(latency.data).toHaveLength(5);
   });
 
   it('passes mock list payloads to API clients without an extra result wrapper', async () => {
