@@ -1628,3 +1628,15 @@ npm test -- --coverage.enabled=false
 ### 风险与待验证范围
 
 - 保留后端字段及历史数据兼容性，未修改接口或数据库结构；浏览器已验证项目列表和新增表单，尚未验证窄屏视口。
+
+## 2026-07-18：项目组标签分页展示统一
+
+### 已完成
+
+- 项目组标签列表向共享 `DataTable` 传入 `hideOnSinglePage`，结果未超过默认每页 20 条时不显示分页。
+
+### 验证状态
+
+- RED：项目组标签聚焦测试 `1 failed`，复现单页分页配置缺失。
+- GREEN：`pnpm test -- group-tag.test.js`，`4 passed`；受影响文件 ESLint 通过。
+- 浏览器核验：`http://localhost:5174/admin/group-tags` 在 5 条数据时不显示分页。

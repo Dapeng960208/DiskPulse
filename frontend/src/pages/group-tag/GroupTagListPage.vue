@@ -54,7 +54,7 @@ query();
     <DataTable
       :data="result.content"
       :loading="querying"
-      :pagination="{ page: queryParams.page, pageSize: queryParams.size, total: result.total }"
+      :pagination="{ page: queryParams.page, pageSize: queryParams.size, total: result.total, hideOnSinglePage: true }"
       @update:pagination="({ page, pageSize }) => { queryParams.page = page; queryParams.size = pageSize; query(); }">
       <ElTableColumn
         label="标签名称"
