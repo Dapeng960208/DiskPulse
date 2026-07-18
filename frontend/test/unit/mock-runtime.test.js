@@ -175,4 +175,14 @@ describe('frontend mock runtime', () => {
 
     expect(response.data.content).toHaveLength(5);
   });
+
+  it('accepts double-slash resource paths emitted by the shared API client', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    await expect(gateway.request('get', '/storage-usages//101/realtime', undefined, superadmin.token))
+      .resolves.toMatchObject({ info: { linux_path: '/data/demo/project-1/alice' } });
+    await expect(gateway.request('get', '/groups//11/realtime', undefined, superadmin.token))
+      .resolves.toMatchObject({ info: { name: '芯片设计项目组' } });
+  });
 });
