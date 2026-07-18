@@ -5,6 +5,7 @@ import {
   DEMO_PASSWORD,
   DEMO_USERS,
   createMockGateway,
+  mockAxiosAdapter,
 } from '@/mocks/runtime.js';
 
 describe('frontend mock runtime', () => {
@@ -98,7 +99,7 @@ describe('frontend mock runtime', () => {
     await gateway.request('delete', `/group-tags/${created.id}`, undefined, admin.token);
     const tags = await gateway.request('get', '/group-tags', undefined, admin.token);
 
-    expect(trend.content.length).toBeGreaterThan(1);
+    expect(trend.length).toBeGreaterThan(1);
     expect(updated.name).toBe('Mock 已更新标签');
     expect(tags.content.some((tag) => tag.id === created.id)).toBe(false);
   });
@@ -134,12 +135,14 @@ describe('frontend mock runtime', () => {
 
     for (const path of listPaths) {
       const response = await gateway.request('get', path, undefined, superadmin.token);
-      expect(response.content, path).toEqual(expect.any(Array));
-      expect(response.content.length, path).toBeGreaterThanOrEqual(5);
+      const content = response.content ?? response;
+      expect(content, path).toEqual(expect.any(Array));
+      expect(content.length, path).toBeGreaterThanOrEqual(5);
     }
     for (const path of dashboardPaths) {
       const response = await gateway.request('get', path, undefined, superadmin.token);
-      expect(response.content.length, path).toBeGreaterThanOrEqual(5);
+      const content = response.content ?? response;
+      expect(content.length, path).toBeGreaterThanOrEqual(5);
     }
 
     const summary = await gateway.request('get', '/dashboard/summary', undefined, superadmin.token);
@@ -149,5 +152,16 @@ describe('frontend mock runtime', () => {
     expect(summary.summary.alert_count).toBeGreaterThanOrEqual(5);
     expect(configuration.storage_alert_rule).toBeTruthy();
     expect(conversation.messages.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('passes mock list payloads to API clients without an extra result wrapper', async () => {
+    const login = await createMockGateway().login('demo-superadmin', DEMO_PASSWORD);
+    const response = await mockAxiosAdapter({
+      method: 'get',
+      url: '/projects',
+      headers: { Authorization: `Bearer ${login.token}` },
+    });
+
+    expect(response.data.content).toHaveLength(5);
   });
 });
