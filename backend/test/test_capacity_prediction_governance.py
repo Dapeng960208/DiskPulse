@@ -127,6 +127,7 @@ def test_project_admin_can_only_create_capacity_plan_for_its_own_resource(db_ses
         models.Project(id=1, name="project-alpha"),
         models.Project(id=2, name="project-beta"),
         models.ProjectMembership(project_id=1, user_id=1, role="project_admin"),
+        models.CapacityPredictionSettings(id=1, user_visible=True),
         models.StorageCluster(id=1, name="cluster-alpha", storage_type="netapp"),
         models.GroupTag(id=1, name="research"),
         models.Group(id=1, project_id=1, storage_cluster_id=1, group_tag_id=1, name="group-alpha", enable_monitoring=False),
@@ -146,3 +147,49 @@ def test_project_admin_can_only_create_capacity_plan_for_its_own_resource(db_ses
             db_session, current_user=user, asset_type="group", asset_id=2,
             effective_at=UTC_NOW, capacity_delta=10.0, reason="cross project",
         )
+
+
+def test_only_candidate_with_passing_evaluations_can_be_enabled(db_session):
+    import models
+    from services.capacityPredictionGovernanceService import (
+        activate_capacity_prediction_candidate,
+        create_capacity_prediction_candidate,
+        record_capacity_prediction_evaluation,
+    )
+
+    db_session.add(models.AIConfig(
+        id=1,
+        name="forecast-private-model",
+        provider="ollama",
+        base_url="http://forecast.internal",
+        model="forecast-model",
+        enabled=True,
+        enable_chat=False,
+    ))
+    db_session.commit()
+    candidate = create_capacity_prediction_candidate(
+        db_session,
+        version="capacity-ai-v1",
+        ai_model_id=1,
+    )
+    for index in range(3):
+        record_capacity_prediction_evaluation(
+            db_session,
+            candidate_id=candidate.id,
+            baseline_mape=20.0,
+            candidate_mape=17.0,
+            risk_coverage_ok=True,
+            window_start=UTC_NOW + timedelta(days=index * 30),
+            window_end=UTC_NOW + timedelta(days=(index + 1) * 30),
+        )
+    activate_capacity_prediction_candidate(db_session, candidate_id=candidate.id)
+
+    assert db_session.get(models.CapacityPredictionCandidate, candidate.id).enabled is True
+
+    rejected = create_capacity_prediction_candidate(
+        db_session,
+        version="capacity-ai-v2",
+        ai_model_id=1,
+    )
+    with pytest.raises(HTTPException, match="activation gate"):
+        activate_capacity_prediction_candidate(db_session, candidate_id=rejected.id)
