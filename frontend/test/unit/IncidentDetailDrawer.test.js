@@ -92,11 +92,19 @@ describe('IncidentDetailDrawer', () => {
     const wrapper = await mountDrawer();
 
     const tooltipContents = wrapper.findAllComponents({ name: 'ElTooltip' })
-      .map((tooltip) => tooltip.props('content'));
+      .map((tooltip) => tooltip.attributes('content'));
     expect(tooltipContents).toEqual(expect.arrayContaining([
       '将事件指派给当前登录用户，明确处理责任。',
       '取消当前认领；仅认领人或超级管理员可以释放。',
       '恢复派生事件的后续通知，不删除事件、证据或原始告警。',
     ]));
+  });
+
+  it('explains the effective capacity alert threshold precedence', async () => {
+    const wrapper = await mountDrawer();
+
+    const tooltipContents = wrapper.findAllComponents({ name: 'ElTooltip' })
+      .map((tooltip) => tooltip.attributes('content'));
+    expect(tooltipContents).toContain('容量预测显示可能耗尽，或当前资源的有效告警规则达到阈值。默认按硬限额 80%/90%/95%；用户目录优先采用项目组规则，其次项目规则，最后系统规则。');
   });
 });
