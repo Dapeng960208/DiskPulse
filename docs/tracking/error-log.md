@@ -947,3 +947,11 @@
 - 修复：在关闭请求数据库会话的 `finally` 中记录预设的 `500` 响应状态与耗时；探针短路路径保持不创建常规会话。
 - 验证：RED 用例失败；GREEN 后关联 API 用例通过，完整后端测试 `440 passed`。
 - 风险：生产指标端点的实际 scrape 延迟与并发负载仍需部署环境验收。
+### 2026-07-18：隔离 worktree 缺少本地 Python 与前端依赖
+
+- 触发：在 `D:\dev\DiskPulse\.worktrees\review-fixes` 执行后端全量测试和前端 Vitest。
+- 现象：`..\.venv\Scripts\python.exe` 不存在；首次 Vitest 无法找到 `frontend/node_modules`。
+- 根因：Git worktree 不复制被忽略的本地虚拟环境与 Node 依赖目录。
+- 修复：后端显式使用主工作区只读解释器 `D:\dev\DiskPulse\.venv\Scripts\python.exe`；前端在隔离 worktree 执行 `npm ci` 恢复 lockfile 对应依赖。
+- 验证：后端全量 `530 passed`，前端 coverage `67 files / 412 passed`、lint 与生产构建通过。
+- 风险：依赖目录不应提交；后续新 worktree 仍需按环境初始化步骤准备。
