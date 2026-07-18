@@ -1,5 +1,14 @@
 # 错误记录
 
+### 2026-07-18：r10 降级无法接纳已分类的失败遥测行
+
+- 触发：r8 账本升级 r10、写入带 `vendor_timeout` 的失败行后执行 r10 downgrade。
+- 现象：SQLite 表重建复制数据时报 `CHECK constraint failed: ck_telemetry_run_terminal_fields`。
+- 根因：旧终态约束要求失败行 `error_code IS NULL`，但降级直接恢复旧约束，没有先转换 r10 新增的数据状态。
+- 修复：先移除 r10 终态约束，清空失败行分类错误码，再恢复旧约束；SQLite 通过无终态约束的中间表完成两阶段重建。
+- 验证：SQLite 实际升降级和 SQLite/PostgreSQL/MySQL 离线迁移合计 `4 passed`。
+- 风险：降级会有意丢弃旧 schema 无法表达的失败分类码；真实 PostgreSQL/MySQL 在线降级仍须在备份与维护窗口验收。
+
 ### 2026-07-18：性能资产厂商标识与整数 Volume 主键比较
 
 - 触发：使用 UUID 形式的性能 `object_id` 解析 Volume 资产，并检查生成的 SQL。

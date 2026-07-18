@@ -767,3 +767,16 @@ def test_telemetry_failure_code_migration_upgrades_existing_sqlite_ledger():
         assert connection.execute(
             sa.select(ledger.c.error_code).where(ledger.c.task_id == "r8-upgrade-failure")
         ).scalar_one() == "vendor_timeout"
+
+        # Review source: r10 downgrade tried to restore the old constraint while
+        # classified failed rows still held error codes. Resolution contract:
+        # downgrade clears only those newly unsupported codes before rebuilding.
+        r10.downgrade()
+        downgraded_ledger = sa.Table(
+            "telemetry_collection_runs", sa.MetaData(), autoload_with=connection
+        )
+        assert connection.execute(
+            sa.select(downgraded_ledger.c.error_code).where(
+                downgraded_ledger.c.task_id == "r8-upgrade-failure"
+            )
+        ).scalar_one() is None

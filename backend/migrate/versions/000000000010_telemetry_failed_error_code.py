@@ -34,7 +34,7 @@ NEW_TERMINAL_CONDITION = (
 )
 
 
-def _sqlite_telemetry_table(*, terminal_condition: str) -> sa.Table:
+def _sqlite_telemetry_table(*, terminal_condition: str | None) -> sa.Table:
     metadata = sa.MetaData()
     table = sa.Table(
         "telemetry_collection_runs",
@@ -81,7 +81,6 @@ def _sqlite_telemetry_table(*, terminal_condition: str) -> sa.Table:
             "AND storage_cluster_id IS NULL)",
             name="ck_telemetry_run_scope",
         ),
-        sa.CheckConstraint(terminal_condition, name=TERMINAL_CONSTRAINT),
         sa.ForeignKeyConstraint(["storage_cluster_id"], ["storage_clusters.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
@@ -92,6 +91,10 @@ def _sqlite_telemetry_table(*, terminal_condition: str) -> sa.Table:
             name="uq_telemetry_run_task_attempt_scope",
         ),
     )
+    if terminal_condition is not None:
+        table.append_constraint(
+            sa.CheckConstraint(terminal_condition, name=TERMINAL_CONSTRAINT)
+        )
     sa.Index(
         "ix_telemetry_run_component_cluster_finished",
         table.c.component,
@@ -102,14 +105,38 @@ def _sqlite_telemetry_table(*, terminal_condition: str) -> sa.Table:
     return table
 
 
-def _replace_terminal_constraint(condition: str, *, copy_from: sa.Table | None = None) -> None:
+def _replace_terminal_constraint(
+    condition: str | None,
+    *,
+    copy_from: sa.Table | None = None,
+    drop_existing: bool = True,
+) -> None:
     with op.batch_alter_table(
         "telemetry_collection_runs",
         recreate="always" if copy_from is not None else "auto",
         copy_from=copy_from,
     ) as batch_op:
-        batch_op.drop_constraint(TERMINAL_CONSTRAINT, type_="check")
-        batch_op.create_check_constraint(TERMINAL_CONSTRAINT, condition)
+        if drop_existing:
+            batch_op.drop_constraint(TERMINAL_CONSTRAINT, type_="check")
+        if condition is not None:
+            batch_op.create_check_constraint(TERMINAL_CONSTRAINT, condition)
+
+
+def _clear_classified_failure_codes() -> None:
+    telemetry_runs = sa.table(
+        "telemetry_collection_runs",
+        sa.column("outcome", sa.String(length=16)),
+        sa.column("error_code", sa.String(length=32)),
+    )
+    # Review source: downgrade rebuilt the old constraint while r10-classified
+    # failed rows still contained error_code values. Resolution: clear only the
+    # data the old schema cannot represent before replacing the constraint.
+    op.execute(
+        telemetry_runs.update()
+        .where(telemetry_runs.c.outcome == "failed")
+        .where(telemetry_runs.c.error_code.is_not(None))
+        .values(error_code=None)
+    )
 
 
 def upgrade() -> None:
@@ -125,9 +152,19 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     if op.get_context().dialect.name == "sqlite":
+        # SQLite cannot clear error_code while the r10 check is active. Rebuild
+        # once without the terminal check, clean the rows, then restore r8/r9.
         _replace_terminal_constraint(
-            OLD_TERMINAL_CONDITION,
+            None,
             copy_from=_sqlite_telemetry_table(terminal_condition=NEW_TERMINAL_CONDITION),
         )
+        _clear_classified_failure_codes()
+        _replace_terminal_constraint(
+            OLD_TERMINAL_CONDITION,
+            copy_from=_sqlite_telemetry_table(terminal_condition=None),
+            drop_existing=False,
+        )
         return
-    _replace_terminal_constraint(OLD_TERMINAL_CONDITION)
+    _replace_terminal_constraint(None)
+    _clear_classified_failure_codes()
+    _replace_terminal_constraint(OLD_TERMINAL_CONDITION, drop_existing=False)
