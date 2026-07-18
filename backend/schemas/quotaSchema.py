@@ -16,6 +16,8 @@ class QuotaAdjustmentRequest(BaseModel):
     unit: Literal["GiB", "TiB"]
     soft_grace: int | None = Field(default=None, gt=0)
     soft_grace_unit: Literal["minutes", "hours", "days"] | None = None
+    force_below_usage: bool = False
+    change_reason: str | None = Field(default=None, min_length=1, max_length=256)
 
     @model_validator(mode="after")
     def validate_limits(self):
@@ -71,3 +73,9 @@ class QuotaAdjustmentResponse(BaseModel):
     soft_limit: float | None = None
     unit: Literal["GiB"] = "GiB"
     soft_grace_seconds: int | None = None
+    operation_id: str = ""
+    verification_source: Literal[
+        "post_write_readback",
+        "post_timeout_readback",
+        "manual_reconciliation",
+    ] = "post_write_readback"

@@ -43,10 +43,32 @@ class FakeTokenRedis:
         return int(self.values.pop(key, None) is not None)
 
 
+class FakeQuotaRedis(FakeTokenRedis):
+    def set(self, key, value, nx=False, ex=None):
+        if nx and key in self.values:
+            return False
+        return super().set(key, value, ex=ex)
+
+    def setex(self, key, ttl, value):
+        return self.set(key, value, ex=ttl)
+
+    def eval(self, _script, _numkeys, key, value):
+        if self.get(key) != value:
+            return 0
+        return self.delete(key)
+
+
 @pytest.fixture(autouse=True)
 def token_redis(monkeypatch):
     client = FakeTokenRedis()
     monkeypatch.setattr(security, "_redis_client", lambda: client, raising=False)
+    return client
+
+
+@pytest.fixture(autouse=True)
+def quota_redis(monkeypatch):
+    client = FakeQuotaRedis()
+    monkeypatch.setattr("services.quotaService._quota_redis_client", lambda: client, raising=False)
     return client
 
 
