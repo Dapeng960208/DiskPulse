@@ -62,12 +62,6 @@ onMounted(query);
 
 <template>
   <section class="audit-event-list-page">
-    <header class="page-heading">
-      <div>
-        <h2>统一操作审计</h2>
-        <p>查询跨项目的脱敏操作记录和关联标识。</p>
-      </div>
-    </header>
     <QueryForm
       @query="{
         queryParams.page = 1;
@@ -131,7 +125,5 @@ onMounted(query);
 
 <style scoped>
 .audit-event-list-page { display: grid; gap: var(--spacing-md); }
-.page-heading h2 { margin: 0 0 4px; color: var(--text-primary); font-size: var(--font-size-xl); }
-.page-heading p { margin: 0; color: var(--text-secondary); }
 .audit-event-list-page__table { min-height: 420px; }
 </style>

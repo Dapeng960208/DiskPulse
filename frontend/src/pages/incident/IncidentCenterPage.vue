@@ -2,16 +2,13 @@
 import { onMounted, reactive, ref } from 'vue';
 import {
   ElButton,
-  ElCard,
   ElFormItem,
-  ElInput,
   ElOption,
-  ElPagination,
   ElSelect,
-  ElTable,
   ElTableColumn,
   ElTag,
 } from 'element-plus';
+import DataTable from '@/components/data/DataTable.vue';
 import QueryForm from '@/components/form/QueryForm.vue';
 import incidentApi from '@/api/incident-api.js';
 import IncidentDetailDrawer from './components/IncidentDetailDrawer.vue';
@@ -67,14 +64,9 @@ function reset() {
   query();
 }
 
-function updatePage(page) {
-  queryParams.page = page;
-  query();
-}
-
-function updateSize(size) {
-  queryParams.size = size;
-  queryParams.page = 1;
+function updatePagination(next) {
+  queryParams.page = next.page;
+  queryParams.size = next.pageSize;
   query();
 }
 
@@ -88,12 +80,6 @@ onMounted(query);
 
 <template>
   <section class="incident-center-page">
-    <header class="page-heading">
-      <div>
-        <h2>事件中心</h2>
-        <p>集中查看项目范围内的容量、性能、设备与遥测关联事件。</p>
-      </div>
-    </header>
     <QueryForm
       @query="{ queryParams.page = 1; query(); }"
       @reset="reset">
@@ -121,67 +107,51 @@ onMounted(query);
             :value="value" />
         </ElSelect>
       </ElFormItem>
-      <template #actions>
-        <ElButton
-          type="primary"
-          @click="query">搜索</ElButton>
-      </template>
     </QueryForm>
-    <ElCard class="incident-center-page__table">
-      <p
-        v-if="error"
-        class="incident-center-page__error">{{ error }}</p>
-      <ElTable
-        v-loading="loading"
-        :data="incidents"
-        empty-text="当前项目范围内暂无事件">
-        <ElTableColumn
-          label="资产"
-          prop="display_name"
-          min-width="180" />
-        <ElTableColumn
-          label="类别"
-          min-width="120">
-          <template #default="{ row }">{{ categoryLabels[row.category] || row.category }}</template>
-        </ElTableColumn>
-        <ElTableColumn
-          label="严重度"
-          prop="severity"
-          width="110">
-          <template #default="{ row }"><ElTag :type="row.severity === 'critical' ? 'danger' : 'warning'">{{ row.severity }}</ElTag></template>
-        </ElTableColumn>
-        <ElTableColumn
-          label="状态"
-          width="120">
-          <template #default="{ row }">{{ statusLabels[row.status] || row.status }}</template>
-        </ElTableColumn>
-        <ElTableColumn
-          label="最近证据"
-          prop="last_evidence_at"
-          min-width="190" />
-        <ElTableColumn
-          label="操作"
-          width="100"
-          fixed="right">
-          <template #default="{ row }">
-            <ElButton
-              size="small"
-              @click="openDetail(row)">查看</ElButton>
-          </template>
-        </ElTableColumn>
-      </ElTable>
-      <ElPagination
-        v-if="total > 0"
-        class="incident-center-page__pagination"
-        background
-        layout="total, sizes, prev, pager, next, jumper"
-        :current-page="queryParams.page"
-        :page-size="queryParams.size"
-        :page-sizes="[20, 50, 100]"
-        :total="total"
-        @current-change="updatePage"
-        @size-change="updateSize" />
-    </ElCard>
+    <DataTable
+      class="incident-center-page__table"
+      :data="incidents"
+      :loading="loading"
+      :error="error"
+      :pagination="{ page: queryParams.page, pageSize: queryParams.size, total, pageSizes: [20, 50, 100], showJumper: true }"
+      @update:pagination="updatePagination">
+      <ElTableColumn
+        label="资产"
+        prop="display_name"
+        min-width="180" />
+      <ElTableColumn
+        label="类别"
+        min-width="120">
+        <template #default="{ row }">{{ categoryLabels[row.category] || row.category }}</template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="严重度"
+        prop="severity"
+        width="110">
+        <template #default="{ row }"><ElTag :type="row.severity === 'critical' ? 'danger' : 'warning'">{{ row.severity }}</ElTag></template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="状态"
+        width="120">
+        <template #default="{ row }">{{ statusLabels[row.status] || row.status }}</template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="最近证据"
+        prop="last_evidence_at"
+        min-width="190" />
+      <ElTableColumn
+        label="操作"
+        align="right"
+        width="100"
+        fixed="right">
+        <template #default="{ row }">
+          <ElButton
+            size="small"
+            plain
+            @click="openDetail(row)">查看</ElButton>
+        </template>
+      </ElTableColumn>
+    </DataTable>
     <IncidentDetailDrawer
       v-model="detailVisible"
       :incident="selectedIncident"
@@ -191,9 +161,5 @@ onMounted(query);
 
 <style scoped>
 .incident-center-page { display: grid; gap: var(--spacing-md); }
-.page-heading h2 { margin: 0 0 4px; color: var(--text-primary); font-size: var(--font-size-xl); }
-.page-heading p { margin: 0; color: var(--text-secondary); }
 .incident-center-page__table { min-height: 420px; }
-.incident-center-page__pagination { display: flex; justify-content: flex-end; margin-top: var(--spacing-md); }
-.incident-center-page__error { margin: 0 0 var(--spacing-md); color: var(--danger-color); }
 </style>
