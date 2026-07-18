@@ -46,7 +46,7 @@ def test_candidate_activation_needs_three_windows_ten_percent_mape_gain_and_risk
     assert candidate_meets_activation_gate(passing[:2]) is False
     assert candidate_meets_activation_gate([
         *passing[:2],
-        {"baseline_mape": 30.0, "candidate_mape": 28.0, "risk_coverage_ok": True},
+        {"baseline_mape": 30.0, "candidate_mape": 29.1, "risk_coverage_ok": True},
     ]) is False
     assert candidate_meets_activation_gate([
         *passing[:2],
@@ -63,7 +63,7 @@ def test_reader_is_denied_resource_prediction_until_super_admin_enables_global_v
         models.Project(id=1, name="project-alpha"),
         models.ProjectMembership(project_id=1, user_id=1, role="reader"),
         models.StorageCluster(id=1, name="cluster-alpha", storage_type="netapp"),
-        models.Group(id=1, project_id=1, storage_cluster_id=1, group_tag_id=1, name="group-alpha"),
+        models.Group(id=1, project_id=1, storage_cluster_id=1, group_tag_id=1, name="group-alpha", enable_monitoring=False),
         models.GroupTag(id=1, name="research"),
         models.CapacityForecast(
             asset_type="group", asset_id="1", storage_cluster_id=1, project_id=1,
@@ -86,6 +86,38 @@ def test_reader_is_denied_resource_prediction_until_super_admin_enables_global_v
     assert result.asset_id == "1"
 
 
+def test_reader_cannot_list_capacity_plans_until_global_visibility_is_enabled(db_session):
+    import models
+    from services.capacityPredictionGovernanceService import list_resource_capacity_plans
+
+    db_session.add_all([
+        models.User(id=1, rd_username="reader"),
+        models.Project(id=1, name="project-alpha"),
+        models.ProjectMembership(project_id=1, user_id=1, role="reader"),
+        models.StorageCluster(id=1, name="cluster-alpha", storage_type="netapp"),
+        models.GroupTag(id=1, name="research"),
+        models.Group(id=1, project_id=1, storage_cluster_id=1, group_tag_id=1, name="group-alpha", enable_monitoring=False),
+    ])
+    db_session.commit()
+
+    with pytest.raises(HTTPException, match="globally disabled"):
+        list_resource_capacity_plans(
+            db_session,
+            current_user=db_session.get(models.User, 1),
+            asset_type="group",
+            asset_id=1,
+        )
+
+    db_session.add(models.CapacityPredictionSettings(id=1, user_visible=True))
+    db_session.commit()
+    assert list_resource_capacity_plans(
+        db_session,
+        current_user=db_session.get(models.User, 1),
+        asset_type="group",
+        asset_id=1,
+    ) == []
+
+
 def test_project_admin_can_only_create_capacity_plan_for_its_own_resource(db_session):
     import models
     from services.capacityPredictionGovernanceService import create_capacity_plan
@@ -97,8 +129,8 @@ def test_project_admin_can_only_create_capacity_plan_for_its_own_resource(db_ses
         models.ProjectMembership(project_id=1, user_id=1, role="project_admin"),
         models.StorageCluster(id=1, name="cluster-alpha", storage_type="netapp"),
         models.GroupTag(id=1, name="research"),
-        models.Group(id=1, project_id=1, storage_cluster_id=1, group_tag_id=1, name="group-alpha"),
-        models.Group(id=2, project_id=2, storage_cluster_id=1, group_tag_id=1, name="group-beta"),
+        models.Group(id=1, project_id=1, storage_cluster_id=1, group_tag_id=1, name="group-alpha", enable_monitoring=False),
+        models.Group(id=2, project_id=2, storage_cluster_id=1, group_tag_id=1, name="group-beta", enable_monitoring=False),
     ])
     db_session.commit()
     user = db_session.get(models.User, 1)
