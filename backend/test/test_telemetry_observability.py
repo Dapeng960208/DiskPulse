@@ -716,3 +716,54 @@ def test_telemetry_migration_upgrades_and_downgrades_sqlite():
         migration.downgrade()
         inspector.clear_cache()
         assert "telemetry_collection_runs" not in inspector.get_table_names()
+
+
+def test_telemetry_failure_code_migration_upgrades_existing_sqlite_ledger():
+    """Existing r8 ledgers accept classified failed runs after the r10 upgrade."""
+    import importlib.util
+    from uuid import uuid4
+
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    migrations_dir = Path(__file__).resolve().parents[1] / "migrate" / "versions"
+
+    def load_migration(filename, module_name):
+        spec = importlib.util.spec_from_file_location(module_name, migrations_dir / filename)
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+        return migration
+
+    r8 = load_migration("000000000008_telemetry_collection_runs.py", "telemetry_r8_sqlite")
+    r10 = load_migration("000000000010_telemetry_failed_error_code.py", "telemetry_r10_sqlite")
+
+    with sa.create_engine("sqlite://").begin() as connection:
+        connection.execute(sa.text("CREATE TABLE storage_clusters (id INTEGER PRIMARY KEY)"))
+        r8.op = Operations(MigrationContext.configure(connection))
+        r8.upgrade()
+        r10.op = Operations(MigrationContext.configure(connection))
+        r10.upgrade()
+        ledger = sa.Table("telemetry_collection_runs", sa.MetaData(), autoload_with=connection)
+
+        # Review fix verification: the upgraded constraint must retain a failed error code.
+        connection.execute(
+            ledger.insert().values(
+                id=str(uuid4()),
+                task_id="r8-upgrade-failure",
+                attempt=1,
+                scope_type="cluster",
+                scope_key="1",
+                component="capacity",
+                trace_id="f164d96d-647a-4303-82e8-5356031da939",
+                started_at=UTC_NOW,
+                finished_at=UTC_NOW,
+                outcome="failed",
+                error_code="vendor_timeout",
+                created_at=UTC_NOW,
+            )
+        )
+
+        assert connection.execute(
+            sa.select(ledger.c.error_code).where(ledger.c.task_id == "r8-upgrade-failure")
+        ).scalar_one() == "vendor_timeout"
