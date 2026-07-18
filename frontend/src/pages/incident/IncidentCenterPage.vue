@@ -14,6 +14,7 @@ import DataTable from '@/components/data/DataTable.vue';
 import QueryForm from '@/components/form/QueryForm.vue';
 import incidentApi from '@/api/incident-api.js';
 import IncidentDetailDrawer from './components/IncidentDetailDrawer.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 
 const queryParams = reactive({ page: 1, size: 20, status: '', category: '' });
 const incidents = ref([]);
@@ -194,15 +195,12 @@ onMounted(query);
         fixed="right">
         <template #default="{ row }">
           <div class="list-row-actions">
-            <ElButton
-              size="small"
-              plain
-              @click="openDetail(row)">详情</ElButton>
-            <ElButton
-              size="small"
-              plain
-              type="primary"
-              @click="openEdit(row)">编辑</ElButton>
+            <TableActionButton
+              action="detail"
+              @click="openDetail(row)">详情</TableActionButton>
+            <TableActionButton
+              action="edit"
+              @click="openEdit(row)">编辑</TableActionButton>
           </div>
         </template>
       </ElTableColumn>

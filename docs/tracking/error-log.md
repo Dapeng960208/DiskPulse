@@ -1,5 +1,32 @@
 # 错误记录
 
+### 2026-07-18：浏览器插件缺少规定的运行入口
+
+- 触发：按前端渲染验证流程准备检查 `/admin/volume/1` 的页面身份、DOM、控制台、截图和指标多选交互。
+- 现象：Browser 插件和技能已列出，但工具发现没有返回技能要求的浏览器运行入口。
+- 根因：当前会话未注入该插件的执行工具，无法按插件协议建立浏览器连接。
+- 处理：遵守插件边界，不擅自改用独立 Playwright；继续完成单元测试、ESLint 和 Vite 构建验证。
+- 验证：前端聚焦 `2 files / 3 tests passed`，相关文件 ESLint 通过，`build:test` 通过。
+- 风险：桌面端/移动端真实布局、控制台健康和指标多选交互仍需在具备 Browser 运行入口的会话或部署环境验证。
+
+### 2026-07-18：空虚拟环境导致聚焦 pytest 无法启动
+
+- 触发：执行 `uv run pytest ...` 和仓库历史命令 `.\.venv\Scripts\python.exe -m pytest ...`。
+- 现象：`uv` 报 `pytest` program not found；工作区 `.venv` 目录存在但为空，系统 Python 也没有 pytest。
+- 根因：当前本地虚拟环境未初始化，裸 `uv run` 不会自动读取 `backend/requirements.txt`。
+- 处理：使用 `uv run --with-requirements backend\requirements.txt python -m pytest ...` 创建隔离临时环境后执行同一聚焦测试。
+- 验证：关联 RED 用例得到预期 `TypeError`；实现后影响面与 schema 契约回归 `147 passed`。
+- 风险：该命令会从依赖源解析环境；离线机器仍需预先准备仓库虚拟环境或 uv 缓存。
+
+### 2026-07-18：存储采集审计用例按同秒时间与随机 UUID 排序不稳定
+
+- 触发：扩大执行 `test_storage_collection_trigger.py`，成功与失败两个参数化用例均检查 attempt/result 顺序。
+- 现象：查询按 `occurred_at, id` 排序时返回 `result` 在 `attempt` 前，断言期望固定为 attempt 后 result。
+- 根因：两条事件可能拥有相同时间精度，第二排序键是随机 UUID，不能表达阶段先后。
+- 处理：本次只记录，未修改与卷性能关联无关的审计模型或测试。
+- 验证：同一扩大命令为 `122 passed, 2 failed`；排除该无关文件后的直接影响面为 `138 passed`。
+- 风险：该用例仍可能阻塞后端全量回归；后续应独立决定使用可排序序列、提高时间精度或让测试按 phase/outcome 集合断言。
+
 ### 2026-07-18：前端 Mock 缺少一条命令可用的启动入口
 
 - 触发：在 `frontend/` 尝试直接通过包管理器启动 Mock 网页，并运行新增的启动契约测试。
@@ -1145,6 +1172,15 @@
 - 修复：后端显式使用主工作区只读解释器 `D:\dev\DiskPulse\.venv\Scripts\python.exe`；前端在隔离 worktree 执行 `npm ci` 恢复 lockfile 对应依赖。
 - 验证：后端全量 `530 passed`，前端 coverage `67 files / 412 passed`、lint 与生产构建通过。
 - 风险：依赖目录不应提交；后续新 worktree 仍需按环境初始化步骤准备。
+
+### 2026-07-18：登录页未声明 Element Plus 图标依赖
+
+- 触发：执行 `pnpm dev` 并访问登录页，随后执行 `pnpm build:prod` 复现。
+- 现象：Vite 无法解析 `LoginPage.vue` 导入的 `@element-plus/icons-vue`。
+- 根因：该包仅由 `element-plus` 间接安装，未在前端 `package.json` 中直接声明；pnpm 不向应用暴露未声明的间接依赖。
+- 修复：添加 `@element-plus/icons-vue` 作为生产依赖并同步 `pnpm-lock.yaml`。
+- 验证：修复前生产构建按预期失败；添加依赖后 `pnpm build:prod` 通过。
+- 风险：需重启本地 Vite 服务以清除其已解析的模块状态，未执行浏览器端登录交互回归。
 # 2026-07-18：Mock 未登录首屏空白
 
 - **现象**：`VITE_USE_MOCKS=true` 时直接访问 `/`，浏览器控制台出现 `Cannot read properties of undefined (reading 'errorHandlerDisabled')`，页面没有内容。

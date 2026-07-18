@@ -16,6 +16,14 @@ export function resolveAccessibility(isAccessible) {
   throw new Error('isAccessible() must return either 200, 401 or 403');
 }
 
+export function canAccessRoute(router, target) {
+  if (!router || !target || typeof target !== 'object') return false;
+  if (target.params && Object.values(target.params).some((value) => value == null || value === '')) return false;
+
+  const resolved = router.resolve(target);
+  return resolved?.meta?.isAccessible?.() === 200;
+}
+
 export function processRoutes(routes, isParentAccessible) {
   routes.forEach((route) => {
     if (!route.meta) {

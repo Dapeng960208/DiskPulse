@@ -14,6 +14,8 @@ import storageClusterApi from '@/api/storage-cluster-api';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
+import AccessibleResourceLink from '@/components/basic/AccessibleResourceLink.vue';
 const router = useRouter();
 const selectedCluster = ref(null);
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
@@ -111,7 +113,7 @@ query();
         min-width="140"
       >
         <template #default="{ row }">
-          <span>{{ row.storage_cluster?.name || '-' }}</span>
+          <AccessibleResourceLink :to="{ name: 'StorageClusterDetail', params: { id: row.storage_cluster?.id } }">{{ row.storage_cluster?.name || '-' }}</AccessibleResourceLink>
         </template>
       </ElTableColumn>
       <ElTableColumn
@@ -128,8 +130,9 @@ query();
         align="center"
         prop="name"
         min-width="180"
-        show-overflow-tooltip
-      />
+        show-overflow-tooltip>
+        <template #default="{ row }"><AccessibleResourceLink :to="{ name: 'QtreeDetail', params: { id: row.id } }">{{ row.name }}</AccessibleResourceLink></template>
+      </ElTableColumn>
       <ElTableColumn
         v-if="showCapacityColumns"
         label="所属存储空间"
@@ -137,7 +140,7 @@ query();
         min-width="160"
       >
         <template #default="{ row }">
-          <span>{{ row.volume.name }}</span>
+          <AccessibleResourceLink :to="{ name: 'VolumeDetail', params: { id: row.volume?.id } }">{{ row.volume?.name || '-' }}</AccessibleResourceLink>
         </template>
       </ElTableColumn>
 
@@ -243,13 +246,12 @@ query();
         width="132"
         fixed="right">
         <template #default="{ row }">
-          <ElButton
+          <TableActionButton
             v-if="hasRole('disk-monitor:admin')"
-            size="small"
-            plain
+            action="detail"
             @click="router.push({path: `/admin/qtree/${row.id}`})">
             详情
-          </ElButton>
+          </TableActionButton>
         </template>
       </ElTableColumn>
     </DataTable>

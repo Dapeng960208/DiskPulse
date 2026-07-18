@@ -1,4 +1,6 @@
 import { flushPromises, shallowMount } from '@vue/test-utils';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({
@@ -64,6 +66,26 @@ describe('ForecastGovernancePage', () => {
     expect(wrapper.text()).not.toContain('后台预测和评估持续运行');
     expect(controlRow.text()).toContain('全局用户可见性');
     expect(controlRow.findComponent({ name: 'ElButton' }).exists()).toBe(true);
+  });
+
+  it('explains both MAPE metrics and keeps the evaluation table directly below its heading', () => {
+    const source = readFileSync(resolve('src/pages/admin/forecast-governance/ForecastGovernancePage.vue'), 'utf8');
+
+    expect(source).toContain('基线 MAPE：当前基线预测与实际容量的平均绝对百分比误差，数值越低越准确。');
+    expect(source).toContain('候选 MAPE：候选 AI 模型预测与实际容量的平均绝对百分比误差，数值越低越准确。');
+    expect(source).toContain('aria-label="基线 MAPE 说明"');
+    expect(source).toContain('aria-label="候选 MAPE 说明"');
+    expect(source).not.toContain('grid-template-rows: auto auto minmax(0, 1fr)');
+  });
+
+  it('keeps the control row and both table headings at their contracted dimensions', () => {
+    const source = readFileSync(resolve('src/pages/admin/forecast-governance/ForecastGovernancePage.vue'), 'utf8');
+
+    expect(source).toContain('.forecast-governance-page__setting { display: flex; align-items: center; gap: var(--spacing-md); height: 60px; }');
+    expect(source.match(/class="forecast-governance-page__section-heading"/g)).toHaveLength(2);
+    expect(source).toContain('.forecast-governance-page__section-heading { display: flex; align-items: center; justify-content: flex-start; height: 40px; text-align: left; }');
+    expect(source).toContain('.forecast-governance-page { display: grid; align-content: start; gap: var(--spacing-lg); }');
+    expect(source).toContain('.forecast-governance-page__section { display: grid; align-content: start; gap: var(--spacing-md); }');
   });
 
   it('creates a trimmed candidate and reloads governance state', async () => {

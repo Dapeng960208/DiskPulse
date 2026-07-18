@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { ElAlert, ElButton, ElDatePicker, ElDescriptions, ElDescriptionsItem, ElDialog, ElEmpty, ElForm, ElFormItem, ElInput, ElInputNumber, ElMessage, ElTable, ElTableColumn, ElTag } from 'element-plus';
 import capacityPredictionApi from '@/api/capacity-prediction-api.js';
 import { getChartColors, loadEcharts } from '@/lib/echarts.js';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 
 const props = defineProps({ assetType: { type: String, required: true }, assetId: { type: Number, required: true }, visible: { type: Boolean, default: false }, canManagePlans: { type: Boolean, default: false } });
 const prediction = ref(null);
@@ -150,10 +151,10 @@ async function createPlan() {
           label="P90"
           prop="p90" />
       </ElTable>
-      <div class="capacity-prediction-panel__plans"><span>已批准容量计划：{{ plans.length }} 项</span><ElButton
+      <div class="capacity-prediction-panel__plans"><span>已批准容量计划：{{ plans.length }} 项</span><TableActionButton
         v-if="canManagePlans"
-        size="small"
-        @click="openPlanDialog">新增计划</ElButton></div>
+        action="create"
+        @click="openPlanDialog">新增计划</TableActionButton></div>
       <p class="capacity-prediction-panel__audit">审计摘要：{{ auditSummary }}</p>
       <ElTable
         :data="relatedIncidents"

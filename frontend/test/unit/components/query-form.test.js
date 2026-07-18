@@ -99,6 +99,8 @@ describe('QueryForm progressive filter toolbar', () => {
       '搜索',
     ]);
     expect(buttons[3].attributes('data-type')).toBe('success');
+    expect(buttons[2].attributes('data-type')).toBeUndefined();
+    expect(buttons[4].attributes('data-type')).toBe('primary');
 
     await buttons[3].trigger('click');
     await buttons[2].trigger('click');

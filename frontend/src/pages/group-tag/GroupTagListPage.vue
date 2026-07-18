@@ -6,6 +6,7 @@ import DataTable from '@/components/data/DataTable.vue';
 import QueryForm from '@/components/form/QueryForm.vue';
 import { useQuery, useQueryParams } from '@/composables/query';
 import GroupTagFormDialog from './components/GroupTagFormDialog.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 
 const dialogRef = ref();
 const { queryParams, reset } = useQueryParams(() => ({ page: 1, size: 20, nameLike: null }));
@@ -64,21 +65,17 @@ query();
         width="160"
         fixed="right">
         <template #header>
-          <ElButton
-            size="small"
-            plain
-            type="primary"
-            @click="dialogRef.edit()">新增标签</ElButton>
+          <TableActionButton
+            action="create"
+            @click="dialogRef.edit()">新增标签</TableActionButton>
         </template>
         <template #default="{ row }">
-          <ElButton
-            link
-            type="primary"
-            @click="dialogRef.edit(row)">编辑</ElButton>
-          <ElButton
-            link
-            type="danger"
-            @click="confirmDelete(row)">删除</ElButton>
+          <TableActionButton
+            action="edit"
+            @click="dialogRef.edit(row)">编辑</TableActionButton>
+          <TableActionButton
+            action="delete"
+            @click="confirmDelete(row)">删除</TableActionButton>
         </template>
       </ElTableColumn>
     </DataTable>

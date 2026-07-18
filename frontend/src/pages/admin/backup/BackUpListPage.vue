@@ -9,6 +9,7 @@ import { hasRole } from '@/utils/authorization';
 import { useQuery, useQueryParams } from '@/composables/query';
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
 import { useCurrentUser } from '@/stores/current-user';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 const exportRef =ref(null);
 const currentUser = useCurrentUser();
 const router = useRouter();
@@ -230,22 +231,18 @@ query();
         width="160"
         fixed="right">
         <template #default="{ row }">
-          <ElButton
+          <TableActionButton
             v-if="hasRole('disk-monitor:admin') && row.status===2"
-            size="small"
-            type="danger"
-            plain
+            action="delete"
             @click="confirmDeleteBackUp(row)">
             删除备份
-          </ElButton>
-          <ElButton
+          </TableActionButton>
+          <TableActionButton
             v-if="hasRole('disk-monitor:admin') && row.status===2"
-            size="small"
-            type="success"
-            plain
+            action="rollback"
             @click="confirmRollBack(row)">
             回滚备份
-          </ElButton>
+          </TableActionButton>
         </template>
       </ElTableColumn>
     </DataTable>

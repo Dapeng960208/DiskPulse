@@ -14,9 +14,11 @@ import {
   ElTable,
   ElTableColumn,
   ElTag,
+  ElTooltip,
 } from 'element-plus';
 import capacityPredictionApi from '@/api/capacity-prediction-api.js';
 import aiApi from '@/api/ai-api.js';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 
 const visible = ref(false);
 const loading = ref(false);
@@ -137,7 +139,7 @@ onMounted(load);
     </section>
 
     <section class="forecast-governance-page__section">
-      <h3>模型状态</h3>
+      <h3 class="forecast-governance-page__section-heading">模型状态</h3>
       <ElTable
         :data="candidates"
         empty-text="暂无候选预测模型">
@@ -177,21 +179,21 @@ onMounted(load);
           width="120"
           align="right">
           <template #default="{ row }">
-            <ElButton
+            <TableActionButton
               v-if="!row.enabled"
-              size="small"
+              action="activate"
               :disabled="!row.activation_ready"
               :loading="activatingId === row.id"
               @click="activateCandidate(row)">
               启用
-            </ElButton>
+            </TableActionButton>
           </template>
         </ElTableColumn>
       </ElTable>
     </section>
 
     <section class="forecast-governance-page__section">
-      <h3>跨资源滚动回测评估</h3>
+      <h3 class="forecast-governance-page__section-heading">跨资源滚动回测评估</h3>
       <ElEmpty
         v-if="evaluationRows.length === 0"
         description="暂无完成的 30 天评估窗口"
@@ -209,13 +211,35 @@ onMounted(load);
           <template #default="{ row }">{{ row.window_start }} 至 {{ row.window_end }}</template>
         </ElTableColumn>
         <ElTableColumn
-          label="基线 MAPE"
           prop="baseline_mape"
-          width="120" />
+          width="120">
+          <template #header>
+            <span class="forecast-governance-page__metric-header">
+              基线 MAPE
+              <ElTooltip content="基线 MAPE：当前基线预测与实际容量的平均绝对百分比误差，数值越低越准确。">
+                <span
+                  class="forecast-governance-page__metric-help i-ri-question-line"
+                  tabindex="0"
+                  aria-label="基线 MAPE 说明" />
+              </ElTooltip>
+            </span>
+          </template>
+        </ElTableColumn>
         <ElTableColumn
-          label="候选 MAPE"
           prop="candidate_mape"
-          width="120" />
+          width="120">
+          <template #header>
+            <span class="forecast-governance-page__metric-header">
+              候选 MAPE
+              <ElTooltip content="候选 MAPE：候选 AI 模型预测与实际容量的平均绝对百分比误差，数值越低越准确。">
+                <span
+                  class="forecast-governance-page__metric-help i-ri-question-line"
+                  tabindex="0"
+                  aria-label="候选 MAPE 说明" />
+              </ElTooltip>
+            </span>
+          </template>
+        </ElTableColumn>
         <ElTableColumn
           label="耗尽风险覆盖"
           width="130">
@@ -260,11 +284,13 @@ onMounted(load);
 </template>
 
 <style scoped>
-.forecast-governance-page { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: var(--spacing-lg); }
-.forecast-governance-page__setting { display: flex; align-items: center; gap: var(--spacing-md); }
+.forecast-governance-page { display: grid; align-content: start; gap: var(--spacing-lg); }
+.forecast-governance-page__setting { display: flex; align-items: center; gap: var(--spacing-md); height: 60px; }
 .forecast-governance-page__setting strong { margin-right: auto; }
-.forecast-governance-page__section h3 { margin: 0; }
+.forecast-governance-page__section-heading { display: flex; align-items: center; justify-content: flex-start; height: 40px; text-align: left; }
 .forecast-governance-page__setting,
 .forecast-governance-page__section { padding: var(--spacing-md); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); }
-.forecast-governance-page__section { display: grid; gap: var(--spacing-md); }
+.forecast-governance-page__section { display: grid; align-content: start; gap: var(--spacing-md); }
+.forecast-governance-page__metric-header { display: inline-flex; align-items: center; gap: var(--spacing-xs); }
+.forecast-governance-page__metric-help { color: var(--text-tertiary); cursor: help; outline-offset: 2px; }
 </style>

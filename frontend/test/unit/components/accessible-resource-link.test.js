@@ -1,4 +1,6 @@
 import { defineComponent, h } from 'vue';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -28,12 +30,23 @@ function mountLink(to) {
 }
 
 describe('AccessibleResourceLink', () => {
-  it('renders a primary internal link only when the resolved route is accessible', async () => {
+  it('owns the lightweight resource-link appearance instead of inheriting Element Plus primary styles', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/basic/AccessibleResourceLink.vue'), 'utf8');
+
+    expect(source).toContain('class="accessible-resource-link__link"');
+    expect(source).toContain('font-weight: 400;');
+    expect(source).toContain('color: #5b84ad;');
+    expect(source).toContain('color: #4d759d;');
+    expect(source).not.toContain('type="primary"');
+  });
+
+  it('renders a lightweight internal link only when the resolved route is accessible', async () => {
     router.resolve.mockReturnValue({ meta: { isAccessible: () => 200 } });
     const wrapper = mountLink({ name: 'StorageClusterDetail', params: { id: 8 } });
 
     const link = wrapper.get('a');
-    expect(link.attributes('data-type')).toBe('primary');
+    expect(link.attributes('class')).toContain('accessible-resource-link__link');
+    expect(link.attributes('data-type')).toBeUndefined();
     expect(link.attributes('data-underline')).toBe('false');
     await link.trigger('click');
     expect(router.push).toHaveBeenCalledWith({ name: 'StorageClusterDetail', params: { id: 8 } });

@@ -11,6 +11,8 @@ import StorageClusterFormDialog from './components/StorageClusterFormDialog.vue'
 import Progress from '@/components/form//Progress.vue';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
+import AccessibleResourceLink from '@/components/basic/AccessibleResourceLink.vue';
 const router = useRouter();
 const formDialogRef = ref();
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
@@ -98,8 +100,9 @@ query();
         align="center"
         sortable="custom"
         min-width="150"
-        show-overflow-tooltip
-      />
+        show-overflow-tooltip>
+        <template #default="{ row }"><AccessibleResourceLink :to="{ name: 'StorageClusterDetail', params: { id: row.id } }">{{ row.name }}</AccessibleResourceLink></template>
+      </ElTableColumn>
       <ElTableColumn
         v-if="showSecondaryColumns"
         label="存储类型"
@@ -186,23 +189,20 @@ query();
         fixed="right"
       >
         <template #header>
-          <ElButton
+          <TableActionButton
             v-if="hasRole('disk-monitor:admin')"
-            size="small"
-            plain
-            type="primary"
+            action="create"
             @click="formDialogRef.edit()">
             添加集群
-          </ElButton>
+          </TableActionButton>
         </template>
         <template #default="{ row }">
           <div class="list-row-actions">
-            <ElButton
-              size="small"
-              plain
+            <TableActionButton
+              action="detail"
               @click="router.push({ path: `/admin/storage-cluster/${row.id}` })">
               详情
-            </ElButton>
+            </TableActionButton>
             <ElDropdown
               v-if="hasRole('disk-monitor:admin')"
               trigger="click"

@@ -314,6 +314,10 @@ const alerts = incidents.map((incident, index) => ({
     audits,
     aiModels,
     capacityPredictionSettings: { visible: true },
+    capacityPredictionPlans: [
+      { id: 1, asset_type: 'storage_usage', asset_id: '101', project_id: 1, effective_at: '2026-08-01T00:00:00Z', capacity_delta: 80, reason: 'Mock 演示扩容计划', created_at: '2026-07-18T09:00:00Z' },
+      { id: 2, asset_type: 'group', asset_id: '11', project_id: 1, effective_at: '2026-08-15T00:00:00Z', capacity_delta: 150, reason: 'Mock 演示项目组扩容计划', created_at: '2026-07-18T09:30:00Z' },
+    ],
     capacityPredictionCandidates,
     conversations,
     backups: usages.map((usage, index) => ({
@@ -376,6 +380,30 @@ export function createMockGateway() {
     `2026-07-${String(13 + index).padStart(2, '0')} 09:00:00`,
     Math.round((Number(item.used) || 200) * (0.82 + index * 0.035)),
   ]);
+  const capacityPredictionResource = (assetType, assetId) => {
+    const records = assetType === 'group' ? state.groups : state.usages;
+    const item = records.find((record) => record.id === Number(assetId));
+    if (!item) throw error(404, '容量预测资源不存在');
+    return item;
+  };
+  const capacityPrediction = (assetType, item) => ({
+    id: 1000 + item.id,
+    asset_type: assetType,
+    asset_id: String(item.id),
+    storage_cluster_id: item.storage_cluster_id,
+    project_id: item.project_id,
+    vendor: 'mock',
+    display_name: item.linux_path || item.name,
+    training_start: '2026-06-13T09:00:00Z',
+    training_end: '2026-07-18T09:00:00Z',
+    hard_limit: item.limit,
+    curve: resourceTrend(item).map(([observed_at, p50]) => ({ observed_at, p10: Math.round(p50 * 0.95), p50, p90: Math.round(p50 * 1.05) })),
+    exhaustion_dates: { p10: '2026-09-08', p50: '2026-09-22', p90: '2026-10-06' },
+    algorithm_version: 'capacity-ai-v2',
+    input_quality: { status: 'ready', coverage_ratio: 0.98, sample_count: 36, latest_observed_at: '2026-07-18T09:00:00Z', forecast_fresh_at: '2026-07-18T09:05:00Z', prediction_source: 'ai_candidate', candidate_version: 'capacity-ai-v2' },
+    backtest_mape: 9.8,
+    created_at: '2026-07-18T09:05:00Z',
+  });
   const findResource = (path, suffix) => {
     const match = path.match(new RegExp(`^/(projects|groups|storage-usages|aggregates|volumes|qtrees)/(\\d+)/${suffix}$`));
     if (!match) return null;
@@ -422,6 +450,29 @@ export function createMockGateway() {
       id: `${path.includes('forecasts') ? 'forecast' : 'anomaly'}-${index + 1}`,
       predicted_at: incident.last_evidence_at,
     })));
+    if (path === '/v1/capacity-predictions/visibility') return { visible: state.capacityPredictionSettings.visible === true };
+    const capacityPredictionResourcePath = path.match(/^\/v1\/capacity-predictions\/(group|storage_usage)\/(\d+)(?:\/(access|plans|related-incidents))?$/);
+    if (capacityPredictionResourcePath) {
+      const [, assetType, assetId, endpoint] = capacityPredictionResourcePath;
+      const item = capacityPredictionResource(assetType, assetId);
+      if (!allowed(account, item.project_id)) throw error(403);
+      if (state.capacityPredictionSettings.visible !== true) throw error(403, '容量预测已停用');
+      const canManagePlans = capabilities(account, item.project_id).adjust_quota;
+      if (endpoint === 'access') return { visible: true, can_manage_plans: canManagePlans };
+      if (endpoint === 'plans') {
+        if (verb === 'post') {
+          if (!canManagePlans) throw error(403);
+          const plan = { id: state.capacityPredictionPlans.length + 1, asset_type: assetType, asset_id: String(assetId), project_id: item.project_id, effective_at: body?.effective_at, capacity_delta: body?.capacity_delta, reason: body?.reason, created_at: '2026-07-18T10:00:00Z' };
+          state.capacityPredictionPlans.push(plan);
+          return plan;
+        }
+        return state.capacityPredictionPlans.filter((plan) => plan.asset_type === assetType && plan.asset_id === String(assetId));
+      }
+      if (endpoint === 'related-incidents') return state.incidents
+        .filter((incident) => incident.project_id === item.project_id && incident.category === 'capacity_pressure')
+        .map((incident) => ({ id: incident.id, category: incident.category, severity: incident.severity, status: incident.status, updated_at: incident.last_evidence_at, rca_confidence: 'high' }));
+      return capacityPrediction(assetType, item);
+    }
     const incident = path.match(/^\/v1\/incidents\/(\d+)(?:\/(diagnosis|comments))?$/);
     if (incident) {
       const item = state.incidents.find((record) => record.id === Number(incident[1]));

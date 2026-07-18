@@ -167,3 +167,38 @@ describe('global list row actions', () => {
     expect(aiSource).toContain('ElMessageBox.confirm');
   });
 });
+
+describe('unified list action adoption', () => {
+  const semanticActionContracts = [
+    ['src/components/audit/AuditEventTable.vue', ['detail']],
+    ['src/pages/admin/aggregate/AggregateListPage.vue', ['detail']],
+    ['src/pages/admin/ai/AiCenterPage.vue', ['create', 'edit']],
+    ['src/pages/admin/backup/BackUpListPage.vue', ['delete', 'rollback']],
+    ['src/pages/admin/forecast-governance/ForecastGovernancePage.vue', ['activate']],
+    ['src/pages/admin/qtree/QtreeListPage.vue', ['detail']],
+    ['src/pages/admin/storage-cluster/components/ClusterIncidentsTab.vue', ['detail']],
+    ['src/pages/admin/storage-cluster/StorageClusterListPage.vue', ['create', 'detail']],
+    ['src/pages/admin/user/UserListPage.vue', ['create', 'sync', 'edit', 'delete']],
+    ['src/pages/admin/volume/VolumeListPage.vue', ['detail']],
+    ['src/pages/capacity-prediction/CapacityPredictionPanel.vue', ['create']],
+    ['src/pages/group/GroupListPage.vue', ['create', 'detail']],
+    ['src/pages/group-tag/GroupTagListPage.vue', ['create', 'edit', 'delete']],
+    ['src/pages/incident/IncidentCenterPage.vue', ['detail', 'edit']],
+    ['src/pages/project/components/ProjectMembersTab.vue', ['edit', 'remove']],
+    ['src/pages/project/components/ProjectTable.vue', ['create', 'edit', 'detail']],
+    ['src/pages/usage/UsageListPage.vue', ['create', 'detail']],
+  ];
+
+  it.each(semanticActionContracts)('%s uses semantic small plain actions', (file, actions) => {
+    const source = readPage(file);
+
+    expect(source).toContain("@/components/basic/TableActionButton.vue");
+    for (const action of actions) {
+      expect(source).toContain(`action="${action}"`);
+    }
+  });
+
+  it('removes link-style buttons from the group-tag operation column', () => {
+    expect(readPage('src/pages/group-tag/GroupTagListPage.vue')).not.toMatch(/<ElButton\s+link/);
+  });
+});

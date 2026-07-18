@@ -12,6 +12,8 @@ import ProjectFormDialog from './ProjectFormDialog.vue';
 import UserAvatar from '@/components/data/UserAvatar.vue'
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
+import AccessibleResourceLink from '@/components/basic/AccessibleResourceLink.vue';
 const projectFormDialogRef = ref();
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 const { queryParams, reset } = useQueryParams(() => ({
@@ -71,8 +73,9 @@ query();
         align="center"
         sortable
         min-width="160"
-        show-overflow-tooltip
-      />
+        show-overflow-tooltip>
+        <template #default="{ row }"><AccessibleResourceLink :to="{ name: 'ProjectDetail', params: { id: row.id } }">{{ row.name }}</AccessibleResourceLink></template>
+      </ElTableColumn>
       <ElTableColumn
         v-if="showSecondaryColumns"
         label="存储集群"
@@ -82,7 +85,7 @@ query();
           <template v-if="row.storage_clusters?.length">
             <div
               v-for="cluster in row.storage_clusters"
-              :key="cluster.id">{{ cluster.name }}</div>
+              :key="cluster.id"><AccessibleResourceLink :to="{ name: 'StorageClusterDetail', params: { id: cluster.id } }">{{ cluster.name }}</AccessibleResourceLink></div>
           </template>
           <span v-else>-</span>
         </template>
@@ -167,29 +170,25 @@ query();
         width="132"
         fixed="right">
         <template #header>
-          <ElButton
-            size="small"
-            plain
-            type="primary"
+          <TableActionButton
+            action="create"
             @click="projectFormDialogRef.edit()">
             添加项目
-          </ElButton>
+          </TableActionButton>
         </template>
         <template #default="{ row }">
 
           <!-- v-if="hasRole('disk-monitor:admin')" -->
-          <ElButton
-            size="small"
-            plain
+          <TableActionButton
+            action="edit"
             @click="projectFormDialogRef.edit(row)">
             编辑
-          </ElButton>
-          <ElButton
-            size="small"
-            plain
+          </TableActionButton>
+          <TableActionButton
+            action="detail"
             @click="router.push({path: `/project/${row.id}`})">
             详情
-          </ElButton>
+          </TableActionButton>
 
         </template>
       </ElTableColumn>

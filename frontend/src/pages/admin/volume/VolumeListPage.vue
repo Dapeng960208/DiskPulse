@@ -12,6 +12,8 @@ import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 import { getStorageResourceNativeType } from '@/utils/storage-resource';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
+import AccessibleResourceLink from '@/components/basic/AccessibleResourceLink.vue';
 const router = useRouter();
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 
@@ -83,7 +85,7 @@ query();
         min-width="140"
       >
         <template #default="{ row }">
-          <span>{{ row.storage_cluster?.name || '-' }}</span>
+          <AccessibleResourceLink :to="{ name: 'StorageClusterDetail', params: { id: row.storage_cluster?.id } }">{{ row.storage_cluster?.name || '-' }}</AccessibleResourceLink>
         </template>
       </ElTableColumn>
       <ElTableColumn
@@ -100,8 +102,9 @@ query();
         align="center"
         prop="name"
         min-width="180"
-        show-overflow-tooltip
-      />
+        show-overflow-tooltip>
+        <template #default="{ row }"><AccessibleResourceLink :to="{ name: 'VolumeDetail', params: { id: row.id } }">{{ row.name }}</AccessibleResourceLink></template>
+      </ElTableColumn>
       <ElTableColumn
         v-if="showSecondaryColumns"
         label="服务域（SVM / Access Zone）"
@@ -238,13 +241,12 @@ query();
         width="132"
         fixed="right">
         <template #default="{ row }">
-          <ElButton
+          <TableActionButton
             v-if="hasRole('disk-monitor:admin')"
-            size="small"
-            plain
+            action="detail"
             @click="router.push({path: `/admin/volume/${row.id}`})">
             详情
-          </ElButton>
+          </TableActionButton>
         </template>
       </ElTableColumn>
     </DataTable>
