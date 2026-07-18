@@ -8,6 +8,12 @@
 - 新增默认关闭的 `incident_notifications` 配置；开启后默认通知管理员，项目负责人、成员、额外用户和飞书/邮件通道均需显式启用。AI 只可读取当前用户有权查看的诊断摘要，服务端拒绝模型新增事实、证据或置信度。
 - 已完成本地单元/聚焦验证；真实 NetApp/PowerScale 回放、QuestDB/Redis/Celery、通知通道、容量 MAPE 与 RCA Top-3 结果仍待隔离环境验收，因此高置信度开关默认关闭。详见[专题总览](../features/forecast-incident-center/overview.md)。
 
+## 2026-07-18：跨栈代码审查问题修复
+
+- 修复 MySQL 项目负责人旧外键删除顺序、失败遥测错误码持久化与 r10 既有账本升级；Alembic 唯一 head 更新为 `000000000010`。
+- Dashboard 对普通项目成员先要求项目范围，存储告警投递改为带租约的原子领取；AI 未知工具安全完成 SSE，图表异步初始化可取消，项目成员授权失败会明确提示。
+- 安全审查遗留修复合入后，全量后端 `533 passed`、前端覆盖率 `412 passed`（Statements/Lines `97.90%`、Branches `87.24%`、Functions `82.51%`），前端 lint 和生产构建通过。详细问题表、提交和剩余验证边界见[代码审查问题修复复盘](../features/review-remediation/verification.md)。
+
 ## 2026-07-18：遥测新鲜度与平台可观测
 
 - 容量、厂商事件和性能三条采集链路新增独立运行账本，记录集群级最后结果、UTC 时间、新鲜度所需的最后成功状态和安全 `trace_id`；不再依赖 `StorageCluster.updated_at` 或日志判断采集状态。

@@ -1028,3 +1028,12 @@
 - 修复：将遥测约束变更合入单一 `000000000010_forecast_incidents`；要求相邻异常点恰隔 5 分钟；按 UTC 当前时间判断静默有效期；拆开飞书和邮件投递条件。
 - 验证：四条 RED 回归均失败后转绿；Alembic `heads` 显示唯一 `000000000010 (head)`，后端全量、前端事件中心聚焦测试和测试模式构建通过。
 - 风险：真实 PostgreSQL 升级、Redis/Celery 任务、QuestDB 样本和外部通知通道仍未在隔离环境执行。
+
+### 2026-07-18：隔离 worktree 缺少本地 Python 与前端依赖
+
+- 触发：在 `D:\dev\DiskPulse\.worktrees\review-fixes` 执行后端全量测试和前端 Vitest。
+- 现象：`..\.venv\Scripts\python.exe` 不存在；首次 Vitest 无法找到 `frontend/node_modules`。
+- 根因：Git worktree 不复制被忽略的本地虚拟环境与 Node 依赖目录。
+- 修复：后端显式使用主工作区只读解释器 `D:\dev\DiskPulse\.venv\Scripts\python.exe`；前端在隔离 worktree 执行 `npm ci` 恢复 lockfile 对应依赖。
+- 验证：后端全量 `530 passed`，前端 coverage `67 files / 412 passed`、lint 与生产构建通过。
+- 风险：依赖目录不应提交；后续新 worktree 仍需按环境初始化步骤准备。

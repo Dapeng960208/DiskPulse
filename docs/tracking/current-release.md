@@ -44,6 +44,26 @@
 - 应用内浏览器当前拦截 `127.0.0.1`（`ERR_BLOCKED_BY_CLIENT`），未绕过该策略执行截图或真实交互；前端浏览器验收待可访问本机/部署 URL 后补做。
 - 当前虚拟环境没有 Ruff，未新增依赖；Python 静态 lint 待 CI/依赖环境提供该工具后补跑。
 
+## 2026-07-18：跨栈代码审查修复与本地 main 合入
+
+### 已完成
+
+- 在独立 `codex/review-fixes` worktree 中按前端、后端、数据库读写和 Celery 结论修复 7 项问题：MySQL 外键删除顺序、项目成员 Dashboard 范围、告警投递租约、遥测失败错误码及 r10 存量迁移、未知 AI 工具 SSE 完成、ECharts 卸载竞态、成员授权失败提示。
+- 每项生产行为修复均先提交 RED 再提交 GREEN；代码修复处保留 `Review fix:` 注释。补强既有 SQLite r8 账本升级至 r10 后写入失败错误码的实际迁移回归。
+- 新增[代码审查问题修复复盘](../features/review-remediation/verification.md)，其中包含按严重度排序的问题、影响范围、位置、提交证据、验证与风险。
+- 安全审查遗留分支已在修复 worktree 合并并解决告警重试测试冲突；本地 `main` 将快进到该验证通过的提交链，原主工作区的其他集成分支不被改写。
+
+### 验证状态
+
+- 合并安全审查遗留修复后的后端全量：`D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test -q`，`533 passed`；告警、路由错误路径和 AI 相关聚焦组合 `54 passed`。
+- 前端全量 coverage：`67 files / 412 passed`；Statements/Lines `97.90%`、Branches `87.24%`、Functions `82.51%`。`npm run lint` 和 `npm run build:prod` 通过。
+- 迁移：`compileall`、Alembic `heads/history` 与跨方言迁移编译通过；唯一 head 为 `000000000010`。
+
+### 风险与后续
+
+- 真实 PostgreSQL/MySQL 在线迁移、Redis/Celery 多 worker 告警竞争、飞书投递、设备 API 及已登录浏览器 E2E 未在本地执行；须在部署或集成环境继续验收。
+- 前端构建保留既有 `%VITE_APP_TITLE%` 未定义和大 chunk 警告，不是本次修复引入。
+
 ## 2026-07-18：遥测可观测复查与复盘交付
 
 ### 已完成
