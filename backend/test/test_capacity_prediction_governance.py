@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -32,6 +33,56 @@ def test_ai_curve_requires_exactly_30_ordered_nonnegative_quantiles():
     invalid[3]["p10"] = 99.0
     with pytest.raises(ValueError, match="quantile"):
         validate_ai_prediction_curve(invalid, forecast_start=UTC_NOW)
+
+
+def test_ai_candidate_uses_only_aggregate_input_and_falls_back_to_baseline_on_invalid_output():
+    from services.capacityPredictionGovernanceService import generate_candidate_curve_with_fallback
+
+    calls = []
+
+    def invalid_completion(_model, messages, *, tools):
+        calls.append((messages, tools))
+        return SimpleNamespace(text="not-json")
+
+    baseline = _curve(UTC_NOW)
+    result = generate_candidate_curve_with_fallback(
+        model=SimpleNamespace(),
+        asset_type="storage_usage",
+        points=[(UTC_NOW - timedelta(days=1), 42.0)],
+        hard_limit=100.0,
+        approved_plans=[{"effective_at": UTC_NOW.isoformat(), "capacity_delta": 8.0}],
+        forecast_start=UTC_NOW,
+        baseline_curve=baseline,
+        completion=invalid_completion,
+    )
+
+    assert result.source == "baseline_fallback"
+    assert result.curve == baseline
+    assert result.fallback_reason == "invalid_output"
+    serialized = str(calls[0][0])
+    assert "storage_usage" in serialized
+    assert "42.0" in serialized
+    assert "linux_path" not in serialized
+    assert calls[0][1] == []
+
+
+def test_ai_candidate_accepts_a_valid_30_day_prediction_curve():
+    from services.capacityPredictionGovernanceService import generate_candidate_curve_with_fallback
+
+    result = generate_candidate_curve_with_fallback(
+        model=SimpleNamespace(),
+        asset_type="group",
+        points=[(UTC_NOW - timedelta(days=1), 42.0)],
+        hard_limit=100.0,
+        approved_plans=[],
+        forecast_start=UTC_NOW,
+        baseline_curve=_curve(UTC_NOW),
+        completion=lambda *_args, **_kwargs: SimpleNamespace(text='{"curve": ' + str(_curve(UTC_NOW)).replace("'", '"') + '}'),
+    )
+
+    assert result.source == "ai_candidate"
+    assert result.fallback_reason is None
+    assert len(result.curve) == 30
 
 
 def test_candidate_activation_needs_three_windows_ten_percent_mape_gain_and_risk_coverage():

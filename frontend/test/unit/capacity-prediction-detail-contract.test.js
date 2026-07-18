@@ -35,4 +35,13 @@ describe('resource capacity prediction detail contracts', () => {
     expect(governance).toContain('activateCandidate');
     expect(api).toContain('capacity-prediction-candidates');
   });
+
+  it('explains prediction confidence, model fallback, and related incident boundaries', () => {
+    const panel = source('src/pages/capacity-prediction/CapacityPredictionPanel.vue');
+
+    expect(panel).toContain('数据质量');
+    expect(panel).toContain('模型版本');
+    expect(panel).toContain('关联事件');
+    expect(panel).toContain('基线回退');
+  });
 });
