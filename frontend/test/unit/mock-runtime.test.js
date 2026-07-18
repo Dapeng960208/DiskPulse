@@ -104,6 +104,23 @@ describe('frontend mock runtime', () => {
     expect(tags.content.some((tag) => tag.id === created.id)).toBe(false);
   });
 
+  it('supplies candidate models and completed evaluation windows for capacity prediction governance', async () => {
+    const gateway = createMockGateway();
+    const admin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    const settings = await gateway.request('get', '/v1/admin/capacity-prediction-settings', undefined, admin.token);
+    const candidates = await gateway.request('get', '/v1/admin/capacity-prediction-candidates', undefined, admin.token);
+
+    expect(settings.visible).toBe(true);
+    expect(candidates).toHaveLength(2);
+    expect(candidates[0]).toMatchObject({
+      version: 'capacity-ai-v2',
+      ai_model_id: 1,
+      activation_ready: true,
+    });
+    expect(candidates[0].evaluations).toHaveLength(3);
+  });
+
   it('gives the superadmin five or more records for every visible mock data source', async () => {
     const gateway = createMockGateway();
     const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);

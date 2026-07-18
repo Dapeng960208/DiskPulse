@@ -8,8 +8,12 @@ const api = vi.hoisted(() => ({
   createCandidate: vi.fn(),
   activateCandidate: vi.fn(),
 }));
+const aiApi = vi.hoisted(() => ({
+  listAdminModels: vi.fn(),
+}));
 
 vi.mock('@/api/capacity-prediction-api.js', () => ({ default: api }));
+vi.mock('@/api/ai-api.js', () => ({ default: aiApi }));
 
 import ForecastGovernancePage from '@/pages/admin/forecast-governance/ForecastGovernancePage.vue';
 
@@ -31,6 +35,10 @@ describe('ForecastGovernancePage', () => {
     api.updateSettings.mockResolvedValue({ visible: true });
     api.createCandidate.mockResolvedValue({ id: 5 });
     api.activateCandidate.mockResolvedValue({ id: 4, enabled: true });
+    aiApi.listAdminModels.mockResolvedValue([
+      { id: 3, name: '公有预测模型', provider: 'openai', model: 'gpt-forecast', enabled: false },
+      { id: 4, name: '本地预测模型', provider: 'ollama', model: 'forecast-local', enabled: true },
+    ]);
   });
 
   it('updates global visibility and reports save failures', async () => {
@@ -55,7 +63,7 @@ describe('ForecastGovernancePage', () => {
     expect(wrapper.find('h2').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('后台预测和评估持续运行');
     expect(controlRow.text()).toContain('全局用户可见性');
-    expect(controlRow.text()).toContain('新增候选模型');
+    expect(controlRow.findComponent({ name: 'ElButton' }).exists()).toBe(true);
   });
 
   it('creates a trimmed candidate and reloads governance state', async () => {
@@ -70,6 +78,19 @@ describe('ForecastGovernancePage', () => {
     expect(api.createCandidate).toHaveBeenCalledWith({ version: 'capacity-ai-v3', ai_model_id: 12 });
     expect(api.settings).toHaveBeenCalledTimes(2);
     expect(wrapper.vm.createDialogVisible).toBe(false);
+  });
+
+  it('offers every AI Center model in the candidate-model dropdown without provider or enabled filtering', async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    await wrapper.vm.openCreateDialog();
+
+    expect(aiApi.listAdminModels).toHaveBeenCalledTimes(1);
+    expect(wrapper.vm.configuredModels).toEqual([
+      { id: 3, name: '公有预测模型', provider: 'openai', model: 'gpt-forecast', enabled: false },
+      { id: 4, name: '本地预测模型', provider: 'ollama', model: 'forecast-local', enabled: true },
+    ]);
   });
 
   it('activates an eligible candidate and reports a rejected activation', async () => {

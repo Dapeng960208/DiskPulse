@@ -539,13 +539,8 @@ def create_capacity_prediction_candidate(db, *, version: str, ai_model_id: int) 
     if capacityPredictionCrud.get_candidate_by_version(db, version) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="capacity prediction version already exists")
     model = db.get(AIConfig, ai_model_id)
-    if model is None or model.enabled is not True:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="approved AI model is required")
-    if model.provider != "ollama":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="private AI model is required for capacity prediction",
-        )
+    if model is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="configured AI model is required")
     try:
         return capacityPredictionCrud.add_candidate(
             db,
@@ -616,13 +611,8 @@ def activate_capacity_prediction_candidate(db, *, candidate_id: int) -> Capacity
     if candidate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="capacity prediction candidate was not found")
     model = db.get(AIConfig, candidate.ai_model_id)
-    if model is None or model.enabled is not True:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="approved AI model is required")
-    if model.provider != "ollama":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="private AI model is required for capacity prediction",
-        )
+    if model is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="configured AI model is required")
     evaluations = capacityPredictionCrud.list_candidate_evaluations(db, candidate_id=candidate_id)
     evaluation_rows = [
         {

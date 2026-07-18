@@ -8,18 +8,21 @@ import {
   ElForm,
   ElFormItem,
   ElInput,
-  ElInputNumber,
+  ElOption,
+  ElSelect,
   ElSwitch,
   ElTable,
   ElTableColumn,
   ElTag,
 } from 'element-plus';
 import capacityPredictionApi from '@/api/capacity-prediction-api.js';
+import aiApi from '@/api/ai-api.js';
 
 const visible = ref(false);
 const loading = ref(false);
 const error = ref('');
 const candidates = ref([]);
+const configuredModels = ref([]);
 const activatingId = ref(null);
 const createDialogVisible = ref(false);
 const creating = ref(false);
@@ -62,9 +65,17 @@ async function update(value) {
   }
 }
 
-function openCreateDialog() {
+async function openCreateDialog() {
   candidateForm.version = '';
   candidateForm.aiModelId = null;
+  error.value = '';
+  try {
+    const models = await aiApi.listAdminModels();
+    configuredModels.value = Array.isArray(models) ? models : [];
+  } catch {
+    configuredModels.value = [];
+    error.value = '加载 AI 中心模型失败';
+  }
   createDialogVisible.value = true;
 }
 
@@ -80,7 +91,7 @@ async function createCandidate() {
     createDialogVisible.value = false;
     await load();
   } catch {
-    error.value = '创建候选模型失败；仅可使用已启用的私有模型';
+    error.value = '创建候选模型失败';
   } finally {
     creating.value = false;
   }
@@ -106,16 +117,6 @@ onMounted(load);
   <section
     v-loading="loading"
     class="forecast-governance-page">
-    <header class="forecast-governance-page__header">
-      <div>
-        <h2>容量预测治理</h2>
-        <p>后台预测和评估持续运行；发布开关仅控制拥有项目权限的成员能否查看资源级预测。</p>
-      </div>
-      <ElButton
-        type="primary"
-        @click="openCreateDialog">新增候选模型</ElButton>
-    </header>
-
     <ElAlert
       v-if="error"
       :title="error"
@@ -123,16 +124,16 @@ onMounted(load);
       :closable="false" />
 
     <section class="forecast-governance-page__setting">
-      <div>
-        <strong>全局用户可见性</strong>
-        <p>关闭后普通用户的页签和读取接口均不可用；超级管理员仍可治理和查看。</p>
-      </div>
+      <strong>全局用户可见性</strong>
       <ElSwitch
         :model-value="visible"
         :loading="loading"
         active-text="向项目成员发布"
         inactive-text="仅超级管理员可见"
         @change="update" />
+      <ElButton
+        type="primary"
+        @click="openCreateDialog">新增候选模型</ElButton>
     </section>
 
     <section class="forecast-governance-page__section">
@@ -234,12 +235,17 @@ onMounted(load);
             maxlength="64"
             placeholder="例如 capacity-ai-v2" />
         </ElFormItem>
-        <ElFormItem label="已启用私有模型 ID">
-          <ElInputNumber
+        <ElFormItem label="AI 中心模型">
+          <ElSelect
             v-model="candidateForm.aiModelId"
-            :min="1"
-            :precision="0"
-            class="!w-full" />
+            class="!w-full"
+            placeholder="请选择已配置模型">
+            <ElOption
+              v-for="model in configuredModels"
+              :key="model.id"
+              :label="`${model.name}（${model.model}）`"
+              :value="model.id" />
+          </ElSelect>
         </ElFormItem>
       </ElForm>
       <template #footer>
@@ -254,13 +260,10 @@ onMounted(load);
 </template>
 
 <style scoped>
-.forecast-governance-page { display: grid; gap: var(--spacing-lg); }
-.forecast-governance-page__header,
-.forecast-governance-page__setting { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-md); }
-.forecast-governance-page__header h2,
+.forecast-governance-page { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: var(--spacing-lg); }
+.forecast-governance-page__setting { display: flex; align-items: center; gap: var(--spacing-md); }
+.forecast-governance-page__setting strong { margin-right: auto; }
 .forecast-governance-page__section h3 { margin: 0; }
-.forecast-governance-page__header p,
-.forecast-governance-page__setting p { margin: var(--spacing-xs) 0 0; color: var(--text-secondary); }
 .forecast-governance-page__setting,
 .forecast-governance-page__section { padding: var(--spacing-md); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); }
 .forecast-governance-page__section { display: grid; gap: var(--spacing-md); }

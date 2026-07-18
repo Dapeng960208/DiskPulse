@@ -171,6 +171,34 @@ const alerts = incidents.map((incident, index) => ({
     temperature: 0.3,
     max_tokens: 2048,
   }));
+  const capacityPredictionCandidates = [
+    {
+      id: 1,
+      version: 'capacity-ai-v2',
+      ai_model_id: 1,
+      enabled: true,
+      activation_ready: true,
+      forecast_count: 18,
+      fallback_count: 1,
+      evaluations: [
+        { baseline_mape: 12.4, candidate_mape: 9.8, risk_coverage_ok: true, window_start: '2026-04-01T00:00:00Z', window_end: '2026-05-01T00:00:00Z' },
+        { baseline_mape: 11.9, candidate_mape: 9.2, risk_coverage_ok: true, window_start: '2026-05-01T00:00:00Z', window_end: '2026-05-31T00:00:00Z' },
+        { baseline_mape: 12.1, candidate_mape: 9.4, risk_coverage_ok: true, window_start: '2026-05-31T00:00:00Z', window_end: '2026-06-30T00:00:00Z' },
+      ],
+    },
+    {
+      id: 2,
+      version: 'capacity-ai-v3',
+      ai_model_id: 3,
+      enabled: false,
+      activation_ready: false,
+      forecast_count: 6,
+      fallback_count: 0,
+      evaluations: [
+        { baseline_mape: 10.8, candidate_mape: 9.9, risk_coverage_ok: true, window_start: '2026-06-01T00:00:00Z', window_end: '2026-07-01T00:00:00Z' },
+      ],
+    },
+  ];
   const conversations = aiModels.map((model, index) => ({
     id: index + 1,
     title: `${model.name}会话`,
@@ -197,6 +225,8 @@ const alerts = incidents.map((incident, index) => ({
     alerts,
     audits,
     aiModels,
+    capacityPredictionSettings: { visible: true },
+    capacityPredictionCandidates,
     conversations,
     backups: usages.map((usage, index) => ({
       id: index + 1,
@@ -354,6 +384,25 @@ export function createMockGateway() {
     if (projectMatch) { const item = state.projects.find((record) => record.id === Number(projectMatch[1])); if (!item || !allowed(account, item.id)) throw error(403); return { ...item, capabilities: capabilities(account, item.id) }; }
     if (path === '/projects') return page(scoped(account, state.projects.map((item) => ({ ...item, project_id: item.id, capabilities: capabilities(account, item.id) }))));
     if (path === '/ai/models') return state.aiModels.filter((model) => model.enabled && model.enable_chat);
+    if (path === '/v1/admin/capacity-prediction-settings') {
+      if (verb === 'patch') Object.assign(state.capacityPredictionSettings, { visible: body?.user_visible === true });
+      return state.capacityPredictionSettings;
+    }
+    if (path === '/v1/admin/capacity-prediction-candidates') {
+      if (verb === 'post') {
+        const item = { id: state.capacityPredictionCandidates.length + 1, version: body?.version, ai_model_id: body?.ai_model_id, enabled: false, activation_ready: false, forecast_count: 0, fallback_count: 0, evaluations: [] };
+        state.capacityPredictionCandidates.push(item);
+        return item;
+      }
+      return state.capacityPredictionCandidates;
+    }
+    const capacityPredictionCandidate = path.match(/^\/v1\/admin\/capacity-prediction-candidates\/(\d+)\/activate$/);
+    if (capacityPredictionCandidate && verb === 'post') {
+      const item = state.capacityPredictionCandidates.find((record) => record.id === Number(capacityPredictionCandidate[1]));
+      if (!item) throw error(404);
+      state.capacityPredictionCandidates.forEach((record) => { record.enabled = record.id === item.id; });
+      return item;
+    }
     if (path === '/ai/conversations') {
       if (verb === 'post') { const item = { id: state.conversations.length + 1, title: body?.title || '新对话', model_id: body?.model_id || 1, messages: [] }; state.conversations.unshift(item); return item; }
       return state.conversations;
