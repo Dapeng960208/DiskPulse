@@ -105,23 +105,7 @@ query();
       </ElTableColumn>
       <ElTableColumn
         v-if="showCapacityColumns"
-        label="PT经理"
-        align="center"
-        sortable
-        min-width="160"
-      >
-        <template #default="{ row }">
-          <div style="display: flex; align-items: center; justify-content: center;">
-            <UserAvatar
-              v-if="row.pt_user && row.pt_user.avatar_url"
-              :src="row.pt_user.avatar_url" />
-            <span style="margin-left: 8px;">{{ row?.pt_user?.rd_username }} {{ row?.pt_user?.username }}</span>
-          </div>
-        </template>
-      </ElTableColumn>
-      <ElTableColumn
-        v-if="showCapacityColumns"
-        label="开发代表"
+        label="项目负责人"
         align="center"
         sortable
         min-width="160"
