@@ -663,6 +663,43 @@ def test_fixed_history_replay_meets_capacity_mape_and_rca_top_three_gates():
     assert hit_rate >= 0.80
 
 
+def test_performance_asset_keeps_vendor_uuid_off_integer_volume_id_predicate():
+    """Review source: UUID/name identifiers were compared with integer Volume.id.
+
+    Resolution contract: non-numeric vendor identifiers only participate in
+    string-column matching, avoiding PostgreSQL integer/text comparison errors.
+    """
+    from celery_tasks.tasks import forecast_incidents
+
+    statements = []
+
+    class Result:
+        @staticmethod
+        def scalar_one_or_none():
+            return None
+
+    class Database:
+        @staticmethod
+        def execute(statement):
+            statements.append(str(statement))
+            return Result()
+
+    class Cluster:
+        id = 7
+        name = "cluster-7"
+        storage_type = "netapp"
+
+    forecast_incidents._performance_asset(
+        Database(),
+        cluster=Cluster(),
+        object_type="volume",
+        object_id="4f8bd4ef-4157-4d3f-b902-a61060ad20e8",
+        object_name="volume-a",
+    )
+
+    assert "volumes.id =" not in statements[0]
+
+
 def test_performance_task_writes_only_after_three_consecutive_five_minute_anomalies():
     from celery_tasks.tasks import forecast_incidents
 

@@ -463,10 +463,19 @@ def run_telemetry_quality_snapshots(*, now: datetime | None = None) -> int:
 
 def _performance_asset(db, *, cluster: StorageCluster, object_type: str, object_id: str, object_name: str | None) -> tuple[AssetRef, str]:
     if object_type == "volume":
+        name_candidates = {object_id}
+        if object_name:
+            name_candidates.add(object_name)
+        volume_match = Volume.name.in_(sorted(name_candidates))
+        # Review source: vendor UUID/name values were bound against integer
+        # Volume.id. Resolution: only an ASCII-decimal identifier may add the
+        # integer primary-key predicate; all other identifiers stay on name.
+        if object_id.isascii() and object_id.isdecimal():
+            volume_match = volume_match | (Volume.id == int(object_id))
         volume = db.execute(
             select(Volume).where(
                 Volume.storage_cluster_id == cluster.id,
-                (Volume.name == object_id) | (Volume.name == object_name) | (Volume.id == object_id),
+                volume_match,
             )
         ).scalar_one_or_none()
         if volume is not None:
