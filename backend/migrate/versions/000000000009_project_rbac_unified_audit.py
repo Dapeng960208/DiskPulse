@@ -97,6 +97,17 @@ def _sqlite_batch_alter_projects(copy_from: sa.Table, alter) -> None:
                 connection.exec_driver_sql("PRAGMA foreign_keys=ON")
 
 
+def _mysql_pt_user_fk_names(foreign_keys) -> tuple[str, ...]:
+    """Return only the legacy projects.pt_user_id -> users.id constraints."""
+    return tuple(
+        foreign_key["name"]
+        for foreign_key in foreign_keys
+        if foreign_key.get("name")
+        and foreign_key.get("constrained_columns") == ["pt_user_id"]
+        and foreign_key.get("referred_table") == "users"
+    )
+
+
 def _drop_pt_user_column() -> None:
     context = op.get_context()
     if context.dialect.name == "sqlite":
@@ -104,6 +115,14 @@ def _drop_pt_user_column() -> None:
             _sqlite_projects_table(include_pt_user=True),
             lambda batch_op: batch_op.drop_column("pt_user_id"),
         )
+        return
+    if context.dialect.name == "mysql" and not context.as_sql:
+        # Review fix: MySQL refuses to drop a column while its legacy FK exists.
+        foreign_keys = sa.inspect(op.get_bind()).get_foreign_keys("projects")
+        with op.batch_alter_table("projects") as batch_op:
+            for foreign_key_name in _mysql_pt_user_fk_names(foreign_keys):
+                batch_op.drop_constraint(foreign_key_name, type_="foreignkey")
+            batch_op.drop_column("pt_user_id")
         return
     with op.batch_alter_table("projects") as batch_op:
         batch_op.drop_column("pt_user_id")
