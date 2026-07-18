@@ -25,9 +25,10 @@ onBeforeMount(() => {
 <template>
   <section class="detail-monitor-page">
     <template v-if="activeView === 'realtime'">
-      <div class="flex justify-end mb-4">
+      <div
+        v-if="predictionVisible"
+        class="detail-monitor-page__actions flex justify-end mb-4">
         <ElButton
-          v-if="predictionVisible"
           data-testid="capacity-prediction-entry"
           type="primary"
           @click="activeView = 'prediction'">容量预测</ElButton>
