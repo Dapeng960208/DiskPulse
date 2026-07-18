@@ -1,5 +1,14 @@
 # 错误记录
 
+### 2026-07-18：乱序证据回拨 Incident 最近证据时间
+
+- 触发：先关联 08:10 的证据，再接收同一事件桶内迟到的 08:05 唯一证据。
+- 现象：`last_evidence_at` 从 08:10 回拨为 08:05。
+- 根因：既有 Incident 分支无条件用当前输入的 `observed_at` 覆盖汇总时间。
+- 修复：统一使用 `max(current, observed)` 更新汇总时间；证据行继续保存自身原始 `observed_at`。
+- 验证：乱序证据与同桶/跨桶重开回归合计 `3 passed`。
+- 风险：本地未模拟多个 Celery worker 对同一 Incident 的数据库级并发更新；部署环境仍需观察锁与事务隔离行为。
+
 ### 2026-07-18：Mock 通用表映射暴露系统资源给项目角色
 
 - 触发：使用 `demo-project-admin` 读取 `/storage-clusters` 等系统资源。

@@ -416,6 +416,17 @@ def _correlation_key(asset_ref: AssetRef, category: str) -> str:
     return ":".join((str(asset_ref.storage_cluster_id), asset_ref.asset_type, asset_ref.asset_id, category))
 
 
+def _latest_evidence_time(incident: Incident, observed_at: datetime) -> datetime:
+    """Keep the incident summary timestamp monotonic while accepting late evidence."""
+    observed_at = _utc(observed_at)
+    if incident.last_evidence_at is None:
+        return observed_at
+    # Review source: an out-of-order sample overwrote the newest evidence time.
+    # Resolution: summarize with max(current, observed) while still persisting
+    # every unique evidence row at its original observed_at.
+    return max(_utc(incident.last_evidence_at), observed_at)
+
+
 def _severity(envelope: TelemetryEnvelope) -> str:
     if isinstance(envelope.value, dict):
         raw = str(envelope.value.get("severity") or "warning").lower()
@@ -500,7 +511,7 @@ def correlate_incident(db, envelope: TelemetryEnvelope, *, category: str) -> Cor
         require_incident_transition("resolved", "open", system_reopen=True)
         incident.status = "open"
         incident.resolved_at = None
-        incident.last_evidence_at = observed_at
+        incident.last_evidence_at = _latest_evidence_time(incident, observed_at)
         if _severity(envelope) == "critical" and incident.severity != "critical":
             incident.severity = "critical"
             severity_escalated = True
@@ -535,7 +546,7 @@ def correlate_incident(db, envelope: TelemetryEnvelope, *, category: str) -> Cor
         )
         created = True
     else:
-        incident.last_evidence_at = observed_at
+        incident.last_evidence_at = _latest_evidence_time(incident, observed_at)
         if _severity(envelope) == "critical" and incident.severity != "critical":
             incident.severity = "critical"
             severity_escalated = True

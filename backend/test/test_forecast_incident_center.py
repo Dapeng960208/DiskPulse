@@ -179,6 +179,47 @@ def test_resolved_incident_reopens_when_new_evidence_stays_in_same_bucket(db_ses
     assert reopened.incident.resolved_at is None
 
 
+def test_out_of_order_evidence_does_not_move_last_evidence_at_backwards(db_session):
+    """Review source: late evidence overwrote the incident's newest timestamp.
+
+    Resolution contract: persist the evidence itself but keep last_evidence_at
+    as the maximum observed timestamp for the correlated incident.
+    """
+    import models
+    from services import forecastIncidentService as analytics
+
+    db_session.add_all([
+        models.StorageCluster(id=7, name="cluster-7", storage_type="netapp"),
+        models.Project(id=1, name="project-alpha"),
+    ])
+    db_session.commit()
+    latest_at = UTC_NOW + timedelta(minutes=10)
+    envelope = analytics.TelemetryEnvelope(
+        asset_ref=_asset(),
+        source="storage_alert",
+        source_ref="netapp:ordered:latest",
+        observed_at=latest_at,
+        collected_at=latest_at,
+        metric_or_event="vendor_event",
+        value={"severity": "warning"},
+        quality="good",
+    )
+    created = analytics.correlate_incident(db_session, envelope, category="device_fault")
+    db_session.commit()
+
+    result = analytics.correlate_incident(
+        db_session,
+        envelope.model_copy(update={
+            "source_ref": "netapp:ordered:late-arrival",
+            "observed_at": UTC_NOW + timedelta(minutes=5),
+        }),
+        category="device_fault",
+    )
+
+    assert result.incident.id == created.incident.id
+    assert result.incident.last_evidence_at == latest_at
+
+
 @pytest.mark.parametrize("next_status", ["investigating", "resolved"])
 def test_invalid_state_transition_is_a_conflict(next_status):
     from services import forecastIncidentService as analytics
