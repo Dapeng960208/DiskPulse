@@ -204,7 +204,12 @@ const seed = () => {
       role: index === 0 ? 'project_admin' : 'member',
     })),
     config: {
-      storage_alert_rule: { enabled: true, warning_ratio: 75, critical_ratio: 90, consecutive_count: 3 },
+      storage_alert_rule: {
+        quota_basis: 'hard',
+        important: { threshold: 80, repeat_hours: 24 },
+        serious: { threshold: 90, repeat_hours: 6 },
+        emergency: { threshold: 95, repeat_hours: 1 },
+      },
     },
   };
 };
