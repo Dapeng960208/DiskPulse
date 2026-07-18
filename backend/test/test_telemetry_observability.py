@@ -65,7 +65,11 @@ def test_telemetry_run_lifecycle_uses_utc_and_persists_only_safe_outcome_fields(
         outcome="failed",
         error_code="vendor_timeout",
     )
-    assert (failed.data_state, failed.records_written, failed.error_code) == (None, None, None)
+    assert (failed.data_state, failed.records_written, failed.error_code) == (
+        None,
+        None,
+        "vendor_timeout",
+    )
 
 
 def test_pending_telemetry_run_cannot_persist_terminal_fields(session_factory):
@@ -462,9 +466,9 @@ def test_isolated_vendor_collection_records_cluster_success_and_failure(session_
     assert summary == {"succeeded_clusters": (1,), "failed_clusters": (2,)}
     with session_factory() as db:
         rows = db.query(models.TelemetryCollectionRun).order_by(models.TelemetryCollectionRun.scope_key).all()
-    assert [(row.outcome, row.records_written, row.data_state) for row in rows] == [
-        ("success", 4, "data"),
-        ("failed", None, None),
+    assert [(row.outcome, row.records_written, row.data_state, row.error_code) for row in rows] == [
+        ("success", 4, "data", None),
+        ("failed", None, None, "vendor_timeout"),
     ]
 
 
