@@ -253,6 +253,20 @@ describe('frontend mock runtime', () => {
     });
   });
 
+  it('supplies readable AI audit display summaries', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    const audits = await gateway.request('get', '/admin/ai-audits', undefined, superadmin.token);
+
+    expect(audits.content[0]).toMatchObject({
+      conversation: { title: expect.any(String) },
+      user: { rd_username: expect.any(String) },
+      model: { name: expect.any(String) },
+      tool_names: [expect.any(String)],
+    });
+  });
+
   it('accepts double-slash resource paths emitted by the shared API client', async () => {
     const gateway = createMockGateway();
     const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);

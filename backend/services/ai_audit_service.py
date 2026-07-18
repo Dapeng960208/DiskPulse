@@ -44,6 +44,13 @@ def _redact_ai_payload(value, *, key: str | None = None):
 
 
 def serialize_audit(item: AIAuditLog, *, include_detail: bool = False) -> dict:
+    detail = _json_value(item.detail_payload)
+    tool_names = []
+    for trace in detail if isinstance(detail, list) else []:
+        name = trace.get("tool_name") if isinstance(trace, dict) else None
+        if isinstance(name, str) and name and name not in tool_names:
+            tool_names.append(name)
+
     data = {
         "id": item.id,
         "model_id": item.model_id,
@@ -58,6 +65,26 @@ def serialize_audit(item: AIAuditLog, *, include_detail: bool = False) -> dict:
         "trace_id": item.trace_id,
         "started_at": item.started_at,
         "finished_at": item.finished_at,
+        "conversation": (
+            {"id": item.conversation.id, "title": item.conversation.title}
+            if item.conversation is not None
+            else None
+        ),
+        "user": (
+            {
+                "id": item.user.id,
+                "rd_username": item.user.rd_username,
+                "username": item.user.username,
+            }
+            if item.user is not None
+            else None
+        ),
+        "model": (
+            {"id": item.model.id, "name": item.model.name, "model": item.model.model}
+            if item.model is not None
+            else None
+        ),
+        "tool_names": tool_names,
     }
     if include_detail:
         data.update(

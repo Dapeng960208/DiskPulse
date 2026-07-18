@@ -168,13 +168,6 @@ onMounted(async () => {
 
 <template>
   <section class="ai-center">
-    <header>
-      <div>
-        <h2>AI 中心</h2>
-        <p>统一管理模型连接和对话审计，仅超级管理员可访问。</p>
-      </div>
-    </header>
-
     <ElTabs v-model="activeTab">
       <ElTabPane
         label="模型管理"
@@ -276,24 +269,21 @@ onMounted(async () => {
             label="ID"
             width="80" />
           <ElTableColumn
-            prop="conversation_id"
             label="会话"
-            width="100" />
+            min-width="160"><template #default="{ row }">{{ row.conversation?.title || '-' }}</template></ElTableColumn>
           <ElTableColumn
-            prop="user_id"
             label="用户"
-            width="100" />
+            min-width="120"><template #default="{ row }">{{ row.user?.rd_username || row.user?.username || '-' }}</template></ElTableColumn>
           <ElTableColumn
-            prop="model_id"
             label="模型"
-            width="100" />
+            min-width="140"><template #default="{ row }">{{ row.model?.name || row.model?.model || '-' }}</template></ElTableColumn>
           <ElTableColumn
             label="状态"
             width="110"><template #default="{ row }"><ElTag :type="statusType(row.status)">{{ row.status }}</ElTag></template></ElTableColumn>
           <ElTableColumn
-            prop="tool_call_count"
             label="工具调用"
-            width="110" />
+            min-width="160"
+            show-overflow-tooltip><template #default="{ row }">{{ row.tool_names?.join('、') || '-' }}</template></ElTableColumn>
           <ElTableColumn
             prop="started_at"
             label="开始时间"
@@ -386,9 +376,6 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
-header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
-.ai-center > header h2 { margin: 0 0 5px; font-size: 22px; color: var(--text-primary); }
-.ai-center > header p { margin: 0; color: var(--text-secondary); }
 .toolbar { display: flex; justify-content: flex-end; gap: 10px; margin: 8px 0 14px; }
 .toolbar .el-select { width: 150px; }
 .el-pagination { justify-content: flex-end; margin-top: 16px; }

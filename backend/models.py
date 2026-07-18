@@ -933,3 +933,7 @@ class AIAuditLog(Base):
     finished_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+    model = relationship("AIConfig", foreign_keys=[model_id])
+    conversation = relationship("AIConversation", foreign_keys=[conversation_id])
+    user = relationship("User", foreign_keys=[user_id])

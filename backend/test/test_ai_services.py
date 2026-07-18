@@ -12,7 +12,7 @@ from sqlalchemy import select
 from appConfig import base_config
 from models import AIConfig, AIConversation, AIAuditLog, AIMessage, User
 from routers import ai, ai_admin
-from services import ai_chat_service, ai_client
+from services import ai_audit_service, ai_chat_service, ai_client
 from services.ai_client import AIClientError, AIClientToolArgumentsError, AIClientToolCall, AICompletionStreamEvent
 from services.ai_security import encrypt_secret
 from services.ai_security import decrypt_secret, mask_secret
@@ -84,6 +84,37 @@ def seed_model(db, *, actor_id=1, provider="openai"):
     db.commit()
     db.refresh(item)
     return item
+
+
+def test_list_audits_includes_safe_display_summaries(db_session):
+    user = seed_user(db_session, username="alice")
+    configured = seed_model(db_session, actor_id=user.id)
+    conversation = AIConversation(user_id=user.id, model_id=configured.id, title="容量风险排查")
+    db_session.add(conversation)
+    db_session.flush()
+    db_session.add(AIAuditLog(
+        model_id=configured.id,
+        conversation_id=conversation.id,
+        user_id=user.id,
+        source="chat",
+        source_ref=str(conversation.id),
+        tool_call_count=2,
+        tool_failed_count=0,
+        detail_payload=json.dumps([
+            {"tool_name": "list_projects"},
+            {"tool_name": "get_project"},
+            {"tool_name": "list_projects"},
+        ]),
+        status="succeeded",
+    ))
+    db_session.commit()
+
+    result = ai_audit_service.list_audits(db_session, page=1, size=20)
+
+    assert result["content"][0]["conversation"] == {"id": conversation.id, "title": "容量风险排查"}
+    assert result["content"][0]["user"] == {"id": user.id, "rd_username": "alice", "username": "alice"}
+    assert result["content"][0]["model"] == {"id": configured.id, "name": "openai-model", "model": "model-test"}
+    assert result["content"][0]["tool_names"] == ["list_projects", "get_project"]
 
 
 def test_openai_and_claude_non_streaming_payloads(monkeypatch):

@@ -560,4 +560,15 @@ describe('AI pages interactions', () => {
     expect(router.push).toHaveBeenCalledWith('/admin/ai-center/audits/7');
     expect(wrapper.vm.statusType('failed')).toBe('danger');
   });
+
+  it('renders readable audit summaries without a redundant page heading', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/pages/admin/ai/AiCenterPage.vue'), 'utf8');
+
+    expect(source).not.toContain('<h2>AI 中心</h2>');
+    expect(source).not.toContain('统一管理模型连接和对话审计，仅超级管理员可访问。');
+    expect(source).toContain('row.conversation?.title');
+    expect(source).toContain('row.user?.rd_username');
+    expect(source).toContain('row.model?.name');
+    expect(source).toContain('row.tool_names?.join');
+  });
 });

@@ -2,7 +2,7 @@
 from datetime import datetime
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from models import AIConfig, AIConversation, AIAuditLog, AIMessage
 
@@ -87,6 +87,11 @@ def list_audits(
     rows = list(
         db.scalars(
             select(AIAuditLog)
+            .options(
+                joinedload(AIAuditLog.model),
+                joinedload(AIAuditLog.conversation),
+                joinedload(AIAuditLog.user),
+            )
             .where(*conditions)
             .order_by(AIAuditLog.started_at.desc(), AIAuditLog.id.desc())
             .offset((page - 1) * size)
