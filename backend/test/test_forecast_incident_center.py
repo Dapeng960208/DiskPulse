@@ -136,6 +136,49 @@ def test_incident_evidence_deduplicates_and_resolved_incident_reopens_within_24_
     assert reopened.incident.status == "open"
 
 
+def test_resolved_incident_reopens_when_new_evidence_stays_in_same_bucket(db_session):
+    """Review source: same-bucket lookup bypassed the existing 24-hour reopen branch.
+
+    Resolution contract: any new correlated evidence must reopen a resolved incident,
+    even when both evidence records share the original 30-minute bucket.
+    """
+    import models
+    from services import forecastIncidentService as analytics
+
+    db_session.add_all([
+        models.StorageCluster(id=7, name="cluster-7", storage_type="netapp"),
+        models.Project(id=1, name="project-alpha"),
+    ])
+    db_session.commit()
+    envelope = analytics.TelemetryEnvelope(
+        asset_ref=_asset(),
+        source="storage_alert",
+        source_ref="netapp:same-bucket:1",
+        observed_at=UTC_NOW,
+        collected_at=UTC_NOW,
+        metric_or_event="vendor_event",
+        value={"severity": "warning"},
+        quality="good",
+    )
+    created = analytics.correlate_incident(db_session, envelope, category="device_fault")
+    created.incident.status = "resolved"
+    created.incident.resolved_at = UTC_NOW + timedelta(minutes=1)
+    db_session.commit()
+
+    reopened = analytics.correlate_incident(
+        db_session,
+        envelope.model_copy(update={
+            "source_ref": "netapp:same-bucket:2",
+            "observed_at": UTC_NOW + timedelta(minutes=5),
+        }),
+        category="device_fault",
+    )
+
+    assert reopened.reopened is True
+    assert reopened.incident.status == "open"
+    assert reopened.incident.resolved_at is None
+
+
 @pytest.mark.parametrize("next_status", ["investigating", "resolved"])
 def test_invalid_state_transition_is_a_conflict(next_status):
     from services import forecastIncidentService as analytics

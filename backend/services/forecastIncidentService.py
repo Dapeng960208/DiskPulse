@@ -492,44 +492,48 @@ def correlate_incident(db, envelope: TelemetryEnvelope, *, category: str) -> Cor
             correlation_key=correlation_key,
             resolved_since=observed_at - timedelta(hours=24),
         )
-        if incident is not None:
-            require_incident_transition("resolved", "open", system_reopen=True)
-            incident.status = "open"
-            incident.resolved_at = None
-            incident.last_evidence_at = observed_at
-            if _severity(envelope) == "critical" and incident.severity != "critical":
-                incident.severity = "critical"
-                severity_escalated = True
-            forecastIncidentCrud.add_incident_timeline(
-                db,
-                IncidentTimeline(
-                    incident_id=incident.id,
-                    event_type="reopened",
-                    from_status="resolved",
-                    to_status="open",
-                ),
-            )
-            reopened = True
-        else:
-            incident = Incident(
-                correlation_key=correlation_key,
-                correlation_bucket_at=_bucket_start(observed_at),
-                asset_type=asset.asset_type,
-                asset_id=asset.asset_id,
-                storage_cluster_id=asset.storage_cluster_id,
-                project_id=asset.project_id,
-                vendor=asset.vendor,
-                display_name=asset.display_name,
-                category=category,
-                severity=_severity(envelope),
-                opened_at=observed_at,
-                last_evidence_at=observed_at,
-            )
-            forecastIncidentCrud.add_incident(db, incident)
-            forecastIncidentCrud.add_incident_timeline(
-                db, IncidentTimeline(incident_id=incident.id, event_type="created", to_status="open")
-            )
-            created = True
+
+    # Review source: a resolved incident found in the current bucket skipped the
+    # old reopen branch. Resolution: apply one status-based reopen path to both
+    # same-bucket matches and the 24-hour resolved-incident lookup.
+    if incident is not None and incident.status == "resolved":
+        require_incident_transition("resolved", "open", system_reopen=True)
+        incident.status = "open"
+        incident.resolved_at = None
+        incident.last_evidence_at = observed_at
+        if _severity(envelope) == "critical" and incident.severity != "critical":
+            incident.severity = "critical"
+            severity_escalated = True
+        forecastIncidentCrud.add_incident_timeline(
+            db,
+            IncidentTimeline(
+                incident_id=incident.id,
+                event_type="reopened",
+                from_status="resolved",
+                to_status="open",
+            ),
+        )
+        reopened = True
+    elif incident is None:
+        incident = Incident(
+            correlation_key=correlation_key,
+            correlation_bucket_at=_bucket_start(observed_at),
+            asset_type=asset.asset_type,
+            asset_id=asset.asset_id,
+            storage_cluster_id=asset.storage_cluster_id,
+            project_id=asset.project_id,
+            vendor=asset.vendor,
+            display_name=asset.display_name,
+            category=category,
+            severity=_severity(envelope),
+            opened_at=observed_at,
+            last_evidence_at=observed_at,
+        )
+        forecastIncidentCrud.add_incident(db, incident)
+        forecastIncidentCrud.add_incident_timeline(
+            db, IncidentTimeline(incident_id=incident.id, event_type="created", to_status="open")
+        )
+        created = True
     else:
         incident.last_evidence_at = observed_at
         if _severity(envelope) == "critical" and incident.severity != "critical":
