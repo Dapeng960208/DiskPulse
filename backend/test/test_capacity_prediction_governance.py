@@ -195,13 +195,43 @@ def test_only_candidate_with_passing_evaluations_can_be_enabled(db_session):
         activate_capacity_prediction_candidate(db_session, candidate_id=rejected.id)
 
 
+def test_candidate_requires_private_ollama_model(db_session):
+    import models
+    from services.capacityPredictionGovernanceService import create_capacity_prediction_candidate
+
+    db_session.add(models.AIConfig(
+        id=1,
+        name="public-model",
+        provider="openai",
+        base_url="https://api.example.com",
+        model="public-model",
+        enabled=True,
+        enable_chat=False,
+    ))
+    db_session.commit()
+
+    with pytest.raises(HTTPException, match="private AI model"):
+        create_capacity_prediction_candidate(
+            db_session,
+            version="capacity-ai-public-v1",
+            ai_model_id=1,
+        )
+
+
 def test_governance_router_exposes_safe_candidate_lifecycle_only_to_super_admins():
     from routers.forecast_incidents import router
     from schemas.capacityPredictionSchema import CapacityPredictionCandidateOut
 
-    routes = {route.path: route for route in router.routes}
-    list_route = routes["/v1/admin/capacity-prediction-candidates"]
-    activate_route = routes["/v1/admin/capacity-prediction-candidates/{candidate_id}/activate"]
+    list_route = next(
+        route
+        for route in router.routes
+        if route.path == "/v1/admin/capacity-prediction-candidates" and "GET" in route.methods
+    )
+    activate_route = next(
+        route
+        for route in router.routes
+        if route.path == "/v1/admin/capacity-prediction-candidates/{candidate_id}/activate"
+    )
 
     assert list_route.response_model == list[CapacityPredictionCandidateOut]
     assert list_route.dependencies
