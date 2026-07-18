@@ -879,7 +879,13 @@ def stream_message(
                 if result.get("ok") is False:
                     audit.tool_failed_count += 1
                 display_result, truncated = _display_tool_result(result)
-                visibility = _tool_visibility(db, registry[call.name], call.arguments, result)
+                definition = registry.get(call.name)
+                # Review fix: unknown provider tool names must complete as safe failed calls.
+                visibility = (
+                    _tool_visibility(db, definition, call.arguments, result)
+                    if definition is not None
+                    else _unknown_visibility()
+                )
                 trace_entry.update(
                     {
                         "status": "failed" if result.get("ok") is False else "succeeded",
