@@ -26,14 +26,18 @@ vi.mock('@/components/form/RdUserSelect.vue', () => ({
 }));
 vi.mock('element-plus', () => ({
   ElButton: { name: 'ElButton', template: '<button><slot /></button>' },
-  ElDialog: { name: 'ElDialog', template: '<div><slot /><slot name="footer" /></div>' },
+  ElDialog: {
+    name: 'ElDialog',
+    props: { modelValue: Boolean, appendToBody: Boolean },
+    template: '<div v-if="modelValue" class="member-dialog"><slot /><slot name="footer" /></div>',
+  },
   ElForm: { name: 'ElForm', template: '<form><slot /></form>' },
   ElFormItem: { name: 'ElFormItem', template: '<div><slot /></div>' },
   ElMessage: { error: ui.error, success: ui.success, warning: vi.fn() },
   ElMessageBox: { confirm: ui.confirm },
   ElOption: { name: 'ElOption', template: '<option><slot /></option>' },
   ElSelect: { name: 'ElSelect', template: '<select><slot /></select>' },
-  ElTable: { name: 'ElTable', template: '<div><slot /></div>' },
+  ElTable: { name: 'ElTable', props: { data: Array }, template: '<div><slot /></div>' },
   ElTableColumn: {
     name: 'ElTableColumn',
     template: '<div><slot :row="{ user_id: 7, role: \'reader\', user: { rd_username: \'alice\' } }" /></div>',
@@ -73,6 +77,25 @@ describe('ProjectMembersTab', () => {
 
     expect(membershipApi.create).toHaveBeenCalledWith(1, { user_id: 2, role: 'reader' });
     expect(ui.error).toHaveBeenCalledWith('保存项目成员失败，请稍后重试');
+  });
+
+  it('opens the add-member form above the project tabs', async () => {
+    const wrapper = await mountTab();
+
+    expect(wrapper.find('.member-dialog').exists()).toBe(false);
+    await findButton(wrapper, '添加成员').trigger('click');
+
+    expect(wrapper.find('.member-dialog').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'ElDialog' }).props('appendToBody')).toBe(true);
+  });
+
+  it('renders members when the API returns a paginated response', async () => {
+    const members = [{ user_id: 9, role: 'editor', user: { rd_username: 'bob' } }];
+    membershipApi.list.mockResolvedValue({ content: members });
+
+    const wrapper = await mountTab();
+
+    expect(wrapper.findComponent({ name: 'ElTable' }).props('data')).toEqual(members);
   });
 
   it('shows an error when confirmed removal fails instead of treating it as cancellation', async () => {

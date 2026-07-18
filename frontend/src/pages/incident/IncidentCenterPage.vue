@@ -38,9 +38,9 @@ const statusLabels = {
 
 const categoryLabels = {
   capacity_pressure: '容量压力',
-  device_fault: '设备故障',
+  device_fault: '设备健康风险',
   performance_contention: '性能争用',
-  telemetry_blindspot: '遥测盲区',
+  telemetry_blindspot: '监控盲区',
 };
 
 const editableStatusOptions = computed(() => {
@@ -165,11 +165,11 @@ onMounted(query);
       :pagination="{ page: queryParams.page, pageSize: queryParams.size, total, pageSizes: [20, 50, 100], hideOnSinglePage: true, showJumper: true }"
       @update:pagination="updatePagination">
       <ElTableColumn
-        label="资产"
+        label="受影响对象"
         prop="display_name"
         min-width="180" />
       <ElTableColumn
-        label="类别"
+        label="事件类型"
         min-width="120">
         <template #default="{ row }">{{ categoryLabels[row.category] || row.category }}</template>
       </ElTableColumn>

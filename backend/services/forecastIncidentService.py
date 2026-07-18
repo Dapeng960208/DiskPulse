@@ -662,7 +662,16 @@ def list_visible_incidents(
 
 
 def incident_capabilities(db, *, current_user, incident: Incident) -> dict[str, bool]:
-    return project_access_service.incident_capabilities(db, current_user, incident.project_id)
+    capabilities = project_access_service.incident_capabilities(db, current_user, incident.project_id)
+    can_edit = capabilities.get("edit") is True
+    is_assignee = current_user is not None and incident.assigned_user_id == current_user.id
+    return {
+        **capabilities,
+        "claim": can_edit and incident.assigned_user_id is None,
+        "release": can_edit and incident.assigned_user_id is not None and (
+            is_assignee or (current_user is not None and is_super_admin(current_user))
+        ),
+    }
 
 
 def incident_detail(db, *, current_user, incident_id: int) -> tuple[Incident, list[IncidentEvidence], list[IncidentTimeline], Any]:

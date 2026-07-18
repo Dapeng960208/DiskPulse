@@ -42,6 +42,10 @@ const visible = computed({
 });
 const current = computed(() => detail.value || props.incident || {});
 const capabilities = computed(() => current.value.capabilities || {});
+const canClaim = computed(() => capabilities.value.claim
+  ?? (capabilities.value.edit === true && current.value.assigned_user_id == null));
+const canRelease = computed(() => capabilities.value.release
+  ?? (capabilities.value.edit === true && current.value.assigned_user_id != null));
 const nextStatus = computed(() => ({
   open: 'acknowledged',
   acknowledged: 'investigating',
@@ -52,15 +56,52 @@ const isUpdating = computed(() => Boolean(activeAction.value));
 
 const categoryLabels = {
   capacity_pressure: '容量压力',
-  device_fault: '设备故障',
+  device_fault: '设备健康风险',
   performance_contention: '性能争用',
-  telemetry_blindspot: '遥测盲区',
+  telemetry_blindspot: '监控盲区',
 };
 const categoryDescriptions = {
   capacity_pressure: '容量预测显示可能耗尽，或当前资源的有效告警规则达到阈值。默认按硬限额 80%/90%/95%；用户目录优先采用项目组规则，其次项目规则，最后系统规则。',
-  device_fault: '严重厂商事件、重复故障指纹或采集错误表明设备可能异常。',
+  device_fault: 'NetApp EMS 或 PowerScale（Isilon）厂商系统事件达到严重级别、同一故障指纹反复出现，或同一时段采集异常时创建。它表示待核查的设备健康风险，不等同于已确认硬件损坏。',
   performance_contention: '同一指标连续三个相邻 5 分钟桶偏离 28 天同星期同小时基线，且鲁棒 Z 分数绝对值均不低于 3.5。',
   telemetry_blindspot: '监控盲区：容量、厂商事件或性能遥测过期、采集失败或覆盖率不足，当前数据不足以可靠判断资产状态。',
+};
+const confidenceLabels = {
+  high: '高',
+  medium: '中',
+  low: '低',
+  insufficient: '证据不足',
+};
+const confidenceDescriptions = {
+  high: '有多类相互独立的最新证据支持，建议优先处理。',
+  medium: '已有支持证据，但仍需回查原始事件或监控数据。',
+  low: '证据较少或存在冲突，只能作为排查线索。',
+  insufficient: '当前证据不足，不能给出可靠的排查方向。',
+};
+const evidenceSourceLabels = {
+  forecast: '容量预测',
+  storage_alert: 'DiskPulse 存储告警',
+  vendor_event: '厂商系统事件',
+  telemetry: '监控采集',
+};
+const evidenceTypeLabels = {
+  forecast_exhaustion: '预测容量可能耗尽',
+  hard_limit_alert: '硬限额告警',
+  soft_limit_alert: '软限额告警',
+  severe_vendor_event: '厂商严重系统事件',
+  repeated_fault: '重复故障事件',
+  collection_error: '采集异常',
+};
+const timelineLabels = {
+  opened: '事件创建',
+  evidence_added: '新增证据',
+  claimed: '已认领',
+  released: '已释放',
+  status_changed: '状态已推进',
+  severity_changed: '风险级别已调整',
+  silenced: '已静默通知',
+  unsilenced: '已恢复通知',
+  commented: '添加评论',
 };
 const statusLabels = {
   open: '未处理',
@@ -168,26 +209,32 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
       <ElDescriptions
         :column="2"
         border>
-        <ElDescriptionsItem label="资产">{{ current.display_name }}</ElDescriptionsItem>
-        <ElDescriptionsItem label="类别"><ElTooltip :content="categoryDescriptions[current.category] || '未知事件类别。'"><span>{{ categoryLabels[current.category] || current.category }}</span></ElTooltip></ElDescriptionsItem>
-        <ElDescriptionsItem label="状态"><ElTooltip :content="statusDescriptions[current.status] || '未知事件状态。'"><span>{{ statusLabels[current.status] || current.status }}（{{ current.status }}）</span></ElTooltip></ElDescriptionsItem>
-        <ElDescriptionsItem label="严重度"><ElTag :type="current.severity === 'critical' ? 'danger' : 'warning'">{{ current.severity }}</ElTag></ElDescriptionsItem>
+        <ElDescriptionsItem label="受影响对象">{{ current.display_name }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="事件类型"><ElTooltip :content="categoryDescriptions[current.category] || '未知事件类型。'"><span>{{ categoryLabels[current.category] || current.category }}</span></ElTooltip></ElDescriptionsItem>
+        <ElDescriptionsItem label="处置状态"><ElTooltip :content="statusDescriptions[current.status] || '未知处置状态。'"><span>{{ statusLabels[current.status] || current.status }}</span></ElTooltip></ElDescriptionsItem>
+        <ElDescriptionsItem label="认领状态"><ElTag :type="current.assigned_user_id == null ? 'info' : 'success'">{{ current.assigned_user_id == null ? '待认领' : '已认领' }}</ElTag></ElDescriptionsItem>
+        <ElDescriptionsItem label="风险级别"><ElTag :type="current.severity === 'critical' ? 'danger' : 'warning'">{{ current.severity === 'critical' ? '严重' : '警告' }}</ElTag></ElDescriptionsItem>
       </ElDescriptions>
 
       <div
         v-if="capabilities.edit"
         class="incident-detail__actions list-row-actions">
-        <ElTooltip content="将事件指派给当前登录用户，明确处理责任。"><ElButton
-          data-testid="incident-claim"
-          size="small"
-          :loading="activeAction === 'claim'"
-          :disabled="isUpdating"
-          @click="updateIncident({ claim: true }, 'claim', '事件已认领')">认领</ElButton></ElTooltip>
-        <ElTooltip content="取消当前认领；仅认领人或超级管理员可以释放。"><ElButton
-          size="small"
-          :loading="activeAction === 'release'"
-          :disabled="isUpdating"
-          @click="updateIncident({ claim: false }, 'release', '事件已释放')">释放</ElButton></ElTooltip>
+        <ElTooltip
+          v-if="canClaim"
+          content="将事件指派给当前登录用户，明确处理责任。"><ElButton
+            data-testid="incident-claim"
+            size="small"
+            :loading="activeAction === 'claim'"
+            :disabled="isUpdating"
+            @click="updateIncident({ claim: true }, 'claim', '事件已认领')">认领</ElButton></ElTooltip>
+        <ElTooltip
+          v-if="canRelease"
+          content="取消当前认领；仅认领人或超级管理员可以释放。"><ElButton
+            data-testid="incident-release"
+            size="small"
+            :loading="activeAction === 'release'"
+            :disabled="isUpdating"
+            @click="updateIncident({ claim: false }, 'release', '事件已释放')">释放</ElButton></ElTooltip>
         <ElTooltip
           v-if="nextStatus"
           :content="nextStatusTooltip"><ElButton
@@ -214,16 +261,17 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
 
       <section class="incident-detail__section">
         <ElTooltip content="由服务端按固定证据权重计算，不使用 AI 自由生成结论。"><h3>确定性诊断</h3></ElTooltip>
+        <p class="incident-detail__hint">这是基于已记录证据生成的规则化排查建议，不是 AI 自由生成的故障结论。</p>
         <p v-if="!current.diagnosis">尚无足够证据生成诊断。</p>
         <template v-else>
-          <p>置信度：<ElTooltip content="高置信度要求回放验证开关已启用、候选分数至少 0.8，且至少有两类独立证据。"><ElTag>{{ current.diagnosis.confidence }}</ElTag></ElTooltip></p>
+          <p>建议可靠性：<ElTooltip content="高可靠性要求回放验证开关已启用、候选分数至少 0.8，且至少有两类独立证据。"><ElTag>{{ confidenceLabels[current.diagnosis.confidence] || current.diagnosis.confidence }}</ElTag></ElTooltip> {{ confidenceDescriptions[current.diagnosis.confidence] || '请结合证据引用进行核查。' }}</p>
           <ul class="incident-detail__candidate-list">
             <li
               v-for="candidate in current.diagnosis.candidates || []"
               :key="candidate.category">
-              {{ categoryLabels[candidate.category] || candidate.category }}：{{ candidate.score }}
-              <span>证据 {{ (candidate.evidence_refs || []).join('、') || '无' }}</span>
-              <span v-if="candidate.data_gaps?.length">；数据缺口 {{ candidate.data_gaps.join('、') }}</span>
+              建议优先核查{{ categoryLabels[candidate.category] || candidate.category }}（证据匹配分 {{ candidate.score }}）
+              <span>；依据 {{ (candidate.evidence_refs || []).join('、') || '无' }}</span>
+              <span v-if="candidate.data_gaps?.length">；待补充 {{ candidate.data_gaps.join('、') }}</span>
             </li>
           </ul>
         </template>
@@ -236,20 +284,22 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
           size="small"
           empty-text="暂无证据摘要">
           <ElTableColumn
-            prop="evidence_type"
-            label="类型"
-            min-width="150" />
+            label="证据内容"
+            min-width="150">
+            <template #default="scope">{{ evidenceTypeLabels[scope?.row?.evidence_type] || scope?.row?.evidence_type || '-' }}</template>
+          </ElTableColumn>
           <ElTableColumn
-            prop="source"
             label="来源"
-            min-width="120" />
+            min-width="120">
+            <template #default="scope">{{ evidenceSourceLabels[scope?.row?.source] || scope?.row?.source || '-' }}</template>
+          </ElTableColumn>
           <ElTableColumn
             prop="source_ref"
-            label="不可变引用"
+            label="追溯编号"
             min-width="180" />
           <ElTableColumn
             prop="observed_at"
-            label="观测时间"
+            label="发现时间"
             min-width="180" />
         </ElTable>
       </section>
@@ -265,9 +315,10 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
             label="时间"
             min-width="180" />
           <ElTableColumn
-            prop="event_type"
-            label="事件"
-            min-width="130" />
+            label="操作"
+            min-width="130">
+            <template #default="scope">{{ timelineLabels[scope?.row?.event_type] || scope?.row?.event_type || '-' }}</template>
+          </ElTableColumn>
           <ElTableColumn
             prop="comment"
             label="评论"
@@ -324,6 +375,7 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
 .incident-detail__section { display: grid; gap: 8px; }
 .incident-detail__section h3 { margin: 0; font-size: var(--font-size-base); color: var(--text-primary); }
 .incident-detail__section p { margin: 0; color: var(--text-secondary); }
+.incident-detail__hint { padding: 8px 10px; border-left: 3px solid var(--primary-color); background: var(--bg-secondary); font-size: var(--font-size-sm); }
 .incident-detail__candidate-list { margin: 0; padding-left: 20px; color: var(--text-primary); }
 .incident-detail__candidate-list span { color: var(--text-secondary); }
 .incident-detail__comment { justify-self: end; }

@@ -47,7 +47,8 @@ function canManage(member) {
 async function loadMembers() {
   loading.value = true;
   try {
-    members.value = await membershipApi.list(props.projectId);
+    const result = await membershipApi.list(props.projectId);
+    members.value = Array.isArray(result) ? result : (result?.content || []);
   } catch {
     members.value = [];
     ElMessage.error('加载项目成员失败，请稍后重试');
@@ -164,6 +165,7 @@ onMounted(loadMembers);
 
     <ElDialog
       v-model="dialogVisible"
+      append-to-body
       class="write-form-dialog write-form-dialog--compact"
       :title="editingUserId == null ? '添加项目成员' : '编辑项目成员'">
       <ElForm
