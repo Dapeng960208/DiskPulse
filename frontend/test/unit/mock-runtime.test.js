@@ -217,6 +217,27 @@ describe('frontend mock runtime', () => {
     expect(response.data.content).toHaveLength(5);
   });
 
+  it('supplies every usage-list display field and flat quota thresholds', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    const usages = await gateway.request('get', '/storage-usages', undefined, superadmin.token);
+    const thresholds = await gateway.request('get', '/config/storage-alert-thresholds', undefined, superadmin.token);
+
+    expect(usages.content[0]).toMatchObject({
+      project: { id: expect.any(Number), name: expect.any(String) },
+      group_tag: { id: expect.any(Number), name: expect.any(String) },
+      group: { id: expect.any(Number), name: expect.any(String) },
+      storage_cluster: { id: expect.any(Number), name: expect.any(String) },
+      limit: expect.any(Number),
+      soft_limit: expect.any(Number),
+      used: expect.any(Number),
+      use_ratio: 40,
+      soft_use_ratio: 45,
+    });
+    expect(thresholds).toEqual({ important: 80, serious: 90, emergency: 95 });
+  });
+
   it('accepts double-slash resource paths emitted by the shared API client', async () => {
     const gateway = createMockGateway();
     const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
