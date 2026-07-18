@@ -63,6 +63,7 @@ describe('detail capacity prediction navigation', () => {
     await flushPromises();
 
     expect(wrapper.find('.real-time-page-stub').attributes('data-show-header')).toBe('false');
+    expect(wrapper.find('.detail-monitor-page__actions').exists()).toBe(true);
     const entry = wrapper.get('[data-testid="capacity-prediction-entry"]');
     expect(entry.text()).toContain('容量预测');
 
@@ -78,6 +79,7 @@ describe('detail capacity prediction navigation', () => {
     await flushPromises();
 
     expect(wrapper.find('.real-time-page-stub').attributes('data-show-header')).toBe('false');
+    expect(wrapper.find('.detail-monitor-page__actions').exists()).toBe(false);
     expect(wrapper.find('[data-testid="capacity-prediction-entry"]').exists()).toBe(false);
   });
 
