@@ -12,7 +12,7 @@
 
 - `telemetry_quality_snapshots` 从 `telemetry_collection_runs` 和 QuestDB 覆盖率派生，不会写回或替代账本中的最后成功时间。
 - `capacity_forecasts` 使用有硬限额的存储集群、卷、Qtree、项目组和用户目录的 45 个 UTC 日窗口。每天保留最大已用值；有效日少于 30 或覆盖率小于 80% 时只保存 `capacity_history_insufficient` 数据缺口。满足条件后以 Theil-Sen 中位斜率和残差 P10/P50/P90 生成未来 30 天曲线及三条耗尽日期。
-- `anomaly_observations` 对 QuestDB 性能样本按 5 分钟桶计算 P95 延迟、IOPS、吞吐量；以过去 28 天同星期/小时中位数与 MAD 建模，绝对鲁棒 Z 分数至少 3.5 且连续三点才写入。零 MAD 只在数值不同于基线时使用有界高分，孤立尖峰不写入。
+- `anomaly_observations` 对 QuestDB 性能样本按 5 分钟桶计算 P95 延迟、IOPS、吞吐量；以过去 28 天同星期/小时中位数与 MAD 建模，绝对鲁棒 Z 分数至少 3.5 且连续三个相邻 5 分钟点才写入。零 MAD 只在数值不同于基线时使用有界高分，孤立尖峰或存在采样空档的三点均不写入。
 - `incident_evidence` 的唯一键是 `(source, source_ref)`，只保存引用、类型、时间、缺口和哈希。回放或重算不覆盖原始事实；同算法版本的分析结果以各自唯一键幂等。
 - 无法把厂商事件或性能对象映射到卷/Qtree/项目时，使用集群级 `AssetRef` 并记录 `asset_mapping_missing`。
 
@@ -20,7 +20,7 @@
 
 事件按 `storage_cluster + AssetRef + category + 30 分钟 UTC 桶` 归并；同键已解决事件在 24 小时内有新证据时由系统重开。人工状态只允许 `open → acknowledged → investigating → mitigated → resolved` 的相邻迁移。
 
-维护窗口和事件静默只抑制派生 Incident 的创建/重开或通知：采集、原始事实和分析快照仍保留。维护窗口按项目、可选集群/资产和 UTC 起止时间匹配。
+维护窗口和事件静默只抑制派生 Incident 的创建/重开或通知：采集、原始事实和分析快照仍保留。维护窗口按项目、可选集群/资产和 UTC 起止时间匹配；`silenced_until` 到达后自动不再抑制通知。
 
 确定性 RCA 至多给出 `capacity_pressure`、`device_fault`、`performance_contention`、`telemetry_blindspot` 三项候选。各候选使用固定权重、同类最高证据、冲突扣 0.20、独立类型数/最新时间/固定优先级排序。仅当部署配置 `incident_analytics.replay_gate_verified=true` 且候选分数至少 0.8、含至少两类独立证据时才标记“高”置信度；当前该开关默认关闭。
 
@@ -39,7 +39,7 @@
 ## 任务、通知与作业关联
 
 - 容量预测每日运行；质量快照在容量、厂商事件和性能原始写入成功后异步排队；性能异常在性能采集成功后异步排队。三者都使用 Redis 单例锁，异常不会回滚原始采集。
-- `incident_notifications.enabled` 是 Incident 通知总开关；启用时默认受众是 `super_admin_usernames`。项目负责人、项目成员、额外用户名、邮件和飞书均需分别显式开启。仅新建、系统重开和严重度升级尝试发送；维护窗口与静默不影响原始告警或厂商事件通知。
+- `incident_notifications.enabled` 是 Incident 通知总开关；启用时默认受众是 `super_admin_usernames`。项目负责人、项目成员、额外用户名、邮件和飞书均需分别显式开启，邮件和飞书可独立投递。仅新建、系统重开和严重度升级尝试发送；维护窗口与静默不影响原始告警或厂商事件通知。
 - `WorkloadStorageAdapter` 是默认不连接客户系统的只读契约。Slurm/LSF/EDA 夹具只输出按实际执行窗口、项目、主机、已解析 `AssetRef` 与 5 分钟窗汇总的 `active_job_count`。作业 ID、原始路径、环境和日志仅可在内存映射中使用，绝不持久化或发送给模型。
 
 ## 前端入口与验证范围
