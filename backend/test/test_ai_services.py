@@ -394,6 +394,47 @@ def test_stream_persists_live_tool_trace_with_distinct_call_ids_and_truncated_re
     assert [item["call_id"] for item in assistant["tool_calls"]] == [item["call_id"] for item in started]
 
 
+def test_stream_finishes_an_unknown_tool_call_without_crashing(db_session, monkeypatch):
+    seed_user(db_session)
+    configured = seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, title="未知工具")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    rounds = {"count": 0}
+
+    def provider_stream(*_args, **_kwargs):
+        rounds["count"] += 1
+        if rounds["count"] == 1:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[AIClientToolCall(tool_id="unknown-1", name="unknown_tool", arguments={})],
+                stop_reason="tool_calls",
+            )
+        else:
+            yield AICompletionStreamEvent(kind="delta", text="已完成")
+            yield AICompletionStreamEvent(kind="completed", text="已完成", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    events = list(
+        ai_chat_service.stream_message(
+            app=FastAPI(),
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=1,
+            content="调用未知工具",
+        )
+    )
+
+    assert [event for event, _data in events if event == "error"] == []
+    started = next(data for event, data in events if event == "tool_call_started")
+    finished = next(data for event, data in events if event == "tool_call_finished")
+    completed = next(data for event, data in events if event == "completed")
+    assert (finished["call_id"], finished["status"]) == (started["call_id"], "failed")
+    assert completed["message"]["status"] == "succeeded"
+
+
 def test_tool_trace_redacts_sensitive_result_keys_before_persisting():
     display, truncated = ai_chat_service._display_tool_result(
         {"accessToken": "should-not-persist", "nested": {"apiKey": "also-hidden"}}
