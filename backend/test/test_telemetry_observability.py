@@ -655,6 +655,39 @@ def test_telemetry_model_contract_and_migration_compile_for_supported_dialects()
         assert "finished_at is not null" in sql
 
 
+@pytest.mark.parametrize("dialect_name", ("sqlite", "postgresql", "mysql"))
+def test_telemetry_failure_code_migration_replaces_terminal_constraint(dialect_name):
+    import importlib.util
+    import io
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "migrate"
+        / "versions"
+        / "000000000010_telemetry_failed_error_code.py"
+    )
+    spec = importlib.util.spec_from_file_location("telemetry_failure_code_migration", migration_path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    output = io.StringIO()
+    migration.op = Operations(
+        MigrationContext.configure(
+            dialect_name=dialect_name,
+            opts={"as_sql": True, "output_buffer": output},
+        )
+    )
+
+    migration.upgrade()
+    migration.downgrade()
+
+    sql = output.getvalue().lower()
+    assert "ck_telemetry_run_terminal_fields" in sql
+    assert "vendor_timeout" in sql
+
+
 def test_telemetry_migration_upgrades_and_downgrades_sqlite():
     import importlib.util
 
