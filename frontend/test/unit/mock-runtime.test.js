@@ -32,6 +32,36 @@ describe('frontend mock runtime', () => {
     expect((await gateway.request('get', '/projects/1', undefined, admin.token)).capabilities).toMatchObject({ manage_members: true, view_audit_events: true });
   });
 
+  it('keeps system resource reads and writes exclusive to the superadmin', async () => {
+    // Review source: the generic Mock table map exposed system inventory to
+    // project-scoped roles. Resolution contract: mirror real route RBAC while
+    // leaving project resources on their existing capability checks.
+    const gateway = createMockGateway();
+    const projectAdmin = await gateway.login('demo-project-admin', DEMO_PASSWORD);
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const systemPaths = [
+      '/storage-clusters',
+      '/aggregates',
+      '/volumes',
+      '/qtrees',
+      '/group-tags',
+      '/users',
+      '/storage-back-up-records',
+    ];
+
+    for (const path of systemPaths) {
+      await expect(gateway.request('get', path, undefined, projectAdmin.token))
+        .rejects.toMatchObject({ status: 403 });
+      await expect(gateway.request('post', path, { name: 'blocked' }, projectAdmin.token))
+        .rejects.toMatchObject({ status: 403 });
+      await expect(gateway.request('get', path, undefined, superadmin.token))
+        .resolves.toMatchObject({ content: expect.any(Array) });
+    }
+
+    await expect(gateway.request('get', '/groups', undefined, projectAdmin.token))
+      .resolves.toMatchObject({ content: expect.any(Array) });
+  });
+
   it('keeps permitted writes in memory and exposes export and AI stream responses', async () => {
     const gateway = createMockGateway();
     const editor = await gateway.login('demo-editor', DEMO_PASSWORD);

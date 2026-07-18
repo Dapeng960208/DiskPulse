@@ -8,6 +8,16 @@ export const DEMO_USERS = [
   { id: 4, username: 'demo-reader', commonName: '演示只读成员', role: 'reader', projectIds: [1] },
 ];
 
+const SYSTEM_RESOURCE_PREFIXES = [
+  '/storage-clusters',
+  '/aggregates',
+  '/volumes',
+  '/qtrees',
+  '/group-tags',
+  '/users',
+  '/storage-back-up-records',
+];
+
 const seed = () => ({
   projects: [{ id: 1, name: '芯片设计平台', description: '虚构演示项目' }, { id: 2, name: '企业基础设施', description: '仅管理员可见' }],
   groups: [{ id: 11, name: 'EDA 研发组', project_id: 1, linux_path: '/data/eda', group_tag: { id: 1, name: '研发' }, storage_cluster: { id: 1, name: 'NetApp-演示', storage_type: 'netapp' }, capabilities: {} }],
@@ -52,6 +62,12 @@ export function createMockGateway() {
     }
     const account = accountFor(token); if (!account) throw error(401, '请先登录');
     if (path === '/users/current/profile') return { result: profile(account), ...profile(account), meta: {}, traceId: traceId() };
+    const systemResource = SYSTEM_RESOURCE_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
+      && !['/users/current/profile', '/users/logout'].includes(path);
+    // Review source: the generic Mock table map exposed system inventory to
+    // project roles. Resolution: enforce the real superadmin boundary once,
+    // before list/detail/write dispatch, while preserving personal auth paths.
+    if (systemResource && account.role !== 'superadmin') throw error(403);
     if (path.startsWith('/admin') && account.role !== 'superadmin') throw error(403);
     if (path === '/dashboard/capacity-trend') return page([
       { date: '2026-07-14', used: 580, limit: 1000 }, { date: '2026-07-15', used: 610, limit: 1000 }, { date: '2026-07-16', used: 645, limit: 1000 }, { date: '2026-07-17', used: 680, limit: 1000 }, { date: '2026-07-18', used: 720, limit: 1000 },
