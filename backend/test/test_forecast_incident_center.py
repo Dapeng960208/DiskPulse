@@ -296,3 +296,186 @@ def test_quality_snapshot_is_derived_and_never_promotes_a_new_last_success_autho
     assert snapshot.coverage_ratio == 0.8
     assert snapshot.authoritative_last_success_at is None
     assert "telemetry_stale" in snapshot.data_gaps
+
+
+def test_matching_maintenance_window_suppresses_new_incident_without_losing_raw_evidence(db_session):
+    import models
+    from services import forecastIncidentService as analytics
+
+    db_session.add_all(
+        [
+            models.StorageCluster(id=7, name="cluster-7", storage_type="netapp"),
+            models.Project(id=1, name="project-alpha"),
+            models.MaintenanceWindow(
+                project_id=1,
+                storage_cluster_id=7,
+                asset_type="group",
+                asset_id="101",
+                starts_at=UTC_NOW - timedelta(minutes=5),
+                ends_at=UTC_NOW + timedelta(minutes=5),
+                reason="planned maintenance",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    result = analytics.correlate_incident(
+        db_session,
+        analytics.TelemetryEnvelope(
+            asset_ref=_asset(),
+            source="storage_alert",
+            source_ref="netapp:maintenance-window",
+            observed_at=UTC_NOW,
+            collected_at=UTC_NOW,
+            metric_or_event="severe_vendor_event",
+            value={"severity": "critical"},
+            quality="good",
+        ),
+        category="device_fault",
+    )
+
+    assert result.suppressed is True
+    assert result.incident is None
+    assert db_session.query(models.Incident).count() == 0
+
+
+def test_persisted_diagnosis_is_versioned_and_idempotent_for_same_evidence_digest(db_session):
+    import models
+    from services import forecastIncidentService as analytics
+
+    db_session.add_all(
+        [
+            models.StorageCluster(id=7, name="cluster-7", storage_type="netapp"),
+            models.Project(id=1, name="project-alpha"),
+            models.Incident(
+                correlation_key="7:group:101:capacity_pressure",
+                correlation_bucket_at=UTC_NOW,
+                asset_type="group",
+                asset_id="101",
+                storage_cluster_id=7,
+                project_id=1,
+                vendor="netapp",
+                display_name="project-alpha",
+                category="capacity_pressure",
+                opened_at=UTC_NOW,
+                last_evidence_at=UTC_NOW,
+            ),
+        ]
+    )
+    db_session.commit()
+    incident = db_session.query(models.Incident).one()
+    db_session.add_all(
+        [
+            models.IncidentEvidence(
+                incident_id=incident.id,
+                source="forecast",
+                source_ref="forecast:1",
+                evidence_type="forecast_exhaustion",
+                observed_at=UTC_NOW,
+                evidence_hash="a" * 64,
+            ),
+            models.IncidentEvidence(
+                incident_id=incident.id,
+                source="storage_alert",
+                source_ref="alert:1",
+                evidence_type="hard_limit_alert",
+                observed_at=UTC_NOW,
+                evidence_hash="b" * 64,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    first = analytics.persist_incident_diagnosis(
+        db_session, incident_id=incident.id, high_confidence_enabled=True
+    )
+    second = analytics.persist_incident_diagnosis(
+        db_session, incident_id=incident.id, high_confidence_enabled=True
+    )
+
+    assert first.id == second.id
+    assert first.confidence == "high"
+    assert db_session.query(models.Diagnosis).count() == 1
+
+
+def test_incident_notification_only_triggers_for_create_reopen_or_severity_escalation():
+    from services import incidentNotificationService as notifications
+
+    assert notifications.should_send_incident_notification(
+        created=True, reopened=False, severity_escalated=False
+    ) is True
+    assert notifications.should_send_incident_notification(
+        created=False, reopened=True, severity_escalated=False
+    ) is True
+    assert notifications.should_send_incident_notification(
+        created=False, reopened=False, severity_escalated=True
+    ) is True
+    assert notifications.should_send_incident_notification(
+        created=False, reopened=False, severity_escalated=False
+    ) is False
+
+
+def test_workload_adapter_only_returns_aggregated_time_window_asset_evidence():
+    from services.workloadStorageAdapter import WorkloadRun, aggregate_workload_evidence
+
+    evidence = aggregate_workload_evidence(
+        [
+            WorkloadRun(
+                scheduler="slurm",
+                project_id=1,
+                hostname="compute-01",
+                started_at=UTC_NOW,
+                ended_at=UTC_NOW + timedelta(minutes=7),
+                asset_ref=_asset(),
+                raw_path="/never/persisted/path",
+                job_id="98765",
+            ),
+        ]
+    )
+
+    assert evidence == [
+        {
+            "scheduler": "slurm",
+            "project_id": 1,
+            "hostname": "compute-01",
+            "asset_ref": _asset().model_dump(),
+            "window_start": UTC_NOW,
+            "active_job_count": 1,
+        },
+        {
+            "scheduler": "slurm",
+            "project_id": 1,
+            "hostname": "compute-01",
+            "asset_ref": _asset().model_dump(),
+            "window_start": UTC_NOW + timedelta(minutes=5),
+            "active_job_count": 1,
+        },
+    ]
+
+
+def test_restricted_ai_diagnosis_rejects_unknown_evidence_and_uses_deterministic_fallback():
+    from services.incidentAiService import render_restricted_diagnosis
+
+    diagnosis = {
+        "incident_id": 7,
+        "confidence": "medium",
+        "candidates": [
+            {
+                "category": "device_fault",
+                "score": 0.5,
+                "evidence_refs": ["vendor:1"],
+                "data_gaps": ["asset_mapping_missing"],
+            }
+        ],
+        "evidence_ids": ["vendor:1"],
+        "data_gaps": ["asset_mapping_missing"],
+    }
+
+    rendered = render_restricted_diagnosis(
+        model_text="设备故障（90%）：证据 vendor:1、invented:2。",
+        diagnosis=diagnosis,
+    )
+
+    assert rendered.used_fallback is True
+    assert "invented:2" not in rendered.text
+    assert "0.5" in rendered.text
