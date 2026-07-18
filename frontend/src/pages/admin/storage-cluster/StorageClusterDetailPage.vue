@@ -32,6 +32,7 @@ import storageClusterApi from '@/api/storage-cluster-api';
 import { useQuery } from '@/composables/query';
 import { getDefaultTime } from '@/composables/common';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
+import ClusterIncidentsTab from './components/ClusterIncidentsTab.vue';
 
 const route = useRoute();
 const breadcrumbs = useBreadcrumbs();
@@ -662,6 +663,13 @@ onBeforeMount(() => {
                 @size-change="changeSystemEventPageSize" />
             </div>
           </div>
+        </ElTabPane>
+        <ElTabPane
+          label="关联事件"
+          name="incidents">
+          <ClusterIncidentsTab
+            v-if="activeTab === 'incidents' && clusterId"
+            :cluster-id="clusterId" />
         </ElTabPane>
       </ElTabs>
     </ElCard>

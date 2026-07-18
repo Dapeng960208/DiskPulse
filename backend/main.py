@@ -18,6 +18,7 @@ from routers import (
     audit_events,
     config,
     dashboard,
+    forecast_incidents,
     group,
     group_tag,
     large_files,
@@ -72,6 +73,7 @@ v1_authenticated_router = APIRouter(
     dependencies=[Depends(require_authenticated_request)],
 )
 v1_authenticated_router.include_router(telemetry.router)
+v1_authenticated_router.include_router(forecast_incidents.router)
 app.include_router(v1_authenticated_router)
 
 cors_origins = base_config.get("application.cors_origins", [])

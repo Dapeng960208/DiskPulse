@@ -502,6 +502,198 @@ class StorageAlerts(Base):
     storage_cluster = relationship("StorageCluster", lazy=True)
 
 
+class TelemetryQualitySnapshot(Base):
+    __tablename__ = "telemetry_quality_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "asset_type", "asset_id", "period", "algorithm_version", "calculated_at",
+            name="uq_telemetry_quality_snapshot_version",
+        ),
+        Index(
+            "ix_telemetry_quality_project_period_calculated",
+            "project_id", "period", desc("calculated_at"),
+        ),
+        Index(
+            "ix_telemetry_quality_cluster_asset_period",
+            "storage_cluster_id", "asset_type", "asset_id", "period",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    asset_type = Column(String(32), nullable=False)
+    asset_id = Column(String(128), nullable=False)
+    storage_cluster_id = Column(Integer, ForeignKey("storage_clusters.id", ondelete="SET NULL"), nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    vendor = Column(String(32), nullable=False)
+    display_name = Column(String(255), nullable=False)
+    period = Column(String(32), nullable=False)
+    latest_point_at = Column(UTCDateTime(), nullable=True)
+    coverage_ratio = Column(Float, nullable=False, default=0)
+    data_gaps = Column(JSON, nullable=False, default=list)
+    quality_status = Column(String(24), nullable=False, default="insufficient")
+    algorithm_version = Column(String(64), nullable=False)
+    calculated_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+
+
+class CapacityForecast(Base):
+    __tablename__ = "capacity_forecasts"
+    __table_args__ = (
+        UniqueConstraint(
+            "asset_type", "asset_id", "training_end", "algorithm_version",
+            name="uq_capacity_forecast_asset_training_version",
+        ),
+        Index("ix_capacity_forecast_project_created", "project_id", desc("created_at")),
+        Index("ix_capacity_forecast_cluster_asset_created", "storage_cluster_id", "asset_type", "asset_id", desc("created_at")),
+    )
+
+    id = Column(Integer, primary_key=True)
+    asset_type = Column(String(32), nullable=False)
+    asset_id = Column(String(128), nullable=False)
+    storage_cluster_id = Column(Integer, ForeignKey("storage_clusters.id", ondelete="SET NULL"), nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    vendor = Column(String(32), nullable=False)
+    display_name = Column(String(255), nullable=False)
+    training_start = Column(UTCDateTime(), nullable=False)
+    training_end = Column(UTCDateTime(), nullable=False)
+    hard_limit = Column(Float, nullable=False)
+    curve = Column(JSON, nullable=False, default=list)
+    exhaustion_dates = Column(JSON, nullable=False, default=dict)
+    algorithm_version = Column(String(64), nullable=False)
+    input_quality = Column(JSON, nullable=False, default=dict)
+    backtest_mape = Column(Float, nullable=True)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+
+
+class AnomalyObservation(Base):
+    __tablename__ = "anomaly_observations"
+    __table_args__ = (
+        UniqueConstraint("source", "source_ref", "metric", "algorithm_version", name="uq_anomaly_source_metric_version"),
+        Index("ix_anomaly_project_observed", "project_id", desc("observed_at")),
+        Index("ix_anomaly_cluster_asset_metric_observed", "storage_cluster_id", "asset_type", "asset_id", "metric", desc("observed_at")),
+    )
+
+    id = Column(Integer, primary_key=True)
+    asset_type = Column(String(32), nullable=False)
+    asset_id = Column(String(128), nullable=False)
+    storage_cluster_id = Column(Integer, ForeignKey("storage_clusters.id", ondelete="SET NULL"), nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    vendor = Column(String(32), nullable=False)
+    display_name = Column(String(255), nullable=False)
+    metric = Column(String(32), nullable=False)
+    observed_at = Column(UTCDateTime(), nullable=False)
+    observed_value = Column(Float, nullable=False)
+    seasonal_baseline = Column(Float, nullable=False)
+    mad = Column(Float, nullable=False)
+    robust_z_score = Column(Float, nullable=False)
+    severity = Column(String(16), nullable=False)
+    evidence_window_start = Column(UTCDateTime(), nullable=False)
+    evidence_window_end = Column(UTCDateTime(), nullable=False)
+    source = Column(String(64), nullable=False)
+    source_ref = Column(String(255), nullable=False)
+    input_quality = Column(JSON, nullable=False, default=dict)
+    algorithm_version = Column(String(64), nullable=False)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+
+
+class Incident(Base):
+    __tablename__ = "incidents"
+    __table_args__ = (
+        UniqueConstraint("correlation_key", "correlation_bucket_at", name="uq_incident_correlation_bucket"),
+        CheckConstraint("status IN ('open', 'acknowledged', 'investigating', 'mitigated', 'resolved')", name="ck_incident_status"),
+        CheckConstraint("category IN ('capacity_pressure', 'device_fault', 'performance_contention', 'telemetry_blindspot')", name="ck_incident_category"),
+        Index("ix_incident_project_status_updated", "project_id", "status", desc("updated_at")),
+        Index("ix_incident_cluster_asset_updated", "storage_cluster_id", "asset_type", "asset_id", desc("updated_at")),
+        Index("ix_incident_correlation_resolved", "correlation_key", "resolved_at"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    correlation_key = Column(String(512), nullable=False)
+    correlation_bucket_at = Column(UTCDateTime(), nullable=False)
+    asset_type = Column(String(32), nullable=False)
+    asset_id = Column(String(128), nullable=False)
+    storage_cluster_id = Column(Integer, ForeignKey("storage_clusters.id", ondelete="SET NULL"), nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    vendor = Column(String(32), nullable=False)
+    display_name = Column(String(255), nullable=False)
+    category = Column(String(32), nullable=False)
+    severity = Column(String(16), nullable=False, default="warning")
+    status = Column(String(16), nullable=False, default="open")
+    assigned_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    opened_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+    last_evidence_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+    resolved_at = Column(UTCDateTime(), nullable=True)
+    silenced_until = Column(UTCDateTime(), nullable=True)
+    silence_reason = Column(String(500), nullable=True)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class IncidentEvidence(Base):
+    __tablename__ = "incident_evidence"
+    __table_args__ = (
+        UniqueConstraint("source", "source_ref", name="uq_incident_evidence_source_ref"),
+        Index("ix_incident_evidence_incident_observed", "incident_id", desc("observed_at")),
+    )
+
+    id = Column(Integer, primary_key=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False)
+    source = Column(String(64), nullable=False)
+    source_ref = Column(String(255), nullable=False)
+    evidence_type = Column(String(64), nullable=False)
+    observed_at = Column(UTCDateTime(), nullable=False)
+    data_gaps = Column(JSON, nullable=False, default=list)
+    evidence_hash = Column(String(64), nullable=False)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+
+
+class IncidentTimeline(Base):
+    __tablename__ = "incident_timeline"
+    __table_args__ = (Index("ix_incident_timeline_incident_occurred", "incident_id", "occurred_at", "id"),)
+
+    id = Column(Integer, primary_key=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False)
+    event_type = Column(String(32), nullable=False)
+    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    from_status = Column(String(16), nullable=True)
+    to_status = Column(String(16), nullable=True)
+    comment = Column(Text, nullable=True)
+    occurred_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+
+
+class MaintenanceWindow(Base):
+    __tablename__ = "maintenance_windows"
+    __table_args__ = (Index("ix_maintenance_project_window", "project_id", "starts_at", "ends_at"),)
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
+    storage_cluster_id = Column(Integer, ForeignKey("storage_clusters.id", ondelete="SET NULL"), nullable=True)
+    asset_type = Column(String(32), nullable=True)
+    asset_id = Column(String(128), nullable=True)
+    starts_at = Column(UTCDateTime(), nullable=False)
+    ends_at = Column(UTCDateTime(), nullable=False)
+    reason = Column(String(500), nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+
+
+class Diagnosis(Base):
+    __tablename__ = "diagnoses"
+    __table_args__ = (
+        UniqueConstraint("incident_id", "algorithm_version", "evidence_digest", name="uq_diagnosis_incident_version_digest"),
+        Index("ix_diagnosis_incident_created", "incident_id", desc("created_at")),
+    )
+
+    id = Column(Integer, primary_key=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False)
+    algorithm_version = Column(String(64), nullable=False)
+    candidates = Column(JSON, nullable=False, default=list)
+    confidence = Column(String(16), nullable=False)
+    evidence_ids = Column(JSON, nullable=False, default=list)
+    data_gaps = Column(JSON, nullable=False, default=list)
+    evidence_digest = Column(String(64), nullable=False)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+
+
 class StorageAlertState(Base):
     __tablename__ = "storage_alert_states"
     __table_args__ = (

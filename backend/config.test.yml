@@ -33,6 +33,15 @@ redis:
 observability:
   metrics_token_file: ./metrics-token.test
 
+incident_notifications:
+  enabled: false
+  notify_administrators: true
+  notify_project_owner: false
+  notify_project_members: false
+  extra_usernames: []
+  feishu_enabled: true
+  email_enabled: false
+
 ai:
   config_secret_key: test-ai-config-secret-key
   request_timeout_seconds: 60
