@@ -237,8 +237,8 @@ class TelemetryCollectionRun(Base):
             "AND records_written IS NULL AND error_code IS NULL) OR "
             "(outcome IS NOT NULL AND finished_at IS NOT NULL AND ((outcome = 'success' AND data_state IS NOT NULL "
             "AND records_written IS NOT NULL AND error_code IS NULL) OR "
-            "(outcome IN ('failed', 'skipped') AND data_state IS NULL "
-            "AND records_written IS NULL AND error_code IS NULL)))",
+            "(outcome = 'failed' AND data_state IS NULL AND records_written IS NULL AND error_code IS NOT NULL) OR "
+            "(outcome = 'skipped' AND data_state IS NULL AND records_written IS NULL AND error_code IS NULL)))",
             name="ck_telemetry_run_terminal_fields",
         ),
         Index(

@@ -161,6 +161,13 @@ def complete_collection_run(
             run.data_state = data_state
             run.records_written = records_written
             run.error_code = None
+        elif outcome == "failed":
+            if error_code not in ERROR_CODES:
+                raise ValueError("failed telemetry runs require a classified error code")
+            # Review fix: retain the classified failure reason in the telemetry ledger.
+            run.data_state = None
+            run.records_written = None
+            run.error_code = error_code
         else:
             run.data_state = None
             run.records_written = None
