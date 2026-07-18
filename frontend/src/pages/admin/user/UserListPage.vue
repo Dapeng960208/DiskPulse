@@ -217,8 +217,8 @@ onBeforeMount(() => {
         </template>
       </ElTableColumn>
       <ElTableColumn
-        align="center"
-        min-width="120"
+        align="right"
+        width="196"
         fixed="right">
         <template #header>
           <ElButton

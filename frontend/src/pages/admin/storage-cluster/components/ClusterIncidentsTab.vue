@@ -94,6 +94,7 @@ onMounted(load);
         min-width="190" />
       <ElTableColumn
         label="详情"
+        align="right"
         width="90"
         fixed="right">
         <template #default="{ row }"><ElButton

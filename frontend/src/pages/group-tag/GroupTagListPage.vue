@@ -61,7 +61,8 @@ query();
         prop="name" />
       <ElTableColumn
         align="right"
-        width="160">
+        width="160"
+        fixed="right">
         <template #header>
           <ElButton
             size="small"

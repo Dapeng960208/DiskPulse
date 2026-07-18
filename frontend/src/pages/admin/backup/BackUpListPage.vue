@@ -226,8 +226,9 @@ query();
       </template> -->
       </ElTableColumn>
       <ElTableColumn
-        align="center"
-        min-width="120">
+        align="right"
+        width="160"
+        fixed="right">
         <template #default="{ row }">
           <ElButton
             v-if="hasRole('disk-monitor:admin') && row.status===2"
