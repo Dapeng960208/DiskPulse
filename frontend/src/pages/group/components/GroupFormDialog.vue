@@ -165,7 +165,6 @@ defineExpose({
     <template #header>
       <div class="write-form-dialog__heading">
         <h2>{{ mode === 'create' ? '新增项目组监控配置' : '修改项目组监控配置' }}</h2>
-        <p>配置项目归属、存储目标、负责人和告警策略。</p>
       </div>
     </template>
     <ElForm

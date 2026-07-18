@@ -149,7 +149,6 @@ defineExpose({
     <template #header>
       <div class="write-form-dialog__heading">
         <h2>{{ mode === 'create' ? '新增用户目录' : '修改用户目录' }}</h2>
-        <p>关联项目、项目组和研发用户，路径由选择结果自动生成。</p>
       </div>
     </template>
     <ElForm

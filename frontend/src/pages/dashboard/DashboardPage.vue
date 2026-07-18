@@ -177,7 +177,6 @@ onMounted(loadDashboard);
     <header class="dashboard-header">
       <div>
         <h1>存储概览</h1>
-        <p>{{ isProject ? (scope.project_name || '项目数据加载中') : '全局存储运行视图' }}</p>
       </div>
       <div class="dashboard-controls">
         <ProjectSelect

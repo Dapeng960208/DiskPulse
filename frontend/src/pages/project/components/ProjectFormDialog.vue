@@ -87,7 +87,6 @@ defineExpose({
     <template #header>
       <div class="write-form-dialog__heading">
         <h2>{{ mode === 'create' ? '新增项目' : '修改项目' }}</h2>
-        <p>维护项目负责人、说明和告警策略。</p>
       </div>
     </template>
     <ElForm

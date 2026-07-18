@@ -80,7 +80,6 @@ defineExpose({
     <template #header>
       <div class="write-form-dialog__heading">
         <h2>{{ mode === 'create' ? '新增用户' : '修改用户' }}</h2>
-        <p>维护用户身份信息、账户类型和告警状态。</p>
       </div>
     </template>
     <ElForm

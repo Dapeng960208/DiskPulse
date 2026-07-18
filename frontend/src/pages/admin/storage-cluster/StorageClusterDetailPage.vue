@@ -585,7 +585,6 @@ onBeforeMount(() => {
             <div class="system-events">
               <div class="system-events__heading">
                 <h3>系统事件</h3>
-                <p>事件对象表示厂商事件关联的节点：NetApp 优先显示节点名称，Isilon 显示 OneFS 节点编号。</p>
               </div>
               <FilterForm
                 class="system-event-filter"

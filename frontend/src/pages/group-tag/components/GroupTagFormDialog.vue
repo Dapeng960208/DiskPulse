@@ -49,7 +49,6 @@ defineExpose({
     <template #header>
       <div class="write-form-dialog__heading">
         <h2>{{ mode === 'create' ? '新增项目组标签' : '修改项目组标签' }}</h2>
-        <p>标签用于统一分类和筛选项目组。</p>
       </div>
     </template>
     <ElForm

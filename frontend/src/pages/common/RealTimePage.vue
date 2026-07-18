@@ -225,7 +225,6 @@ const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThre
       class="real-time-page__header">
       <div>
         <h1>{{ props.label }}实时监控</h1>
-        <p>查看指定时间范围内的容量指标趋势和最近告警。</p>
       </div>
     </section>
     <FilterForm

@@ -138,7 +138,6 @@ defineExpose({
     <template #header>
       <div class="write-form-dialog__heading">
         <h2>{{ mode === 'create' ? '新增存储集群' : '编辑存储集群' }}</h2>
-        <p>配置设备连接、安全校验和采集状态。</p>
       </div>
     </template>
     <ElForm
@@ -326,7 +325,6 @@ defineExpose({
       </ul>
 
       <h3>root 创建与授权命令</h3>
-      <p>在任一 Isilon 节点使用 root 执行；创建用户时按提示输入密码。</p>
       <pre>{{ isilonAccountCommands }}</pre>
 
       <h3>DiskPulse 配置</h3>

@@ -21,7 +21,6 @@
         >
         <div class="login-visual__message">
           <h1 id="storage-platform-title">存储集群，一处掌控</h1>
-          <p>统一查看容量、性能与故障，管理项目组和用户目录。</p>
         </div>
         <ul
           class="login-visual__capabilities"
@@ -46,7 +45,6 @@
         <div class="login-header">
           <p class="login-kicker">安全登录</p>
           <h2 id="login-title">登录 {{ appTitle }}</h2>
-          <p>使用 LDAP 账号访问存储资源与管理功能。</p>
         </div>
 
         <ElForm

@@ -40,16 +40,16 @@ vi.mock('element-plus', () => ({
   ElTable: { name: 'ElTable', props: { data: Array }, template: '<div><slot /></div>' },
   ElTableColumn: {
     name: 'ElTableColumn',
-    template: '<div><slot :row="{ user_id: 7, role: \'reader\', user: { rd_username: \'alice\' } }" /></div>',
+    template: '<div><slot name="header" /><slot :row="{ user_id: 7, role: \'reader\', user: { rd_username: \'alice\' } }" /></div>',
   },
   ElTag: { name: 'ElTag', template: '<span><slot /></span>' },
 }));
 
 import ProjectMembersTab from '@/pages/project/components/ProjectMembersTab.vue';
 
-async function mountTab() {
+async function mountTab({ canManageMembers = false, canManageProjectAdmins = false } = {}) {
   const wrapper = mount(ProjectMembersTab, {
-    props: { projectId: 1, canManageProjectAdmins: false },
+    props: { projectId: 1, canManageMembers, canManageProjectAdmins },
     global: {
       directives: { loading: () => undefined },
     },
@@ -68,7 +68,7 @@ describe('ProjectMembersTab', () => {
 
   it('shows an error when adding a member fails instead of leaving a rejected promise', async () => {
     membershipApi.create.mockRejectedValue(new Error('forbidden'));
-    const wrapper = await mountTab();
+    const wrapper = await mountTab({ canManageMembers: true });
 
     await findButton(wrapper, '添加成员').trigger('click');
     await wrapper.find('.user-select').trigger('click');
@@ -79,8 +79,16 @@ describe('ProjectMembersTab', () => {
     expect(ui.error).toHaveBeenCalledWith('保存项目成员失败，请稍后重试');
   });
 
-  it('opens the add-member form above the project tabs', async () => {
-    const wrapper = await mountTab();
+  it('shows the add-member form control only to project administrators and super administrators', async () => {
+    const reader = await mountTab();
+
+    expect(findButton(reader, '添加成员')).toBeUndefined();
+
+    const projectAdmin = await mountTab({ canManageMembers: true });
+
+    expect(findButton(projectAdmin, '添加成员')).toBeDefined();
+
+    const wrapper = await mountTab({ canManageMembers: true, canManageProjectAdmins: true });
 
     expect(wrapper.find('.member-dialog').exists()).toBe(false);
     await findButton(wrapper, '添加成员').trigger('click');

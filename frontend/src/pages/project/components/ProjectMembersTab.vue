@@ -22,6 +22,7 @@ const props = defineProps({
     type: Number,
     required: true,
   },
+  canManageMembers: Boolean,
   canManageProjectAdmins: Boolean,
 });
 
@@ -117,15 +118,6 @@ onMounted(loadMembers);
 
 <template>
   <section class="project-members-tab">
-    <div class="section-toolbar">
-      <div>
-        <h3>项目成员</h3>
-        <p>管理本项目的只读和编辑成员。</p>
-      </div>
-      <ElButton
-        type="primary"
-        @click="openCreate"><i class="i-ri-user-add-line"></i>添加成员</ElButton>
-    </div>
     <ElTable
       v-loading="loading"
       :data="members">
@@ -148,6 +140,12 @@ onMounted(loadMembers);
         align="right"
         width="150"
         fixed="right">
+        <template #header>
+          <ElButton
+            v-if="canManageMembers"
+            type="primary"
+            @click="openCreate"><i class="i-ri-user-add-line"></i>添加成员</ElButton>
+        </template>
         <template #default="{ row }">
           <div
             v-if="canManage(row)"
@@ -204,10 +202,3 @@ onMounted(loadMembers);
     </ElDialog>
   </section>
 </template>
-
-<style scoped>
-.section-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--spacing-md); margin-bottom: var(--spacing-md); }
-.section-toolbar h3 { margin: 0 0 4px; color: var(--text-primary); font-size: var(--font-size-lg); }
-.section-toolbar p { margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
-.section-toolbar i { margin-right: var(--spacing-xs); }
-</style>

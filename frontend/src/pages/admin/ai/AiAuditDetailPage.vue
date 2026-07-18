@@ -23,7 +23,7 @@ onMounted(async () => {
 
 <template>
   <section class="audit-detail">
-    <div class="heading"><div><h2>审计记录 #{{ route.params.id }}</h2><p>请求与响应仅保留脱敏摘要，工具结果不在此展示。</p></div><ElButton @click="router.push('/admin/ai-center?tab=audit')">返回审计</ElButton></div>
+    <div class="heading"><div><h2>审计记录 #{{ route.params.id }}</h2></div><ElButton @click="router.push('/admin/ai-center?tab=audit')">返回审计</ElButton></div>
     <ElDescriptions
       v-if="audit"
       :column="2"

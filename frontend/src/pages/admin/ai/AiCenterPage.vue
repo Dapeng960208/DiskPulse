@@ -311,7 +311,6 @@ onMounted(async () => {
       <template #header>
         <div class="write-form-dialog__heading">
           <h2>{{ editingId ? '编辑模型' : '新增模型' }}</h2>
-          <p>配置模型连接、生成参数和对话能力。</p>
         </div>
       </template>
       <ElForm

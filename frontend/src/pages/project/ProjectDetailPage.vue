@@ -91,6 +91,7 @@ onMounted(() => {
         name="members">
         <ProjectMembersTab
           :project-id="projectId"
+          :can-manage-members="canManageMembers"
           :can-manage-project-admins="canManageProjectAdmins" />
       </ElTabPane>
       <ElTabPane

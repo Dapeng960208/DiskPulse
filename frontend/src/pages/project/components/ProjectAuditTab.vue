@@ -48,10 +48,6 @@ onMounted(loadEvents);
 
 <template>
   <section class="project-audit-tab">
-    <div class="section-heading">
-      <h3>项目审计</h3>
-      <p>查看当前项目的脱敏操作记录。</p>
-    </div>
     <AuditEventTable
       :events="events"
       :loading="loading"

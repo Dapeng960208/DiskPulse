@@ -42,7 +42,6 @@ onMounted(loadEvent);
     <div class="page-heading">
       <div>
         <h2>审计事件 #{{ route.params.id }}</h2>
-        <p>仅展示经过后端脱敏的操作摘要。</p>
       </div>
       <ElButton @click="router.push('/admin/audit-events')">返回审计</ElButton>
     </div>
