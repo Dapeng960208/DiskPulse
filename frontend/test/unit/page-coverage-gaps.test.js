@@ -656,6 +656,7 @@ describe('real-time page coverage gaps', () => {
       props: { apiType: 'storage-usage', label: '用户目录', attributeId: null },
     });
 
+    expect(wrapper.findComponent({ name: 'StorageUsageSelect' }).props('modelValue')).toEqual([]);
     expect(mocks.storageUsageApi.fetchStorageRealTimeDataById).not.toHaveBeenCalled();
     expect(mocks.alertApi.fetch).not.toHaveBeenCalled();
 
