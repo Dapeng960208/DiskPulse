@@ -1,5 +1,6 @@
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ElMessage } from 'element-plus';
 
 const api = vi.hoisted(() => ({
   fetchPrediction: vi.fn(),
@@ -32,6 +33,9 @@ describe('CapacityPredictionPanel', () => {
     vi.clearAllMocks();
     api.fetchPlans.mockResolvedValue([]);
     api.fetchRelatedIncidents.mockResolvedValue([]);
+    api.createPlan.mockResolvedValue({ id: 1 });
+    vi.spyOn(ElMessage, 'success').mockImplementation(() => {});
+    vi.spyOn(ElMessage, 'error').mockImplementation(() => {});
   });
 
   it('renders an empty state when the resource has no forecast yet', async () => {
@@ -61,5 +65,51 @@ describe('CapacityPredictionPanel', () => {
     expect(api.fetchPrediction).not.toHaveBeenCalled();
     expect(api.fetchPlans).not.toHaveBeenCalled();
     expect(api.fetchRelatedIncidents).not.toHaveBeenCalled();
+  });
+
+  it('creates a resource-scoped capacity plan and reloads the panel', async () => {
+    api.fetchPrediction.mockRejectedValue({ response: { status: 404 } });
+    const wrapper = mountPanel({ canManagePlans: true });
+    await flushPromises();
+
+    wrapper.vm.openPlanDialog();
+    wrapper.vm.planForm.effectiveAt = new Date('2026-08-01T00:00:00Z');
+    wrapper.vm.planForm.capacityDelta = 2048;
+    wrapper.vm.planForm.reason = '  approved expansion  ';
+    await wrapper.vm.createPlan();
+
+    expect(api.createPlan).toHaveBeenCalledWith('group', 7, {
+      effective_at: '2026-08-01T00:00:00.000Z',
+      capacity_delta: 2048,
+      reason: 'approved expansion',
+    });
+    expect(ElMessage.success).toHaveBeenCalledWith('容量计划已保存');
+    expect(api.fetchPrediction).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the plan dialog open and reports a failed save', async () => {
+    api.fetchPrediction.mockRejectedValue({ response: { status: 404 } });
+    api.createPlan.mockRejectedValue(new Error('forbidden'));
+    const wrapper = mountPanel({ canManagePlans: true });
+    await flushPromises();
+
+    wrapper.vm.openPlanDialog();
+    wrapper.vm.planForm.capacityDelta = 1;
+    wrapper.vm.planForm.reason = 'approved cleanup';
+    await wrapper.vm.createPlan();
+
+    expect(ElMessage.error).toHaveBeenCalledWith('保存容量计划失败，请确认项目管理员权限后重试');
+    expect(wrapper.vm.planDialogVisible).toBe(true);
+  });
+
+  it('updates dialog visibility through the v-model contract', async () => {
+    api.fetchPrediction.mockRejectedValue({ response: { status: 404 } });
+    const wrapper = mountPanel({ canManagePlans: true });
+    await flushPromises();
+
+    wrapper.vm.openPlanDialog();
+    await wrapper.findComponent({ name: 'ElDialog' }).vm.$emit('update:modelValue', false);
+
+    expect(wrapper.vm.planDialogVisible).toBe(false);
   });
 });

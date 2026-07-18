@@ -317,7 +317,6 @@ describe('dialog component function coverage', () => {
     getExposed(wrapper).edit({ id: 1, name: 'Demo' });
     await wrapper.findAll('input').at(0).setValue('Demo Project');
     wrapper.findAllComponents({ name: 'RdUserSelect' }).at(0).vm.$emit('update:modelValue', 10);
-    wrapper.findAllComponents({ name: 'RdUserSelect' }).at(1).vm.$emit('update:modelValue', 11);
     await wrapper.findAll('input').at(1).setValue('project description');
     await findSubmitButton(wrapper).trigger('click');
     await wrapper.find('[data-test="dialog-model"]').trigger('click');

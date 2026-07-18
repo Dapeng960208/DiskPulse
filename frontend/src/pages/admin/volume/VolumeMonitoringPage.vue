@@ -26,7 +26,7 @@ const metricOptions = [
   { value: 'throughput_total', label: '吞吐量' },
 ];
 const metricLabels = Object.fromEntries(metricOptions.map((item) => [item.value, item.label]));
-const performanceByMetric = computed(() => new Map(monitoring.value.performance.map((item) => [item.metric, item])));
+const performanceByMetric = computed(() => new Map((monitoring.value.performance || []).map((item) => [item.metric, item])));
 const capacitySeries = computed(() => [{ name: '已用容量', data: monitoring.value.capacity || [] }]);
 
 function metricSeries(metric) {
@@ -42,11 +42,18 @@ async function load() {
   if (!Number.isInteger(volumeId.value) || volumeId.value <= 0) return;
   loading.value = true;
   try {
-    monitoring.value = await volumeApi.fetchMonitoring(volumeId.value, {
+    const result = await volumeApi.fetchMonitoring(volumeId.value, {
       start_time: dateRange.value?.[0],
       end_time: dateRange.value?.[1],
       metrics: selectedMetrics.value,
     });
+    monitoring.value = {
+      info: null,
+      binding: null,
+      capacity: [],
+      performance: [],
+      ...(result && typeof result === 'object' ? result : {}),
+    };
     breadcrumbs.setDetailTitle(route.name, monitoring.value.info?.name || '');
   } finally {
     loading.value = false;

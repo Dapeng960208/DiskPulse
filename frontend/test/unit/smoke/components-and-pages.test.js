@@ -64,6 +64,24 @@ vi.mock('@/api/project-api.js', () => ({
   },
 }));
 
+vi.mock('@/api/volume-api.js', () => ({
+  default: {
+    fetchMonitoring: vi.fn(() => Promise.resolve({
+      info: null,
+      binding: null,
+      capacity: [],
+      performance: [],
+    })),
+  },
+}));
+
+vi.mock('@/api/users-api', () => ({
+  default: {
+    fetch: vi.fn(() => Promise.resolve({ content: [], total: 0 })),
+    fetchById: vi.fn(() => Promise.resolve(null)),
+  },
+}));
+
 vi.mock('@/pages/common/RealTimePage.vue', () => ({
   default: {
     name: 'RealTimePage',

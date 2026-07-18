@@ -1168,3 +1168,21 @@
 - **修复**：增加回测窗口数据库唯一约束和服务校验；激活时复核私有模型；重复版本/窗口返回 `409`；基线按训练日期排序并只叠加同日候选；前端单独处理 `404` 空态；容量预测写路由排除通用重复审计；Pydantic 拒绝零值、非有限值和空白说明。
 - **验证**：相关 RED 用例先稳定失败，修复后后端聚焦回归 `92 passed`，前端预测测试 `7 passed`，scoped ESLint、源码编译、三方言迁移编译、生产构建和 `git diff --check` 均通过。
 - **风险**：真实 PostgreSQL 并发写入、Celery/Redis 调度、QuestDB 数据与私有 Ollama 仍需隔离环境联调。
+
+## 2026-07-18：合并主线后前端函数覆盖率低于全局门禁
+
+- **触发**：在容量预测治理分支合并最新 `main` 后执行 `npm run test:coverage`。
+- **现象**：当时全部 `460` 条测试通过，但 Functions 仅 `77.53%`，低于全局 `80%` 门禁，命令退出 `1`。
+- **根因**：新增预测治理、容量计划、事件列表交互及预测 API wrapper 的多个真实事件函数尚未被行为测试调用；同时主线页面合同变化使部分既有测试只验证渲染而未覆盖交互。
+- **修复**：补充预测 API、治理页、预测面板和事件中心的成功、失败、筛选、分页、详情及 `v-model` 交互测试，并修复主线合并暴露的卷监控空响应和过期组件 Mock。
+- **验证**：全量 coverage 为 `77 files / 471 passed`；Statements/Lines `97.27%`、Branches `85.88%`、Functions `80.21%`，四项均通过门禁。
+- **风险**：覆盖率测试仍会输出既有模拟网络失败和 Vue prop warning，但命令退出成功；真实浏览器与外部服务联调仍属于部署前验收。
+
+## 2026-07-18：PowerShell 未展开 ESLint 文件数组
+
+- **触发**：将 `git diff --name-only` 结果直接作为 `npx eslint $files` 参数执行合并前 scoped lint。
+- **现象**：ESLint 把全部路径拼成一个匹配模式并报告 `No files matching the pattern`，构建因前置失败未执行。
+- **根因**：PowerShell 调用外部命令时未按预期展开该字符串数组。
+- **修复**：改为 `& npx eslint @files` 显式展开参数，并把未跟踪的新增测试文件一并加入列表。
+- **验证**：scoped ESLint 结果为 `0 errors`、`11 warnings`，随后 `npx vite build` 成功。
+- **风险**：11 条 warning 均来自既有多组件测试文件的 `vue/one-component-per-file`；生产构建仍保留既有 `%VITE_APP_TITLE%` 和大 chunk warning。

@@ -15,6 +15,12 @@ vi.mock('@/pages/common/RealTimePage.vue', () => ({
   },
 }));
 
+vi.mock('@/api/capacity-prediction-api.js', () => ({
+  default: {
+    access: vi.fn(() => Promise.reject({ response: { status: 403 } })),
+  },
+}));
+
 import UsageDetailPage from '@/pages/usage/UsageDetailPage.vue';
 
 const hiddenLabels = [

@@ -21,5 +21,6 @@ describe('volume performance monitoring detail', () => {
     expect(page).toContain('存储空间容量变化');
     expect(page).toContain('v-for="metric in selectedMetrics"');
     expect(page).toContain('performance-grid');
+    expect(page).toContain('monitoring.value.performance || []');
   });
 });
