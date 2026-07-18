@@ -2,6 +2,7 @@
 """Configuration-scoped delivery for derived Incident notifications only."""
 
 from collections.abc import Iterable
+from datetime import datetime, timezone
 
 from appConfig import base_config
 from models import Project, ProjectMembership, User
@@ -77,12 +78,21 @@ def _recipient_emails(db, usernames: Iterable[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(str(row[0]) for row in emails if row[0]))
 
 
+def _incident_is_currently_silenced(incident) -> bool:
+    silenced_until = incident.silenced_until
+    if silenced_until is None:
+        return False
+    if silenced_until.tzinfo is None:
+        silenced_until = silenced_until.replace(tzinfo=timezone.utc)
+    return silenced_until > datetime.now(timezone.utc)
+
+
 def notify_incident(db, incident, *, event: str) -> tuple[str, ...]:
     """Best-effort derived notification; source alerts and vendor events are untouched."""
     config = incident_notification_config()
     if event not in {"created", "reopened", "severity_escalated"}:
         return ()
-    if not config["enabled"] or (incident.silenced_until is not None):
+    if not config["enabled"] or _incident_is_currently_silenced(incident):
         return ()
     owner, members = _project_recipients(db, incident.project_id)
     recipients = resolve_recipient_usernames(

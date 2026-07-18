@@ -460,7 +460,10 @@ def test_expired_incident_silence_does_not_suppress_a_new_severity_notification(
 
     recipients = notifications.notify_incident(
         None,
-        SimpleNamespace(project_id=1, silenced_until=UTC_NOW - timedelta(minutes=1)),
+        SimpleNamespace(
+            project_id=1,
+            silenced_until=datetime.now(timezone.utc) - timedelta(minutes=1),
+        ),
         event="severity_escalated",
     )
 
