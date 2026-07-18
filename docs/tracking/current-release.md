@@ -1813,3 +1813,21 @@ npm test -- --coverage.enabled=false
 ### 风险与待验证范围
 
 - 尚未逐页在真实登录角色和窄屏视口中手工验证；自动化测试已覆盖按钮语义、链接拒绝路径、无 ID 回退文本与操作列采用合同。
+
+## 2026-07-18：用户目录 Mock 展示字段与阈值颜色修复
+
+### 已完成
+
+- Mock 用户目录记录补齐项目、项目组标签、软限额使用率等列表展示字段，并将硬、软使用率统一为百分比值。
+- Mock `GET /config/storage-alert-thresholds` 返回前端阈值 store 所需的扁平阈值对象；40% 至 54% 的使用率因此正确按低于重要阈值的颜色展示。
+
+### 验证状态
+
+- RED：新增 Mock 运行时回归测试后，项目、项目组标签、软使用率缺失且硬使用率为小数，测试按预期失败。
+- GREEN：`npx vitest run test/unit/mock-runtime.test.js test/unit/storage-alert-thresholds-store.test.js test/unit/quota-progress-color.test.js --coverage.enabled=false`，`24 passed`；Mock 源码 ESLint 通过。
+- `npm run build:test` 通过；保留既有 `%VITE_APP_TITLE%` 未定义和大 chunk 警告。
+
+### 风险与待验证范围
+
+- 按当前任务要求未执行浏览器检查；真实后端接口未变更，未进行真实后端联调。
+- 全量 `npm run test:coverage` 失败于 12 条既有页面/路由合同用例（按钮查找、用户 LDAP、懒加载数量、容量预测详情），本次 Mock 回归用例已通过，未扩大修复范围。

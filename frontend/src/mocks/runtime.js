@@ -89,24 +89,33 @@ const seed = () => {
     soft_limit: 440 + index * 60,
     use_ratio: 0.46 + index * 0.04,
   }));
-  const usages = users.map((user, index) => ({
-    id: 101 + index,
-    name: `home-${user.rd_username}`,
-    rd_username: user.rd_username,
-    user,
-    project_id: projects[index].id,
-    group_id: groups[index].id,
-    group: groups[index],
-    group_tag_id: tags[index].id,
-    linux_path: `/data/demo/project-${index + 1}/${user.rd_username}`,
-    used: 180 + index * 42,
-    limit: 450 + index * 65,
-    soft_limit: 400 + index * 60,
-    use_ratio: 0.4 + index * 0.04,
-    storage_cluster: clusters[index],
-    storage_cluster_id: clusters[index].id,
-    capabilities: {},
-  }));
+  const usages = users.map((user, index) => {
+    const used = 180 + index * 42;
+    const limit = 450 + index * 65;
+    const softLimit = 400 + index * 60;
+
+    return {
+      id: 101 + index,
+      name: `home-${user.rd_username}`,
+      rd_username: user.rd_username,
+      user,
+      project_id: projects[index].id,
+      project: projects[index],
+      group_id: groups[index].id,
+      group: groups[index],
+      group_tag_id: tags[index].id,
+      group_tag: tags[index],
+      linux_path: `/data/demo/project-${index + 1}/${user.rd_username}`,
+      used,
+      limit,
+      soft_limit: softLimit,
+      use_ratio: Number(((used / limit) * 100).toFixed(2)),
+      soft_use_ratio: Number(((used / softLimit) * 100).toFixed(2)),
+      storage_cluster: clusters[index],
+      storage_cluster_id: clusters[index].id,
+      capabilities: {},
+    };
+  });
   const incidents = ['容量压力', '磁盘故障', '性能争用', '遥测延迟', '复制滞后'].map((display_name, index) => {
     const category = ['capacity_pressure', 'device_fault', 'performance_contention', 'telemetry_blindspot', 'capacity_pressure'][index];
     const status = ['open', 'acknowledged', 'investigating', 'mitigated', 'resolved'][index];
@@ -440,7 +449,15 @@ export function createMockGateway() {
       { name: '低', count: 5 }, { name: '中', count: 4 }, { name: '重要', count: 3 }, { name: '严重', count: 2 }, { name: '紧急', count: 1 },
     ];
     if (path === '/dashboard/top-users') return state.usages.map((usage) => ({ name: usage.rd_username, used_gb: usage.used }));
-    if (path === '/config/storage' || path === '/config/storage-alert-thresholds') return state.config;
+    if (path === '/config/storage') return state.config;
+    if (path === '/config/storage-alert-thresholds') {
+      const { important, serious, emergency } = state.config.storage_alert_rule;
+      return {
+        important: important.threshold,
+        serious: serious.threshold,
+        emergency: emergency.threshold,
+      };
+    }
     if (path === '/v1/incidents') {
       const records = scoped(account, state.incidents);
       return page(records);

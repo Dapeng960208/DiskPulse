@@ -1222,3 +1222,21 @@
 - **修复**：改为 `& npx eslint @files` 显式展开参数，并把未跟踪的新增测试文件一并加入列表。
 - **验证**：scoped ESLint 结果为 `0 errors`、`11 warnings`，随后 `npx vite build` 成功。
 - **风险**：11 条 warning 均来自既有多组件测试文件的 `vue/one-component-per-file`；生产构建仍保留既有 `%VITE_APP_TITLE%` 和大 chunk warning。
+
+### 2026-07-18：用户目录 Mock 阈值接口形状不匹配
+
+- 触发：以 Mock 模式查看用户目录列表的硬、软限额使用率颜色。
+- 现象：40% 至 54% 的进度条均显示最高告警色，且列表未展示项目、项目组标签和软限额使用率对应数据。
+- 根因：Mock 用户目录记录遗漏 `project`、`group_tag`、`soft_use_ratio` 等展示字段，`/config/storage-alert-thresholds` 错误返回嵌套的完整规则对象，导致阈值 store 解析出 `NaN`。
+- 修复：补齐用户目录 Mock 字段并按前端 API 契约返回扁平的 `important`、`serious`、`emergency` 阈值。
+- 验证：新增 Mock 运行时回归用例先失败，修复后 Mock、阈值 store 和颜色测试共 `24 passed`。
+- 风险：按任务要求未执行浏览器检查；真实后端接口未变更，未进行真实后端联调。
+
+### 2026-07-18：前端全量覆盖率存在既有页面合同失败
+
+- 触发：在用户目录 Mock 修复后执行 `npm run test:coverage`。
+- 现象：本次 Mock 回归通过，但 12 条既有用例失败，主要为 `Cannot read properties of undefined (reading 'trigger')`、用户 LDAP 按钮缺失、路由懒加载数量断言过期及容量预测详情合同不匹配。
+- 根因：失败用例涉及管理列表、用户管理、路由及容量预测详情，未触及本次 `frontend/src/mocks/runtime.js` 的字段与阈值逻辑。
+- 修复：未扩大本次范围；使用 Mock、阈值 store、颜色的聚焦回归确认修复，并执行测试模式构建。
+- 验证：聚焦 Vitest `24 passed`，`npm run build:test` 通过。
+- 风险：全量 coverage 门禁当前不可通过；需由对应页面/路由主题单独处理后重跑。
