@@ -193,3 +193,16 @@ def test_only_candidate_with_passing_evaluations_can_be_enabled(db_session):
     )
     with pytest.raises(HTTPException, match="activation gate"):
         activate_capacity_prediction_candidate(db_session, candidate_id=rejected.id)
+
+
+def test_governance_router_exposes_safe_candidate_lifecycle_only_to_super_admins():
+    from routers.forecast_incidents import router
+    from schemas.capacityPredictionSchema import CapacityPredictionCandidateOut
+
+    routes = {route.path: route for route in router.routes}
+    list_route = routes["/v1/admin/capacity-prediction-candidates"]
+    activate_route = routes["/v1/admin/capacity-prediction-candidates/{candidate_id}/activate"]
+
+    assert list_route.response_model == list[CapacityPredictionCandidateOut]
+    assert list_route.dependencies
+    assert activate_route.dependencies
