@@ -510,6 +510,26 @@ describe('AI pages interactions', () => {
     expect(wrapper.find('.composer-actions').exists()).toBe(false);
   });
 
+  it('renders distinct animated avatars for user and AI messages', async () => {
+    const wrapper = shallowMount(AiChatPage, {
+      global: {
+        stubs: {
+          ElScrollbar: { template: '<div><slot /></div>' },
+        },
+      },
+    });
+    await flushPromises();
+    wrapper.vm.messages = [
+      { id: 81, role: 'user', content: '你好' },
+      { id: 82, role: 'assistant', content: '你好，我可以协助分析容量。' },
+    ];
+    await flushPromises();
+
+    expect(wrapper.find('.message-avatar--user').attributes('aria-label')).toBe('你的头像');
+    expect(wrapper.find('.message-avatar--assistant').attributes('aria-label')).toBe('AI 助手头像');
+    expect(wrapper.find('.message-avatar--assistant .message-avatar__pulse').exists()).toBe(true);
+  });
+
   it('keeps model selection beside the composer action and simplifies chat chrome', async () => {
     const wrapper = shallowMount(AiChatPage);
     await flushPromises();

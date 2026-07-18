@@ -393,7 +393,19 @@ onMounted(loadInitial);
           :key="message.id"
           class="message"
           :class="message.role">
-          <div class="message-role">{{ message.role === 'user' ? '你' : 'AI' }}</div>
+          <div
+            class="message-avatar"
+            :class="`message-avatar--${message.role}`"
+            role="img"
+            :aria-label="message.role === 'user' ? '你的头像' : 'AI 助手头像'">
+            <span class="message-avatar__orbit" />
+            <i
+              :class="message.role === 'user' ? 'i-ri-user-3-fill' : 'i-ri-sparkling-2-fill'"
+              aria-hidden="true" />
+            <span
+              v-if="message.role === 'assistant'"
+              class="message-avatar__pulse" />
+          </div>
           <div
             v-if="message.role === 'assistant' && isWaitingForToolResult(message)"
             class="message-body tool-waiting">正在查询数据</div>
@@ -552,7 +564,15 @@ onMounted(loadInitial);
 .live-status { color: var(--primary-color); font-size: 13px; }
 .message-list { flex: 1; min-height: 0; padding: 20px 0; }
 .message { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; max-width: 920px; margin: 0 auto 18px; padding: 0 24px; }
-.message-role { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--el-color-primary-light-9); color: var(--primary-color); font-size: 12px; font-weight: 600; }
+.message-avatar { position: relative; display: grid; place-items: center; width: 32px; height: 32px; overflow: hidden; isolation: isolate; border: 1px solid var(--el-color-primary-light-5); border-radius: 50%; background: var(--el-color-primary-light-9); color: var(--primary-color); box-shadow: 0 2px 8px var(--el-color-primary-light-7); }
+.message-avatar > i { position: relative; z-index: 1; font-size: 16px; }
+.message-avatar__orbit { position: absolute; inset: 3px; border: 1px solid currentColor; border-radius: 50%; border-right-color: transparent; opacity: .6; animation: message-avatar-orbit 3s linear infinite; }
+.message-avatar--assistant { border-color: var(--el-color-success-light-5); background: var(--el-color-success-light-9); color: var(--el-color-success); box-shadow: 0 2px 10px var(--el-color-success-light-7); }
+.message-avatar--assistant .message-avatar__orbit { animation-duration: 1.8s; }
+.message-avatar__pulse { position: absolute; inset: 0; border: 1px solid currentColor; border-radius: 50%; opacity: 0; animation: message-avatar-pulse 1.8s ease-out infinite; }
+@keyframes message-avatar-orbit { to { transform: rotate(360deg); } }
+@keyframes message-avatar-pulse { 0% { transform: scale(.75); opacity: .65; } 80%, 100% { transform: scale(1.35); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .message-avatar__orbit, .message-avatar__pulse { animation: none; } }
 .message.user .message-body { background: var(--bg-secondary); border-radius: 10px; padding: 10px 13px; white-space: pre-wrap; }
 .message-body { min-width: 0; line-height: 1.75; color: var(--text-primary); }
 .tool-waiting { color: var(--text-secondary); font-size: 13px; }
