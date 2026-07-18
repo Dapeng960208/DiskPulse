@@ -4,7 +4,7 @@
 
 - 修复 MySQL 项目负责人旧外键删除顺序、失败遥测错误码持久化与 r10 既有账本升级；Alembic 唯一 head 更新为 `000000000010`。
 - Dashboard 对普通项目成员先要求项目范围，存储告警投递改为带租约的原子领取；AI 未知工具安全完成 SSE，图表异步初始化可取消，项目成员授权失败会明确提示。
-- 全量后端 `530 passed`、前端覆盖率 `412 passed`（Statements/Lines `97.90%`、Branches `87.24%`、Functions `82.51%`），前端 lint 和生产构建通过。详细问题表、提交和剩余验证边界见[代码审查问题修复复盘](../features/review-remediation/verification.md)。
+- 安全审查遗留修复合入后，全量后端 `533 passed`、前端覆盖率 `412 passed`（Statements/Lines `97.90%`、Branches `87.24%`、Functions `82.51%`），前端 lint 和生产构建通过。详细问题表、提交和剩余验证边界见[代码审查问题修复复盘](../features/review-remediation/verification.md)。
 
 ## 2026-07-18：遥测新鲜度与平台可观测
 

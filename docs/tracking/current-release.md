@@ -10,7 +10,7 @@
 
 ### 验证状态
 
-- 后端全量：`D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test -q`，`530 passed`。
+- 合并安全审查遗留修复后的后端全量：`D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend/test -q`，`533 passed`；告警、路由错误路径和 AI 相关聚焦组合 `54 passed`。
 - 前端全量 coverage：`67 files / 412 passed`；Statements/Lines `97.90%`、Branches `87.24%`、Functions `82.51%`。`npm run lint` 和 `npm run build:prod` 通过。
 - 迁移：`compileall`、Alembic `heads/history` 与跨方言迁移编译通过；唯一 head 为 `000000000010`。
 
