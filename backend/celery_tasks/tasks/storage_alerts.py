@@ -421,7 +421,10 @@ def _delivery_audit_context(audit_context_payload=None) -> AuditContext:
 def _prepare_delivery_attempt(event_id, *, context: AuditContext, config):
     with SessionLocal.begin() as db:
         event = db.query(StorageAlerts).filter_by(id=event_id).with_for_update().first()
-        if event is None or event.delivery_status not in {"pending", "retrying"}:
+        if event is None or event.delivery_status not in {"pending", "retrying", "delivering"}:
+            return None
+        now = datetime.now()
+        if event.next_attempt_at is None or event.next_attempt_at > now:
             return None
         if not event.recipient_usernames:
             event.delivery_status = "skipped"
@@ -429,8 +432,10 @@ def _prepare_delivery_attempt(event_id, *, context: AuditContext, config):
         if not config.get("enabled"):
             event.delivery_status = "skipped"
             return None
+        # Review fix: an active delivery lease prevents duplicate task deliveries.
+        event.delivery_status = "delivering"
         event.delivery_attempts += 1
-        event.next_attempt_at = datetime.now() + timedelta(seconds=DELIVERY_ATTEMPT_LEASE_SECONDS)
+        event.next_attempt_at = now + timedelta(seconds=DELIVERY_ATTEMPT_LEASE_SECONDS)
         append_audit_event(
             db,
             context=context,
@@ -536,7 +541,7 @@ def retry_storage_alerts_task():
             row.id
             for row in db.query(StorageAlerts.id)
             .filter(
-                StorageAlerts.delivery_status.in_(("pending", "retrying")),
+                StorageAlerts.delivery_status.in_(("pending", "retrying", "delivering")),
                 StorageAlerts.next_attempt_at <= now,
             )
             .limit(100)
