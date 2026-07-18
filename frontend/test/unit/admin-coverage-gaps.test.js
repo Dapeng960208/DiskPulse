@@ -10,13 +10,17 @@ const dashboardApi = {
   fetchAlertLevels: vi.fn(),
   fetchTopUsers: vi.fn(),
 };
+const authorization = { hasRole: vi.fn() };
 
 vi.mock('@/api/project-api.js', () => ({ default: projectApi }));
 vi.mock('@/api/group-api.js', () => ({ default: groupApi }));
 vi.mock('@/api/dashboard-api.js', () => ({ default: dashboardApi }));
+vi.mock('@/utils/authorization', () => authorization);
 
 describe('admin coverage gaps', () => {
   it('loads the dashboard after a project is selected', async () => {
+    // Review fix verification: legacy shallow mounts must provide the dashboard role boundary.
+    authorization.hasRole.mockReturnValue(true);
     dashboardApi.fetchSummary.mockResolvedValue({
       scope: { mode: 'project', project_id: 7, project_name: '项目 A' },
       summary: { limit_gb: 20, used_gb: 10, available_gb: 10, use_ratio: 50, storage_cluster_count: 1, alert_count: 0 },
