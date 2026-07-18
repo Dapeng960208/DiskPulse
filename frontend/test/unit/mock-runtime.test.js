@@ -238,6 +238,21 @@ describe('frontend mock runtime', () => {
     expect(thresholds).toEqual({ important: 80, serious: 90, emergency: 95 });
   });
 
+  it('supplies every project-list display field', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    const projects = await gateway.request('get', '/projects', undefined, superadmin.token);
+
+    expect(projects.content[0]).toMatchObject({
+      storage_clusters: [{ id: expect.any(Number), name: expect.any(String), storage_type: expect.any(String) }],
+      in_charge_user: { id: expect.any(Number), rd_username: expect.any(String) },
+      limit: expect.any(Number),
+      used: expect.any(Number),
+      use_ratio: expect.any(Number),
+    });
+  });
+
   it('accepts double-slash resource paths emitted by the shared API client', async () => {
     const gateway = createMockGateway();
     const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);

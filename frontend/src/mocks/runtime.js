@@ -40,6 +40,21 @@ const seed = () => {
     email: `${rd_username}@example.test`,
     enabled: true,
   }));
+  projects.forEach((project, index) => {
+    const limit = 1200 + index * 180;
+    const used = 480 + index * 130;
+    const storageCluster = clusters[index];
+
+    Object.assign(project, {
+      limit,
+      used,
+      use_ratio: Number(((used / limit) * 100).toFixed(2)),
+      storage_clusters: [storageCluster],
+      storage_cluster_types: [storageCluster.storage_type],
+      in_charge_user_id: users[index].id,
+      in_charge_user: users[index],
+    });
+  });
   const groups = projects.map((project, index) => ({
     id: 11 + index,
     name: `${project.name.replace('平台', '')}项目组`,
