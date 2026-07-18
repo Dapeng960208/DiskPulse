@@ -22,7 +22,7 @@ const pageContracts = [
     file: 'src/pages/project/components/ProjectTable.vue',
     progress: ['使用率(%)'],
     secondary: ['存储集群', '存储类型'],
-    capacity: ['PT经理', '开发代表', '限额', '使用量'],
+    capacity: ['项目负责人', '限额', '使用量'],
     identity: '项目',
   },
   {
@@ -121,5 +121,15 @@ describe('responsive list column contracts', () => {
 
     expect(progress).toContain('useStorageAlertThresholds');
     expect(progress).toContain('getQuotaProgressColor');
+  });
+
+  it('removes the retired PT manager field and uses project owner terminology', () => {
+    const projectTable = source('src/pages/project/components/ProjectTable.vue');
+    const projectForm = source('src/pages/project/components/ProjectFormDialog.vue');
+
+    expect(projectTable).not.toContain('PT经理');
+    expect(projectForm).not.toContain('PT经理');
+    expect(projectTable).toContain('label="项目负责人"');
+    expect(projectForm).toContain('label="项目负责人"');
   });
 });
