@@ -222,7 +222,7 @@ def test_forecast_incident_migration_compiles_and_upgrades_sqlite():
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
 
-    migration_path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000010_forecast_incidents.py"
+    migration_path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000011_forecast_incidents.py"
     spec = importlib.util.spec_from_file_location("forecast_incident_migration", migration_path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
@@ -240,15 +240,6 @@ def test_forecast_incident_migration_compiles_and_upgrades_sqlite():
         connection.execute(sa.text("CREATE TABLE storage_clusters (id INTEGER PRIMARY KEY)"))
         connection.execute(sa.text("CREATE TABLE projects (id INTEGER PRIMARY KEY)"))
         connection.execute(sa.text("CREATE TABLE users (id INTEGER PRIMARY KEY)"))
-        telemetry_runs = migration._sqlite_telemetry_table(
-            terminal_condition=migration.OLD_TELEMETRY_TERMINAL_CONDITION
-        )
-        sa.Table(
-            "storage_clusters",
-            telemetry_runs.metadata,
-            sa.Column("id", sa.Integer(), primary_key=True),
-        )
-        telemetry_runs.create(connection)
         migration.op = Operations(MigrationContext.configure(connection))
         migration.upgrade()
         inspector = sa.inspect(connection)
