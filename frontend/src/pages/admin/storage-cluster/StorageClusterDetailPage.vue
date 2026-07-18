@@ -19,7 +19,7 @@ import {
   ElTabPane,
   ElTabs,
 } from 'element-plus';
-import { computed, onBeforeMount, reactive, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeMount, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import FilterForm from '@/components/form/QueryForm.vue';
 import StorageTrendChart from '@/components/dashboard/StorageTrendChart.vue';
@@ -32,6 +32,7 @@ import storageClusterApi from '@/api/storage-cluster-api';
 import { useQuery } from '@/composables/query';
 import { getDefaultTime } from '@/composables/common';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
+const ClusterIncidentsTab = defineAsyncComponent(() => import('./components/ClusterIncidentsTab.vue'));
 
 const route = useRoute();
 const breadcrumbs = useBreadcrumbs();
@@ -662,6 +663,13 @@ onBeforeMount(() => {
                 @size-change="changeSystemEventPageSize" />
             </div>
           </div>
+        </ElTabPane>
+        <ElTabPane
+          label="关联事件"
+          name="incidents">
+          <ClusterIncidentsTab
+            v-if="activeTab === 'incidents' && clusterId"
+            :cluster-id="clusterId" />
         </ElTabPane>
       </ElTabs>
     </ElCard>

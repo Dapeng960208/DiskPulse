@@ -1,10 +1,18 @@
 import logging
 from logging.config import fileConfig
+from pathlib import Path
+import sys
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+
+# Support both `cd backend; alembic ...` and repository-root `-c backend/alembic.ini`.
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
 from appConfig import base_config
 
 # this is the Alembic Config object, which provides

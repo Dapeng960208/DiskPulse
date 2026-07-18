@@ -18,9 +18,13 @@ const storageClusterApi = vi.hoisted(() => ({
 const aggregateApi = vi.hoisted(() => ({
   fetchAggregateTrees: vi.fn(),
 }));
+const incidentApi = vi.hoisted(() => ({
+  fetchIncidents: vi.fn(),
+}));
 
 vi.mock('@/api/storage-cluster-api', () => ({ default: storageClusterApi }));
 vi.mock('@/api/aggregate-api.js', () => ({ default: aggregateApi }));
+vi.mock('@/api/incident-api.js', () => ({ default: incidentApi }));
 const route = vi.hoisted(() => ({ name: 'StorageClusterDetail', params: { id: '42' } }));
 vi.mock('vue-router', () => ({ useRoute: () => route }));
 vi.mock('@/composables/common', () => ({ getDefaultTime: () => [...initialRange] }));
@@ -214,6 +218,7 @@ describe('storage cluster health analytics page', () => {
       data: [], total: 0, page: 1, page_size: 20,
     });
     aggregateApi.fetchAggregateTrees.mockResolvedValue({ data: [{ name: 'volume-a' }] });
+    incidentApi.fetchIncidents.mockResolvedValue({ content: [], total: 0 });
     storageClusterApi.exportAnalytics.mockResolvedValue({
       data: new Blob(['report']),
       headers: { 'content-disposition': 'attachment; filename="storage-health.xlsx"' },

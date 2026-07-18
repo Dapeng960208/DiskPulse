@@ -947,3 +947,75 @@
 - 修复：在关闭请求数据库会话的 `finally` 中记录预设的 `500` 响应状态与耗时；探针短路路径保持不创建常规会话。
 - 验证：RED 用例失败；GREEN 后关联 API 用例通过，完整后端测试 `440 passed`。
 - 风险：生产指标端点的实际 scrape 延迟与并发负载仍需部署环境验收。
+
+### 2026-07-18：Vitest 源文件断言误用 `import.meta.url`
+
+- 触发：执行 `cd frontend; npm exec vitest run test/unit/StorageClusterDetailPage.test.js --coverage.enabled=false`。
+- 现象：测试初始化报 `TypeError: The URL must be of scheme file`，无法读取 `StorageClusterDetailPage.vue`。
+- 根因：Vitest 转换模块后的 `import.meta.url` 是开发服务器 URL，不保证是 `file:` URL，不能直接传给 Node 的 `fileURLToPath()`。
+- 修复：测试改用当前前端工作目录 `process.cwd()` 与 `node:path.resolve()` 定位源文件。
+- 验证：关联事件中心聚焦 Vitest 套件重跑通过。
+- 风险：该静态断言仅保护懒加载声明与页签边界；实际渲染仍须由浏览器验收覆盖。
+
+### 2026-07-18：隔离 worktree 缺少运行时 `backend/config.yml`
+
+- 触发：在隔离 worktree 的 `backend` 目录执行 `D:\dev\DiskPulse\.venv\Scripts\python.exe -c "from celery_tasks.tasks import forecast_incidents"`。
+- 现象：任务模块导入时 `appConfig` 报 `Configuration file not found: ...\\backend\\config.yml`。
+- 根因：`backend/config.yml` 是包含部署凭据的被忽略运行时文件，Git worktree 不会复制该文件。
+- 修复：未复制或提交真实配置；单元测试继续使用 `backend/config.test.yml` 注入配置。部署/本地 worker 验收前须由操作者以受控方式提供真实运行时配置。
+- 验证：不依赖运行时配置的后端聚焦测试、编译和前端聚焦测试均可执行。
+- 风险：Celery 任务在真实 Redis、PostgreSQL、QuestDB 配置下的注册和执行仍待部署环境验证。
+
+### 2026-07-18：仓库根目录 Alembic 命令缺少后端模块路径
+
+- 触发：执行计划中的 `D:\dev\DiskPulse\.venv\Scripts\python.exe -m alembic -c backend/alembic.ini upgrade head`。
+- 现象：首次执行在加载 `backend/migrate/env.py` 时返回 `ModuleNotFoundError: No module named 'appConfig'`。
+- 根因：迁移环境只依赖 `cd backend` 时隐式存在的模块搜索路径，仓库根目录的 `-c backend/alembic.ini` 调用没有把 `backend` 加入 `sys.path`。
+- 修复：`migrate/env.py` 从自身绝对位置解析并加入 `backend` 模块根；重跑后已越过模块导入，按预期停在隔离 worktree 缺少被忽略 `config.yml` 的环境边界。
+- 验证：同一命令重跑不再出现 `appConfig` 导入错误；迁移 DDL 的 SQLite 升降级和三方言离线编译继续由自动化测试覆盖。
+- 风险：真实 PostgreSQL 升级仍要求部署方提供受控运行时配置与数据库连接。
+
+### 2026-07-18：前端不存在通用 `build` 脚本
+
+- 触发：在 `frontend` 执行 `npm run build`。
+- 现象：npm 返回 `Missing script: "build"`。
+- 根因：仓库将构建入口显式命名为 `build:test` 和 `build:prod`，未定义通用别名。
+- 修复：使用测试模式的实际脚本 `npm run build:test`；构建成功。
+- 验证：Vite 完成 2,583 个模块转换并生成测试构建产物；保留既有 `%VITE_APP_TITLE%` 未定义与大 chunk warning。
+- 风险：未运行需要部署变量的 `build:prod`，真实发布环境仍应使用受控变量执行生产构建。
+
+### 2026-07-18：应用内浏览器拦截本地 Vite 验收
+
+- 触发：启动本地 Vite 后使用应用内浏览器访问 `http://127.0.0.1:5173/incidents`。
+- 现象：首次为 `ERR_CONNECTION_REFUSED`；启动服务后浏览器策略返回 `ERR_BLOCKED_BY_CLIENT`，无法取得页面 DOM、截图或执行交互。
+- 根因：当前应用内浏览器客户端阻止本机回环地址访问；不是事件中心路由的前端运行时异常。
+- 修复：未绕过浏览器策略或改用未经授权的外部自动化；停止临时 Vite 服务，保留 Vitest 与 Vite 测试模式构建验证。
+- 验证：组件聚焦测试和 `npm run build:test` 均通过；应用内浏览器验收待允许本机 URL 后重试。
+- 风险：未获得真实浏览器截图、控制台和交互证据，详情抽屉与集群页签需在可访问的本机/部署浏览器补验。
+
+### 2026-07-18：事件中心 Vue 模板未满足属性换行 lint 规则
+
+- 触发：执行事件中心相关 Vue 文件的 `npx eslint`。
+- 现象：`vue/max-attributes-per-line` 报告 96 条属性未按项目规则换行的错误。
+- 根因：已有事件中心模板与新增详情/关联页签均使用多属性单行写法，未遵循当前 ESLint 配置。
+- 修复：仅对事件中心、详情抽屉、关联页签和集群详情四个相关组件执行 ESLint 自动格式化；不改变 API、状态或权限逻辑。
+- 验证：相同 scoped ESLint 命令通过，4 个前端聚焦测试继续通过。
+- 风险：未执行全仓 ESLint；其他目录的既有格式问题不在本次范围内。
+
+### 2026-07-18：后端 scoped Ruff 检查不可用
+
+- 触发：使用项目虚拟环境执行 `python -m ruff check` 检查本次 Python 文件。
+- 现象：解释器返回 `No module named ruff`。
+- 根因：当前 `D:\dev\DiskPulse\.venv` 未安装 Ruff，仓库也没有将其作为现有验证依赖。
+- 修复：未下载、安装或修改依赖；改用已安装的 `compileall` 和 pytest 聚焦回归。
+- 验证：Python 编译与后端聚焦测试通过。
+- 风险：未获得 Ruff 的静态规则覆盖；如 CI 引入 Ruff，应在依赖锁定后补跑同一 scoped 检查。
+
+### 2026-07-18：性能异常扫描的资产键被星号解包为列表
+
+- 触发：执行固定性能样本的连续三点异常任务回归测试。
+- 现象：扫描在读取对象名称时抛出 `TypeError: unhashable type: 'list'`。
+- 根因：循环使用 `for (*identity, metric)`，Python 将前三个资产键放入可变 `list`，后续用作 `names` 字典键时失败。
+- 修复：改为显式解包 `cluster_id, object_type, object_id, metric` 并重建元组资产键。
+- 验证：事件中心后端测试 `20 passed`，连续三点延迟/IOPS/吞吐异常均被识别。
+- 风险：该回归覆盖纯 QuestDB 行转换；真实性能表的厂商对象映射仍需隔离环境回放。

@@ -56,3 +56,9 @@ observability:
 4. 在测试环境按计划停止 QuestDB、PostgreSQL、Redis 和 Worker，验证相应的降级与新鲜度变化。
 
 本地自动化测试不替代真实 Redis、PostgreSQL、QuestDB、Celery Beat/Worker、飞书或网络策略的部署验收。
+
+## 派生质量快照边界
+
+事件中心的 `telemetry_quality_snapshots` 在原始容量、厂商事件和性能写入成功后由独立 Celery 任务派生。快照结合本账本成功运行数与 QuestDB/厂商事实覆盖率，保存资产、周期、最新点、覆盖率、质量状态和数据缺口；它不是也绝不会成为第二套“最后成功时间”权威来源。
+
+质量任务使用独立 Redis 锁并在异常时只记录安全日志，不能回滚或阻塞原始采集。`telemetry_stale`、`coverage_insufficient` 与采集失败可作为派生 Incident 的证据，但静默和维护窗口不会删除运行账本、原始事实或质量快照。

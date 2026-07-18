@@ -58,6 +58,12 @@ diskpulse_app.conf.beat_schedule = {
         "schedule": 300.0,
         "options": {"expires": 300},
     },
+    "capacity_forecast_daily_task": {
+        # 08:10 Asia/Shanghai is 00:10 UTC; forecast curves use UTC days.
+        "task": "celery_tasks.tasks.forecast_incidents.capacity_forecast_daily_task",
+        "schedule": crontab(hour="8", minute="10"),
+        "options": {"expires": 900},
+    },
     "telemetry_collection_runs_cleanup_task": {
         "task": "celery_tasks.tasks.telemetry.telemetry_collection_runs_cleanup_task",
         "schedule": crontab(hour="3", minute="17"),
@@ -134,6 +140,7 @@ import celery_tasks.tasks.large_files
 import celery_tasks.tasks.storage_health
 import celery_tasks.tasks.storage_alerts
 import celery_tasks.tasks.telemetry
+import celery_tasks.tasks.forecast_incidents
 # import celery_tasks.tasks.check_quest_db
 # import celery_tasks.tasks.large_files
 # import celery_tasks.tasks.lsf_alerts

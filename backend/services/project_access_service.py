@@ -203,6 +203,29 @@ def project_capabilities(db, current_user, project_id: int) -> dict[str, bool]:
     }
 
 
+def incident_capabilities(db, current_user, project_id: int | None) -> dict[str, bool]:
+    """UI hints for derived Incident mutations; services still enforce RBAC."""
+    if current_user is None:
+        return {"edit": False, "create_maintenance_window": False}
+    if is_super_admin(current_user):
+        return {"edit": True, "create_maintenance_window": True}
+    if project_id is None:
+        return {"edit": False, "create_maintenance_window": False}
+    membership = (
+        db.query(ProjectMembership)
+        .filter(
+            ProjectMembership.project_id == project_id,
+            ProjectMembership.user_id == current_user.id,
+        )
+        .one_or_none()
+    )
+    rank = ROLE_RANK[membership.role] if membership is not None else 0
+    return {
+        "edit": rank >= ROLE_RANK["editor"],
+        "create_maintenance_window": rank >= ROLE_RANK["project_admin"],
+    }
+
+
 def group_capabilities(current_user, group: Group | None) -> dict[str, bool]:
     """Expose the same quota affordance enforced by quotaService."""
     return {

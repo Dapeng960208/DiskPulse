@@ -398,6 +398,14 @@ def storage_alerts_schedule_task():
         event_ids = evaluate_storage_alerts(**sample)
     for event_id in event_ids:
         deliver_storage_alert_task.delay(event_id)
+    if event_ids:
+        try:
+            from celery_tasks.tasks import forecast_incidents
+
+            # Derived Incident evidence references this immutable raw alert only.
+            forecast_incidents.diskpulse_alert_evidence_task.delay(event_ids)
+        except Exception:
+            logger.warning("Unable to enqueue derived Incident evidence for storage alerts")
     return event_ids
 
 
