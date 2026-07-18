@@ -685,7 +685,8 @@ def test_telemetry_failure_code_migration_replaces_terminal_constraint(dialect_n
 
     sql = output.getvalue().lower()
     assert "ck_telemetry_run_terminal_fields" in sql
-    assert "vendor_timeout" in sql
+    assert "outcome = 'failed'" in sql
+    assert "error_code is not null" in sql
 
 
 def test_telemetry_migration_upgrades_and_downgrades_sqlite():
