@@ -648,6 +648,24 @@ describe('alert and user page coverage gaps', () => {
 });
 
 describe('real-time page coverage gaps', () => {
+  it('waits for a valid detail resource id before requesting real-time data or alerts', async () => {
+    mocks.storageUsageApi.fetchStorageRealTimeDataById.mockClear();
+    mocks.alertApi.fetch.mockClear();
+
+    const wrapper = await mountPage(RealTimePage, {
+      props: { apiType: 'storage-usage', label: '用户目录', attributeId: null },
+    });
+
+    expect(mocks.storageUsageApi.fetchStorageRealTimeDataById).not.toHaveBeenCalled();
+    expect(mocks.alertApi.fetch).not.toHaveBeenCalled();
+
+    await wrapper.setProps({ attributeId: 101 });
+    await flushPromises();
+
+    expect(mocks.storageUsageApi.fetchStorageRealTimeDataById).toHaveBeenCalledWith(101, expect.any(Object));
+    expect(mocks.alertApi.fetch).toHaveBeenCalled();
+  });
+
   it('removes the duplicate header range and shows alert urgency instead of the prompt', async () => {
     tableRows = [
       { alert_level: 'emergency', avg_use_ratio: 96, updated_at: '2026-07-17' },
