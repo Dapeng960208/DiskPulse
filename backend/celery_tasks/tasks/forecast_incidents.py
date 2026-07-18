@@ -545,6 +545,11 @@ def _performance_findings(rows: list[dict], *, now: datetime) -> list[dict]:
         if len(scored) < 3:
             continue
         last_three = scored[-3:]
+        if any(
+            right[0] - left[0] != timedelta(minutes=5)
+            for left, right in zip(last_three, last_three[1:])
+        ):
+            continue
         if not forecastIncidentService.qualifies_performance_anomaly([item[-1] for item in last_three]):
             continue
         observed_at, value, baseline, mad, score = last_three[-1]
