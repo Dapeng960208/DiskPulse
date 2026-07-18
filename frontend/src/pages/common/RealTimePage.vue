@@ -47,7 +47,13 @@ const props = defineProps({
   },
 });
 
-const attributeId = ref(Array.isArray(props.attributeId) ? props.attributeId : [props.attributeId]);
+function normalizeResourceIds(value) {
+  return (Array.isArray(value) ? value : [value])
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0);
+}
+
+const attributeId = ref(normalizeResourceIds(props.attributeId));
 const route = useRoute();
 const breadcrumbs = useBreadcrumbs();
 const dateRange = ref(getDefaultTime(8));
@@ -197,7 +203,7 @@ watch(attributeId, () => {
   alertQuery();
 }, { deep: true });
 watch(() => props.attributeId, (value) => {
-  attributeId.value = Array.isArray(value) ? value : [value];
+  attributeId.value = normalizeResourceIds(value);
 }, { deep: true });
 const yAxisUnit = computed(() => {
   return queryParams.value.indicator === 'used'
