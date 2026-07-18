@@ -117,17 +117,37 @@ const seed = () => {
     status: ['open', 'acknowledged', 'investigating', 'mitigated', 'resolved'][index],
     last_evidence_at: `2026-07-18 0${9 + index}:30:00`,
   }));
-  const alerts = incidents.map((incident, index) => ({
-    id: index + 1,
-    project_id: incident.project_id,
-    related_type: 'StorageUsage',
-    related_id: usages[index].id,
-    title: `${incident.display_name}预警`,
-    alert_level: index === 1 ? 'serious' : 'important',
-    avg_use_ratio: 72 + index * 4,
-    updated_at: incident.last_evidence_at,
-    created_at: incident.last_evidence_at,
-  }));
+const alerts = incidents.map((incident, index) => ({
+  id: index + 1,
+  project_id: incident.project_id,
+  storage_cluster_id: clusters[index].id,
+  source: 'diskpulse',
+  alert_type: 'alert',
+  related_type: 'StorageUsage',
+  related_id: usages[index].id,
+  event_type: ['trigger', 'escalation', 'repeat', 'recovery', 'trigger'][index],
+  quota_basis: index === 3 ? 'soft' : 'hard',
+  delivery_status: ['sent', 'pending', 'retrying', 'sent', 'skipped'][index],
+  cluster_name: clusters[index].name,
+  project_name: projects[index].name,
+  title: `${incident.display_name}预警`,
+  description: `${usages[index].linux_path} 的 ${incident.display_name}预警`,
+  alert_level: index === 1 ? 'serious' : 'important',
+  threshold: [80, 90, 85, 75, 80][index],
+  avg_use_ratio: 82 + index * 3,
+  related_info: {
+    context: {
+      cluster: clusters[index].name,
+      project: projects[index].name,
+      group: groups[index].name,
+      group_tag: tags[index].name,
+      linux_path: usages[index].linux_path,
+      username: users[index].rd_username,
+    },
+  },
+  updated_at: incident.last_evidence_at,
+  created_at: incident.last_evidence_at,
+}));
   const audits = incidents.map((incident, index) => ({
     id: index + 1,
     action: ['project.member.read', 'storage.usage.update', 'group.quota.adjust', 'storage.alert.read', 'ai.conversation.create'][index],
