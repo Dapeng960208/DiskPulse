@@ -8,6 +8,7 @@ const KNOWN_SSE_EVENTS = new Set([
   'delta',
   'tool_call_started',
   'tool_call_finished',
+  'quota_confirmation_required',
   'completed',
   'error',
   'cancelled',
@@ -73,6 +74,7 @@ function isValidSsePayload(event, data) {
   if (event === 'tool_call_started' || event === 'tool_call_finished') {
     return hasTurnId(data) && typeof data.call_id === 'string';
   }
+  if (event === 'quota_confirmation_required') return hasTurnId(data) && typeof data.confirmation_id === 'string' && isObject(data.preview);
   if (TERMINAL_SSE_EVENTS.has(event)) return hasTurnId(data) && isObject(data.message);
   return true;
 }
@@ -146,6 +148,11 @@ export default {
   createConversation: (payload) => request('post', '/ai/conversations', { data: payload }),
   getConversation: (id) => request('get', `/ai/conversations/${id}`),
   deleteConversation: (id) => request('delete', `/ai/conversations/${id}`),
+  decideQuotaConfirmation: (conversationId, confirmationId, decision) => request(
+    'post',
+    `/ai/conversations/${conversationId}/quota-confirmations/${confirmationId}`,
+    { data: { decision } },
+  ),
   streamMessage: streamConversationMessage,
   listAdminModels: () => request('get', '/admin/ai-models'),
   createModel: (payload) => request('post', '/admin/ai-models', { data: payload }),

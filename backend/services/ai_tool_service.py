@@ -10,6 +10,7 @@ from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
 
 from models import User
+from services.audit_service import ai_tool_actor_context
 from utils.auth_service import is_super_admin
 from utils.security import issue_token
 
@@ -180,14 +181,15 @@ async def _execute(
     path, query, body = _request_parts(definition, payload)
     headers = {"Authorization": f"Bearer {issue_token(user_id)}"} if user_id is not None else {}
     # In-process ASGI avoids network trust changes; the token preserves normal API authorization.
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app),
-        base_url="http://diskpulse-ai.internal",
-    ) as client:
-        request_kwargs: dict[str, Any] = {"params": query, "headers": headers}
-        if body is not None:
-            request_kwargs["json"] = body
-        response = await client.request(definition.method, path, **request_kwargs)
+    with ai_tool_actor_context():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://diskpulse-ai.internal",
+        ) as client:
+            request_kwargs: dict[str, Any] = {"params": query, "headers": headers}
+            if body is not None:
+                request_kwargs["json"] = body
+            response = await client.request(definition.method, path, **request_kwargs)
     if response.status_code == 204:
         return {"ok": True, "data": None}
     try:

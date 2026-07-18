@@ -622,6 +622,38 @@ class IsilonClient:
             "soft_grace": readback.get("soft_grace"),
         }
 
+    def read_quota(
+        self,
+        *,
+        quota_type: str,
+        volume_name: str,
+        qtree_name: str | None,
+        path: str,
+        username: str | None,
+    ) -> Dict:
+        current = next(
+            (
+                quota for quota in self.get_quotas(quota_type=quota_type)
+                if self._matches_quota(quota, quota_type, path, username)
+                and not quota.get("linked", False)
+            ),
+            None,
+        )
+        if current is None:
+            raise RuntimeError("Isilon quota readback failed")
+        response = self.session.get(
+            f"{self.base_url}/{self.api_version}/quota/quotas/{current['id']}", timeout=60,
+        )
+        raise_for_device_status(response, logger=self, context="[IsilonClient] GET quota readback failed")
+        data = response.json()
+        quota = (data.get("quotas") or [data])[0]
+        thresholds = quota.get("thresholds") or {}
+        return {
+            "hard_limit": thresholds.get("hard"),
+            "soft_limit": thresholds.get("soft"),
+            "soft_grace": thresholds.get("soft_grace"),
+        }
+
     def get_exports(self) -> List[Dict]:
         """Return all NFS exports, following resume-based pagination."""
         result: List[Dict] = []

@@ -1,10 +1,12 @@
 <script setup>
 import {
   ElButton,
+  ElCheckbox,
   ElDialog,
   ElForm,
   ElFormItem,
   ElInputNumber,
+  ElInput,
   ElMessage,
   ElMessageBox,
   ElOption,
@@ -25,6 +27,9 @@ const emit = defineEmits(['submitted']);
 
 const visible = ref(false);
 const submitting = ref(false);
+const reconciling = ref(false);
+const history = ref([]);
+const unknownOutcome = ref(false);
 const formRef = ref();
 const resource = ref();
 const model = reactive({
@@ -33,6 +38,8 @@ const model = reactive({
   unit: 'GiB',
   soft_grace: null,
   soft_grace_unit: 'days',
+  force_below_usage: false,
+  change_reason: '',
 });
 
 const storageType = computed(() => resource.value?.storage_cluster?.storage_type?.toLowerCase());
@@ -82,8 +89,37 @@ function open(row) {
     unit: 'GiB',
     soft_grace: null,
     soft_grace_unit: 'days',
+    force_below_usage: false,
+    change_reason: '',
   });
   visible.value = true;
+  unknownOutcome.value = false;
+  void loadHistory();
+}
+
+async function loadHistory() {
+  if (!resource.value) return;
+  const api = props.resourceType === 'group' ? groupApi : storageUsageApi;
+  try {
+    history.value = await api.quotaHistory(resource.value.id);
+  } catch {
+    history.value = [];
+  }
+}
+
+async function reconcile() {
+  if (!resource.value || reconciling.value) return;
+  const api = props.resourceType === 'group' ? groupApi : storageUsageApi;
+  reconciling.value = true;
+  try {
+    await api.reconcileQuota(resource.value.id);
+    unknownOutcome.value = false;
+    await loadHistory();
+    ElMessage.success('只读对账完成');
+    emit('submitted');
+  } finally {
+    reconciling.value = false;
+  }
 }
 
 function toGiB(value) {
@@ -105,12 +141,15 @@ function changeUnit(nextUnit) {
 
 async function submit() {
   await formRef.value?.validate();
-  if (resource.value?.used != null && toGiB(model.hard_limit) < Number(resource.value.used)) {
+  const belowUsage = resource.value?.used != null && toGiB(model.hard_limit) < Number(resource.value.used);
+  if (belowUsage && (!model.force_below_usage || !model.change_reason.trim())) {
     await ElMessageBox.confirm(
-      '新的硬限额低于当前已用容量，可能立即阻止写入，确认继续？',
+      '新的硬限额低于当前已用容量，必须以强制缩减方式继续。',
       '确认缩减配额',
       { type: 'warning', confirmButtonText: '继续调整', cancelButtonText: '取消' },
     );
+    model.force_below_usage = true;
+    if (!model.change_reason.trim()) model.change_reason = '已确认危险缩减';
   }
 
   const payload = {
@@ -120,6 +159,10 @@ async function submit() {
     soft_grace: isIsilon.value && model.soft_limit != null ? model.soft_grace : null,
     soft_grace_unit: isIsilon.value && model.soft_limit != null ? model.soft_grace_unit : null,
   };
+  if (belowUsage) {
+    payload.force_below_usage = model.force_below_usage;
+    payload.change_reason = model.change_reason.trim();
+  }
   const api = props.resourceType === 'group' ? groupApi : storageUsageApi;
   submitting.value = true;
   try {
@@ -127,6 +170,13 @@ async function submit() {
     ElMessage.success('配额调整成功');
     visible.value = false;
     emit('submitted');
+  } catch (error) {
+    const code = error?.response?.data?.detail?.code;
+    if (code === 'quota_outcome_unknown') {
+      unknownOutcome.value = true;
+      ElMessage.warning('设备写入结果未知，请执行只读对账');
+    }
+    throw error;
   } finally {
     submitting.value = false;
   }
@@ -179,6 +229,33 @@ defineExpose({ open, model });
           </ElSelect>
         </div>
       </ElFormItem>
+      <template v-if="resource?.used != null && toGiB(model.hard_limit) < Number(resource.used)">
+        <ElFormItem label="危险缩减">
+          <ElCheckbox v-model="model.force_below_usage">强制缩减（仅超级管理员）</ElCheckbox>
+        </ElFormItem>
+        <ElFormItem label="缩减理由">
+          <ElInput
+            v-model="model.change_reason"
+            :maxlength="256"
+            show-word-limit
+            placeholder="说明缩减原因" />
+        </ElFormItem>
+      </template>
+      <section
+        v-if="unknownOutcome || history.length"
+        class="quota-history write-form-field--full">
+        <div class="write-form-section">最近配额历史</div>
+        <ElButton
+          v-if="unknownOutcome"
+          size="small"
+          :loading="reconciling"
+          @click="reconcile">只读对账</ElButton>
+        <ul v-if="history.length">
+          <li
+            v-for="item in history"
+            :key="item.id">{{ item.action }} · {{ item.outcome }} · {{ item.occurred_at }}</li>
+        </ul>
+      </section>
       <ElFormItem
         v-if="supportsSoftLimit"
         label="软限额（可选）"
@@ -251,4 +328,6 @@ defineExpose({ open, model });
   gap: var(--spacing-sm);
   width: 100%;
 }
+.quota-history { display: grid; gap: var(--spacing-sm); }
+.quota-history ul { margin: 0; padding-left: var(--spacing-lg); color: var(--el-text-color-secondary); font-size: var(--el-font-size-small); }
 </style>

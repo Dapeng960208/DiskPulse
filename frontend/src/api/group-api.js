@@ -8,6 +8,14 @@ class GroupApi extends BaseApi {
   adjustQuota(groupId, data) {
     return super.patch(`/${groupId}/quota`, data);
   }
+
+  reconcileQuota(groupId) {
+    return super.post(`/${groupId}/quota/reconcile`);
+  }
+
+  quotaHistory(groupId) {
+    return super.get(`/${groupId}/quota/history`);
+  }
 }
 
 export default new GroupApi('/groups/');

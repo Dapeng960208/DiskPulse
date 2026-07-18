@@ -214,6 +214,32 @@ def adjust_storage_usage_quota(
     )
 
 
+@router.post("/{storage_usage_id}/quota/reconcile", response_model=quotaSchema.QuotaAdjustmentResponse)
+def reconcile_storage_usage_quota(
+    storage_usage_id: int,
+    request: Request,
+    current_user: CurrentUserDep,
+    db: Session = Depends(get_db),
+):
+    return quotaService.reconcile_storage_usage_quota(
+        db,
+        storage_usage_id=storage_usage_id,
+        current_user=current_user,
+        audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
+    )
+
+
+@router.get("/{storage_usage_id}/quota/history")
+def storage_usage_quota_history(
+    storage_usage_id: int,
+    current_user: CurrentUserDep,
+    db: Session = Depends(get_db),
+):
+    return quotaService.storage_usage_quota_history(
+        db, storage_usage_id=storage_usage_id, current_user=current_user,
+    )
+
+
 @router.get("/{storage_usage_id}/image")
 def get_storage_usage_image_by_id(storage_usage_id: int, end_time: str | None = None, role: str = 'manager',
                                   current_user: CurrentUserDep = None, db: Session = Depends(get_db)):

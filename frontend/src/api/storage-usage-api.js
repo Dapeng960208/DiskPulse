@@ -14,6 +14,14 @@ class StorageUsageApi extends BaseApi {
   adjustQuota(storageUsageId, data) {
     return super.patch(`/${storageUsageId}/quota`, data);
   }
+
+  reconcileQuota(storageUsageId) {
+    return super.post(`/${storageUsageId}/quota/reconcile`);
+  }
+
+  quotaHistory(storageUsageId) {
+    return super.get(`/${storageUsageId}/quota/history`);
+  }
 }
 
 export default new StorageUsageApi('/storage-usages/');

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Literal
@@ -34,6 +36,16 @@ _PATH_KEY_PARTS = ("path", "directory", "filename")
 _REDACTED = "[REDACTED]"
 _PHASES = {"attempt", "result"}
 _OUTCOMES = {"success", "denied", "failure"}
+_ai_tool_actor: ContextVar[bool] = ContextVar("ai_tool_actor", default=False)
+
+
+@contextmanager
+def ai_tool_actor_context():
+    token = _ai_tool_actor.set(True)
+    try:
+        yield
+    finally:
+        _ai_tool_actor.reset(token)
 
 
 def _normalise_uuid(value: str | UUID) -> str:
@@ -67,7 +79,7 @@ def audit_context_for_request(request, *, actor_user_id: int | None, actor_type:
         request_id=context.request_id,
         trace_id=context.trace_id,
         operation_id=context.operation_id,
-        actor_type=actor_type,
+        actor_type="ai_tool" if actor_type == "user" and _ai_tool_actor.get() else actor_type,
         actor_user_id=actor_user_id,
     )
 

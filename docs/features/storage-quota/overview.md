@@ -49,6 +49,10 @@ NetApp 和 Isilon 的设备协议与 TLS 证书校验由 `storage_clusters.proto
 - NetApp Qtree/用户写 quota rule；NetApp Volume 项目组只调整 Volume 容量且仅支持硬限额。
 - Isilon Directory/User quota 支持硬限额、软限额和宽限期；设置软限额时宽限期必填。继承 default-user 的用户会创建独立配额，不修改共享默认值。
 - 后端统一换算单位并在设备写入后读回校验；成功后更新本地限额与利用率、写入 `quota_adjustment` 记录，再发送结果邮件。
+- 同一设备侧配额规则以 Redis 非阻塞锁互斥；锁冲突返回 `409 quota_adjustment_in_progress`，Redis 不可用时拒绝写入，绝不无锁降级。
+- 新硬限额低于已用容量时必须显式 `force_below_usage=true` 并给出 1–256 字符理由，且仅超级管理员可执行。
+- 写请求超时或连接中断后不会重发；系统只读回目标配额，匹配时标记 `post_timeout_readback`，否则以 `502 quota_outcome_unknown` 返回关联 `operation_id`。
+- `POST /groups/{id}/quota/reconcile` 与 `POST /storage-usages/{id}/quota/reconcile` 只读设备并修复本地数据，不再次写设备或发送通知；对应 `GET .../quota/history` 返回最近十条脱敏结果审计。
 
 详细接口、厂商映射和异常边界见 [项目组与用户目录配额调整设计](quota-adjustment-design.md)。
 

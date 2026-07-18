@@ -12,9 +12,9 @@ from urllib3 import disable_warnings
 from urllib3.exceptions import InsecureRequestWarning
 
 from appConfig import base_config
-from models import Group, Qtree, StorageAlerts, StorageUsage, Volume
+from models import AuditEvent, Group, Qtree, StorageAlerts, StorageUsage, Volume
 from schemas.quotaSchema import QuotaAdjustmentRequest, QuotaAdjustmentResponse
-from services.audit_service import AuditContext, append_audit_event
+from services.audit_service import AuditContext, append_audit_event, serialize_audit_event
 from services.storageAlertRuleService import resolve_recipient_usernames
 from utils.auth_service import is_super_admin
 from utils.isilonClient import IsilonClient
@@ -193,6 +193,12 @@ def _result_from_device(*, resource, resource_type: str, storage_type: str, devi
         operation_id=operation_id,
         verification_source=verification_source,
     )
+
+
+def _read_quota_result(*, client, resource, resource_type: str, target, volume, storage_type: str, rule: dict) -> dict:
+    if resource_type == "Group" and storage_type == "netapp" and isinstance(target, Volume):
+        return client.read_volume_capacity(volume_name=volume.name)
+    return client.read_quota(**rule)
 
 
 def _enqueue_adjustment_feishu(event_id: int, *, audit_context: AuditContext | None = None) -> None:
@@ -455,7 +461,10 @@ def _execute_adjustment_locked(
         raise
     except (requests.Timeout, requests.ConnectionError) as error:
         try:
-            device_result = client.read_quota(**rule)
+            device_result = _read_quota_result(
+                client=client, resource=resource, resource_type=resource_type, target=target,
+                volume=volume, storage_type=storage_type, rule=rule,
+            )
         except Exception as readback_error:
             logger.warning(
                 "Quota write outcome unknown cluster_id=%s resource_type=%s resource_id=%s write_error=%s readback_error=%s",
@@ -721,7 +730,10 @@ def _reconcile_quota(
         client = None
         try:
             client = _build_client(cluster)
-            device_result = client.read_quota(**rule)
+            device_result = _read_quota_result(
+                client=client, resource=resource, resource_type=resource_type, target=target,
+                volume=volume, storage_type=storage_type, rule=rule,
+            )
         except Exception as error:
             if audit_context is not None:
                 append_audit_event(
@@ -787,6 +799,49 @@ def reconcile_storage_usage_quota(
     return _reconcile_quota(
         db, resource=storage_usage, resource_type="StorageUsage", target=resolved["target"], volume=resolved["volume"],
         current_user=current_user, audit_context=audit_context,
+    )
+
+
+def quota_history(
+    db: Session,
+    *,
+    resource_type: str,
+    resource_id: int,
+    group_id: int,
+    current_user,
+) -> list[dict]:
+    require_group_quota_adjustment_permission(db=db, group_id=group_id, current_user=current_user)
+    rows = (
+        db.query(AuditEvent)
+        .filter(
+            AuditEvent.resource_type == resource_type,
+            AuditEvent.resource_id == resource_id,
+            AuditEvent.phase == "result",
+            AuditEvent.action.in_(("quota.adjust", "quota.reconcile")),
+        )
+        .order_by(AuditEvent.occurred_at.desc(), AuditEvent.id.desc())
+        .limit(10)
+        .all()
+    )
+    return [serialize_audit_event(row) for row in rows]
+
+
+def group_quota_history(db: Session, *, group_id: int, current_user) -> list[dict]:
+    group = db.get(Group, group_id)
+    if group is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+    return quota_history(
+        db, resource_type="group", resource_id=group.id, group_id=group.id, current_user=current_user,
+    )
+
+
+def storage_usage_quota_history(db: Session, *, storage_usage_id: int, current_user) -> list[dict]:
+    storage_usage = db.get(StorageUsage, storage_usage_id)
+    if storage_usage is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage usage not found")
+    return quota_history(
+        db, resource_type="storage_usage", resource_id=storage_usage.id,
+        group_id=storage_usage.group_id, current_user=current_user,
     )
 
 

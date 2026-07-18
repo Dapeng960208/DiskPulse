@@ -14,6 +14,7 @@ from appConfig import base_config
 from crud import aiCrud
 from models import AIConversation, AIAuditLog, AIMessage, Group, StorageUsage, User
 from services.audit_service import AuditContext, append_audit_event, redact_audit_payload
+from services import ai_quota_confirmation_service
 from services.ai_client import AIClientError, AIClientToolArgumentsError, AIClientToolCall, chat_completion_stream
 from services.ai_config_service import serialize_model
 from services.ai_tool_service import build_tool_registry, execute_tool, tool_definitions
@@ -779,6 +780,7 @@ def stream_message(
     diagnosis_payloads: list[dict] = []
     emitted_text: list[str] = []
     final_text = ""
+    confirmation_pending: dict | None = None
     recovery: dict | None = None
     degraded_error_message: str | None = None
     terminal = False
@@ -883,14 +885,28 @@ def stream_message(
                     "status": "running",
                 }
                 started_at = monotonic()
-                result = execute_tool(
-                    app=app,
-                    registry=registry,
-                    tool_name=call.name,
-                    arguments=call.arguments,
-                    user_id=user_id,
-                    current_user=current_user,
-                )
+                if ai_quota_confirmation_service.is_quota_write_tool(call.name):
+                    try:
+                        confirmation_pending = ai_quota_confirmation_service.prepare_confirmation(
+                            db,
+                            definition=registry[call.name],
+                            arguments=call.arguments,
+                            user_id=user_id,
+                            conversation_id=conversation.id,
+                            audit=audit,
+                        )
+                        result = {"ok": True, "data": {"confirmation_required": confirmation_pending}}
+                    except HTTPException as error:
+                        result = {"ok": False, "error": str(error.detail)}
+                else:
+                    result = execute_tool(
+                        app=app,
+                        registry=registry,
+                        tool_name=call.name,
+                        arguments=call.arguments,
+                        user_id=user_id,
+                        current_user=current_user,
+                    )
                 if (
                     call.name == "get_incident_diagnosis"
                     and result.get("ok") is True
@@ -910,7 +926,9 @@ def stream_message(
                 )
                 trace_entry.update(
                     {
-                        "status": "failed" if result.get("ok") is False else "succeeded",
+                        "status": "failed" if result.get("ok") is False else (
+                            "awaiting_confirmation" if confirmation_pending is not None else "succeeded"
+                        ),
                         "elapsed_ms": elapsed_ms,
                         "result": display_result,
                         "truncated": truncated,
@@ -929,6 +947,14 @@ def stream_message(
                     "result": display_result,
                     "truncated": truncated,
                 }
+                if confirmation_pending is not None:
+                    yield "quota_confirmation_required", {
+                        "turn_id": turn_id,
+                        "tool_name": call.name,
+                        **confirmation_pending,
+                    }
+                    final_text = "配额调整已生成安全预览，请在五分钟内确认或取消。"
+                    break
                 messages.extend(_provider_tool_messages(model.provider, call, result))
                 if call.name == "get_incident_diagnosis" and result.get("ok") is True:
                     messages.append(
@@ -941,6 +967,8 @@ def stream_message(
                             ),
                         }
                     )
+            if confirmation_pending is not None:
+                break
             yield "status", {"turn_id": turn_id, "status": "thinking"}
         else:
             recovery = dict(_RECOVERY_BY_REASON["tool_iteration_limit"])
@@ -988,6 +1016,26 @@ def stream_message(
                 tool_trace=tool_trace,
                 error_message=degraded_error_message,
                 recovery=recovery,
+                visibility=_combine_visibility(turn_visibility, _visibility_from_trace_entries(tool_trace)),
+            )
+            terminal = True
+            yield "completed", {
+                "turn_id": turn_id,
+                "message": message_data,
+                "conversation": conversation_data,
+                "audit_id": audit.id,
+            }
+            return
+
+        if confirmation_pending is not None:
+            message_data, conversation_data = _terminal_message(
+                db,
+                assistant=assistant,
+                audit=audit,
+                conversation=conversation,
+                text=final_text,
+                status_value="awaiting_confirmation",
+                tool_trace=tool_trace,
                 visibility=_combine_visibility(turn_visibility, _visibility_from_trace_entries(tool_trace)),
             )
             terminal = True

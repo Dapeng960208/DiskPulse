@@ -189,6 +189,38 @@ class NetAppClient:
             "soft_grace": None,
         }
 
+    def read_quota(
+        self,
+        *,
+        quota_type: str,
+        volume_name: str,
+        qtree_name: str | None,
+        path: str,
+        username: str | None,
+    ) -> Dict:
+        params = {
+            "fields": "volume,qtree,type,users,space",
+            "volume.name": volume_name,
+            "type": quota_type,
+        }
+        if qtree_name is not None:
+            params["qtree.name"] = qtree_name
+        if username is not None:
+            params["users.name"] = username
+        reports = self._get_all_records("storage/quota/reports", params=params)
+        if not reports:
+            raise RuntimeError("NetApp quota readback failed")
+        space = reports[0].get("space") or {}
+        return {"hard_limit": space.get("hard_limit"), "soft_limit": space.get("soft_limit"), "soft_grace": None}
+
+    def read_volume_capacity(self, *, volume_name: str) -> Dict:
+        volumes = self._get_all_records(
+            "storage/volumes", params={"name": volume_name, "fields": "uuid,name,size"},
+        )
+        if not volumes or volumes[0].get("size") is None:
+            raise RuntimeError("NetApp volume readback failed")
+        return {"hard_limit": volumes[0]["size"], "soft_limit": None, "soft_grace": None}
+
     def update_volume_capacity(self, *, volume_name: str, hard_limit: float) -> Dict:
         volumes = self._get_all_records(
             "storage/volumes",

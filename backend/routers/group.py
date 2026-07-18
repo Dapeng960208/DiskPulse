@@ -136,6 +136,30 @@ def adjust_group_quota(
     )
 
 
+@router.post("/{group_id}/quota/reconcile", response_model=quotaSchema.QuotaAdjustmentResponse)
+def reconcile_group_quota(
+    group_id: int,
+    request: Request,
+    current_user: CurrentUserDep,
+    db: Session = Depends(get_db),
+):
+    return quotaService.reconcile_group_quota(
+        db,
+        group_id=group_id,
+        current_user=current_user,
+        audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
+    )
+
+
+@router.get("/{group_id}/quota/history")
+def group_quota_history(
+    group_id: int,
+    current_user: CurrentUserDep,
+    db: Session = Depends(get_db),
+):
+    return quotaService.group_quota_history(db, group_id=group_id, current_user=current_user)
+
+
 @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_group(
     group_id: int,

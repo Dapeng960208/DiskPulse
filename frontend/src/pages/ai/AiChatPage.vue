@@ -188,6 +188,7 @@ function toolStatusText(status) {
     running: '调用中',
     succeeded: '完成',
     failed: '失败',
+    awaiting_confirmation: '等待确认',
     cancelled: '已停止',
   }[status] || '等待中';
 }
@@ -216,6 +217,20 @@ function isWaitingForToolResult(message) {
     && message.tool_calls.length > 0;
 }
 
+async function decideQuotaConfirmation(message, decision) {
+  const confirmation = message?.quota_confirmation;
+  if (!confirmation || confirmation.deciding || confirmation.decided) return;
+  confirmation.deciding = true;
+  try {
+    await aiApi.decideQuotaConfirmation(activeConversationId.value, confirmation.confirmation_id, decision);
+    confirmation.decided = decision;
+  } catch (error) {
+    confirmation.error = error.message || '确认操作失败';
+  } finally {
+    confirmation.deciding = false;
+  }
+}
+
 function applyEvent(requestConversationId, { event, data }) {
   // Ignore late chunks from a request whose conversation is no longer displayed.
   if (activeConversationId.value !== requestConversationId) return;
@@ -238,6 +253,10 @@ function applyEvent(requestConversationId, { event, data }) {
   } else if (event === 'tool_call_finished') {
     const assistant = findAssistantMessage(data?.turn_id);
     if (!assistant || !mergeToolCall(assistant, data)) return;
+  } else if (event === 'quota_confirmation_required') {
+    const assistant = findAssistantMessage(data?.turn_id);
+    if (!assistant) return;
+    assistant.quota_confirmation = { ...data, deciding: false, decided: null, error: '' };
   } else if (event === 'completed') {
     if (!reconcileTerminalEvent(requestConversationId, data, 'succeeded')) return;
   } else if (event === 'cancelled') {
@@ -403,6 +422,28 @@ onMounted(loadInitial);
               @click="continueRecovery(message)">{{ message.recovery.label }}</button>
           </section>
           <section
+            v-if="message.role === 'assistant' && message.quota_confirmation"
+            class="quota-confirmation">
+            <strong>配额调整确认</strong>
+            <p>{{ message.quota_confirmation.preview.resource }}：{{ message.quota_confirmation.preview.old_hard_limit }} → {{ message.quota_confirmation.preview.new_hard_limit }} {{ message.quota_confirmation.preview.unit }}</p>
+            <p v-if="message.quota_confirmation.preview.change_reason">理由：{{ message.quota_confirmation.preview.change_reason }}</p>
+            <p
+              v-if="message.quota_confirmation.error"
+              class="failed-label">{{ message.quota_confirmation.error }}</p>
+            <div class="quota-confirmation__actions">
+              <ElButton
+                size="small"
+                :disabled="message.quota_confirmation.deciding || message.quota_confirmation.decided"
+                @click="decideQuotaConfirmation(message, 'cancel')">取消</ElButton>
+              <ElButton
+                size="small"
+                type="danger"
+                :loading="message.quota_confirmation.deciding"
+                :disabled="message.quota_confirmation.deciding || message.quota_confirmation.decided"
+                @click="decideQuotaConfirmation(message, 'confirm')">确认执行</ElButton>
+            </div>
+          </section>
+          <section
             v-if="message.role === 'assistant' && message.tool_calls?.length"
             class="tool-trace"
             aria-label="工具调用">
@@ -520,6 +561,9 @@ onMounted(loadInitial);
 .message-recovery__action { padding: 4px 9px; border: 1px solid var(--el-color-warning-light-3); border-radius: var(--radius-full); color: var(--el-color-warning); background: var(--el-color-warning-light-9); cursor: pointer; font: inherit; }
 .message-recovery__action:hover:not(:disabled), .message-recovery__action:focus-visible { border-color: var(--el-color-warning); outline: none; }
 .message-recovery__action:disabled { cursor: not-allowed; opacity: .65; }
+.quota-confirmation { grid-column: 2; display: grid; gap: 6px; padding: var(--spacing-sm); border: 1px solid var(--el-color-warning-light-5); border-radius: var(--radius-sm); background: var(--el-color-warning-light-9); color: var(--text-primary); font-size: 12px; }
+.quota-confirmation p { margin: 0; }
+.quota-confirmation__actions { display: flex; gap: var(--spacing-sm); }
 .tool-trace { grid-column: 2; display: grid; gap: 6px; margin-top: -8px; color: var(--text-secondary); font-size: 12px; }
 .tool-trace__title { color: var(--text-tertiary); font-weight: 600; }
 .tool-trace__item { border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-secondary); overflow: hidden; }

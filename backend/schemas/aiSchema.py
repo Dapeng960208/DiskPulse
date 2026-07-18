@@ -65,3 +65,7 @@ class ConversationCreate(BaseModel):
 
 class MessageCreate(BaseModel):
     content: str = Field(min_length=1, max_length=32000)
+
+
+class QuotaConfirmationDecision(BaseModel):
+    decision: Literal["confirm", "cancel"]

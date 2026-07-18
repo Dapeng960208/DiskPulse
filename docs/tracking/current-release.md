@@ -1,5 +1,24 @@
 # 当前交付记录
 
+## 2026-07-18：直接配额调整可靠性与 AI 确认
+
+### 已完成
+
+- 项目组和用户目录配额写入按设备侧规则使用 Redis 600 秒非阻塞锁；危险缩减增加超级管理员强制标记和理由校验，写入超时只做只读核验而不重发。
+- NetApp/PowerScale 增加精确只读配额查询；新增同步只读对账和最近十条配额结果历史接口，审计记录包含验证来源、强制缩减和理由的脱敏摘要。
+- 两条 AI 配额写工具改为五分钟一次性确认：SSE 发送安全预览，确认端点重新校验会话、角色、注册工具和 Redis 载荷；内部调用以可信 `ai_tool` 来源审计。
+- 配额弹窗增加危险缩减输入，AI 对话接收并展示确认/取消卡片。
+
+### 验证状态
+
+- 后端聚焦：`D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest backend\test\test_quota_adjustment.py backend\test\test_ai_platform.py backend\test\test_ai_services.py -q -p no:cacheprovider`，`66 passed`；`compileall -q backend` 通过。
+- 前端聚焦：`npx vitest run test/unit/quota-adjustment.test.js test/unit/api/modules.test.js --coverage.enabled=false`，`5 passed`。
+
+### 风险与待完成
+
+- 未对真实 Redis、NetApp 或 PowerScale 执行写入；真实验收必须使用指定的隔离配额对象，先完成一次真实写入，再做一次只读对账。
+- 隔离 worktree 无自身前端依赖目录，验证时复用主工作区依赖；未运行浏览器 E2E、全量 coverage 或真实设备联调。
+
 ## 2026-07-18：前端 Mock 数据与四角色演示
 
 ### 已完成

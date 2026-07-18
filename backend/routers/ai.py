@@ -6,9 +6,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from dependencies import CurrentUserDep, get_db
-from schemas.aiSchema import ConversationCreate, MessageCreate
-from services import ai_chat_service, audit_service
+from schemas.aiSchema import ConversationCreate, MessageCreate, QuotaConfirmationDecision
+from services import ai_chat_service, ai_quota_confirmation_service, audit_service
 from services.ai_rate_limit import enforce_ai_rate_limit
+from services.ai_tool_service import build_tool_registry
 
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -113,3 +114,23 @@ def stream_message(
             stream.close()
 
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
+
+@router.post("/conversations/{conversation_id}/quota-confirmations/{confirmation_id}")
+def decide_quota_confirmation(
+    conversation_id: int,
+    confirmation_id: str,
+    payload: QuotaConfirmationDecision,
+    request: Request,
+    current_user: CurrentUserDep,
+    db: Session = Depends(get_db),
+):
+    return ai_quota_confirmation_service.decide_confirmation(
+        db,
+        app=request.app,
+        registry=build_tool_registry(request.app, current_user=current_user),
+        conversation_id=conversation_id,
+        confirmation_id=confirmation_id,
+        decision=payload.decision,
+        current_user=current_user,
+    )
