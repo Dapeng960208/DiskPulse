@@ -92,13 +92,11 @@ describe('router/routes and app shell', () => {
       .filter((route) => !route.meta?.isHidden)
       .map((route) => route.meta.title);
 
-    expect(rootTitles).toEqual(expect.arrayContaining(['概览', '用户目录', '项目', '项目组', '告警']));
+    expect(rootTitles).toEqual(expect.arrayContaining(['概览', '项目', '容量预测', 'AI 助手', '告警']));
+    expect(rootTitles).not.toEqual(expect.arrayContaining(['用户目录', '项目组']));
     expect(adminTitles).toEqual(expect.arrayContaining([
       '项目组标签',
       '存储集群',
-      '容量池',
-      '存储空间',
-      'Qtree（NetApp）',
       '用户信息管理',
       '系统设置',
       'AI 中心',
@@ -163,7 +161,7 @@ describe('router/routes and app shell', () => {
     expect(wrapper.findComponent({ name: 'ElConfigProvider' }).exists()).toBe(true);
   });
 
-  it('places AI assistant immediately after project groups', () => {
+  it('places the standalone capacity prediction entry immediately after projects', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes,
@@ -182,18 +180,25 @@ describe('router/routes and app shell', () => {
     });
     const labels = wrapper.findAll('.menu-item').map((item) => item.text());
 
-    expect(labels[labels.indexOf('项目组') + 1]).toBe('AI 助手');
+    expect(labels[labels.indexOf('项目') + 1]).toBe('容量预测');
+    expect(labels).not.toContain('项目组');
+    expect(labels).not.toContain('用户目录');
   });
 
-  it('orders system management from storage resources to platform administration with semantic icons', () => {
+  it('groups storage inventory below storage clusters without changing existing URLs', () => {
     const adminRoute = routes.find((route) => route.path === '/admin');
+    const storageGroup = adminRoute.children.find((route) => route.path === '' && route.meta?.title === '存储集群');
     const visibleRoutes = adminRoute.children.filter((route) => !route.meta?.isHidden);
 
+    expect(storageGroup).toEqual(expect.objectContaining({
+      meta: expect.objectContaining({ title: '存储集群', icon: 'i-ri-server-line' }),
+    }));
+    expect(storageGroup.component).toBeUndefined();
+    expect(storageGroup.children.map((route) => route.name)).toEqual([
+      'StorageClusters', 'Aggregates', 'Volumes', 'Qtrees',
+    ]);
     expect(visibleRoutes.map((route) => route.name)).toEqual([
-      'StorageClusters',
-      'Aggregates',
-      'Volumes',
-      'Qtrees',
+      undefined,
       'GroupTags',
       'UsersManagement',
       'Settings',
@@ -202,11 +207,7 @@ describe('router/routes and app shell', () => {
       'IncidentCenter',
       'AuditEvents',
     ]);
-    expect(Object.fromEntries(visibleRoutes.map((route) => [route.name, route.meta.icon]))).toEqual({
-      StorageClusters: 'i-ri-server-line',
-      Aggregates: 'i-ri-pie-chart-2-line',
-      Volumes: 'i-ri-database-2-line',
-      Qtrees: 'i-ri-folder-2-line',
+    expect(Object.fromEntries(visibleRoutes.filter((route) => route.name).map((route) => [route.name, route.meta.icon]))).toEqual({
       GroupTags: 'i-ri-price-tag-3-line',
       UsersManagement: 'i-ri-team-line',
       Settings: 'i-ri-settings-3-line',
@@ -215,5 +216,66 @@ describe('router/routes and app shell', () => {
       IncidentCenter: 'i-ri-alarm-warning-line',
       AuditEvents: 'i-ri-file-search-line',
     });
+
+    const router = createRouter({ history: createMemoryHistory(), routes });
+    expect(Object.fromEntries(storageGroup.children.map((route) => [
+      route.name,
+      router.resolve({ name: route.name }).path,
+    ]))).toEqual({
+      StorageClusters: '/admin/storage-clusters',
+      Aggregates: '/admin/aggregates',
+      Volumes: '/admin/volumes',
+      Qtrees: '/admin/qtrees',
+    });
+  });
+
+  it('keeps project-scoped resource deep links while hiding their root-menu entries', () => {
+    const flatRoutes = routes.flatMap((route) => route.children || []);
+    const usages = flatRoutes.find((route) => route.name === 'Usages');
+    const groups = flatRoutes.find((route) => route.name === 'Groups');
+    const capacityPredictions = flatRoutes.find((route) => route.name === 'CapacityPredictions');
+
+    expect(usages.meta).toMatchObject({ title: '用户目录', isHidden: true });
+    expect(usages.meta.isRoot).not.toBe(true);
+    expect(groups.meta).toMatchObject({ title: '项目组', isHidden: true });
+    expect(groups.meta.isRoot).not.toBe(true);
+    expect(capacityPredictions).toEqual(expect.objectContaining({
+      path: 'capacity-predictions',
+      meta: expect.objectContaining({
+        title: '容量预测',
+        isRoot: true,
+        icon: 'i-ri-line-chart-line',
+      }),
+    }));
+  });
+
+  it('normalizes nested menu paths for the storage-cluster submenu', () => {
+    const router = createRouter({ history: createMemoryHistory(), routes });
+    const wrapper = shallowMount(RouteMenu, {
+      global: {
+        plugins: [createPinia(), router],
+        stubs: {
+          ElMenu: { template: '<div><slot /></div>' },
+          RouteMenuItem: {
+            name: 'RouteMenuItem',
+            props: ['option'],
+            template: '<span class="menu-item">{{ option.label }}</span>',
+          },
+        },
+      },
+    });
+    const adminOption = wrapper
+      .findAllComponents({ name: 'RouteMenuItem' })
+      .map((item) => item.props('option'))
+      .find((option) => option.label === '系统管理');
+    const storageOption = adminOption.children.find((option) => option.label === '存储集群');
+
+    expect(storageOption.children.map((option) => option.path)).toEqual([
+      '/admin/storage-clusters',
+      '/admin/aggregates',
+      '/admin/volumes',
+      '/admin/qtrees',
+    ]);
+    expect(storageOption.children.every((option) => !option.path.includes('//'))).toBe(true);
   });
 });
