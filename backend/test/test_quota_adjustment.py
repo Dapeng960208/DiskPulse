@@ -237,7 +237,7 @@ def test_only_super_admin_can_force_a_quota_below_used_capacity(db_session, monk
             current_user=quota_owner(db_session),
         )
     assert error.value.status_code == 403
-    assert error.value.detail["code"] == "quota_below_usage_requires_super_admin"
+    assert error.value.detail == "quota adjustment permission required"
 
     result = quotaService.adjust_group_quota(
         db_session,
@@ -522,7 +522,7 @@ def test_quota_adjustment_propagates_correlation_to_notification_task(db_session
         "get",
         lambda key, default=None: {
             "feishu_notification": {"enabled": True, "debug": False, "cc_usernames": ["auditor"]},
-            "super_admin_usernames": ["admin"],
+            "super_admin_usernames": ["alice"],
         }.get(key, default),
     )
 
@@ -554,7 +554,7 @@ def test_quota_adjustments_queue_feishu_for_group_owner_and_directory_user(db_se
         "get",
         lambda key, default=None: {
             "feishu_notification": {"enabled": True, "debug": False, "cc_usernames": ["auditor"]},
-            "super_admin_usernames": ["admin"],
+            "super_admin_usernames": ["alice"],
         }.get(key, default),
     )
 
@@ -605,7 +605,7 @@ def test_quota_adjustment_succeeds_when_feishu_enqueue_fails(db_session, monkeyp
         "get",
         lambda key, default=None: {
             "feishu_notification": {"enabled": True, "debug": False, "cc_usernames": []},
-            "super_admin_usernames": [],
+            "super_admin_usernames": ["alice"],
         }.get(key, default),
     )
 

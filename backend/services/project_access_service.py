@@ -248,18 +248,28 @@ def incident_capabilities(db, current_user, project_id: int | None) -> dict[str,
 
 
 def group_capabilities(current_user, group: Group | None) -> dict[str, bool]:
-    """Expose the same quota affordance enforced by quotaService."""
+    """Expose the super-admin-only project-group quota affordance."""
     return {
         "adjust_quota": bool(
             group is not None
             and current_user is not None
-            and (
-                is_super_admin(current_user)
-                or group.in_charge_user_id == current_user.id
-            )
+            and is_super_admin(current_user)
         )
     }
 
 
 def storage_usage_capabilities(current_user, storage_usage: StorageUsage) -> dict[str, bool]:
-    return group_capabilities(current_user, storage_usage.group)
+    group = storage_usage.group
+    project = group.project if group is not None else None
+    return {
+        "adjust_quota": bool(
+            current_user is not None
+            and (
+                is_super_admin(current_user)
+                or (
+                    project is not None
+                    and project.in_charge_user_id == current_user.id
+                )
+            )
+        )
+    }

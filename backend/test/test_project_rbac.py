@@ -63,6 +63,9 @@ def test_quota_capabilities_limit_groups_to_super_admins_and_users_to_project_ow
     group_owner = _user("group-owner")
     project_owner = _user("project-owner")
     super_admin = _user("super-admin")
+    group_owner.id = 1
+    project_owner.id = 2
+    super_admin.id = 3
     project = Project(id=1, name="project-a", in_charge_user_id=project_owner.id)
     group = Group(id=1, project=project, in_charge_user_id=group_owner.id)
     storage_usage = StorageUsage(id=1, group=group)

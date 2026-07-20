@@ -12,7 +12,7 @@ from urllib3 import disable_warnings
 from urllib3.exceptions import InsecureRequestWarning
 
 from appConfig import base_config
-from models import AuditEvent, Group, Qtree, StorageAlerts, StorageUsage, Volume
+from models import AuditEvent, Group, Project, Qtree, StorageAlerts, StorageUsage, Volume
 from schemas.quotaSchema import QuotaAdjustmentRequest, QuotaAdjustmentResponse
 from services.audit_service import AuditContext, append_audit_event, serialize_audit_event
 from services.storageAlertRuleService import resolve_recipient_usernames
@@ -721,9 +721,9 @@ def adjust_storage_usage_quota(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Storage usage relations not found",
         )
-    require_group_quota_adjustment_permission(
+    require_storage_usage_quota_adjustment_permission(
         db=db,
-        group_id=storage_usage.group_id,
+        storage_usage=storage_usage,
         current_user=current_user,
     )
     resolved = resolve_group_storage_target(storage_usage.group)
@@ -827,8 +827,10 @@ def reconcile_storage_usage_quota(
     storage_usage = db.get(StorageUsage, storage_usage_id)
     if storage_usage is None or storage_usage.group is None or storage_usage.user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage usage not found")
-    require_group_quota_adjustment_permission(
-        db=db, group_id=storage_usage.group_id, current_user=current_user,
+    require_storage_usage_quota_adjustment_permission(
+        db=db,
+        storage_usage=storage_usage,
+        current_user=current_user,
     )
     resolved = resolve_group_storage_target(storage_usage.group)
     if resolved["target"] is None or resolved["volume"] is None:
@@ -839,15 +841,12 @@ def reconcile_storage_usage_quota(
     )
 
 
-def quota_history(
+def _quota_history_rows(
     db: Session,
     *,
     resource_type: str,
     resource_id: int,
-    group_id: int,
-    current_user,
 ) -> list[dict]:
-    require_group_quota_adjustment_permission(db=db, group_id=group_id, current_user=current_user)
     rows = (
         db.query(AuditEvent)
         .filter(
@@ -863,6 +862,22 @@ def quota_history(
     return [serialize_audit_event(row) for row in rows]
 
 
+def quota_history(
+    db: Session,
+    *,
+    resource_type: str,
+    resource_id: int,
+    group_id: int,
+    current_user,
+) -> list[dict]:
+    require_group_quota_adjustment_permission(db=db, group_id=group_id, current_user=current_user)
+    return _quota_history_rows(
+        db,
+        resource_type=resource_type,
+        resource_id=resource_id,
+    )
+
+
 def group_quota_history(db: Session, *, group_id: int, current_user) -> list[dict]:
     group = db.get(Group, group_id)
     if group is None:
@@ -876,21 +891,40 @@ def storage_usage_quota_history(db: Session, *, storage_usage_id: int, current_u
     storage_usage = db.get(StorageUsage, storage_usage_id)
     if storage_usage is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage usage not found")
-    return quota_history(
-        db, resource_type="storage_usage", resource_id=storage_usage.id,
-        group_id=storage_usage.group_id, current_user=current_user,
+    require_storage_usage_quota_adjustment_permission(
+        db=db,
+        storage_usage=storage_usage,
+        current_user=current_user,
+    )
+    return _quota_history_rows(
+        db,
+        resource_type="storage_usage",
+        resource_id=storage_usage.id,
     )
 
 
 def require_group_quota_adjustment_permission(*, db: Session, group_id: int, current_user) -> Group:
-    """Only the responsible group owner may use the non-admin quota exception."""
+    """Project-group quota mutations and history are reserved for super admins."""
     if current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
     if is_super_admin(current_user):
         return None
-    group = db.get(Group, group_id)
-    if group is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
-    if group.in_charge_user_id == current_user.id:
-        return group
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="quota adjustment permission required")
+
+
+def require_storage_usage_quota_adjustment_permission(
+    *,
+    db: Session,
+    storage_usage: StorageUsage,
+    current_user,
+) -> None:
+    """Permit a project owner to adjust only user directories in that project."""
+    if current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+    if is_super_admin(current_user):
+        return
+    group = storage_usage.group
+    project = db.get(Project, group.project_id) if group is not None else None
+    if project is not None and project.in_charge_user_id == current_user.id:
+        return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="quota adjustment permission required")
