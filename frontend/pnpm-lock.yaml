@@ -17,6 +17,9 @@ patchedDependencies:
   lodash-es@4.18.0:
     hash: 062388aac7daa05359dee523efc08e53cba66e41d51d379148f54228490827ca
     path: patches/lodash-es@4.18.0.patch
+  lodash@4.18.0:
+    hash: 1918898c3345324f3e8b35fd805c5dc01ca799366102910d77559129f3630301
+    path: patches/lodash@4.18.0.patch
 
 importers:
 
@@ -5569,9 +5572,9 @@ snapshots:
       '@vueuse/core': 12.0.0(typescript@5.9.3)
       async-validator: 4.2.5
       dayjs: 1.11.20
-      lodash: 4.18.0
+      lodash: 4.18.0(patch_hash=1918898c3345324f3e8b35fd805c5dc01ca799366102910d77559129f3630301)
       lodash-es: 4.18.0(patch_hash=062388aac7daa05359dee523efc08e53cba66e41d51d379148f54228490827ca)
-      lodash-unified: 1.0.3(@types/lodash-es@4.17.12)(lodash-es@4.18.0(patch_hash=062388aac7daa05359dee523efc08e53cba66e41d51d379148f54228490827ca))(lodash@4.18.0)
+      lodash-unified: 1.0.3(@types/lodash-es@4.17.12)(lodash-es@4.18.0(patch_hash=062388aac7daa05359dee523efc08e53cba66e41d51d379148f54228490827ca))(lodash@4.18.0(patch_hash=1918898c3345324f3e8b35fd805c5dc01ca799366102910d77559129f3630301))
       memoize-one: 6.0.0
       normalize-wheel-es: 1.2.0
       vue: 3.5.30(typescript@5.9.3)
@@ -6090,7 +6093,7 @@ snapshots:
   git-raw-commits@2.0.11:
     dependencies:
       dargs: 7.0.0
-      lodash: 4.18.0
+      lodash: 4.18.0(patch_hash=1918898c3345324f3e8b35fd805c5dc01ca799366102910d77559129f3630301)
       meow: 8.1.2
       split2: 3.2.2
       through2: 4.0.2
@@ -6550,10 +6553,10 @@ snapshots:
 
   lodash-es@4.18.0(patch_hash=062388aac7daa05359dee523efc08e53cba66e41d51d379148f54228490827ca): {}
 
-  lodash-unified@1.0.3(@types/lodash-es@4.17.12)(lodash-es@4.18.0(patch_hash=062388aac7daa05359dee523efc08e53cba66e41d51d379148f54228490827ca))(lodash@4.18.0):
+  lodash-unified@1.0.3(@types/lodash-es@4.17.12)(lodash-es@4.18.0(patch_hash=062388aac7daa05359dee523efc08e53cba66e41d51d379148f54228490827ca))(lodash@4.18.0(patch_hash=1918898c3345324f3e8b35fd805c5dc01ca799366102910d77559129f3630301)):
     dependencies:
       '@types/lodash-es': 4.17.12
-      lodash: 4.18.0
+      lodash: 4.18.0(patch_hash=1918898c3345324f3e8b35fd805c5dc01ca799366102910d77559129f3630301)
       lodash-es: 4.18.0(patch_hash=062388aac7daa05359dee523efc08e53cba66e41d51d379148f54228490827ca)
 
   lodash.camelcase@4.3.0: {}
@@ -6576,7 +6579,7 @@ snapshots:
 
   lodash.upperfirst@4.3.1: {}
 
-  lodash@4.18.0: {}
+  lodash@4.18.0(patch_hash=1918898c3345324f3e8b35fd805c5dc01ca799366102910d77559129f3630301): {}
 
   log-update@6.1.0:
     dependencies:
@@ -7618,7 +7621,7 @@ snapshots:
       eslint-visitor-keys: 3.4.3
       espree: 9.6.1
       esquery: 1.7.0
-      lodash: 4.18.0
+      lodash: 4.18.0(patch_hash=1918898c3345324f3e8b35fd805c5dc01ca799366102910d77559129f3630301)
       semver: 7.7.4
     transitivePeerDependencies:
       - supports-color
