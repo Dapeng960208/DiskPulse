@@ -78,11 +78,44 @@ def ensure_group_directory_readers(db, *, group_id: int) -> None:
     )
 
 
-def ensure_project_owner_membership(db, *, project_id: int) -> ProjectMembership | None:
-    """Ensure the configured project in-charge user is a project administrator."""
+def ensure_project_owner_membership(
+    db,
+    *,
+    project_id: int,
+    previous_owner_user_id: int | None = None,
+) -> ProjectMembership | None:
+    """Synchronize the project owner with the project-administrator role."""
     project = db.get(Project, project_id)
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project was not found")
+    if (
+        previous_owner_user_id is not None
+        and previous_owner_user_id != project.in_charge_user_id
+    ):
+        previous_membership = (
+            db.query(ProjectMembership)
+            .filter(
+                ProjectMembership.project_id == project.id,
+                ProjectMembership.user_id == previous_owner_user_id,
+            )
+            .one_or_none()
+        )
+        if previous_membership is not None and previous_membership.role == "project_admin":
+            owns_project_directory = (
+                db.query(StorageUsage.id)
+                .join(Group, Group.id == StorageUsage.group_id)
+                .filter(
+                    Group.project_id == project.id,
+                    StorageUsage.user_id == previous_owner_user_id,
+                )
+                .first()
+                is not None
+            )
+            if owns_project_directory:
+                previous_membership.role = "reader"
+            else:
+                db.delete(previous_membership)
+            db.flush()
     if project.in_charge_user_id is None:
         return None
     return set_project_member(

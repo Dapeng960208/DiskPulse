@@ -68,6 +68,7 @@ def create_project(db: Session, project: projectsSchema.ProjectUpdate):
 def update_project(db: Session, project_id: int, project: projectsSchema.ProjectUpdate):
     project_db = db.query(Project).filter(Project.id == project_id).first()
     if project_db:
+        previous_owner_user_id = project_db.in_charge_user_id
         project_db.name = project.name
         project_db.descriptions = project.descriptions
         project_db.status = project.status
@@ -81,7 +82,11 @@ def update_project(db: Session, project_id: int, project: projectsSchema.Project
         project_db.project_process_code = project.project_process_code
         project_db.updated_at = datetime.now()
         db.flush()
-        ensure_project_owner_membership(db, project_id=project_db.id)
+        ensure_project_owner_membership(
+            db,
+            project_id=project_db.id,
+            previous_owner_user_id=previous_owner_user_id,
+        )
         db.commit()
         db.refresh(project_db)
     return project_db
