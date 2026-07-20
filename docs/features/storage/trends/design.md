@@ -26,9 +26,7 @@
 
 ## 容量单位契约
 
-持久化和兼容数值字段仍以 GB 为原始口径；所有容量类响应同时在 `capacity` 映射中返回 `{ value, unit }`，前端必须优先展示该映射，不能自行猜测单位。转换采用严格阈值：小于 1 GB 为 MB，1 GB 至 1024 GB 为 GB，大于 1024 GB 至 1024 TB 为 TB，大于 1024 TB 为 PB。
-
-容量池、存储空间、Qtree、项目、项目组和存储集群的实时容量曲线返回 `data_unit=TB`；用户目录容量曲线返回 `data_unit=GB`，文件数曲线返回 `data_unit=count`。存储空间监控和集群健康容量变化固定返回 TB，并对具体容量字段保留 `capacity` 映射。
+容量字段、`data_unit`、二进制换算边界和前端消费方式统一遵守[容量单位 API 契约](../../../standards/backend/capacity-unit-contract.md)。本专题只定义趋势元数据和指标选择，不重复容量显示规则。
 
 项目容量趋势读取 QuestDB 的 `project_storage_usages`。每轮存储采集先在 PostgreSQL 内完成项目组更新和项目去重汇总，事务提交成功后才写入项目趋势；只有该项目所有启用项目组所在的存储集群均采集成功时才写入，避免混入跨集群的部分结果。
 

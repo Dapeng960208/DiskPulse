@@ -6,7 +6,7 @@
 
 核心接口位于 `/storage-pulse/api/storage-clusters`，支持集群列表、创建、详情、更新、删除和实时趋势。设备协议由集群的 `protocol` 决定，`tls_verify` 只适用于 HTTPS；HTTP 仅应在可信隔离网络中使用。
 
-容量类资源响应在保留原始 GB 数值兼容字段的同时，使用 `capacity.{field}={ value, unit }` 明确显示单位。容量池、存储空间、Qtree、项目、项目组和集群实时容量曲线使用 `data_unit=TB`；树节点的容量和当前值分别以 `capacity_unit`、`value_unit` 标识，避免把利用率与容量混淆。
+容量类资源响应、实时曲线和容量树遵守[容量单位 API 契约](../../../standards/backend/capacity-unit-contract.md)，避免把利用率与容量混淆。
 
 创建、启用或更新已启用集群后会异步触发采集，保存请求不等待设备响应。采集失败保留已有资源数据并记录安全诊断日志，不输出设备地址、账号或密码。
 

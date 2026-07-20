@@ -21,6 +21,8 @@
 | 文档新增、移动、删除或链接更新 | [文档规范](./documentation-standard.md) 和[命名与链接](./document-naming-convention.md) | 被修改功能的事实来源。 |
 | 测试、排障、部署验收 | 对应实现层规范 | 目标功能专题和对应 `guides/<专业域>/` 文档。 |
 
+涉及存储容量 API、容量树、容量趋势、预测或其前端展示时，必须额外阅读[容量单位 API 契约](../backend/capacity-unit-contract.md)。
+
 ## AI 功能的强制组合
 
 AI 功能先定位到 `docs/features/ai/<功能>/`，再按改动层选择规范：

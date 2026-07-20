@@ -50,7 +50,7 @@ AI 相关文档必须进入 `docs/features/ai/<功能>/`。不得在 `docs/featu
 | 分类 | 文档 |
 | --- | --- |
 | 前端规范 | [前端设计与开发规范](./standards/frontend/frontend-design-standard.md) |
-| 后端规范 | [后端开发规范](./standards/backend/backend-development-standard.md) |
+| 后端规范 | [后端开发规范](./standards/backend/backend-development-standard.md) · [容量单位 API 契约](./standards/backend/capacity-unit-contract.md) |
 | 数据库规范 | [数据库开发规范](./standards/database/database-development-standard.md) |
 | 文档规范 | [文档规范](./standards/documentation/documentation-standard.md) · [命名与链接](./standards/documentation/document-naming-convention.md) · [开发阅读矩阵](./standards/documentation/development-reading-guide.md) · [领域术语](./standards/documentation/domain-terminology.md) · [错误记录规则](./standards/documentation/development-error-summary.md) |
 | Git 规范 | [Git 提交与交付规范](./standards/git/git-commit-standard.md) |

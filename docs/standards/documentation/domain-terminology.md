@@ -33,8 +33,12 @@
 | 限额 | 管理员配置或存储系统返回的容量上限。 | `limit` |
 | 已用容量 | 当前已使用容量。 | `used` |
 | 已分配容量 | 已分配给下级资源的容量。 | `allocated` |
+| 原始容量值 | 数据库存储、采集和兼容数值字段使用的 GB 口径；页面不得直接猜测其显示单位。 | 容量原始字段 |
+| 显示容量 | API 在 `capacity.{field}` 中返回的数值与单位组合。 | `CapacityDisplay` |
 | 使用率 | 已用容量占限额的比例。 | `use_ratio` / `used_ratio` |
 | 阈值 | 告警、扩容或清理判断使用的比例或容量值。 | `threshold` |
+
+容量原始值、显示值、曲线 `data_unit` 和二进制换算边界以[容量单位 API 契约](../backend/capacity-unit-contract.md)为准。
 
 ## 权限与安全
 

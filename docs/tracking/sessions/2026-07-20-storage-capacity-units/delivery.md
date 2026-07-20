@@ -9,6 +9,7 @@
 - 已完成：后端以统一 `capacity.{field}={ value, unit }` 契约返回容量显示单位；前端优先展示接口返回的单位。
 - 已完成：容量池、存储空间、Qtree、项目、项目组和存储集群的实时容量曲线使用 `data_unit=TB`；用户目录容量曲线使用 GB，文件数曲线使用 count。
 - 已完成：存储空间监控、集群健康容量变化、容量预测、容量树、Dashboard 和 Mock 数据均补充了明确单位。
+- 已完成：将容量单位、字段级 `capacity`、曲线 `data_unit` 和前端消费规则收敛为[容量单位 API 契约](../../../standards/backend/capacity-unit-contract.md)，相关功能专题改为引用该唯一来源。
 
 ## 验证
 

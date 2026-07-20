@@ -30,6 +30,7 @@
 
 - 路由函数保持单一 HTTP 操作；参数和依赖优先用 `typing.Annotated`。
 - 新增公开接口应定义返回类型或 `response_model`。
+- 存储容量接口必须遵守[容量单位 API 契约](./capacity-unit-contract.md)：保留 GB 原始字段、返回字段级 `capacity` 显示单位，并为曲线返回 `data_unit`。
 - 输入校验放 Pydantic schema；跨资源、权限、数据库存在性校验放 dependency 或 service。
 - Router 只做 HTTP 参数、权限依赖和响应组装；不得定义 Pydantic `BaseModel`，不得直接导入 SQLAlchemy/model，不得执行表级查询或写入。
 - Service 负责领域编排、权限后置校验、跨表组合、事务边界和错误转换。
