@@ -22,7 +22,7 @@ describe('heading and subtitle policy', () => {
   });
 
   it('records the site-wide prohibition in the frontend standard', () => {
-    const standard = readFileSync(resolve(process.cwd(), '../docs/standards/frontend-design-standard.md'), 'utf8');
+    const standard = readFileSync(resolve(process.cwd(), '../docs/standards/frontend/frontend-design-standard.md'), 'utf8');
 
     expect(standard).toContain('禁止在标题后设置描述性副标题');
   });

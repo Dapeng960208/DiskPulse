@@ -1,10 +1,12 @@
 ## 1. 必读顺序
 
-- 任何任务：读 `docs/standards/documentation-standard.md`、`docs/standards/domain-terminology.md`。
-- 后端任务：再读 `docs/standards/backend-development-standard.md` 和 `docs/standards/frontend-design-standard.md`。
-- 文档命名/放置：读 `docs/standards/document-naming-convention.md`。
-- 遇到可复现错误：按 `docs/standards/development-error-summary.md` 记录。
-- 需要提交：按 `docs/standards/ai-development-standard.md` 执行。
+- 任何任务：先读 `docs/standards/documentation/documentation-standard.md`、`docs/standards/git/git-commit-standard.md`，再按 `docs/standards/documentation/development-reading-guide.md` 选择实现层规范与功能专题。
+- 前端任务：读 `docs/standards/frontend/frontend-design-standard.md` 和目标功能目录中的事实文档；后端任务读 `docs/standards/backend/backend-development-standard.md` 和目标功能目录中的事实文档。
+- 涉及模型、查询、索引、迁移、QuestDB 或 Redis 数据边界：再读 `docs/standards/database/database-development-standard.md`。
+- AI 功能：必须先定位 `docs/features/ai/<功能>/`。开发 AI 后端时，至少读后端规范、该功能的 `overview.md` 与 `backend.md`；开发 AI 前端时，至少读前端规范、该功能的 `overview.md` 与 `frontend.md`。涉及 AI 数据模型或迁移时再读数据库规范。
+- 涉及产品术语、资源名称、权限、指标或用户文案：读 `docs/standards/documentation/domain-terminology.md`。
+- 文档命名/放置：读 `docs/standards/documentation/document-naming-convention.md`。
+- 遇到可复现错误：按 `docs/standards/documentation/development-error-summary.md` 记录。
 
 ## 2. 核心原则
 
