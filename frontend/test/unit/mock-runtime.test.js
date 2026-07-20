@@ -47,6 +47,41 @@ describe('frontend mock runtime', () => {
     expect((await gateway.request('get', '/projects/1', undefined, admin.token)).capabilities).toMatchObject({ manage_members: true, view_audit_events: true });
   });
 
+  it('scopes project and user-detail related datasets by their explicit identifiers', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const projectAdmin = await gateway.login('demo-project-admin', DEMO_PASSWORD);
+    const reader = await gateway.login('demo-reader', DEMO_PASSWORD);
+
+    const usages = await gateway.request('get', '/storage-usages', undefined, superadmin.token, {
+      params: { project_id: 1 },
+    });
+    const alerts = await gateway.request('get', '/storage-alerts', undefined, superadmin.token, {
+      params: { related_type: 'StorageUsage', related_id: 101 },
+    });
+    const forecasts = await gateway.request('get', '/v1/capacity-predictions', undefined, superadmin.token, {
+      params: { page: 1, size: 20 },
+    });
+    const quotaHistory = await gateway.request('get', '/storage-usages/101/quota/history', undefined, superadmin.token);
+    const projectAdminUsage = await gateway.request('get', '/storage-usages/101', undefined, projectAdmin.token);
+
+    expect(usages.content).toHaveLength(1);
+    expect(usages.content[0].project_id).toBe(1);
+    expect(alerts.content).toHaveLength(1);
+    expect(alerts.content[0]).toMatchObject({ related_type: 'StorageUsage', related_id: 101 });
+    expect(forecasts.content[0]).toMatchObject({ asset_type: 'storage_usage', asset_id: '101' });
+    expect(quotaHistory[0]).toMatchObject({
+      action: 'quota.adjust',
+      before_summary: { hard_limit: expect.any(Number) },
+      after_summary: { hard_limit: expect.any(Number) },
+    });
+    expect(projectAdminUsage.capabilities.adjust_quota).toBe(false);
+    await expect(gateway.request('get', '/storage-usages/101/quota/history', undefined, projectAdmin.token))
+      .rejects.toMatchObject({ status: 403 });
+    await expect(gateway.request('get', '/storage-usages/101/quota/history', undefined, reader.token))
+      .rejects.toMatchObject({ status: 403 });
+  });
+
   it('keeps system resource reads and writes exclusive to the superadmin', async () => {
     // Review source: the generic Mock table map exposed system inventory to
     // project-scoped roles. Resolution contract: mirror real route RBAC while
@@ -143,6 +178,97 @@ describe('frontend mock runtime', () => {
       activation_ready: true,
     });
     expect(candidates[0].evaluations).toHaveLength(3);
+  });
+
+  it('paginates capacity prediction lists after applying project scope', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const projectAdmin = await gateway.login('demo-project-admin', DEMO_PASSWORD);
+
+    const finalFirstPage = await gateway.request('get', '/v1/capacity-predictions', undefined, superadmin.token, {
+      params: { page: 1, size: 3 },
+    });
+    const finalSecondPage = await gateway.request('get', '/v1/capacity-predictions', undefined, superadmin.token, {
+      params: { page: 2, size: 3 },
+    });
+    const scopedSecondPage = await gateway.request('get', '/v1/capacity-predictions', undefined, projectAdmin.token, {
+      params: { page: 2, size: 1 },
+    });
+    const baselineFirstPage = await gateway.request('get', '/v1/forecasts', undefined, superadmin.token, {
+      params: { page: 1, size: 4 },
+    });
+    const baselineSecondPage = await gateway.request('get', '/v1/forecasts', undefined, superadmin.token, {
+      params: { page: 2, size: 4 },
+    });
+    const scopedBaselineSecondPage = await gateway.request('get', '/v1/forecasts', undefined, projectAdmin.token, {
+      params: { page: 2, size: 1 },
+    });
+
+    expect(finalFirstPage).toMatchObject({ total: 10, totalElements: 10, meta: { total: 10 } });
+    expect(finalFirstPage.content).toHaveLength(3);
+    expect(finalSecondPage.content).toHaveLength(3);
+    expect(finalSecondPage.data).toEqual(finalSecondPage.content);
+    expect(finalSecondPage.content.map((item) => item.id))
+      .not.toEqual(finalFirstPage.content.map((item) => item.id));
+    expect(scopedSecondPage).toMatchObject({ total: 2, totalElements: 2, meta: { total: 2 } });
+    expect(scopedSecondPage.content).toHaveLength(1);
+    expect(baselineFirstPage).toMatchObject({ total: 25, totalElements: 25, meta: { total: 25 } });
+    expect(baselineFirstPage.content).toHaveLength(4);
+    expect(baselineSecondPage.content).toHaveLength(4);
+    expect(baselineSecondPage.content.map((item) => item.id))
+      .not.toEqual(baselineFirstPage.content.map((item) => item.id));
+    expect(scopedBaselineSecondPage)
+      .toMatchObject({ content: [expect.any(Object)], total: 2, totalElements: 2, meta: { total: 2 } });
+  });
+
+  it('keeps capacity predictions available to superadmins when user visibility is disabled', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const reader = await gateway.login('demo-reader', DEMO_PASSWORD);
+
+    await gateway.request(
+      'patch',
+      '/v1/admin/capacity-prediction-settings',
+      { user_visible: false },
+      superadmin.token,
+    );
+
+    await expect(gateway.request('get', '/v1/capacity-predictions/visibility', undefined, superadmin.token))
+      .resolves.toEqual({ visible: true });
+    await expect(gateway.request('get', '/v1/capacity-predictions', undefined, superadmin.token, {
+      params: { page: 1, size: 1 },
+    })).resolves.toMatchObject({ content: expect.any(Array), total: 10 });
+    await expect(gateway.request('get', '/v1/capacity-predictions/storage_usage/101', undefined, superadmin.token))
+      .resolves.toMatchObject({ asset_type: 'storage_usage', asset_id: '101' });
+    await expect(gateway.request('get', '/v1/capacity-predictions/visibility', undefined, reader.token))
+      .resolves.toEqual({ visible: false });
+    await expect(gateway.request('get', '/v1/capacity-predictions', undefined, reader.token))
+      .rejects.toMatchObject({ status: 403 });
+    await expect(gateway.request('get', '/v1/capacity-predictions/storage_usage/101', undefined, reader.token))
+      .rejects.toMatchObject({ status: 403 });
+    await expect(gateway.request(
+      'get',
+      '/v1/capacity-predictions/storage_usage/101/related-incidents',
+      undefined,
+      reader.token,
+    )).resolves.toEqual(expect.any(Array));
+    await expect(gateway.request(
+      'get',
+      '/v1/capacity-predictions/storage_usage/102/related-incidents',
+      undefined,
+      reader.token,
+    )).rejects.toMatchObject({ status: 403 });
+
+    await gateway.request(
+      'patch',
+      '/v1/admin/capacity-prediction-settings',
+      { user_visible: true },
+      superadmin.token,
+    );
+    await expect(gateway.request('get', '/v1/capacity-predictions/visibility', undefined, reader.token))
+      .resolves.toEqual({ visible: true });
+    await expect(gateway.request('get', '/v1/capacity-predictions', undefined, reader.token))
+      .resolves.toMatchObject({ total: 2 });
   });
 
   it('gives the superadmin five or more records for every visible mock data source', async () => {
@@ -315,5 +441,22 @@ describe('frontend mock runtime', () => {
       after_summary: expect.any(Object),
       metadata: expect.objectContaining({ client_ip: expect.any(String) }),
     });
+  });
+
+  it('mirrors every capacity forecast asset type on the standalone list', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    const forecasts = await gateway.request('get', '/v1/forecasts', undefined, superadmin.token, {
+      params: { page: 1, size: 100 },
+    });
+
+    expect(new Set(forecasts.content.map((item) => item.asset_type))).toEqual(new Set([
+      'storage_cluster',
+      'volume',
+      'qtree',
+      'group',
+      'storage_usage',
+    ]));
   });
 });
