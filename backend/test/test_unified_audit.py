@@ -18,7 +18,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
 from appConfig import base_config
-from models import AIConfig, AIConversation, AuditEvent, Project, User
+from models import AIConfig, AIConversation, AuditEvent, Group, GroupTag, Project, StorageCluster, User
 from services import ai_chat_service, audit_service, project_membership_service
 from services.ai_client import AICompletionStreamEvent
 
@@ -370,6 +370,69 @@ def test_audit_event_list_serializes_numeric_resource_ids_as_strings(
 
     assert response.status_code == 200
     assert response.json()["content"][0]["resource_id"] == "296"
+
+
+def test_audit_event_list_resolves_actor_resource_and_indirect_project_associations(
+    api_client_factory,
+    session_factory,
+):
+    """Storage-cluster events explain their current resource-to-project path."""
+    from routers import audit_events
+    from utils.security import issue_token
+
+    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("super_admin_usernames", ["audit-admin"])
+    session = session_factory()
+    try:
+        session.add_all(
+            [
+                User(id=1, rd_username="audit-admin", username="Audit Admin"),
+                User(id=9, rd_username="collector", username="Storage Collector"),
+                Project(id=10, name="芯片设计平台"),
+                Project(id=11, name="仿真平台"),
+                GroupTag(id=1, name="生产"),
+                StorageCluster(id=2, name="华东存储集群", storage_type="netapp"),
+                Group(id=20, name="芯片设计组", project_id=10, storage_cluster_id=2, group_tag_id=1, enable_monitoring=False),
+                Group(id=21, name="仿真组", project_id=11, storage_cluster_id=2, group_tag_id=1, enable_monitoring=False),
+                AuditEvent(
+                    id="7af3cbd9-2be4-41f7-8af9-9892f5071c2b",
+                    operation_id="9b017ba9-5f17-4bc2-9cd9-411d2fb3b2e6",
+                    phase="result",
+                    actor_type="system",
+                    actor_user_id=9,
+                    action="storage.collection.run",
+                    resource_type="storage_cluster",
+                    resource_id=2,
+                    outcome="success",
+                    request_id="4fc57bc6-59c5-4f69-8318-33aafd1ec6fd",
+                    trace_id="ec6ae0f4-c3a4-4e31-8a1b-b7ab88eb5f07",
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    client = api_client_factory(
+        [audit_events.router],
+        headers={"Authorization": f"Bearer {issue_token(1)}"},
+    )
+
+    response = client.get("/storage-pulse/api/v1/audit-events")
+
+    assert response.status_code == 200
+    event = response.json()["content"][0]
+    assert event["actor"] == {"id": 9, "display_name": "collector"}
+    assert event["resource"] == {
+        "type": "storage_cluster",
+        "id": "2",
+        "name": "华东存储集群",
+    }
+    assert event["related_projects"] == [
+        {"id": 10, "name": "芯片设计平台"},
+        {"id": 11, "name": "仿真平台"},
+    ]
+    assert event["relation_path"] == "存储集群 → 项目组 → 项目"
 
 
 def test_audit_event_detail_is_available_only_within_the_authorized_project_scope(
