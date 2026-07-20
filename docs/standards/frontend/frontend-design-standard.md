@@ -6,7 +6,7 @@
 
 - 开始前**必须**阅读本文、[文档规范](../documentation/documentation-standard.md)、[Git 提交规范](../git/git-commit-standard.md)、[开发阅读矩阵](../documentation/development-reading-guide.md)和 `frontend/src/styles/style.scss`。
 - 前端任务默认只改 `frontend/` 与相关 `docs/`；只有需求明确涉及接口、权限或数据契约时才联动 `backend/`。
-- 功能、接口、配置、权限、测试入口或用户可见行为变更时，**必须**同步事实文档和 `docs/tracking/current-release.md`；计划不能写成已完成。
+- 功能、接口、配置、权限、测试入口或用户可见行为变更时，**必须**同步事实文档和本会话 `docs/tracking/sessions/<session-id>/delivery.md`；可复现错误按[开发跟踪索引](../../tracking/README.md)分类记录，计划不能写成已完成。
 - 先检索同类页面和共享组件，再改动。禁止根据单张截图复制一套局部样式；跨页问题优先修复共享组件、token、布局或测试门禁。
 
 ## 2. 不可例外的 UI 规则

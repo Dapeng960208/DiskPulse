@@ -7,7 +7,7 @@
 - 涉及后端代码、配置、脚本、测试、接口文档或部署时，先读本文、[文档规范](../documentation/documentation-standard.md)、[Git 提交规范](../git/git-commit-standard.md)，并按[开发阅读矩阵](../documentation/development-reading-guide.md)阅读对应功能专题。
 - 涉及模型、迁移、查询、索引、QuestDB 或 Redis 数据边界时，必须再读[数据库规范](../database/database-development-standard.md)；只有接口契约或用户体验联动前端时才读前端规范。
 - 后端任务默认只改 `backend/` 和相关 `docs/`；除非需求明确联动前端，不改 `frontend/`。
-- 功能、接口、配置、权限、数据库、部署、测试入口或用户可见行为变化，必须同步 `docs/` 和 `docs/tracking/current-release.md`。
+- 功能、接口、配置、权限、数据库、部署、测试入口或用户可见行为变化，必须同步 `docs/`、本会话 `docs/tracking/sessions/<session-id>/delivery.md`；可复现错误按[开发跟踪索引](../../tracking/README.md)分类记录。
 
 ## 2. 技术与目录
 

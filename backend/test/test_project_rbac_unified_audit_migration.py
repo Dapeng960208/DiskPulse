@@ -21,7 +21,7 @@ UNIFIED_REVISION = "000000000009"
 HEAD_REVISION = "000000000013"
 UNIFIED_MIGRATION = VERSIONS_ROOT / "000000000009_project_rbac_unified_audit.py"
 TELEMETRY_MIGRATION = VERSIONS_ROOT / "000000000008_telemetry_collection_runs.py"
-RELEASE_TRACKING = BACKEND_ROOT.parent / "docs" / "tracking" / "current-release.md"
+TRACKING_INDEX = BACKEND_ROOT.parent / "docs" / "tracking" / "README.md"
 
 
 def _alembic_config() -> Config:
@@ -123,9 +123,9 @@ def test_sqlite_upgrade_and_downgrade_preserve_storage_alert_rule(monkeypatch, t
         engine.dispose()
 
 
-def test_release_tracking_names_unified_migration_and_pt_data_restore_risk():
-    release = RELEASE_TRACKING.read_text(encoding="utf-8")
+def test_tracking_index_defines_session_and_error_catalog_workflow():
+    tracking = TRACKING_INDEX.read_text(encoding="utf-8")
 
-    assert "000000000009_project_rbac_unified_audit.py" in release
-    assert "pt_user_id" in release
-    assert "不可恢复" in release
+    assert "sessions/<session-id>/" in tracking
+    assert "errors/<category>/" in tracking
+    assert "error-index.md" in tracking

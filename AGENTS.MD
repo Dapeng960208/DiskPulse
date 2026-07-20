@@ -38,5 +38,5 @@
 ## 6. 交付口径
 
 - 最终说明列出改动文件、验证命令、未验证范围和风险。
-- 可复现错误写入 `docs/tracking/error-log.md`。
-- 工作进展、阻塞和交付状态写入 `docs/tracking/current-release.md`。
+- 每个开发会话在 `docs/tracking/sessions/<session-id>/` 下维护 `delivery.md` 与 `errors.md`；会话目录名使用 `YYYY-MM-DD-<task-slug>`。
+- 可复现错误按 `docs/tracking/README.md` 先归类到 `docs/tracking/errors/<category>/<error-slug>.md`，再更新 `docs/tracking/errors/error-index.md` 的出现次数和排序；同类错误每实际出现一次计数加一。

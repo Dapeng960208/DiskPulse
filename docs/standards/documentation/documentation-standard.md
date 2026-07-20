@@ -16,7 +16,7 @@
 | `standards/` | `frontend/`、`backend/`、`database/`、`documentation/`、`git/` | 强制规范按专业域放置。 |
 | `features/` | `<领域>/<功能>/` | 功能事实来源；同一功能的概览、后端、前端、设计和操作说明必须同目录。 |
 | `guides/` | `<专业域>/` | 可执行的测试、排障、部署和验收步骤。 |
-| `tracking/` | 固定文件 | 仅记录当前交付状态和可复现错误。 |
+| `tracking/` | `sessions/<session-id>/`、`errors/<category>/` | 会话交付记录、会话错误引用和按类别维护的错误事实库。 |
 
 当前功能领域为 `ai`、`storage`、`identity`、`organization`、`experience`。AI 相关功能一律放在 `docs/features/ai/<功能>/`；不得创建 `docs/features/ai-*` 平铺目录。新增一级领域前先更新 [文档索引](../../README.md)，说明其边界和二级功能。
 
@@ -24,9 +24,9 @@
 
 ## 必须更新的情形
 
-功能行为、路由、API、配置、权限、数据库、部署方式、测试入口或用户可见结果改变时，更新对应功能专题。用户可见能力同步更新[当前能力](../../overview/product/current-capabilities.md)，当前交付和风险同步更新[当前交付](../../tracking/current-release.md)。
+功能行为、路由、API、配置、权限、数据库、部署方式、测试入口或用户可见结果改变时，更新对应功能专题。用户可见能力同步更新[当前能力](../../overview/product/current-capabilities.md)，当前交付和风险同步更新本会话的 `docs/tracking/sessions/<session-id>/delivery.md`。
 
-可复现且有复用价值的失败按[错误记录规则](./development-error-summary.md)写入 `docs/tracking/error-log.md`。
+可复现且有复用价值的失败按[错误记录规则](./development-error-summary.md)写入本会话 `errors.md`，并同步更新对应分类事实文档与[错误总表](../../tracking/errors/error-index.md)。
 
 ## 命名、移动与完成检查
 

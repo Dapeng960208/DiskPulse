@@ -55,4 +55,4 @@ AI 相关文档必须进入 `docs/features/ai/<功能>/`。不得在 `docs/featu
 | 文档规范 | [文档规范](./standards/documentation/documentation-standard.md) · [命名与链接](./standards/documentation/document-naming-convention.md) · [开发阅读矩阵](./standards/documentation/development-reading-guide.md) · [领域术语](./standards/documentation/domain-terminology.md) · [错误记录规则](./standards/documentation/development-error-summary.md) |
 | Git 规范 | [Git 提交与交付规范](./standards/git/git-commit-standard.md) |
 | 指南 | [前端测试](./guides/frontend/testing.md) · [存储性能与事件排障](./guides/storage/performance-event-troubleshooting.md) |
-| 跟踪 | [当前交付](./tracking/current-release.md) · [可复现错误](./tracking/error-log.md) |
+| 跟踪 | [开发跟踪索引](./tracking/README.md) · [错误总表](./tracking/errors/error-index.md) |
