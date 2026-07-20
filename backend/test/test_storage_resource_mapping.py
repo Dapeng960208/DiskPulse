@@ -7,6 +7,7 @@ import requests
 
 import models
 from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
+from celery_tasks.tasks import storages
 from celery_tasks.tasks.storages import finalize_project_totals
 from utils.isilonClient import IsilonClient
 
@@ -415,6 +416,48 @@ def test_questdb_includes_netapp_groups_bound_to_volumes(db_session):
     monitor.write_questdb()
 
     assert captured["group"] == [1]
+
+
+def test_project_totals_are_written_to_project_trend_after_aggregation(db_session):
+    _seed_cluster(db_session)
+    db_session.add_all(
+        [
+            models.Project(id=1, name="project-a"),
+            models.GroupTag(id=1, name="production"),
+            models.Volume(id=1, storage_cluster_id=1, name="vol-a"),
+            models.Group(
+                id=1,
+                project_id=1,
+                storage_cluster_id=1,
+                group_tag_id=1,
+                volume_id=1,
+                name="group-a",
+                limit=100,
+                soft_limit=80,
+                used=25,
+            ),
+        ]
+    )
+    db_session.commit()
+    refreshed_project_ids = finalize_project_totals(db_session, {1: True}, NOW)
+    questdb_session = Mock()
+
+    storages.write_project_usage_metrics(
+        db_session,
+        refreshed_project_ids,
+        collected_at=NOW,
+        session_factory=lambda: questdb_session,
+    )
+
+    [metric] = questdb_session.add_all.call_args.args[0]
+    assert (
+        metric.project_id,
+        metric.used,
+        metric.used_ratio,
+        metric.soft_limit,
+        metric.soft_use_ratio,
+        metric.updated_at,
+    ) == ("1", 25, 25, 80, 31.25, NOW)
 
 
 def test_project_totals_dedupe_by_target_type_and_id(db_session):
