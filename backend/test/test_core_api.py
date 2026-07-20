@@ -249,6 +249,25 @@ class TestCoreApi:
             "name": "vol-a",
         }
 
+    def test_storage_resource_responses_include_explicit_capacity_units(self):
+        resources = [
+            ("/storage-pulse/api/aggregates/", {"page": 1, "size": 20}),
+            ("/storage-pulse/api/volumes/", {"page": 1, "size": 20}),
+            ("/storage-pulse/api/qtrees/", {"page": 1, "size": 20}),
+            ("/storage-pulse/api/groups/", {"page": 1, "size": 20}),
+            ("/storage-pulse/api/storage-usages/", {"page": 1, "size": 20}),
+            ("/storage-pulse/api/projects/", {"page": 1, "size": 20}),
+            ("/storage-pulse/api/storage-clusters/", {"page": 1, "size": 20}),
+        ]
+
+        for path, params in resources:
+            response = self.client.get(path, params=params)
+
+            assert response.status_code == 200
+            resource = response.json()["content"][0]
+            assert resource["capacity"]["limit"]["unit"] == "GB"
+            assert resource["capacity"]["used"]["unit"] == "GB"
+
     def test_volume_bound_group_image_resolves_owning_volume(self, tmp_path):
         self.bind_seeded_group_to_volume()
         image_path = tmp_path / "group.png"

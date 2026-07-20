@@ -141,6 +141,25 @@ describe('DashboardPage', () => {
     });
   });
 
+  it('renders the explicit capacity unit returned by the API', async () => {
+    dashboardApi.fetchSummary.mockResolvedValueOnce({
+      ...summaryResponse(),
+      summary: {
+        ...summaryResponse().summary,
+        limit_gb: 0,
+        capacity: {
+          limit_gb: { value: 1.25, unit: 'TB' },
+          used_gb: { value: 640, unit: 'GB' },
+          available_gb: { value: 384, unit: 'GB' },
+        },
+      },
+    });
+
+    const wrapper = await mountPage();
+
+    expect(wrapper.text()).toContain('1.25 TB');
+  });
+
   it('waits for a project selection instead of requesting forbidden global data for a project member', async () => {
     authorization.hasRole.mockReturnValue(false);
 
