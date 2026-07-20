@@ -308,7 +308,7 @@ describe('storage cluster health analytics page', () => {
     await selectTab(wrapper, 'distribution');
 
     expect(wrapper.find('.storage-health-filter').exists()).toBe(false);
-    expect(wrapper.findComponent({ name: 'DiskUsage' }).attributes('height')).toBe('520px');
+    expect(wrapper.findComponent({ name: 'DiskUsage' }).attributes('height')).toBe('100%');
   });
 
   it('uses the standard centered loading state for storage distribution', async () => {

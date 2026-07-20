@@ -20,6 +20,7 @@ describe('storage cluster resource tab scrolling', () => {
     expect(resourceTab).toMatch(/\.cluster-resource-list-tab :deep\(\.table-wrapper\) \{\r?\n  overflow-x: hidden;\r?\n  overflow-y: auto;/);
     expect(page).toMatch(/\.table-wrap \{\r?\n  max-width: 100%;\r?\n  overflow-x: hidden;\r?\n  overflow-y: auto;/);
     expect(page).toMatch(/\.storage-health-page :deep\(\.el-table__body-wrapper\) \{\r?\n  overflow-x: hidden !important;/);
+    expect(page).toMatch(/\.analytics-chart-stage \{\r?\n  display: flex;\r?\n  flex: 1 1 auto;\r?\n  min-height: 0;\r?\n  height: 100%;/);
     expect(dataTable).toMatch(/\.table-wrapper \{\r?\n  flex: 1 1 auto;\r?\n  min-height: 0;\r?\n  overflow: auto;/);
   });
 });
