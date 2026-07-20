@@ -211,7 +211,7 @@ def serialize_audit_event(event: AuditEvent) -> dict:
         "actor_user_id": event.actor_user_id,
         "action": event.action,
         "resource_type": event.resource_type,
-        "resource_id": event.resource_id,
+        "resource_id": str(event.resource_id) if event.resource_id is not None else None,
         "project_id": event.project_id,
         "outcome": event.outcome,
         "reason_code": event.reason_code,
