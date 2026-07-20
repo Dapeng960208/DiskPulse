@@ -9,6 +9,22 @@ AuditPhase = Literal["attempt", "result"]
 AuditOutcome = Literal["success", "denied", "failure"]
 
 
+class AuditActorRef(BaseModel):
+    id: int
+    display_name: str
+
+
+class AuditProjectRef(BaseModel):
+    id: int
+    name: str
+
+
+class AuditResourceRef(BaseModel):
+    type: str
+    id: str
+    name: str
+
+
 class AuditEventOut(BaseModel):
     id: str
     operation_id: str
@@ -31,6 +47,11 @@ class AuditEventOut(BaseModel):
     )
     request_id: str
     trace_id: str
+    actor: AuditActorRef | None = None
+    project: AuditProjectRef | None = None
+    resource: AuditResourceRef | None = None
+    related_projects: list[AuditProjectRef] = Field(default_factory=list)
+    relation_path: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

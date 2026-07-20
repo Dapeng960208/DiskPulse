@@ -40,7 +40,7 @@ def list_audit_events(
         end_time=end_time,
     )
     return auditSchema.AuditEventPage(
-        content=[audit_service.serialize_audit_event(event) for event in events],
+        content=audit_service.serialize_audit_events(db, events, current_user=current_user),
         total=total,
     )
 
@@ -52,4 +52,4 @@ def get_audit_event(event_id: str, current_user: CurrentUserDep, db: DBDep):
         current_user=current_user,
         event_id=event_id,
     )
-    return audit_service.serialize_audit_event(event)
+    return audit_service.serialize_audit_events(db, [event], current_user=current_user)[0]
