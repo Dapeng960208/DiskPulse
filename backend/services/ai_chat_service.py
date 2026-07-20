@@ -281,7 +281,14 @@ def _visibility_for_audit(audit: AIAuditLog) -> dict:
 
 
 def _visibility_is_allowed(visibility: dict, current_user: User | None, project_ids: set[int] | None) -> bool:
-    if current_user is None or not visibility["known"]:
+    if current_user is None:
+        return False
+    # Callers first scope the conversation to current_user.  A super administrator
+    # may therefore recover their own legacy turns whose pre-visibility audit
+    # data cannot be proven safe for ordinary users.
+    if is_super_admin(current_user):
+        return True
+    if not visibility["known"]:
         return False
     if visibility["requires_super_admin"] and not is_super_admin(current_user):
         return False
