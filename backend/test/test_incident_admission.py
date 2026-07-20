@@ -11,7 +11,7 @@ def _asset():
     from services.forecastIncidentService import AssetRef
 
     return AssetRef(
-        asset_type="cluster",
+        asset_type="storage_cluster",
         asset_id="7",
         storage_cluster_id=7,
         project_id=None,

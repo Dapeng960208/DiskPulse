@@ -434,6 +434,48 @@ def _severity(envelope: TelemetryEnvelope) -> str:
     return "warning"
 
 
+INCIDENT_FORECAST_URGENT_DAYS = 7
+
+
+def _forecast_exhaustion_at(value) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else None
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
+def should_admit_incident(
+    envelope: TelemetryEnvelope,
+    *,
+    category: str,
+    now: datetime,
+) -> bool:
+    """Keep the Incident queue to urgent cluster actions; raw signals stay queryable elsewhere."""
+    severity = _severity(envelope)
+    if category == "device_fault":
+        return envelope.source == "vendor_event" and severity == "critical"
+    if category == "performance_contention":
+        return envelope.source == "anomaly_observation" and severity == "critical"
+    if category == "telemetry_blindspot":
+        return False
+    if category != "capacity_pressure":
+        return False
+    if envelope.source == "diskpulse_alert":
+        return severity == "critical"
+    if envelope.source != "capacity_forecast" or not isinstance(envelope.value, dict):
+        return False
+    exhaustion_at = _forecast_exhaustion_at(envelope.value.get("exhaustion_p90"))
+    if exhaustion_at is None:
+        return False
+    remaining = _utc(exhaustion_at) - _utc(now)
+    return timedelta(0) <= remaining <= timedelta(days=INCIDENT_FORECAST_URGENT_DAYS)
+
+
 _TELEMETRY_STREAM_LABELS = {
     "capacity": "容量采集",
     "performance": "性能采集",
