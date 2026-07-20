@@ -234,6 +234,7 @@ def _capacity_targets(db) -> list[CapacityTarget]:
 
 def _quest_capacity_points(target: CapacityTarget, *, cutoff: datetime) -> list[tuple[datetime, float]]:
     # Table and column names come from the immutable registry above; only the ID is bound.
+    quest_cutoff = _utc(cutoff).isoformat().replace("+00:00", "Z")
     statement = text(
         f"SELECT updated_at, used FROM {target.table_name} "
         f"WHERE {target.key_column} = :asset_id AND updated_at >= :cutoff "
@@ -242,7 +243,7 @@ def _quest_capacity_points(target: CapacityTarget, *, cutoff: datetime) -> list[
     with QuestDBSession() as connection:
         rows = connection.execute(
             statement,
-            {"asset_id": target.asset_ref.asset_id, "cutoff": _utc(cutoff)},
+            {"asset_id": target.asset_ref.asset_id, "cutoff": quest_cutoff},
         ).mappings().all()
     points: list[tuple[datetime, float]] = []
     for row in rows:

@@ -1,9 +1,17 @@
 # -*- coding: utf-8 -*-
+from datetime import timezone
+
 from sqlalchemy import and_, bindparam, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from dependencies import QuestDBSession
 from models import Group, Project, StorageAlerts, StorageCluster, StorageUsage, User
+
+
+def _questdb_time(value):
+    if value.tzinfo is None:
+        return value.isoformat()
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def get_project(db: Session, project_id: int):
@@ -89,8 +97,8 @@ def get_capacity_trend(*, db: Session, project_id: int | None, start_time, end_t
         )
         params = {
             "project_id": project_id,
-            "start_time": start_time,
-            "end_time": end_time,
+            "start_time": _questdb_time(start_time),
+            "end_time": _questdb_time(end_time),
         }
     else:
         cluster_ids = [cluster.id for cluster in get_active_clusters(db)]
@@ -107,8 +115,8 @@ def get_capacity_trend(*, db: Session, project_id: int | None, start_time, end_t
         ).bindparams(bindparam("cluster_ids", expanding=True))
         params = {
             "cluster_ids": [str(cluster_id) for cluster_id in cluster_ids],
-            "start_time": start_time,
-            "end_time": end_time,
+            "start_time": _questdb_time(start_time),
+            "end_time": _questdb_time(end_time),
         }
 
     with QuestDBSession() as quest_db:
