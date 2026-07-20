@@ -464,9 +464,10 @@ def _raw_point_count(cluster_id: int, component: str, *, started_at: datetime) -
         "WHERE storage_cluster_id = :cluster_id AND updated_at >= :started_at"
     )
     timestamp_key = "collected_at" if component == "performance" else "updated_at"
+    quest_started_at = _utc(started_at).isoformat().replace("+00:00", "Z")
     with QuestDBSession() as connection:
         rows = connection.execute(
-            statement, {"cluster_id": str(cluster_id), "started_at": started_at}
+            statement, {"cluster_id": str(cluster_id), "started_at": quest_started_at}
         ).mappings().all()
     points = [_normalise_quest_time(row.get(timestamp_key)) for row in rows]
     points = [point for point in points if point is not None]
