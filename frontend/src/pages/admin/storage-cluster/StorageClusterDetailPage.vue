@@ -34,6 +34,7 @@ import { getDefaultTime } from '@/composables/common';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
 import { formatCapacity } from '@/utils/capacity';
 const ClusterIncidentsTab = defineAsyncComponent(() => import('./components/ClusterIncidentsTab.vue'));
+const ClusterResourceListTab = defineAsyncComponent(() => import('./components/ClusterResourceListTab.vue'));
 
 const route = useRoute();
 const breadcrumbs = useBreadcrumbs();
@@ -45,6 +46,7 @@ const latency = ref({ supported: true, data: [] });
 const performanceLimit = ref(10);
 const selectedPerformanceObjects = ref([]);
 const selectedPerformanceMetrics = ref(['p95_latency']);
+const resourceTabNames = ['aggregates', 'volumes', 'qtrees'];
 const severity = ref({ counts: {}, total: 0, sources: {} });
 const faults = ref({ data: [] });
 const systemEvents = ref({ data: [] });
@@ -84,6 +86,7 @@ const systemEventQueryParams = () => ({
 });
 
 const capacityData = computed(() => capacity.value?.data || []);
+const usesTimeRange = computed(() => !['distribution', ...resourceTabNames].includes(activeTab.value));
 const capacityChartData = computed(() => capacityData.value.map((item) => [item.updated_at, Number(item.used)]));
 const capacityUnit = computed(() => capacity.value?.data_unit || 'TB');
 const capacityLabel = (field) => formatCapacity(capacity.value?.capacity?.[field]);
@@ -250,6 +253,7 @@ function changeSystemEventPageSize(pageSize) {
 
 function loadActiveTab(force = false) {
   if (activeTab.value === 'distribution') return loadDistribution(force);
+  if (resourceTabNames.includes(activeTab.value)) return undefined;
   if (activeTab.value === 'performance') return loadPerformance(force);
   if (activeTab.value === 'faults') return loadFaults(force);
   return loadCapacity(force);
@@ -351,7 +355,7 @@ onBeforeMount(() => {
         v-model="activeTab"
         class="h-full">
         <FilterForm
-          v-if="activeTab !== 'distribution'"
+          v-if="usesTimeRange"
           class="storage-health-filter"
           @query="searchActiveTab"
           @reset="resetRange">
@@ -490,6 +494,34 @@ onBeforeMount(() => {
               width="100%"
               height="520px" />
           </div>
+        </ElTabPane>
+
+        <ElTabPane
+          label="容量池"
+          name="aggregates">
+          <ClusterResourceListTab
+            v-if="activeTab === 'aggregates' && clusterId"
+            :cluster-id="clusterId"
+            resource-type="aggregate" />
+        </ElTabPane>
+
+        <ElTabPane
+          label="存储空间"
+          name="volumes">
+          <ClusterResourceListTab
+            v-if="activeTab === 'volumes' && clusterId"
+            :cluster-id="clusterId"
+            resource-type="volume" />
+        </ElTabPane>
+
+        <ElTabPane
+          v-if="infoResult?.storage_type && infoResult?.storage_type !== 'isilon'"
+          label="Qtree（NetApp）"
+          name="qtrees">
+          <ClusterResourceListTab
+            v-if="activeTab === 'qtrees' && clusterId"
+            :cluster-id="clusterId"
+            resource-type="qtree" />
         </ElTabPane>
 
         <ElTabPane
