@@ -230,6 +230,9 @@ describe('storage cluster health analytics page', () => {
 
     expect(wrapper.text()).toContain('容量趋势');
     expect(wrapper.text()).toContain('存储分布');
+    expect(wrapper.text()).toContain('容量池');
+    expect(wrapper.text()).toContain('存储空间');
+    expect(wrapper.text()).toContain('Qtree（NetApp）');
     expect(wrapper.text()).toContain('性能分析');
     expect(wrapper.text()).toContain('故障分析');
     expect(wrapper.findAllComponents({ name: 'ElDatePicker' })).toHaveLength(1);
@@ -243,6 +246,16 @@ describe('storage cluster health analytics page', () => {
     expect(storageClusterApi.fetchRepeatedFaults).not.toHaveBeenCalled();
     expect(storageClusterApi.fetchSystemEvents).not.toHaveBeenCalled();
     expect(aggregateApi.fetchAggregateTrees).not.toHaveBeenCalled();
+  });
+
+  it('keeps Qtree unavailable for an Isilon cluster', async () => {
+    storageClusterApi.fetchById.mockResolvedValue({ id: 42, name: 'cluster-a', storage_type: 'isilon' });
+
+    const wrapper = await mountPage();
+
+    expect(wrapper.text()).toContain('容量池');
+    expect(wrapper.text()).toContain('存储空间');
+    expect(wrapper.text()).not.toContain('Qtree（NetApp）');
   });
 
   it('loads the current cluster storage distribution once when its tab opens', async () => {

@@ -3,19 +3,19 @@ import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterResourceListTab from '@/pages/admin/storage-cluster/components/ClusterResourceListTab.vue';
 
-const elementMessage = vi.hoisted(() => ({ error: vi.fn() }));
 const aggregateApi = vi.hoisted(() => ({ fetch: vi.fn() }));
 const volumeApi = vi.hoisted(() => ({ fetch: vi.fn() }));
 const qtreeApi = vi.hoisted(() => ({ fetch: vi.fn() }));
 
-vi.mock('element-plus', () => ({
-  ElMessage: elementMessage,
-  ElTableColumn: { name: 'ElTableColumn', render: () => null },
-  ElTag: { name: 'ElTag', render: () => null },
-}));
 vi.mock('@/api/aggregate-api.js', () => ({ default: aggregateApi }));
 vi.mock('@/api/volume-api.js', () => ({ default: volumeApi }));
 vi.mock('@/api/qtree-api.js', () => ({ default: qtreeApi }));
+vi.mock('@/components/basic/AccessibleResourceLink.vue', () => ({
+  default: { name: 'AccessibleResourceLink', render: () => null },
+}));
+vi.mock('@/components/form/Progress.vue', () => ({
+  default: { name: 'Progress', render: () => null },
+}));
 
 const DataTable = defineComponent({
   name: 'DataTable',
@@ -23,6 +23,7 @@ const DataTable = defineComponent({
     data: { type: Array, default: () => [] },
     loading: Boolean,
     pagination: { type: Object, default: () => ({}) },
+    error: { type: String, default: '' },
   },
   emits: ['update:pagination'],
   setup(props, { slots }) {
@@ -30,6 +31,39 @@ const DataTable = defineComponent({
       JSON.stringify(props.data),
       ...(slots.default?.() || []),
     ]);
+  },
+});
+
+const QueryForm = defineComponent({
+  name: 'QueryForm',
+  emits: ['query', 'reset'],
+  setup(_, { slots }) {
+    return () => h('form', slots.default?.());
+  },
+});
+
+const Input = defineComponent({
+  name: 'ElInput',
+  props: { modelValue: { type: String, default: '' } },
+  emits: ['update:modelValue'],
+  setup() {
+    return () => h('input');
+  },
+});
+
+const FormItem = defineComponent({
+  name: 'ElFormItem',
+  setup(_, { slots }) {
+    return () => h('div', slots.default?.());
+  },
+});
+
+const VolumeSelect = defineComponent({
+  name: 'VolumeSelect',
+  props: { modelValue: { type: [Number, null], default: null } },
+  emits: ['update:modelValue'],
+  setup() {
+    return () => h('select');
   },
 });
 
@@ -85,6 +119,56 @@ describe('ClusterResourceListTab', () => {
     });
   });
 
+  it('uses the standard filter form without allowing the cluster boundary to be cleared', async () => {
+    const wrapper = shallowMount(ClusterResourceListTab, {
+      props: { clusterId: 42, resourceType: 'aggregate' },
+      global: { stubs: { DataTable, QueryForm, ElFormItem: FormItem, ElInput: Input, 'el-input': Input } },
+    });
+    await flushPromises();
+
+    await wrapper.findComponent({ name: 'ElInput' }).vm.$emit('update:modelValue', 'pool-a');
+    await wrapper.findComponent(QueryForm).vm.$emit('query');
+    await flushPromises();
+    expect(aggregateApi.fetch).toHaveBeenLastCalledWith({
+      page: 1,
+      size: 20,
+      nameLike: 'pool-a',
+      storage_cluster_id: 42,
+    });
+
+    await wrapper.findComponent(QueryForm).vm.$emit('reset');
+    await flushPromises();
+    expect(aggregateApi.fetch).toHaveBeenLastCalledWith({ page: 1, size: 20, storage_cluster_id: 42 });
+  });
+
+  it('scopes the Qtree storage-space filter to the current cluster', async () => {
+    const wrapper = shallowMount(ClusterResourceListTab, {
+      props: { clusterId: 42, resourceType: 'qtree' },
+      global: {
+        stubs: {
+          DataTable,
+          QueryForm,
+          ElFormItem: FormItem,
+          ElInput: Input,
+          'el-input': Input,
+          VolumeSelect,
+        },
+      },
+    });
+    await flushPromises();
+
+    await wrapper.findComponent(VolumeSelect).vm.$emit('update:modelValue', 6);
+    await wrapper.findComponent(QueryForm).vm.$emit('query');
+    await flushPromises();
+
+    expect(qtreeApi.fetch).toHaveBeenLastCalledWith({
+      page: 1,
+      size: 20,
+      volume_id: 6,
+      storage_cluster_id: 42,
+    });
+  });
+
   it('keeps a failed resource query actionable inside the current detail tab', async () => {
     volumeApi.fetch.mockRejectedValueOnce(new Error('network'));
     const wrapper = shallowMount(ClusterResourceListTab, {
@@ -93,7 +177,6 @@ describe('ClusterResourceListTab', () => {
     });
     await flushPromises();
 
-    expect(elementMessage.error).toHaveBeenCalledWith('加载存储空间失败，请稍后重试');
     expect(wrapper.findComponent(DataTable).props('error')).toBe('加载存储空间失败，请稍后重试');
   });
 });

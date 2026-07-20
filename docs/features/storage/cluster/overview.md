@@ -10,7 +10,7 @@
 
 创建、启用或更新已启用集群后会异步触发采集，保存请求不等待设备响应。采集失败保留已有资源数据并记录安全诊断日志，不输出设备地址、账号或密码。
 
-前端入口位于“系统管理 → 存储集群”。“存储集群”是无页面组件的菜单分组，二级栏目为“集群列表、容量池、存储空间、Qtree（NetApp）”；现有 `/admin/storage-clusters`、`/admin/aggregates`、`/admin/volumes`、`/admin/qtrees` 以及各详情深链均保持不变。
+前端入口位于“系统管理 → 存储集群”。“存储集群”是无页面组件的菜单分组，二级栏目为“集群列表、容量池、存储空间、Qtree（NetApp）”；现有 `/admin/storage-clusters`、`/admin/aggregates`、`/admin/volumes`、`/admin/qtrees` 以及各详情深链均保持不变。集群详情页按需加载当前集群范围的“容量池”“存储空间”和“Qtree（NetApp）”资源表；三个独立列表页继续作为原有管理入口，不嵌入、不替换也不废弃。资源表使用 `QueryForm` 名称筛选；Qtree 额外可按所属存储空间筛选，并通过 `DataTable` 在详情内容区内提供底部分页。Isilon 集群不显示且不请求 Qtree。
 
 ## PowerScale 会话与权限
 
