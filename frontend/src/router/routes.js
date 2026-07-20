@@ -39,8 +39,7 @@ export default [
         component: () => import('@/pages/usage/UsageListPage.vue'),
         meta: {
           title: '用户目录',
-          isRoot: true,
-          menuOrder: 20,
+          isHidden: true,
           icon: 'i-ri-folder-user-line',
         },
       },
@@ -58,11 +57,28 @@ export default [
         path: 'usage/:id/capacity-prediction',
         name: 'UsageCapacityPrediction',
         component: () => import('@/pages/capacity-prediction/CapacityPredictionDetailPage.vue'),
-        props: { assetType: 'storage_usage', listRouteName: 'Usages', listLabel: '用户目录' },
+        props: { assetType: 'storage_usage', listRouteName: 'CapacityPredictions', listLabel: '容量预测' },
         meta: {
           title: '容量预测',
           isHidden: true,
           breadcrumb: ['用户目录', '容量预测'],
+        },
+      },
+    ],
+  },
+  {
+    path: '/',
+    component: AppLayout,
+    children: [
+      {
+        path: 'capacity-predictions',
+        name: 'CapacityPredictions',
+        component: () => import('@/pages/capacity-prediction/CapacityPredictionListPage.vue'),
+        meta: {
+          title: '容量预测',
+          isRoot: true,
+          menuOrder: 40,
+          icon: 'i-ri-line-chart-line',
         },
       },
     ],
@@ -104,8 +120,7 @@ export default [
         component: () => import('@/pages/group/GroupListPage.vue'),
         meta: {
           title: '项目组',
-          isRoot: true,
-          menuOrder: 40,
+          isHidden: true,
           icon: 'i-ri-team-line',
         },
       },
@@ -123,7 +138,7 @@ export default [
         path: 'group/:id/capacity-prediction',
         name: 'GroupCapacityPrediction',
         component: () => import('@/pages/capacity-prediction/CapacityPredictionDetailPage.vue'),
-        props: { assetType: 'group', listRouteName: 'Groups', listLabel: '项目组' },
+        props: { assetType: 'group', listRouteName: 'CapacityPredictions', listLabel: '容量预测' },
         meta: {
           title: '容量预测',
           isHidden: true,
@@ -173,13 +188,50 @@ export default [
     },
     children: [
       {
-        path: 'storage-clusters',
-        name: 'StorageClusters',
-        component: () => import('@/pages/admin/storage-cluster/StorageClusterListPage.vue'),
+        path: '',
         meta: {
           title: '存储集群',
           icon: 'i-ri-server-line',
+          menuKey: 'admin-storage-resources',
         },
+        children: [
+          {
+            path: 'storage-clusters',
+            name: 'StorageClusters',
+            component: () => import('@/pages/admin/storage-cluster/StorageClusterListPage.vue'),
+            meta: {
+              title: '集群列表',
+              icon: 'i-ri-server-line',
+            },
+          },
+          {
+            path: 'aggregates',
+            name: 'Aggregates',
+            component: () => import('@/pages/admin/aggregate/AggregateListPage.vue'),
+            meta: {
+              title: '容量池',
+              icon: 'i-ri-pie-chart-2-line',
+            },
+          },
+          {
+            path: 'volumes',
+            name: 'Volumes',
+            component: () => import('@/pages/admin/volume/VolumeListPage.vue'),
+            meta: {
+              title: '存储空间',
+              icon: 'i-ri-database-2-line',
+            },
+          },
+          {
+            path: 'qtrees',
+            name: 'Qtrees',
+            component: () => import('@/pages/admin/qtree/QtreeListPage.vue'),
+            meta: {
+              title: 'Qtree（NetApp）',
+              icon: 'i-ri-folder-2-line',
+            },
+          },
+        ],
       },
       {
         path: 'storage-cluster/:id',
@@ -189,15 +241,6 @@ export default [
           title: '存储集群详情',
           isHidden: true,
           breadcrumb: ['系统管理', '存储集群', '存储集群详情'],
-        },
-      },
-      {
-        path: 'aggregates',
-        name: 'Aggregates',
-        component: () => import('@/pages/admin/aggregate/AggregateListPage.vue'),
-        meta: {
-          title: '容量池',
-          icon: 'i-ri-pie-chart-2-line',
         },
       },
       {
@@ -211,15 +254,6 @@ export default [
         },
       },
       {
-        path: 'volumes',
-        name: 'Volumes',
-        component: () => import('@/pages/admin/volume/VolumeListPage.vue'),
-        meta: {
-          title: '存储空间',
-          icon: 'i-ri-database-2-line',
-        },
-      },
-      {
         path: 'volume/:id',
         name: 'VolumeDetail',
         component: () => import('@/pages/admin/volume/VolumeDetailPage.vue'),
@@ -227,15 +261,6 @@ export default [
           title: '存储空间详情',
           isHidden: true,
           breadcrumb: ['系统管理', '存储空间', '存储空间详情'],
-        },
-      },
-      {
-        path: 'qtrees',
-        name: 'Qtrees',
-        component: () => import('@/pages/admin/qtree/QtreeListPage.vue'),
-        meta: {
-          title: 'Qtree（NetApp）',
-          icon: 'i-ri-folder-2-line',
         },
       },
       {

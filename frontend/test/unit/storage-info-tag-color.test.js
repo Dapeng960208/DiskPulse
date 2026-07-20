@@ -11,7 +11,7 @@ const softLimitContracts = [
 const storageTypeContracts = [
   'src/pages/group/GroupListPage.vue',
   'src/pages/usage/UsageListPage.vue',
-  'src/pages/project/ProjectDetailPage.vue',
+  'src/pages/project/components/ProjectGroupsTab.vue',
   'src/pages/project/components/ProjectTable.vue',
   'src/pages/admin/aggregate/AggregateListPage.vue',
   'src/pages/admin/volume/VolumeListPage.vue',

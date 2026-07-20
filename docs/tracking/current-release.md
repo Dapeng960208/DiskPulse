@@ -1,5 +1,36 @@
 # 当前交付记录
 
+## 2026-07-19：导航信息架构调整（当前实现）
+
+### 已完成
+
+- 根导航隐藏项目组和用户目录；项目详情 `/project/:id` 集中展示容量概览、项目组、用户目录、成员与权限和项目审计。
+- 项目组页签新增 `ProjectGroupsTab.vue`，首次切换时才加载，按 `project_id` 调用服务端分页接口，默认 `page=1,size=20`；详情页挂载不再拉取固定 100 条项目组。
+- 新增独立一级“容量预测”列表 `/capacity-predictions`，保留项目组与用户目录预测详情深链；用户目录详情增加配额历史、容量预测最终结果、关联事件和告警页签。
+- 新增 `GET /storage-pulse/api/v1/capacity-predictions` 最终预测列表接口，只返回项目组和用户目录；发布开关、当前资源归属、项目范围、资源存在性均在 `count` 和分页前过滤，当前页再批量合并已启用候选曲线，避免 N+1 和历史项目快照越权。
+- 资源关联事件不再错误复用容量预测发布开关；普通项目成员在 `user_visible=false` 时仍可读取自己项目资源的关联事件，跨项目请求继续拒绝。
+- 项目组、用户目录和最终预测三个服务端分页视图加入最新请求保护；旧响应不会覆盖当前页数据、总数、错误或加载状态。最终预测模型版本优先展示候选版本，未使用候选时回退基线算法版本。
+- Mock 与真实服务对齐容量预测分页、项目过滤和发布可见性：超级管理员不受 `user_visible=false` 限制，普通用户继续受开关和项目权限约束；关联事件只按资源项目权限读取，不复用预测发布开关。
+- “系统管理 → 存储集群”改为无组件菜单分组，包含集群列表、容量池、存储空间和 Qtree（NetApp）；原资源 URL/API 保持不变。
+
+### 验证状态
+
+- RED 检查点：`99641ce test(frontend): add red navigation architecture contracts`，5 个文件、15 条契约测试；其中 11 条因需求结构尚未实现而按预期失败。
+- 收口 RED 检查点：`71fae61 test(storage): add red navigation closure regressions`。关联事件权限 1 条、最终预测列表 2 条、项目资源页签 2 条均因目标缺陷失败；最小修复后对应聚焦测试分别为 `1 passed`、`6 passed`、`7 passed`。
+- 基线核对发现懒加载路由合同原先期望 `30`，实际已有 `32`；新增独立容量预测列表后正确合同数量为 `33`，测试断言已相应修正。
+- 动态路由缺失 mock、内容间距 29 页合同和项目组表格插槽桩均已补齐；导航影响面组合为 `12 files / 68 passed`，迁移后的三项存储静态合同为 `3 files / 17 passed`。
+- 后端容量预测治理与事件中心组合为 `59 passed`；覆盖最终候选曲线、发布开关、关联事件独立 RBAC、分页参数、项目隔离、当前资源迁移/删除、异常历史 `asset_id`、批量候选查询和 SQLite/PostgreSQL SQL 编译。目标模块 `compileall` 与后端 `git diff --check` 通过。
+- 收口后的前端任务影响面为 `15 files / 89 passed`，覆盖路由、Mock、项目页签、用户详情、最终预测列表和并发分页保护。
+- 全量 `npm test` 为 `87 files / 557 passed / 11 failed`；11 条均为 `main` 已复现的既有失败（`admin-deep-coverage` 4、`page-coverage-gaps` 4、LDAP 2、AI Chat 缺 active Pinia 1），本任务新增或迁移的合同没有剩余失败。`npm run test:coverage` 同样因这些既有测试失败未输出最终四项汇总，不能宣称覆盖率门禁通过。
+- `npm run lint`、`npm run build:prod` 和全仓 `git diff --check` 通过；生产构建保留既有 `%VITE_APP_TITLE%` 未定义和大 chunk 警告。
+- 内置 Browser 已验证超级管理员的 `/project/1`、`/capacity-predictions`、`/usage/101`、存储集群二级菜单及四个旧管理 URL；只读成员不显示成员/审计页签，配额历史显示无权提示，预测列表只返回所属项目的 2 条。默认桌面和 `720px` 无页面级横向溢出，控制台无 `error`，仅保留既有 Element Plus 废弃 API warning。
+
+### 风险与待验证范围
+
+- `390px` 下应用壳仍有约 `39px` 页面级横向溢出，收起侧栏后仍存在；该问题已在既有响应式记录中复现，不属于本轮信息架构最小改动。
+- 未连接真实 PostgreSQL、QuestDB、Redis、Celery 或存储设备执行部署联调；SQLite 已执行查询，PostgreSQL 仅完成方言编译验证。
+- 前端全量和覆盖率命令仍因上述 11 条既有失败返回非零，需由独立测试债务任务修复后才能恢复全绿门禁。
+
 ## 2026-07-18：全站标题副标题收敛
 
 ### 已完成

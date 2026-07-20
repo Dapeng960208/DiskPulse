@@ -48,6 +48,22 @@ def capacity_prediction_visibility(current_user: CurrentUserDep, db: DBDep) -> C
     )
 
 
+@router.get("/capacity-predictions", response_model=ForecastPage)
+def list_capacity_predictions(
+    current_user: CurrentUserDep,
+    db: DBDep,
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> ForecastPage:
+    rows, total = capacityPredictionGovernanceService.list_final_predictions(
+        db,
+        current_user=current_user,
+        page=page,
+        size=size,
+    )
+    return ForecastPage(content=[ForecastOut.model_validate(row) for row in rows], total=total)
+
+
 @router.get("/capacity-predictions/{asset_type}/{asset_id}", response_model=ForecastOut)
 def resource_capacity_prediction(
     asset_type: Annotated[str, Path(pattern="^(group|storage_usage)$")],

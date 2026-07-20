@@ -42,7 +42,8 @@ describe('router/routes and app shell', () => {
         breadcrumb: ['系统管理', '存储集群', '存储集群详情'],
       }),
     }));
-    expect(adminRoute.children.map((route) => route.name)).toEqual(
+    const adminResourceRoutes = adminRoute.children.flatMap((route) => route.children || [route]);
+    expect(adminResourceRoutes.map((route) => route.name)).toEqual(
       expect.arrayContaining([
         'StorageClusters',
         'GroupTags',
@@ -67,7 +68,7 @@ describe('router/routes and app shell', () => {
     }));
 
     expect(Object.fromEntries(
-      adminRoute.children
+      adminResourceRoutes
         .filter((route) => [
           'Aggregates', 'AggregateDetail', 'Volumes', 'VolumeDetail', 'Qtrees', 'QtreeDetail',
         ].includes(route.name))
@@ -270,6 +271,8 @@ describe('router/routes and app shell', () => {
       .find((option) => option.label === '系统管理');
     const storageOption = adminOption.children.find((option) => option.label === '存储集群');
 
+    expect(storageOption.key).toBe('admin-storage-resources');
+    expect(storageOption.index).not.toBe(adminOption.index);
     expect(storageOption.children.map((option) => option.path)).toEqual([
       '/admin/storage-clusters',
       '/admin/aggregates',

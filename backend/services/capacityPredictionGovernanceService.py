@@ -472,6 +472,39 @@ def get_resource_prediction(db, *, current_user, asset_type: PredictionAssetType
     return _prediction_view(forecast, candidate_forecast, candidate)
 
 
+def list_final_predictions(db, *, current_user, page: int, size: int):
+    _require_prediction_visibility(db, current_user=current_user)
+    forecasts, total = capacityPredictionCrud.list_latest_forecasts(
+        db,
+        visible_project_ids=forecastIncidentService.visible_project_ids(db, current_user),
+        page=page,
+        size=size,
+    )
+    candidate = capacityPredictionCrud.active_candidate(db)
+    if candidate is None or not forecasts:
+        return forecasts, total
+    candidate_forecasts = capacityPredictionCrud.list_candidate_forecasts_for_baselines(
+        db,
+        candidate_id=candidate.id,
+        baseline_keys=[
+            (forecast.asset_type, forecast.asset_id, forecast.training_end)
+            for forecast in forecasts
+        ],
+    )
+    candidate_by_asset = {
+        (item.asset_type, item.asset_id, item.forecast_start): item
+        for item in candidate_forecasts
+    }
+    return [
+        _prediction_view(
+            forecast,
+            candidate_by_asset.get((forecast.asset_type, forecast.asset_id, forecast.training_end)),
+            candidate,
+        )
+        for forecast in forecasts
+    ], total
+
+
 def list_resource_capacity_plans(db, *, current_user, asset_type: PredictionAssetType, asset_id: int):
     _resource(db, current_user=current_user, asset_type=asset_type, asset_id=asset_id, minimum_role="reader")
     _require_prediction_visibility(db, current_user=current_user)
@@ -480,7 +513,6 @@ def list_resource_capacity_plans(db, *, current_user, asset_type: PredictionAsse
 
 def list_resource_related_incidents(db, *, current_user, asset_type: PredictionAssetType, asset_id: int) -> list[dict[str, Any]]:
     _resource(db, current_user=current_user, asset_type=asset_type, asset_id=asset_id, minimum_role="reader")
-    _require_prediction_visibility(db, current_user=current_user)
     result = []
     for incident in forecastIncidentCrud.list_resource_incidents(
         db,

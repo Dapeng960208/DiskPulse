@@ -19,8 +19,10 @@ class StorageUsageApi extends BaseApi {
     return super.post(`/${storageUsageId}/quota/reconcile`);
   }
 
-  quotaHistory(storageUsageId) {
-    return super.get(`/${storageUsageId}/quota/history`);
+  quotaHistory(storageUsageId, config) {
+    return config
+      ? super.get(`/${storageUsageId}/quota/history`, undefined, config)
+      : super.get(`/${storageUsageId}/quota/history`);
   }
 }
 

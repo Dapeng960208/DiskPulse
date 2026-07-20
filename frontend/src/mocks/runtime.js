@@ -25,6 +25,7 @@ const seed = () => {
     .map((name, index) => ({
       id: index + 1,
       name,
+      project_id: null,
       storage_type: index === 2 || index === 4 ? 'isilon' : 'netapp',
       protocol: 'https',
       enabled: true,
@@ -59,6 +60,7 @@ const seed = () => {
     id: 11 + index,
     name: `${project.name.replace('平台', '')}项目组`,
     project_id: project.id,
+    in_charge_user_id: users[index].id,
     linux_path: `/data/demo/project-${project.id}`,
     used: 260 + index * 55,
     limit: 600 + index * 80,
@@ -86,6 +88,7 @@ const seed = () => {
     aggregate: aggregates[index],
     storage_cluster_id: cluster.id,
     storage_cluster: cluster,
+    project_id: null,
     used: 420 + index * 60,
     limit: 800 + index * 100,
     soft_limit: 700 + index * 80,
@@ -99,6 +102,7 @@ const seed = () => {
     volume: volumes[index],
     storage_cluster_id: cluster.id,
     storage_cluster: cluster,
+    project_id: null,
     used: 230 + index * 45,
     limit: 500 + index * 70,
     soft_limit: 440 + index * 60,
@@ -386,7 +390,14 @@ const alerts = incidents.map((incident, index) => ({
 
 function error(status, message = '没有权限') { const value = new Error(message); value.status = status; value.response = { status, data: { message } }; return value; }
 function normalizePath(path) { const value = String(path || '').replace(/^https?:\/\/[^/]+/, '').replace(/^\/storage-pulse\/api/, '').split('?')[0].replace(/\/{2,}/g, '/'); return value.length > 1 ? value.replace(/\/$/, '') : value; }
-function page(content) { return { content, total: content.length, totalElements: content.length, data: content, meta: { total: content.length }, traceId: traceId() }; }
+function page(content, pagination) {
+  const total = content.length;
+  const pageNumber = Math.max(1, Number(pagination?.page) || 1);
+  const pageSize = Math.max(1, Number(pagination?.size) || 20);
+  const offset = (pageNumber - 1) * pageSize;
+  const pageContent = pagination ? content.slice(offset, offset + pageSize) : content;
+  return { content: pageContent, total, totalElements: total, data: pageContent, meta: { total }, traceId: traceId() };
+}
 
 export function createMockGateway() {
   const state = seed();
@@ -398,12 +409,22 @@ export function createMockGateway() {
   };
   const profile = (account) => ({ id: account.id, commonName: account.commonName, avatarUrl: '', roleCodes: [account.role], permissionCodes: account.role === 'superadmin' ? [['*', '*', '*']] : [], extensionAttributes: {} });
   const allowed = (account, projectId) => account?.role === 'superadmin' || account?.projectIds.includes(Number(projectId));
-  const capabilities = (account, projectId) => {
+  const capabilities = (account, projectId, groupOwnerId = null) => {
     const scoped = allowed(account, projectId);
     const projectAdmin = scoped && account.role === 'project_admin';
-    return { edit: scoped && ['superadmin', 'project_admin', 'editor'].includes(account.role), manage_members: projectAdmin || account.role === 'superadmin', manage_project_admins: account.role === 'superadmin', view_audit_events: projectAdmin || account.role === 'superadmin', adjust_quota: projectAdmin || account.role === 'superadmin' };
+    return { edit: scoped && ['superadmin', 'project_admin', 'editor'].includes(account.role), manage_members: projectAdmin || account.role === 'superadmin', manage_project_admins: account.role === 'superadmin', view_audit_events: projectAdmin || account.role === 'superadmin', adjust_quota: account.role === 'superadmin' || (scoped && groupOwnerId === account.id) };
   };
-  const scoped = (account, records) => account.role === 'superadmin' ? records : records.filter((record) => allowed(account, record.project_id || 1));
+  const resourceCapabilities = (account, item) => {
+    const group = item?.group
+      || state.groups.find((record) => record.id === Number(item?.group_id))
+      || (item?.in_charge_user_id != null ? item : null);
+    return capabilities(account, item?.project_id || group?.project_id || 1, group?.in_charge_user_id);
+  };
+  const scoped = (account, records) => account.role === 'superadmin'
+    ? records
+    : records.filter((record) => record.project_id != null && allowed(account, record.project_id));
+  const predictionVisibleTo = (account) => account.role === 'superadmin'
+    || state.capacityPredictionSettings.visible === true;
   const resourceTrend = (item) => Array.from({ length: 6 }, (_, index) => [
     `2026-07-${String(13 + index).padStart(2, '0')} 09:00:00`,
     Math.round((Number(item.used) || 200) * (0.82 + index * 0.035)),
@@ -478,22 +499,59 @@ export function createMockGateway() {
       };
     }
     if (path === '/v1/incidents') {
-      const records = scoped(account, state.incidents);
+      const records = scoped(account, state.incidents).filter((incident) => (
+        !options.params?.storage_cluster_id
+        || incident.storage_cluster_id === Number(options.params.storage_cluster_id)
+      ));
       return page(records);
     }
-    if (path === '/v1/forecasts' || path === '/v1/anomalies') return page(state.incidents.map((incident, index) => ({
-      ...incident,
-      id: `${path.includes('forecasts') ? 'forecast' : 'anomaly'}-${index + 1}`,
-      predicted_at: incident.last_evidence_at,
-    })));
-    if (path === '/v1/capacity-predictions/visibility') return { visible: state.capacityPredictionSettings.visible === true };
+    if (path === '/v1/forecasts' || path === '/v1/anomalies') {
+      const forecastResources = [
+        ...state.usages,
+        ...state.groups,
+        ...state.clusters,
+        ...state.volumes,
+        ...state.qtrees,
+      ];
+      const source = path.includes('forecasts')
+        ? forecastResources.map((item) => capacityPrediction(
+          state.usages.includes(item) ? 'storage_usage'
+            : state.groups.includes(item) ? 'group'
+              : state.clusters.includes(item) ? 'storage_cluster'
+                : state.volumes.includes(item) ? 'volume' : 'qtree',
+          item,
+        ))
+        : state.incidents.map((incident, index) => ({
+          ...incident,
+          id: `anomaly-${index + 1}`,
+          predicted_at: incident.last_evidence_at,
+        }));
+      const records = scoped(account, source).filter((item) => (
+        !options.params?.storage_cluster_id
+        || item.storage_cluster_id === Number(options.params.storage_cluster_id)
+      ));
+      return page(records, path === '/v1/forecasts' ? options.params || {} : undefined);
+    }
+    if (path === '/v1/capacity-predictions/visibility') return { visible: predictionVisibleTo(account) };
+    if (path === '/v1/capacity-predictions') {
+      if (!predictionVisibleTo(account)) throw error(403, '容量预测已停用');
+      const resources = [...state.usages, ...state.groups];
+      return page(scoped(account, resources).map((item) => capacityPrediction(
+        state.usages.includes(item) ? 'storage_usage' : 'group',
+        item,
+      )), options.params || {});
+    }
     const capacityPredictionResourcePath = path.match(/^\/v1\/capacity-predictions\/(group|storage_usage)\/(\d+)(?:\/(access|plans|related-incidents))?$/);
     if (capacityPredictionResourcePath) {
       const [, assetType, assetId, endpoint] = capacityPredictionResourcePath;
       const item = capacityPredictionResource(assetType, assetId);
       if (!allowed(account, item.project_id)) throw error(403);
-      if (state.capacityPredictionSettings.visible !== true) throw error(403, '容量预测已停用');
-      const canManagePlans = capabilities(account, item.project_id).adjust_quota;
+      if (endpoint === 'related-incidents') return state.incidents
+        .filter((incident) => incident.project_id === item.project_id && incident.category === 'capacity_pressure')
+        .map((incident) => ({ id: incident.id, category: incident.category, severity: incident.severity, status: incident.status, updated_at: incident.last_evidence_at, rca_confidence: 'high' }));
+      if (!predictionVisibleTo(account)) throw error(403, '容量预测已停用');
+      const canManagePlans = account.role === 'superadmin'
+        || (allowed(account, item.project_id) && account.role === 'project_admin');
       if (endpoint === 'access') return { visible: true, can_manage_plans: canManagePlans };
       if (endpoint === 'plans') {
         if (verb === 'post') {
@@ -504,9 +562,6 @@ export function createMockGateway() {
         }
         return state.capacityPredictionPlans.filter((plan) => plan.asset_type === assetType && plan.asset_id === String(assetId));
       }
-      if (endpoint === 'related-incidents') return state.incidents
-        .filter((incident) => incident.project_id === item.project_id && incident.category === 'capacity_pressure')
-        .map((incident) => ({ id: incident.id, category: incident.category, severity: incident.severity, status: incident.status, updated_at: incident.last_evidence_at, rca_confidence: 'high' }));
       return capacityPrediction(assetType, item);
     }
     const incident = path.match(/^\/v1\/incidents\/(\d+)(?:\/(diagnosis|comments))?$/);
@@ -540,6 +595,25 @@ export function createMockGateway() {
       data: resourceTrend(realtimeItem),
       trend_meta: { indicator: 'used', unit: 'GiB' },
     };
+    const quotaHistory = path.match(/^\/storage-usages\/(\d+)\/quota\/history$/);
+    if (quotaHistory) {
+      const usage = state.usages.find((item) => item.id === Number(quotaHistory[1]));
+      if (!usage || !allowed(account, usage.project_id)) throw error(403);
+      if (!resourceCapabilities(account, usage).adjust_quota) throw error(403);
+      return [{
+          id: `mock-quota-${usage.id}`,
+          operation_id: `mock-quota-operation-${usage.id}`,
+          occurred_at: '2026-07-18 09:30:00',
+          action: 'quota.adjust',
+          outcome: 'success',
+          resource_type: 'storage_usage',
+          resource_id: usage.id,
+          project_id: usage.project_id,
+          before_summary: { hard_limit: usage.limit - 50, soft_limit: usage.soft_limit - 50 },
+          after_summary: { hard_limit: usage.limit, soft_limit: usage.soft_limit },
+          metadata: { change_reason: 'Mock 演示配额调整', verification_source: 'post_write_readback' },
+        }];
+    }
     const volumeMonitoring = path.match(/^\/volumes\/(\d+)\/monitoring$/);
     if (volumeMonitoring) {
       const volume = state.volumes.find((item) => item.id === Number(volumeMonitoring[1]));
@@ -624,9 +698,16 @@ export function createMockGateway() {
     const tableMap = { '/groups': 'groups', '/storage-usages': 'usages', '/storage-clusters': 'clusters', '/aggregates': 'aggregates', '/volumes': 'volumes', '/qtrees': 'qtrees', '/group-tags': 'tags', '/storage-alerts': 'alerts', '/v1/audit-events': 'audits', '/storage-back-up-records': 'backups', '/users': 'users' };
     if (path === '/storage-usages/export' && options.responseType === 'blob') return new Blob(['Linux路径,已用容量\n/data/eda/alice,320'], { type: 'text/csv' });
     if (tableMap[path]) {
-      const records = state[tableMap[path]];
-      if (verb === 'post') { if (account.role === 'reader') throw error(403); const item = { id: Math.max(0, ...records.map((record) => record.id || 0)) + 1, project_id: body?.project_id || 1, ...(body || {}), capabilities: capabilities(account, body?.project_id || 1) }; records.push(item); return item; }
-      return page(scoped(account, records.map((item) => ({ ...item, capabilities: { ...item.capabilities, ...capabilities(account, item.project_id || 1) } }))));
+      const sourceRecords = state[tableMap[path]];
+      const records = sourceRecords.filter((item) => {
+        if (options.params?.project_id && Number(item.project_id) !== Number(options.params.project_id)) return false;
+        if (options.params?.storage_cluster_id && Number(item.storage_cluster_id) !== Number(options.params.storage_cluster_id)) return false;
+        if (options.params?.related_type && item.related_type !== options.params.related_type) return false;
+        if (options.params?.related_id && Number(item.related_id) !== Number(options.params.related_id)) return false;
+        return true;
+      });
+      if (verb === 'post') { if (account.role === 'reader') throw error(403); const item = { id: Math.max(0, ...sourceRecords.map((record) => record.id || 0)) + 1, project_id: body?.project_id || 1, ...(body || {}), capabilities: capabilities(account, body?.project_id || 1) }; sourceRecords.push(item); return item; }
+      return page(scoped(account, records.map((item) => ({ ...item, capabilities: { ...item.capabilities, ...resourceCapabilities(account, item) } }))));
     }
     const resource = Object.entries(tableMap).find(([prefix]) => path.startsWith(`${prefix}/`));
     if (resource) {
@@ -634,7 +715,7 @@ export function createMockGateway() {
       if (!item || !allowed(account, item.project_id || 1)) throw error(403);
       if (verb === 'patch' || verb === 'put') { if (account.role === 'reader') throw error(403); Object.assign(item, body || {}); return item; }
       if (verb === 'delete') { if (account.role === 'reader') throw error(403); records.splice(records.indexOf(item), 1); return {}; }
-      return { ...item, capabilities: { ...item.capabilities, ...capabilities(account, item.project_id || 1) } };
+      return { ...item, capabilities: { ...item.capabilities, ...resourceCapabilities(account, item) } };
     }
     if (path.includes('export') && options.responseType === 'blob') return new Blob(['DiskPulse Mock export']);
     return page(Array.from({ length: 5 }, (_, index) => ({ id: index + 1, name: `Mock 演示数据 ${index + 1}`, project_id: 1, status: 'healthy', capabilities: capabilities(account, 1) })));

@@ -43,6 +43,9 @@ NetApp 和 Isilon 的设备协议与 TLS 证书校验由 `storage_clusters.proto
 
 超级管理员可在项目组列表和用户目录列表直接调整最终目标配额，输入值不是扩容量：
 
+- 查看入口已收敛到项目上下文：根导航隐藏项目组和用户目录，项目详情 `/project/:id` 的“项目组”和“用户目录”页签按当前项目筛选关联资源；既有列表 URL、配额调整操作和配额 API 不变。
+- 用户目录详情 `/usage/:id` 提供“配额历史”页签，读取 `/storage-usages/{storage_usage_id}/quota/history` 的脱敏记录。前端仅在 `capabilities.adjust_quota=true` 时请求，服务端仍执行超级管理员/项目组负责人权限校验。
+
 - `PATCH /groups/{group_id}/quota` 调整项目组独占存储目标；共享 Volume/Qtree 返回 `409`，不调用设备。
 - `PATCH /storage-usages/{storage_usage_id}/quota` 按当前研发用户名调整用户配额。
 - 硬限额必填；软限额可不设置，设置时必须严格小于硬限额；不支持文件限额和用户映射。

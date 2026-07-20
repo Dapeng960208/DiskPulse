@@ -9,7 +9,7 @@ const pairedColumnPages = [
   'src/pages/usage/UsageListPage.vue',
   'src/pages/group/GroupListPage.vue',
   'src/pages/project/components/ProjectTable.vue',
-  'src/pages/project/ProjectDetailPage.vue',
+  'src/pages/project/components/ProjectGroupsTab.vue',
   'src/pages/admin/aggregate/AggregateListPage.vue',
   'src/pages/admin/volume/VolumeListPage.vue',
   'src/pages/admin/qtree/QtreeListPage.vue',

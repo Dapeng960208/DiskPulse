@@ -21,6 +21,17 @@ vi.mock('@/api/capacity-prediction-api.js', () => ({
   },
 }));
 
+vi.mock('@/api/storage-usage-api.js', () => ({
+  default: {
+    fetchById: vi.fn(() => Promise.resolve({ id: 234, capabilities: {} })),
+    quotaHistory: vi.fn(() => Promise.resolve([])),
+  },
+}));
+
+vi.mock('@/api/alert-api.js', () => ({
+  default: { fetch: vi.fn(() => Promise.resolve({ content: [], total: 0 })) },
+}));
+
 import UsageDetailPage from '@/pages/usage/UsageDetailPage.vue';
 
 const hiddenLabels = [

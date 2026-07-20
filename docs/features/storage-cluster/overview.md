@@ -23,6 +23,17 @@ API 统一挂载在：
 | 删除集群 | `DELETE /storage-pulse/api/storage-clusters/{storage_cluster_id}` |
 | 实时趋势 | `GET /storage-pulse/api/storage-clusters/{storage_cluster_id}/realtime` |
 
+前端入口位于“系统管理 → 存储集群”。“存储集群”本身是无页面组件的菜单分组，二级栏目如下；本次只调整导航层级，现有路由和 API 均不改名。
+
+| 二级栏目 | 前端路由 |
+| --- | --- |
+| 集群列表 | `/admin/storage-clusters` |
+| 容量池 | `/admin/aggregates` |
+| 存储空间 | `/admin/volumes` |
+| Qtree（NetApp） | `/admin/qtrees` |
+
+详情页继续使用 `/admin/storage-cluster/:id`、`/admin/aggregate/:id`、`/admin/volume/:id` 和 `/admin/qtree/:id` 深链。
+
 ## 创建示例
 
 ```bash

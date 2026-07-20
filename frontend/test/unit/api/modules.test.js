@@ -55,10 +55,11 @@ describe('api modules', () => {
     await alertApi.fetch({ page: 1 });
     await configApi.updateConfig({ enabled: true });
     await capacityPredictionApi.visibility();
+    await capacityPredictionApi.fetchPredictions({ page: 1, size: 20 });
     await capacityPredictionApi.access('group', 7);
-    await capacityPredictionApi.fetchPrediction('usage', 8);
+    await capacityPredictionApi.fetchPrediction('storage_usage', 8);
     await capacityPredictionApi.fetchPlans('group', 7);
-    await capacityPredictionApi.fetchRelatedIncidents('usage', 8);
+    await capacityPredictionApi.fetchRelatedIncidents('storage_usage', 8);
     await capacityPredictionApi.createPlan('group', 7, { capacity_delta: 10 });
     await capacityPredictionApi.settings();
     await capacityPredictionApi.updateSettings({ user_visible: true });
@@ -89,6 +90,7 @@ describe('api modules', () => {
     await storageUsageApi.exportStorageUsages({});
     await storageUsageApi.backUpStorageUsageById(12);
     await storageUsageApi.adjustQuota(12, { hard_limit: 50, unit: 'GiB' });
+    await storageUsageApi.quotaHistory(12);
     await usersApi.login('user', 'password');
     await usersApi.logout();
     await usersApi.fetchProfile();
@@ -102,10 +104,12 @@ describe('api modules', () => {
     expect(getSpy).toHaveBeenCalledWith('/2/realtime', { range: 'day' });
     expect(putSpy).toHaveBeenCalledWith('', { enabled: true });
     expect(getSpy).toHaveBeenCalledWith('/capacity-predictions/visibility');
+    expect(getSpy).toHaveBeenCalledWith('/capacity-predictions', { page: 1, size: 20 });
     expect(getSpy).toHaveBeenCalledWith('/capacity-predictions/group/7/access');
-    expect(getSpy).toHaveBeenCalledWith('/capacity-predictions/usage/8');
+    expect(getSpy).toHaveBeenCalledWith('/capacity-predictions/storage_usage/8');
     expect(getSpy).toHaveBeenCalledWith('/capacity-predictions/group/7/plans');
-    expect(getSpy).toHaveBeenCalledWith('/capacity-predictions/usage/8/related-incidents');
+    expect(getSpy).toHaveBeenCalledWith('/capacity-predictions/storage_usage/8/related-incidents');
+    expect(getSpy).toHaveBeenCalledWith('/12/quota/history');
     expect(postSpy).toHaveBeenCalledWith('/capacity-predictions/group/7/plans', { capacity_delta: 10 });
     expect(getSpy).toHaveBeenCalledWith('/admin/capacity-prediction-settings');
     expect(patchSpy).toHaveBeenCalledWith('/admin/capacity-prediction-settings', { user_visible: true });

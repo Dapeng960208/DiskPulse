@@ -67,6 +67,7 @@ const expectedInUsePageComponents = [
   '@/pages/alert/AlertListPage.vue',
   '@/pages/capacity-prediction/CapacityPredictionDetailPage.vue',
   '@/pages/capacity-prediction/CapacityPredictionDetailPage.vue',
+  '@/pages/capacity-prediction/CapacityPredictionListPage.vue',
   '@/pages/dashboard/DashboardPage.vue',
   '@/pages/group-tag/GroupTagListPage.vue',
   '@/pages/group/GroupDetailPage.vue',
@@ -142,7 +143,7 @@ describe('shared page layout spacing contract', () => {
 });
 
 describe('in-use routed page matrix', () => {
-  it('covers exactly the 28 approved page components and excludes inactive shells', () => {
+  it('covers exactly the 29 approved page components and excludes inactive shells', () => {
     const routesSource = readFrontendSource('src/router/routes.js');
     const routedComponents = [...routesSource.matchAll(
       /component:\s*\(\)\s*=>\s*import\(['"](@\/pages\/[^'"]+\.vue)['"]\)/g,
@@ -151,7 +152,7 @@ describe('in-use routed page matrix', () => {
       .filter((component) => !excludedPageComponents.includes(component))
       .sort();
 
-    expect(inUseComponents).toHaveLength(28);
+    expect(inUseComponents).toHaveLength(29);
     expect(inUseComponents).toEqual(expectedInUsePageComponents);
     expect(routedComponents.filter((component) => excludedPageComponents.includes(component)).sort())
       .toEqual([...excludedPageComponents].sort());
@@ -189,9 +190,10 @@ describe('page-level spacing exceptions', () => {
 
   it('removes the standalone bottom padding from the AI Center root', () => {
     const aiCenterSource = readFrontendSource('src/pages/admin/ai/AiCenterPage.vue');
-    const aiCenter = directDeclarations(extractBlocks(aiCenterSource, '.ai-center')[0]);
+    const aiCenterBlocks = extractBlocks(aiCenterSource, '.ai-center');
 
-    expect(aiCenter).not.toMatch(/padding-bottom\s*:/);
+    expect(aiCenterBlocks.every((block) => !directDeclarations(block).match(/padding-bottom\s*:/)))
+      .toBe(true);
   });
 });
 

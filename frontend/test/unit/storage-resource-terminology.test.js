@@ -32,7 +32,7 @@ describe('cross-vendor storage resource terminology', () => {
     const groupForm = source('src/pages/group/components/GroupFormDialog.vue');
     const groupList = source('src/pages/group/GroupListPage.vue');
     const groupDetail = source('src/pages/group/GroupDetailPage.vue');
-    const projectDetail = source('src/pages/project/ProjectDetailPage.vue');
+    const projectGroups = source('src/pages/project/components/ProjectGroupsTab.vue');
     const usageList = source('src/pages/usage/UsageListPage.vue');
 
     expect(groupForm).toContain('存储空间（Directory Quota）');
@@ -40,7 +40,7 @@ describe('cross-vendor storage resource terminology', () => {
     expect(groupForm).toContain('单个存储目标关联多个项目组');
     expect(groupList).toContain('存储目标');
     expect(groupDetail).toContain('info?.storage_target');
-    expect(projectDetail).toContain('formatStorageTargetType');
+    expect(projectGroups).toContain('formatStorageTargetType');
     expect(usageList).toContain('label="存储类型"');
     expect(usageList).not.toContain('label="Volume"');
     expect(usageList).not.toContain('label="Qtree"');

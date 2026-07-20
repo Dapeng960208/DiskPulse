@@ -28,10 +28,17 @@ watch(() => route.path, (value) => {
 });
 
 function mapRouteToMenuOption(route, parentPath) {
-  const path = parentPath ? `${parentPath}/${route.path}` : route.path;
+  const path = parentPath
+    ? [parentPath, route.path].filter(Boolean).join('/').replace(/\/{2,}/g, '/')
+    : route.path;
+  const key = route.name || route.meta.menuKey || `${parentPath || 'root'}:${route.meta.title}`;
+  const index = route.path || !parentPath
+    ? path
+    : `${parentPath}#${route.meta.menuKey || route.meta.title}`;
 
   return {
-    key: route.name,
+    key,
+    index,
     label: route.meta.title,
     icon: route.meta.icon,
     path,

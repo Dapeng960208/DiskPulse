@@ -5,16 +5,16 @@ import { describe, expect, it } from 'vitest';
 const source = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
 describe('resource capacity prediction detail contracts', () => {
-  it('adds lazy capacity prediction tabs to group and user-directory details', () => {
+  it('keeps capacity prediction in a standalone root entry while preserving resource deep links', () => {
     const group = source('src/pages/group/GroupDetailPage.vue');
     const usage = source('src/pages/usage/UsageDetailPage.vue');
+    const routes = source('src/router/routes.js');
 
-    expect(group).toContain('CapacityPredictionPanel');
-    expect(usage).toContain('CapacityPredictionPanel');
-    expect(group).toContain('容量预测');
-    expect(usage).toContain('容量预测');
-    expect(group).toMatch(/<ElTabPane[\s\S]*?v-if="predictionVisible"[\s\S]*?lazy[\s\S]*?label="容量预测"/);
-    expect(usage).toMatch(/<ElTabPane[\s\S]*?v-if="predictionVisible"[\s\S]*?lazy[\s\S]*?label="容量预测"/);
+    expect(group).not.toContain('CapacityPredictionPanel');
+    expect(usage).not.toContain('CapacityPredictionPanel');
+    expect(routes).toContain("name: 'CapacityPredictions'");
+    expect(routes).toContain("name: 'UsageCapacityPrediction'");
+    expect(routes).toContain("name: 'GroupCapacityPrediction'");
   });
 
   it('keeps prediction visibility server-driven and scoped by resource type', () => {

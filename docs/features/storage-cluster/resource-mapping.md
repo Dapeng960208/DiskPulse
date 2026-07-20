@@ -172,22 +172,23 @@ PostgreSQL 提交成功后写入 QuestDB
 
 | 页面/位置 | 统一文案 | NetApp 展示 | Isilon 展示 |
 | --- | --- | --- | --- |
-| 左侧菜单 | 容量池 | 原生类型为“NetApp Aggregate” | 原生类型为“Isilon Storage Pool” |
+| 系统管理菜单分组 | 存储集群 | 二级栏目为“集群列表、容量池、存储空间、Qtree（NetApp）” | 二级栏目相同，Qtree 页面仍遵守不适用边界 |
+| 存储集群二级栏目 | 容量池 | 原生类型为“NetApp Aggregate” | 原生类型为“Isilon Storage Pool” |
 | 列表/详情标题 | 容量池 / 容量池详情 | 显示 Aggregate 数据 | 显示 Storage Pool 数据 |
 | 容量池搜索字段 | 容量池名称 | Aggregate 名称 | Storage Pool 名称 |
 | 容量池类型列 | 原生类型 | NetApp Aggregate | Isilon Storage Pool |
-| 左侧菜单 | 存储空间 | 原生类型为“NetApp Volume” | 原生类型为“Isilon Directory Quota” |
+| 存储集群二级栏目 | 存储空间 | 原生类型为“NetApp Volume” | 原生类型为“Isilon Directory Quota” |
 | 列表/详情标题 | 存储空间 / 存储空间详情 | 显示 Volume 数据 | 显示 Directory Quota 数据 |
 | 存储空间搜索字段 | 名称/路径 | Volume 名称 | Directory Quota 路径 |
 | 存储空间类型列 | 原生类型 | NetApp Volume | Isilon Directory Quota |
 | 所属容量池列 | 所属容量池 | Aggregate 名称 | 能确认时显示 Storage Pool，否则显示 `-` |
-| 左侧菜单 | Qtree（NetApp） | 正常展示 | 页面提示“Isilon 不支持 Qtree”，不请求 Qtree 数据 |
+| 存储集群二级栏目 | Qtree（NetApp） | 正常展示 | 页面提示“Isilon 不支持 Qtree”，不请求 Qtree 数据 |
 | 项目组表单 | 存储目标类型 | 可选“存储空间”“Qtree（NetApp）” | 固定为“存储空间（Directory Quota）” |
 | 项目组表单 | 存储目标 | 按所选类型选择 Volume/Qtree | 选择 Directory Quota 路径 |
 | 项目组开关 | 单个存储目标关联多个项目组 | 同一文案 | 同一文案 |
 | 项目组列表 | 存储目标 | `存储空间 / 名称` 或 `Qtree（NetApp） / 名称` | `存储空间 / Directory Quota 路径` |
 
-路由和 API 暂不重命名，继续使用 `/aggregates`、`/volumes`、`/qtrees`，减少无业务收益的兼容改造。页面通过 `storage_cluster_id` 筛选，并根据集群类型展示原生类型和适用字段。按钮、面包屑、空状态、趋势图标题、导出列名和错误提示必须与上述统一文案一致，不能只修改菜单标题。
+系统管理前端路由继续使用 `/admin/storage-clusters`、`/admin/aggregates`、`/admin/volumes`、`/admin/qtrees`；后端 API 继续使用 `/storage-clusters`、`/aggregates`、`/volumes`、`/qtrees`。导航分组不引入新的中转页面或兼容路由。页面通过 `storage_cluster_id` 筛选，并根据集群类型展示原生类型和适用字段。按钮、面包屑、空状态、趋势图标题、导出列名和错误提示必须与上述统一文案一致，不能只修改菜单标题。
 
 ## 8. 实现结果与数据兼容
 

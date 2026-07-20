@@ -11,7 +11,11 @@ import AnimatedTextChart from '@/common/charts/AnimatedTextChart.vue'
 const props = defineProps({
   attributeId: {
     type: Number,
-    required: true,
+    default: null,
+  },
+  allowProjectSelection: {
+    type: Boolean,
+    default: true,
   },
 });
 const { queryParams, reset } = useQueryParams(() => ({
@@ -25,9 +29,14 @@ const indicatorOption={
 const { result:storageSummary, querying, query:fetchStorageSummary } = useQuery(() => projectApi.fetchStorageTreeById(queryParams.value.project_id,{'value_type':queryParams.value.value_type}), {
   data: []
 });
+function resetFilters() {
+  reset();
+  queryParams.value.project_id = props.attributeId || 1;
+  fetchStorageSummary();
+}
 onBeforeMount(() => {
   nextTick(() => {
-    queryParams.value.project_id = props.attributeId ? props.attributeId:1;
+    queryParams.value.project_id = props.attributeId || 1;
     fetchStorageSummary();
   });
 });
@@ -40,11 +49,12 @@ onBeforeMount(() => {
       fetchStorageSummary();
     }"
     @reset="{
-      reset();
-      fetchStorageSummary();
+      resetFilters();
     }"
   >
-    <ElFormItem label="项目名">
+    <ElFormItem
+      v-if="allowProjectSelection"
+      label="项目名">
       <ProjectSelect
         v-model="queryParams.project_id"
         placeholder="根据项目名搜索" />

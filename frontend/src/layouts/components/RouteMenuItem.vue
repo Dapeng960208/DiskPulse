@@ -27,7 +27,7 @@ defineProps({
       </ElMenuItem>
       <ElSubMenu
         v-else
-        :index="option.path">
+        :index="option.index">
         <template #title>
           <i
             v-if="option.icon"
@@ -43,7 +43,7 @@ defineProps({
     </template>
     <ElMenuItem
       v-else
-      :index="option.path">
+      :index="option.index">
       <i
         v-if="option.icon"
         :class="option.icon"

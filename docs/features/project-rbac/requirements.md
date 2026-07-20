@@ -3,6 +3,7 @@
 ## 范围
 
 - 为项目添加成员、角色和项目资源隔离。
+- 将项目组和用户目录收敛到项目详情内，按项目查看关联资源；原有目录深链继续保留。
 - 提供项目审计与超级管理员统一操作审计页面/API。
 - 对关键管理、设备、AI、采集和通知动作保留可关联的脱敏审计。
 - 让 AI 会话独立于项目，但绝不返回当前用户无权访问的项目数据。
@@ -21,7 +22,7 @@
 
 - 成员 API：`/storage-pulse/api/projects/{project_id}/members`，提供集合 `GET/POST` 和单成员 `PATCH/DELETE`。
 - 统一审计 API：`/storage-pulse/api/v1/audit-events` 及详情；超级管理员查询全局，项目管理员仅能查询已授权项目范围。
-- 项目详情具有“项目组、成员、项目审计”页签；成员和项目审计由 `capabilities.manage_members` 与 `capabilities.view_audit_events` 控制。
+- 项目详情路由 `/project/{project_id}` 集中展示“容量概览、项目组、用户目录、成员与权限、项目审计”页签；其中成员与项目审计由 `capabilities.manage_members` 与 `capabilities.view_audit_events` 控制。项目组和用户目录不再作为根导航入口，但 `/groups`、`/usage` 深链继续有效。
 - 系统管理具有 `/admin/audit-events` 和详情路由；前端只向超级管理员展示入口。
 - 项目组和用户目录的调整配额按钮仅由 `capabilities.adjust_quota` 显示。
 
