@@ -201,8 +201,20 @@ def get_visible_audit_event(db: Session, *, current_user, event_id: str) -> Audi
     return event
 
 
-def serialize_audit_event(event: AuditEvent) -> dict:
-    return {
+def serialize_audit_events(db: Session, events: list[AuditEvent], *, current_user) -> list[dict]:
+    allowed_project_ids = None
+    if not is_super_admin(current_user):
+        allowed_project_ids = {event.project_id for event in events if event.project_id is not None}
+    associations = auditCrud.get_audit_event_associations(
+        db,
+        events,
+        allowed_project_ids=allowed_project_ids,
+    )
+    return [serialize_audit_event(event, associations.get(event.id)) for event in events]
+
+
+def serialize_audit_event(event: AuditEvent, association: dict | None = None) -> dict:
+    payload = {
         "id": event.id,
         "operation_id": event.operation_id,
         "phase": event.phase,
@@ -221,3 +233,6 @@ def serialize_audit_event(event: AuditEvent) -> dict:
         "request_id": event.request_id,
         "trace_id": event.trace_id,
     }
+    if association is not None:
+        payload.update(association)
+    return payload

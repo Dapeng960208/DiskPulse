@@ -266,9 +266,10 @@ const alerts = incidents.map((incident, index) => ({
 }));
   const audits = incidents.map((incident, index) => {
     const resource = [projects[index], usages[index], groups[index], alerts[index], { id: index + 1, title: `AI 会话 ${index + 1}` }][index];
-    const resourceType = ['ProjectMembership', 'StorageUsage', 'Group', 'StorageAlert', 'AIConversation'][index];
+    const resourceType = ['project_membership', 'storage_usage', 'group', 'storage_alert', 'ai_conversation'][index];
     const action = ['project.member.read', 'storage.usage.update', 'group.quota.adjust', 'storage.alert.read', 'ai.conversation.create'][index];
     const resourceId = resource?.id || index + 1;
+    const isIndirectProjectAssociation = resourceType === 'storage_alert';
     return {
       id: index + 1,
       action,
@@ -276,13 +277,20 @@ const alerts = incidents.map((incident, index) => ({
       result: 'success',
       occurred_at: incident.last_evidence_at,
       created_at: incident.last_evidence_at,
-      project_id: incident.project_id,
-      project: projects[index],
+      project_id: isIndirectProjectAssociation ? null : incident.project_id,
+      project: isIndirectProjectAssociation ? null : projects[index],
       actor_user_id: users[index].id,
-      actor: users[index],
+      actor: { ...users[index], display_name: users[index].rd_username || users[index].username },
       resource_type: resourceType,
       resource_id: resourceId,
       resource_name: resource?.name || resource?.title || incident.display_name,
+      resource: {
+        type: resourceType,
+        id: String(resourceId),
+        name: resource?.name || resource?.title || incident.display_name,
+      },
+      related_projects: isIndirectProjectAssociation ? [projects[index]] : [],
+      relation_path: isIndirectProjectAssociation ? '存储告警 → 存储集群 → 项目组 → 项目' : null,
       resource_path: resource?.linux_path || resource?.path || null,
       trace_id: `audit-trace-${index + 1}`,
       request_id: `mock-request-${index + 1}`,

@@ -435,6 +435,61 @@ def test_audit_event_list_resolves_actor_resource_and_indirect_project_associati
     assert event["relation_path"] == "存储集群 → 项目组 → 项目"
 
 
+def test_project_admin_cannot_enumerate_other_projects_through_shared_resource_associations(
+    api_client_factory,
+    session_factory,
+):
+    from models import ProjectMembership
+    from routers import audit_events
+    from utils.security import issue_token
+
+    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("super_admin_usernames", [])
+    session = session_factory()
+    try:
+        session.add_all(
+            [
+                User(id=1, rd_username="project-admin", username="Project Admin"),
+                Project(id=10, name="芯片设计平台"),
+                Project(id=11, name="仿真平台"),
+                ProjectMembership(project_id=10, user_id=1, role="project_admin"),
+                GroupTag(id=1, name="生产"),
+                StorageCluster(id=2, name="华东存储集群", storage_type="netapp"),
+                Group(id=20, name="芯片设计组", project_id=10, storage_cluster_id=2, group_tag_id=1, enable_monitoring=False),
+                Group(id=21, name="仿真组", project_id=11, storage_cluster_id=2, group_tag_id=1, enable_monitoring=False),
+                AuditEvent(
+                    id="ad0e85bc-6f7a-4742-a2ee-af4b589d8934",
+                    operation_id="ba208c09-df22-4977-9a16-38f2520a4fe8",
+                    phase="result",
+                    actor_type="system",
+                    action="storage.collection.run",
+                    resource_type="storage_cluster",
+                    resource_id=2,
+                    project_id=10,
+                    outcome="success",
+                    request_id="ffb80259-7409-4c7d-8c60-dfa8dc5c157d",
+                    trace_id="ee00ff17-7a5d-4d12-a936-91695b9c3a95",
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    client = api_client_factory(
+        [audit_events.router],
+        headers={"Authorization": f"Bearer {issue_token(1)}"},
+    )
+
+    response = client.get("/storage-pulse/api/v1/audit-events?project_id=10")
+
+    assert response.status_code == 200
+    event = response.json()["content"][0]
+    assert event["project"] == {"id": 10, "name": "芯片设计平台"}
+    assert event["related_projects"] == []
+    assert "仿真平台" not in response.text
+
+
 def test_audit_event_detail_is_available_only_within_the_authorized_project_scope(
     api_client_factory,
     session_factory,

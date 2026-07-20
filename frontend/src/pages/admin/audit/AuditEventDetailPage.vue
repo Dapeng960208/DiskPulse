@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElButton, ElDescriptions, ElDescriptionsItem, ElEmpty, ElTag } from 'element-plus';
 import auditEventsApi from '@/api/audit-events-api.js';
+import AccessibleResourceLink from '@/components/basic/AccessibleResourceLink.vue';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
 
 const route = useRoute();
@@ -19,6 +20,41 @@ function summary(value) {
 
 function outcomeType(outcome) {
   return { success: 'success', denied: 'warning', failure: 'danger' }[outcome] || 'info';
+}
+
+function actorName(current) {
+  return current.actor?.display_name || current.actor?.rd_username || current.actor?.username || current.actor_user_id || '-';
+}
+
+function resourceName(current) {
+  const resource = current.resource;
+  const resourceType = resource?.type || current.resource_type;
+  const typeLabel = {
+    group: '项目组',
+    project: '项目',
+    project_membership: '项目成员',
+    qtree: 'Qtree',
+    storage_alert: '存储告警',
+    storage_cluster: '存储集群',
+    storage_usage: '用户目录',
+    user: '用户',
+    volume: '存储空间',
+  }[resourceType] || resourceType || '-';
+  if (resource?.name) return `${typeLabel} · ${resource.name}`;
+  return current.resource_id == null ? typeLabel : `${typeLabel} #${current.resource_id}`;
+}
+
+function resourceRoute(current) {
+  const resource = current.resource || { type: current.resource_type, id: current.resource_id };
+  const name = {
+    group: 'GroupDetail',
+    project: 'ProjectDetail',
+    qtree: 'QtreeDetail',
+    storage_cluster: 'StorageClusterDetail',
+    storage_usage: 'UsagesDetail',
+    volume: 'VolumeDetail',
+  }[resource.type];
+  return name && resource.id != null ? { name, params: { id: resource.id } } : null;
 }
 
 async function loadEvent() {
@@ -54,9 +90,21 @@ onMounted(loadEvent);
       <ElDescriptionsItem label="结果"><ElTag :type="outcomeType(event.outcome)">{{ event.outcome }}</ElTag></ElDescriptionsItem>
       <ElDescriptionsItem label="操作">{{ event.action }}</ElDescriptionsItem>
       <ElDescriptionsItem label="原因码">{{ event.reason_code || '-' }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="主体">{{ event.actor?.rd_username || event.actor?.username || event.actor_user_id || '-' }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="项目">{{ event.project?.name || event.project_id || '-' }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="资源">{{ event.resource_type || '-' }}{{ event.resource_id == null ? '' : ` #${event.resource_id}` }}</ElDescriptionsItem>
+      <ElDescriptionsItem label="主体">{{ actorName(event) }}</ElDescriptionsItem>
+      <ElDescriptionsItem label="项目"><AccessibleResourceLink :to="{ name: 'ProjectDetail', params: { id: event.project?.id } }">{{ event.project?.name || event.project_id || '-' }}</AccessibleResourceLink></ElDescriptionsItem>
+      <ElDescriptionsItem label="资源"><AccessibleResourceLink :to="resourceRoute(event)">{{ resourceName(event) }}</AccessibleResourceLink></ElDescriptionsItem>
+      <ElDescriptionsItem label="关联项目">
+        <div
+          v-if="event.related_projects?.length"
+          class="audit-event-detail-page__project-links">
+          <AccessibleResourceLink
+            v-for="project in event.related_projects"
+            :key="project.id"
+            :to="{ name: 'ProjectDetail', params: { id: project.id } }">{{ project.name }}</AccessibleResourceLink>
+        </div>
+        <span v-else>无项目关联</span>
+      </ElDescriptionsItem>
+      <ElDescriptionsItem label="关联路径">{{ event.relation_path || '-' }}</ElDescriptionsItem>
       <ElDescriptionsItem label="关联标识">{{ event.trace_id || event.request_id || '-' }}</ElDescriptionsItem>
       <ElDescriptionsItem
         label="变更前摘要"
@@ -80,4 +128,5 @@ onMounted(loadEvent);
 .page-heading h2 { margin: 0 0 4px; color: var(--text-primary); font-size: var(--font-size-xl); }
 .page-heading p { margin: 0; color: var(--text-secondary); }
 pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-size-sm); }
+.audit-event-detail-page__project-links { display: grid; gap: var(--spacing-xs); }
 </style>
