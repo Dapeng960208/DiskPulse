@@ -108,6 +108,12 @@ def _record_correlation(
     category: str,
     notifications: list[tuple[int, str]],
 ) -> None:
+    if not forecastIncidentService.should_admit_incident(
+        envelope,
+        category=category,
+        now=envelope.collected_at,
+    ):
+        return
     result = forecastIncidentService.correlate_incident(db, envelope, category=category)
     if result.incident is None:
         return
@@ -835,20 +841,27 @@ def process_diskpulse_alert_evidence(*, alert_ids: Iterable[int]) -> int:
                 except LookupError:
                     logger.warning("Ignoring raw alert with unavailable storage cluster: alert=%s", event.id)
                     continue
+                envelope = TelemetryEnvelope(
+                    asset_ref=asset,
+                    source="diskpulse_alert",
+                    source_ref=f"diskpulse:{event.id}",
+                    observed_at=_utc(event.updated_at),
+                    collected_at=datetime.now(timezone.utc),
+                    metric_or_event=(
+                        "hard_limit_alert" if event.quota_basis == "hard" else "soft_limit_alert"
+                    ),
+                    value={"severity": event.severity},
+                    quality=quality,
+                )
+                if not forecastIncidentService.should_admit_incident(
+                    envelope,
+                    category="capacity_pressure",
+                    now=envelope.collected_at,
+                ):
+                    continue
                 _record_correlation(
                     db,
-                    envelope=TelemetryEnvelope(
-                        asset_ref=asset,
-                        source="diskpulse_alert",
-                        source_ref=f"diskpulse:{event.id}",
-                        observed_at=_utc(event.updated_at),
-                        collected_at=datetime.now(timezone.utc),
-                        metric_or_event=(
-                            "hard_limit_alert" if event.quota_basis == "hard" else "soft_limit_alert"
-                        ),
-                        value={"severity": event.severity},
-                        quality=quality,
-                    ),
+                    envelope=envelope,
                     category="capacity_pressure",
                     notifications=notifications,
                 )
@@ -883,18 +896,25 @@ def process_vendor_event_evidence(*, storage_cluster_id: int, source: str | None
             handled = 0
             for event in events:
                 external_ref = event.external_event_id or str(event.id)
+                envelope = TelemetryEnvelope(
+                    asset_ref=asset,
+                    source="vendor_event",
+                    source_ref=f"{event.source}:{external_ref}",
+                    observed_at=_utc(event.updated_at),
+                    collected_at=datetime.now(timezone.utc),
+                    metric_or_event="severe_vendor_event" if event.severity == "critical" else "vendor_event",
+                    value={"severity": event.severity},
+                    quality=quality,
+                )
+                if not forecastIncidentService.should_admit_incident(
+                    envelope,
+                    category="device_fault",
+                    now=envelope.collected_at,
+                ):
+                    continue
                 _record_correlation(
                     db,
-                    envelope=TelemetryEnvelope(
-                        asset_ref=asset,
-                        source="vendor_event",
-                        source_ref=f"{event.source}:{external_ref}",
-                        observed_at=_utc(event.updated_at),
-                        collected_at=datetime.now(timezone.utc),
-                        metric_or_event="severe_vendor_event" if event.severity == "critical" else "vendor_event",
-                        value={"severity": event.severity},
-                        quality=quality,
-                    ),
+                    envelope=envelope,
                     category="device_fault",
                     notifications=notifications,
                 )

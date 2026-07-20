@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from crud import forecastIncidentCrud
 from dependencies import CurrentUserDep, get_db, require_super_admin
+from models import User
 from schemas.forecastIncidentSchema import (
     AnomalyOut,
     AnomalyPage,
@@ -17,10 +18,12 @@ from schemas.forecastIncidentSchema import (
     IncidentCommentCreate,
     IncidentDetailOut,
     IncidentEvidenceOut,
+    IncidentEvidencePresentationOut,
     IncidentOut,
     IncidentPage,
     IncidentPatch,
     IncidentTimelineOut,
+    IncidentTimelinePresentationOut,
     MaintenanceWindowCreate,
 )
 from services import audit_service, forecastIncidentService
@@ -258,9 +261,42 @@ def _incident_detail(db: Session, current_user, incident_id: int) -> IncidentDet
     )
     return IncidentDetailOut(
         **_incident_out(db, current_user, incident).model_dump(),
-        evidence=[IncidentEvidenceOut.model_validate(item) for item in evidence],
-        timeline=[IncidentTimelineOut.model_validate(item) for item in timeline],
+        evidence=[_incident_evidence_out(item) for item in evidence],
+        timeline=[_incident_timeline_out(db, item) for item in timeline],
         diagnosis=DiagnosisOut.model_validate(diagnosis) if diagnosis is not None else None,
+    )
+
+
+def _incident_evidence_out(evidence) -> IncidentEvidenceOut:
+    return IncidentEvidenceOut(
+        id=evidence.id,
+        source=evidence.source,
+        source_ref=evidence.source_ref,
+        evidence_type=evidence.evidence_type,
+        observed_at=evidence.observed_at,
+        data_gaps=list(evidence.data_gaps or []),
+        presentation=IncidentEvidencePresentationOut(
+            **forecastIncidentService.build_evidence_presentation(evidence)
+        ),
+    )
+
+
+def _incident_timeline_out(db: Session, timeline) -> IncidentTimelineOut:
+    actor_label = None
+    if timeline.actor_user_id is not None:
+        actor = db.get(User, timeline.actor_user_id)
+        actor_label = (actor.rd_username or actor.username) if actor is not None else f"用户 #{timeline.actor_user_id}"
+    return IncidentTimelineOut(
+        id=timeline.id,
+        event_type=timeline.event_type,
+        actor_user_id=timeline.actor_user_id,
+        from_status=timeline.from_status,
+        to_status=timeline.to_status,
+        comment=timeline.comment,
+        occurred_at=timeline.occurred_at,
+        presentation=IncidentTimelinePresentationOut(
+            **forecastIncidentService.build_timeline_presentation(timeline, actor_label=actor_label)
+        ),
     )
 
 

@@ -434,6 +434,176 @@ def _severity(envelope: TelemetryEnvelope) -> str:
     return "warning"
 
 
+INCIDENT_FORECAST_URGENT_DAYS = 7
+
+
+def _forecast_exhaustion_at(value) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else None
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
+def should_admit_incident(
+    envelope: TelemetryEnvelope,
+    *,
+    category: str,
+    now: datetime,
+) -> bool:
+    """Keep the Incident queue to urgent cluster actions; raw signals stay queryable elsewhere."""
+    severity = _severity(envelope)
+    if category == "device_fault":
+        return envelope.source == "vendor_event" and severity == "critical"
+    if category == "performance_contention":
+        return envelope.source == "anomaly_observation" and severity == "critical"
+    if category == "telemetry_blindspot":
+        return False
+    if category != "capacity_pressure":
+        return False
+    if envelope.source == "diskpulse_alert":
+        return severity == "critical"
+    if envelope.source != "capacity_forecast" or not isinstance(envelope.value, dict):
+        return False
+    exhaustion_at = _forecast_exhaustion_at(envelope.value.get("exhaustion_p90"))
+    if exhaustion_at is None:
+        return False
+    remaining = _utc(exhaustion_at) - _utc(now)
+    return timedelta(0) <= remaining <= timedelta(days=INCIDENT_FORECAST_URGENT_DAYS)
+
+
+_TELEMETRY_STREAM_LABELS = {
+    "capacity": "容量采集",
+    "performance": "性能采集",
+    "vendor_events": "厂商事件采集",
+}
+_EVIDENCE_PRESENTATIONS = {
+    "forecast_exhaustion": ("容量可能耗尽", "容量预测显示当前资源存在耗尽风险。"),
+    "hard_limit_alert": ("硬限额告警", "资源使用率已达到当前有效硬限额告警阈值。"),
+    "soft_limit_alert": ("软限额告警", "资源使用率已达到当前有效软限额告警阈值。"),
+    "severe_vendor_event": ("厂商严重系统事件", "厂商系统报告了需要优先核查的严重事件。"),
+    "repeated_fault": ("重复故障事件", "同一故障指纹在短时间内重复出现。"),
+    "collection_error": ("采集异常", "监控采集任务未能成功完成。"),
+}
+_TIMELINE_ACTION_LABELS = {
+    "created": "系统创建事件",
+    "opened": "系统创建事件",
+    "evidence_added": "关联新证据",
+    "reopened": "系统重新打开事件",
+    "claimed": "认领事件",
+    "released": "释放认领",
+    "status_changed": "更新处置状态",
+    "severity_changed": "调整风险级别",
+    "silenced": "静默事件通知",
+    "unsilenced": "恢复事件通知",
+    "commented": "添加评论",
+}
+
+
+def _telemetry_quality_reference(source_ref: str) -> tuple[str | None, str | None, str | None]:
+    parts = source_ref.split(":", 3)
+    if len(parts) != 4 or parts[0] != "quality":
+        return None, None, None
+    observed_at, separator, reason = parts[3].rpartition(":")
+    if not separator:
+        return parts[2], None, None
+    return parts[2], observed_at, reason
+
+
+def _format_reference_time(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return None
+
+
+def build_evidence_presentation(evidence) -> dict[str, str]:
+    """Return a safe, user-readable view without changing the immutable evidence fact."""
+    source = str(evidence.source or "")
+    source_ref = str(evidence.source_ref or "")
+    evidence_type = str(evidence.evidence_type or "")
+    stream, referenced_at, reference_reason = _telemetry_quality_reference(source_ref)
+    if source == "telemetry_quality" or stream is not None:
+        scope_label = _TELEMETRY_STREAM_LABELS.get(stream or "", "监控采集")
+        reason = reference_reason or evidence_type
+        if reason == "telemetry_stale":
+            formatted_at = _format_reference_time(referenced_at)
+            summary = (
+                f"{scope_label}自 {formatted_at} 起未产生新的成功采集记录。"
+                if formatted_at
+                else f"{scope_label}未在预期时间内产生新的成功采集记录。"
+            )
+            title = f"{scope_label}已过期"
+        elif reason == "coverage_insufficient":
+            title = f"{scope_label}覆盖不足"
+            summary = f"{scope_label}的有效样本覆盖率不足，当前不能可靠判断资产状态。"
+        else:
+            title = f"{scope_label}质量异常"
+            summary = f"{scope_label}存在需要核查的数据质量异常。"
+        return {
+            "group_key": "telemetry_quality",
+            "group_label": "监控可用性异常",
+            "title": title,
+            "summary": summary,
+            "scope_label": scope_label,
+            "technical_ref": source_ref,
+        }
+
+    title, summary = _EVIDENCE_PRESENTATIONS.get(
+        evidence_type,
+        ("关联事件证据", "系统已关联一条待核查的事件证据。"),
+    )
+    group_key = source or evidence_type or "other"
+    group_label = {
+        "forecast": "容量预测依据",
+        "storage_alert": "DiskPulse 告警依据",
+        "vendor_event": "厂商系统事件依据",
+        "telemetry": "监控采集依据",
+    }.get(source, "其他关联依据")
+    scope_label = {
+        "forecast": "容量预测",
+        "storage_alert": "DiskPulse 存储告警",
+        "vendor_event": "厂商系统事件",
+        "telemetry": "监控采集",
+    }.get(source, "关联记录")
+    return {
+        "group_key": group_key,
+        "group_label": group_label,
+        "title": title,
+        "summary": summary,
+        "scope_label": scope_label,
+        "technical_ref": source_ref,
+    }
+
+
+def build_timeline_presentation(timeline, *, actor_label: str | None) -> dict[str, str]:
+    event_type = str(timeline.event_type or "")
+    default_summary = {
+        "created": "系统根据关联证据创建了该事件。",
+        "opened": "系统根据关联证据创建了该事件。",
+        "evidence_added": "系统关联了新的证据，请在上方关联证据中查看。",
+        "reopened": "同类新证据出现，系统重新打开该事件。",
+        "claimed": "事件已被认领，处理责任已明确。",
+        "released": "事件认领已释放，等待重新分派。",
+        "status_changed": "事件处置状态已更新。",
+        "severity_changed": "事件风险级别已更新。",
+        "silenced": "后续事件通知已静默。",
+        "unsilenced": "后续事件通知已恢复。",
+        "commented": "已记录处理评论。",
+    }.get(event_type, "系统记录了一次事件更新。")
+    return {
+        "action_label": _TIMELINE_ACTION_LABELS.get(event_type, "事件更新"),
+        "summary": str(timeline.comment).strip() if timeline.comment else default_summary,
+        "actor_label": actor_label or "系统",
+    }
+
+
 def _append_evidence(db, incident: Incident, envelope: TelemetryEnvelope) -> None:
     evidence = IncidentEvidence(
         incident_id=incident.id,
@@ -445,8 +615,14 @@ def _append_evidence(db, incident: Incident, envelope: TelemetryEnvelope) -> Non
         evidence_hash=hashlib.sha256(f"{envelope.source}:{envelope.source_ref}".encode("utf-8")).hexdigest(),
     )
     forecastIncidentCrud.add_incident_evidence(db, evidence)
+    presentation = build_evidence_presentation(evidence)
     forecastIncidentCrud.add_incident_timeline(
-        db, IncidentTimeline(incident_id=incident.id, event_type="evidence_added")
+        db,
+        IncidentTimeline(
+            incident_id=incident.id,
+            event_type="evidence_added",
+            comment=f"关联{presentation['title']}：{presentation['summary']}",
+        ),
     )
 
 

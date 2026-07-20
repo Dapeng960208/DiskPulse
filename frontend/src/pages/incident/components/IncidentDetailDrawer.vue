@@ -11,8 +11,6 @@ import {
   ElFormItem,
   ElInput,
   ElMessage,
-  ElTable,
-  ElTableColumn,
   ElTag,
   ElTooltip,
 } from 'element-plus';
@@ -54,6 +52,13 @@ const nextStatus = computed(() => ({
 })[current.value.status] || null);
 const isUpdating = computed(() => Boolean(activeAction.value));
 
+function formatLocalDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
 const categoryLabels = {
   capacity_pressure: '容量压力',
   device_fault: '设备健康风险',
@@ -64,7 +69,7 @@ const categoryDescriptions = {
   capacity_pressure: '容量预测显示可能耗尽，或当前资源的有效告警规则达到阈值。默认按硬限额 80%/90%/95%；用户目录优先采用项目组规则，其次项目规则，最后系统规则。',
   device_fault: 'NetApp EMS 或 PowerScale（Isilon）厂商系统事件达到严重级别、同一故障指纹反复出现，或同一时段采集异常时创建。它表示待核查的设备健康风险，不等同于已确认硬件损坏。',
   performance_contention: '同一指标连续三个相邻 5 分钟桶偏离 28 天同星期同小时基线，且鲁棒 Z 分数绝对值均不低于 3.5。',
-  telemetry_blindspot: '监控盲区：容量、厂商事件或性能遥测过期、采集失败或覆盖率不足，当前数据不足以可靠判断资产状态。',
+  telemetry_blindspot: '监控盲区：容量、厂商事件或性能监控采集过期、采集失败或覆盖率不足，当前数据不足以可靠判断资产状态。',
 };
 const confidenceLabels = {
   high: '高',
@@ -83,6 +88,7 @@ const evidenceSourceLabels = {
   storage_alert: 'DiskPulse 存储告警',
   vendor_event: '厂商系统事件',
   telemetry: '监控采集',
+  telemetry_quality: '监控数据质量',
 };
 const evidenceTypeLabels = {
   forecast_exhaustion: '预测容量可能耗尽',
@@ -91,8 +97,11 @@ const evidenceTypeLabels = {
   severe_vendor_event: '厂商严重系统事件',
   repeated_fault: '重复故障事件',
   collection_error: '采集异常',
+  telemetry_stale: '采集已过期',
+  coverage_insufficient: '覆盖不足',
 };
 const timelineLabels = {
+  created: '系统创建事件',
   opened: '事件创建',
   evidence_added: '新增证据',
   claimed: '已认领',
@@ -113,13 +122,49 @@ const statusLabels = {
 const statusDescriptions = {
   open: '系统已创建事件，尚未确认由谁处理。',
   acknowledged: '已确认收到事件，下一步应开始分析。',
-  investigating: '正在核对原始告警、厂商事件、预测和遥测数据。',
+  investigating: '正在核对原始告警、厂商事件、预测和监控数据。',
   mitigated: '影响已缓解，仍需观察是否出现新证据。',
   resolved: '处理完成；若 24 小时内出现同类新证据，系统会重新打开事件。',
 };
 const nextStatusTooltip = computed(() => nextStatus.value
   ? `仅允许相邻推进至“${statusLabels[nextStatus.value]}”，${statusDescriptions[nextStatus.value]}`
   : '事件已解决，不能继续推进状态。');
+
+function evidencePresentation(evidence) {
+  if (evidence.presentation) return evidence.presentation;
+  const sourceLabel = evidenceSourceLabels[evidence.source] || '关联记录';
+  const title = evidenceTypeLabels[evidence.evidence_type] || '关联事件证据';
+  return {
+    group_key: evidence.source || evidence.evidence_type || 'other',
+    group_label: sourceLabel,
+    title,
+    summary: `系统关联了${title}，请结合原始记录核查。`,
+    scope_label: sourceLabel,
+    technical_ref: evidence.source_ref || '-',
+  };
+}
+
+const evidenceGroups = computed(() => {
+  const groups = new Map();
+  for (const evidence of current.value.evidence || []) {
+    const presentation = evidencePresentation(evidence);
+    const key = presentation.group_key || evidence.source || 'other';
+    if (!groups.has(key)) {
+      groups.set(key, { key, label: presentation.group_label || '关联依据', items: [] });
+    }
+    groups.get(key).items.push({ ...evidence, presentation });
+  }
+  return [...groups.values()];
+});
+
+function timelinePresentation(item) {
+  if (item.presentation) return item.presentation;
+  return {
+    action_label: timelineLabels[item.event_type] || '事件更新',
+    summary: item.comment || '系统记录了一次事件更新。',
+    actor_label: item.actor_user_id == null ? '系统' : `用户 #${item.actor_user_id}`,
+  };
+}
 
 async function load() {
   if (!props.incident?.id || !visible.value) return;
@@ -278,52 +323,69 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
       </section>
 
       <section class="incident-detail__section">
-        <h3>证据摘要</h3>
-        <ElTable
-          :data="current.evidence || []"
-          size="small"
-          empty-text="暂无证据摘要">
-          <ElTableColumn
-            label="证据内容"
-            min-width="150">
-            <template #default="scope">{{ evidenceTypeLabels[scope?.row?.evidence_type] || scope?.row?.evidence_type || '-' }}</template>
-          </ElTableColumn>
-          <ElTableColumn
-            label="来源"
-            min-width="120">
-            <template #default="scope">{{ evidenceSourceLabels[scope?.row?.source] || scope?.row?.source || '-' }}</template>
-          </ElTableColumn>
-          <ElTableColumn
-            prop="source_ref"
-            label="追溯编号"
-            min-width="180" />
-          <ElTableColumn
-            prop="observed_at"
-            label="发现时间"
-            min-width="180" />
-        </ElTable>
+        <h3>关联概览</h3>
+        <p v-if="evidenceGroups.length === 0">暂无关联证据。</p>
+        <ul
+          v-else
+          class="incident-detail__evidence-overview"
+          aria-label="关联证据概览">
+          <li
+            v-for="group in evidenceGroups"
+            :key="group.key">
+            <span>{{ group.label }}</span>
+            <ElTag
+              type="info"
+              size="small">{{ group.items.length }} 项</ElTag>
+          </li>
+        </ul>
+      </section>
+
+      <section class="incident-detail__section">
+        <h3>关联证据</h3>
+        <p v-if="evidenceGroups.length === 0">暂无关联证据。</p>
+        <ul
+          v-else
+          class="incident-detail__evidence-groups">
+          <li
+            v-for="group in evidenceGroups"
+            :key="group.key">
+            <h4>{{ group.label }}（{{ group.items.length }} 项）</h4>
+            <article
+              v-for="evidence in group.items"
+              :key="evidence.id"
+              class="incident-detail__evidence-item">
+              <h5>{{ evidence.presentation.title }}</h5>
+              <dl>
+                <div><dt>异常说明</dt><dd>{{ evidence.presentation.summary }}</dd></div>
+                <div><dt>影响范围</dt><dd>{{ current.display_name || '当前对象' }} · {{ evidence.presentation.scope_label }}</dd></div>
+                <div><dt>发现时间</dt><dd>{{ formatLocalDateTime(evidence.observed_at) }}</dd></div>
+              </dl>
+              <details>
+                <summary>技术信息</summary>
+                <code>{{ evidence.presentation.technical_ref }}</code>
+              </details>
+            </article>
+          </li>
+        </ul>
       </section>
 
       <section class="incident-detail__section">
         <h3>时间线</h3>
-        <ElTable
-          :data="current.timeline || []"
-          size="small"
-          empty-text="暂无操作记录">
-          <ElTableColumn
-            prop="occurred_at"
-            label="时间"
-            min-width="180" />
-          <ElTableColumn
-            label="操作"
-            min-width="130">
-            <template #default="scope">{{ timelineLabels[scope?.row?.event_type] || scope?.row?.event_type || '-' }}</template>
-          </ElTableColumn>
-          <ElTableColumn
-            prop="comment"
-            label="评论"
-            min-width="200" />
-        </ElTable>
+        <p v-if="!(current.timeline || []).length">暂无操作记录。</p>
+        <ol
+          v-else
+          class="incident-detail__timeline">
+          <li
+            v-for="item in current.timeline || []"
+            :key="item.id">
+            <time>{{ formatLocalDateTime(item.occurred_at) }}</time>
+            <div>
+              <strong>{{ timelinePresentation(item).action_label }}</strong>
+              <p>{{ timelinePresentation(item).summary }}</p>
+              <span>操作人：{{ timelinePresentation(item).actor_label }}</span>
+            </div>
+          </li>
+        </ol>
       </section>
 
       <section
@@ -378,5 +440,23 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
 .incident-detail__hint { padding: 8px 10px; border-left: 3px solid var(--primary-color); background: var(--bg-secondary); font-size: var(--font-size-sm); }
 .incident-detail__candidate-list { margin: 0; padding-left: 20px; color: var(--text-primary); }
 .incident-detail__candidate-list span { color: var(--text-secondary); }
+.incident-detail__evidence-overview { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.incident-detail__evidence-overview li { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-secondary); font-size: var(--font-size-sm); }
+.incident-detail__evidence-groups { display: grid; gap: var(--spacing-sm); margin: 0; padding: 0; list-style: none; }
+.incident-detail__evidence-groups > li { display: grid; gap: 8px; }
+.incident-detail__evidence-groups h4, .incident-detail__evidence-item h5 { margin: 0; color: var(--text-primary); font-size: var(--font-size-sm); }
+.incident-detail__evidence-item { display: grid; gap: 8px; padding: var(--spacing-sm); border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-secondary); }
+.incident-detail__evidence-item dl { display: grid; gap: 6px; margin: 0; }
+.incident-detail__evidence-item dl div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; }
+.incident-detail__evidence-item dt { color: var(--text-secondary); font-size: var(--font-size-sm); }
+.incident-detail__evidence-item dd { margin: 0; color: var(--text-primary); font-size: var(--font-size-sm); word-break: break-word; }
+.incident-detail__evidence-item details { color: var(--text-secondary); font-size: var(--font-size-sm); }
+.incident-detail__evidence-item code { display: block; margin-top: 6px; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.incident-detail__timeline { display: grid; gap: var(--spacing-sm); margin: 0; padding: 0; list-style: none; }
+.incident-detail__timeline li { display: grid; grid-template-columns: 156px minmax(0, 1fr); gap: var(--spacing-sm); padding-bottom: var(--spacing-sm); border-bottom: 1px solid var(--border-color); }
+.incident-detail__timeline li:last-child { padding-bottom: 0; border-bottom: 0; }
+.incident-detail__timeline time, .incident-detail__timeline span { color: var(--text-secondary); font-size: var(--font-size-sm); }
+.incident-detail__timeline p { margin: 4px 0; color: var(--text-primary); font-size: var(--font-size-sm); }
 .incident-detail__comment { justify-self: end; }
+@media (max-width: 640px) { .incident-detail__timeline li { grid-template-columns: 1fr; gap: 4px; } .incident-detail__evidence-item dl div { grid-template-columns: 1fr; gap: 2px; } }
 </style>

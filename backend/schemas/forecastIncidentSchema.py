@@ -84,6 +84,16 @@ class IncidentEvidenceOut(BaseModel):
     evidence_type: str
     observed_at: datetime
     data_gaps: list[str]
+    presentation: "IncidentEvidencePresentationOut"
+
+
+class IncidentEvidencePresentationOut(BaseModel):
+    group_key: str
+    group_label: str
+    title: str
+    summary: str
+    scope_label: str
+    technical_ref: str
 
 
 class IncidentTimelineOut(BaseModel):
@@ -96,6 +106,13 @@ class IncidentTimelineOut(BaseModel):
     to_status: str | None
     comment: str | None
     occurred_at: datetime
+    presentation: "IncidentTimelinePresentationOut"
+
+
+class IncidentTimelinePresentationOut(BaseModel):
+    action_label: str
+    summary: str
+    actor_label: str
 
 
 class DiagnosisOut(BaseModel):
