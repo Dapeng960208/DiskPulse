@@ -2,6 +2,7 @@
 import asyncio
 from datetime import datetime
 import json
+import logging
 from time import monotonic
 from typing import Iterator
 from uuid import uuid4
@@ -21,6 +22,9 @@ from services.ai_tool_service import build_tool_registry, execute_tool, tool_def
 from services.incidentAiService import render_restricted_diagnosis
 from services.project_access_service import accessible_project_ids
 from utils.auth_service import is_super_admin
+
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """你是 DiskPulse AI 助手。你只能使用已授权的只读工具查询数据。
@@ -797,6 +801,7 @@ def stream_message(
     turn_id = audit.id
     assistant_id = assistant.id
     audit_id = audit.id
+    trace_id = audit.trace_id
     conversation_id = conversation.id
     try:
         yield "user_message", {
@@ -1136,6 +1141,14 @@ def stream_message(
             "audit_id": audit.id,
         }
     except Exception as error:
+        logger.exception(
+            "AI chat stream failed trace_id=%s audit_id=%s conversation_id=%s user_id=%s error_type=%s",
+            trace_id,
+            audit_id,
+            conversation_id,
+            user_id,
+            type(error).__name__,
+        )
         # A failed flush poisons the Session; reload the durable audit after rollback.
         db.rollback()
         audit = aiCrud.get_audit(db, audit_id)
