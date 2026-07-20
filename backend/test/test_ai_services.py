@@ -12,7 +12,7 @@ from sqlalchemy import select
 from appConfig import base_config
 from models import AIConfig, AIConversation, AIAuditLog, AIMessage, User
 from routers import ai, ai_admin
-from services import ai_audit_service, ai_chat_service, ai_client
+from services import ai_audit_service, ai_chat_service, ai_client, ai_quota_confirmation_service
 from services.ai_client import AIClientError, AIClientToolArgumentsError, AIClientToolCall, AICompletionStreamEvent
 from services.ai_security import encrypt_secret
 from services.ai_security import decrypt_secret, mask_secret
@@ -904,6 +904,84 @@ def test_history_restores_unfinished_quota_confirmation_for_owner(db_session):
     with pytest.raises(HTTPException) as denied:
         ai_chat_service.get_conversation(db_session, conversation.id, 2)
     assert denied.value.status_code == 404
+
+
+def test_history_restores_confirmed_quota_adjustment_result(db_session, monkeypatch, quota_redis):
+    """A confirmation result must survive reloading the owning conversation."""
+    user = seed_user(db_session, username="owner")
+    configured = seed_model(db_session, actor_id=user.id)
+    conversation = AIConversation(user_id=user.id, model_id=configured.id, title="已执行的扩容")
+    db_session.add(conversation)
+    db_session.flush()
+    assistant = AIMessage(conversation_id=conversation.id, role="assistant", content="请确认")
+    db_session.add(assistant)
+    db_session.flush()
+    confirmation_id = "confirmed-owner-only"
+    preview = {
+        "resource": "/data/alice",
+        "old_hard_limit": 100,
+        "new_hard_limit": 120,
+        "unit": "GiB",
+    }
+    audit = AIAuditLog(
+        model_id=configured.id,
+        conversation_id=conversation.id,
+        user_id=user.id,
+        source="chat",
+        source_ref=str(conversation.id),
+        request_payload="{}",
+        response_payload=json.dumps({
+            "message_id": assistant.id,
+            "visibility": {"known": True, "project_scope_ids": [], "requires_super_admin": False},
+        }),
+        detail_payload=json.dumps([{
+            "status": "awaiting_confirmation",
+            "confirmation_id": confirmation_id,
+            "preview": preview,
+        }]),
+        status="awaiting_confirmation",
+    )
+    db_session.add(audit)
+    db_session.commit()
+    quota_redis.set(
+        ai_quota_confirmation_service._key(confirmation_id),
+        json.dumps({
+            "user_id": user.id,
+            "conversation_id": conversation.id,
+            "audit_id": audit.id,
+            "tool_name": "adjust_storage_usage_quota",
+            "arguments": {"storage_usage_id": 1, "body": {}},
+            "preview": preview,
+        }),
+    )
+    monkeypatch.setattr(ai_quota_confirmation_service, "_quota_redis_client", lambda: quota_redis)
+    monkeypatch.setattr(ai_quota_confirmation_service, "is_super_admin", lambda _user: True)
+    monkeypatch.setattr(
+        ai_quota_confirmation_service,
+        "execute_tool",
+        lambda **_kwargs: {"ok": True, "data": {"hard_limit": 120}},
+    )
+
+    ai_quota_confirmation_service.decide_confirmation(
+        db_session,
+        app=FastAPI(),
+        registry={"adjust_storage_usage_quota": SimpleNamespace(name="adjust_storage_usage_quota")},
+        conversation_id=conversation.id,
+        confirmation_id=confirmation_id,
+        decision="confirm",
+        current_user=user,
+    )
+
+    db_session.expire_all()
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+
+    restored = history["messages"][-1]["quota_confirmation"]
+    assert restored == {
+        "confirmation_id": confirmation_id,
+        "preview": preview,
+        "decided": "confirm",
+        "result": {"ok": True},
+    }
 
 
 def test_invalid_json_tool_argument_repairs_stop_after_two_attempts_and_degrade_safely(db_session, monkeypatch):

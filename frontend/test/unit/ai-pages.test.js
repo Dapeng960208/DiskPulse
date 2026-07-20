@@ -121,6 +121,37 @@ describe('AI pages interactions', () => {
     expect(wrapper.vm.messages[0].status).toBe('awaiting_confirmation');
   });
 
+  it('restores the persisted failed quota adjustment result when opening conversation history', async () => {
+    aiApi.listConversations.mockResolvedValue([{ id: 10, model_id: 1, title: '扩容历史' }]);
+    aiApi.getConversation.mockResolvedValue({
+      id: 10,
+      model_id: 1,
+      title: '扩容历史',
+      messages: [{
+        id: 2,
+        role: 'assistant',
+        content: '已执行扩容',
+        status: 'failed',
+        tool_calls: [],
+        quota_confirmation: {
+          confirmation_id: 'confirmed-owner-only',
+          decided: 'confirm',
+          result: { ok: false, error: '设备拒绝写入' },
+          preview: { resource: '/data/alice', old_hard_limit: 100, new_hard_limit: 120, unit: 'GiB' },
+        },
+      }],
+    });
+
+    const wrapper = shallowMount(AiChatPage);
+    await flushPromises();
+
+    expect(wrapper.vm.messages[0].quota_confirmation.feedback).toEqual({
+      type: 'danger',
+      text: '设备拒绝写入',
+    });
+    expect(wrapper.vm.messages[0].quota_confirmation.deciding).toBe(false);
+  });
+
   it('shows whether a confirmed AI quota expansion succeeded or failed', async () => {
     const wrapper = shallowMount(AiChatPage);
     await flushPromises();
