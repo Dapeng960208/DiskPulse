@@ -692,6 +692,17 @@ def _tool_failure_repair_instruction(tool_names: list[str]) -> dict:
     }
 
 
+def _reused_tool_result_summary_instruction() -> dict:
+    return {
+        "role": "system",
+        "content": (
+            "系统校验：本回合已成功的同参工具结果被重复请求。"
+            "后续不得调用工具，请严格基于已获得的成功、为空或失败结果直接回答用户。"
+            "空结果应明确说明未发现对应数据，不得编造补充信息。"
+        ),
+    }
+
+
 def _invalid_tool_trace(
     *,
     audit: AIAuditLog,
@@ -899,6 +910,7 @@ def stream_message(
                     final_text = raw_text
                 break
             failed_tool_names: list[str] = []
+            reused_successful_result = False
             for sequence, call in enumerate(calls, start=1):
                 audit.tool_call_count += 1
                 call_id = f"{audit.id}:{iteration}:{sequence}"
@@ -945,6 +957,7 @@ def stream_message(
                     if cached_result is not None:
                         result = cached_result
                         reused_result = True
+                        reused_successful_result = True
                     else:
                         result = execute_tool(
                             app=app,
@@ -1028,6 +1041,9 @@ def stream_message(
                     degraded_error_message = "AI 工具调用连续失败"
                     break
                 messages.append(_tool_failure_repair_instruction(failed_tool_names))
+            elif reused_successful_result:
+                messages.append(_reused_tool_result_summary_instruction())
+                tools = []
             yield "status", {"turn_id": turn_id, "status": "thinking"}
         else:
             recovery = dict(_RECOVERY_BY_REASON["tool_iteration_limit"])
