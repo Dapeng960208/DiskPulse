@@ -129,6 +129,20 @@ describe('router/routes and app shell', () => {
     expect(hasRole).toHaveBeenLastCalledWith('superadmin');
   });
 
+  it('evaluates every declared route access policy', () => {
+    const visit = (items) => items.flatMap((route) => [
+      ...(route.meta?.isAccessible ? [route.meta.isAccessible] : []),
+      ...visit(route.children || []),
+    ]);
+    const accessPolicies = visit(routes);
+
+    expect(accessPolicies.length).toBeGreaterThan(1);
+    expect(accessPolicies.map((policy) => policy())).toEqual(
+      expect.arrayContaining([200]),
+    );
+    expect(hasRole).toHaveBeenCalled();
+  });
+
   it('declares complete breadcrumb hierarchies for every detail route', () => {
     const adminRoute = routes.find((route) => route.path === '/admin');
     const detailBreadcrumbs = [

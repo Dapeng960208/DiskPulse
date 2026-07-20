@@ -3,10 +3,19 @@ import { flushPromises, shallowMount } from '@vue/test-utils';
 import { vi } from 'vitest';
 
 const apis = vi.hoisted(() => ({
-  group: { adjustQuota: vi.fn(() => Promise.resolve({ id: 1 })) },
-  usage: { adjustQuota: vi.fn(() => Promise.resolve({ id: 2 })) },
+  group: {
+    adjustQuota: vi.fn(() => Promise.resolve({ id: 1 })),
+    quotaHistory: vi.fn(() => Promise.resolve([])),
+    reconcileQuota: vi.fn(() => Promise.resolve()),
+  },
+  usage: {
+    adjustQuota: vi.fn(() => Promise.resolve({ id: 2 })),
+    quotaHistory: vi.fn(() => Promise.resolve([])),
+    reconcileQuota: vi.fn(() => Promise.resolve()),
+  },
   confirm: vi.fn(() => Promise.resolve()),
   success: vi.fn(),
+  warning: vi.fn(),
 }));
 
 vi.mock('@/api/group-api.js', () => ({ default: apis.group }));
@@ -14,7 +23,7 @@ vi.mock('@/api/storage-usage-api.js', () => ({ default: apis.usage }));
 vi.mock('element-plus', async (importOriginal) => ({
   ...(await importOriginal()),
   ElMessageBox: { confirm: apis.confirm },
-  ElMessage: { success: apis.success },
+  ElMessage: { success: apis.success, warning: apis.warning },
 }));
 
 const passthrough = (name) => defineComponent({
@@ -46,7 +55,12 @@ const stubs = {
       return () => h('label', [props.label, slots.default?.()]);
     },
   }),
-  ElInputNumber: defineComponent({ name: 'ElInputNumber', template: '<input />' }),
+  ElInputNumber: defineComponent({
+    name: 'ElInputNumber',
+    props: { modelValue: Number },
+    emits: ['update:modelValue'],
+    template: '<input />',
+  }),
   ElSelect: defineComponent({
     name: 'ElSelect',
     props: { modelValue: String, disabled: Boolean },
@@ -57,7 +71,7 @@ const stubs = {
   ElOption: passthrough('ElOption'),
   ElButton: defineComponent({
     name: 'ElButton',
-    emits: ['click'],
+    emits: ['click', 'update:modelValue'],
     setup(_, { emit, slots }) {
       return () => h('button', { onClick: () => emit('click') }, slots.default?.());
     },
@@ -166,5 +180,50 @@ describe('quota adjustment dialog', () => {
 
     expect(apis.confirm).toHaveBeenCalled();
     expect(apis.group.adjustQuota).toHaveBeenCalledWith(1, expect.objectContaining({ hard_limit: 50 }));
+  });
+
+  it('reconciles an unknown device outcome and refreshes quota history', async () => {
+    const unknownOutcome = Object.assign(new Error('unknown'), {
+      response: { data: { detail: { code: 'quota_outcome_unknown' } } },
+    });
+    apis.group.adjustQuota.mockRejectedValueOnce(unknownOutcome);
+    apis.group.quotaHistory
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: 1, action: 'reconcile', outcome: 'success', occurred_at: 'now' }]);
+    const wrapper = await mountDialog();
+    wrapper.vm.$.exposed.open(row());
+    await flushPromises();
+
+    await expect(wrapper.vm.$.setupState.submit()).rejects.toBe(unknownOutcome);
+    expect(apis.warning).toHaveBeenCalledWith('设备写入结果未知，请执行只读对账');
+
+    await wrapper.findAll('button').find((button) => button.text() === '只读对账').trigger('click');
+    await flushPromises();
+
+    expect(apis.group.reconcileQuota).toHaveBeenCalledWith(1);
+    expect(apis.group.quotaHistory).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain('reconcile · success · now');
+  });
+
+  it('updates quota fields through their v-model bindings', async () => {
+    const wrapper = await mountDialog('storage_usage');
+    wrapper.vm.$.exposed.open(row({
+      storage_cluster: { storage_type: 'isilon' },
+    }));
+    await flushPromises();
+
+    const numberInputs = wrapper.findAllComponents({ name: 'ElInputNumber' });
+    await numberInputs[0].vm.$emit('update:modelValue', 90);
+    await numberInputs[1].vm.$emit('update:modelValue', 70);
+    await numberInputs[2].vm.$emit('update:modelValue', 5);
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' });
+    await selects[2].vm.$emit('update:modelValue', 'hours');
+
+    expect(wrapper.vm.$.exposed.model).toMatchObject({
+      hard_limit: 90,
+      soft_limit: 70,
+      soft_grace: 5,
+      soft_grace_unit: 'hours',
+    });
   });
 });

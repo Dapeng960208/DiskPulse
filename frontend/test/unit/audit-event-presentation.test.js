@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   auditActionLabel,
+  auditActionDescription,
+  auditActorTypeLabel,
+  auditOutcomeLabel,
   auditPhaseLabel,
   auditRequesterLabel,
   auditSummaryEntries,
   formatAuditOccurredAt,
+  hasAuditValue,
 } from '@/utils/audit-event-display.js';
 
 describe('统一操作审计展示', () => {
@@ -27,5 +31,13 @@ describe('统一操作审计展示', () => {
       { label: '更新用户目录', value: '12' },
       { label: '更新项目组', value: '3' },
     ]);
+  });
+
+  it('formats actor, action, outcome, and retained values consistently', () => {
+    expect(auditActorTypeLabel('ai_tool')).toBe('AI 工具');
+    expect(auditActionDescription('storage.collection.run')).toBe('存储采集（storage.collection.run）');
+    expect(auditOutcomeLabel('denied')).toBe('已拒绝');
+    expect(hasAuditValue({ status_code: 200 })).toBe(true);
+    expect(hasAuditValue([])).toBe(false);
   });
 });

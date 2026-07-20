@@ -129,6 +129,23 @@ describe('composables', () => {
     expect(form.submitting.value).toBe(false);
   });
 
+  it('allows callers to control the submitting state explicitly or by toggling', () => {
+    const form = useForm(
+      () => ({ name: '' }),
+      {
+        rules: () => ({}),
+        doSubmit: vi.fn(),
+        onSuccess: vi.fn(),
+        onFailure: vi.fn(),
+      },
+    );
+
+    form.toggleSubmitting(true);
+    expect(form.submitting.value).toBe(true);
+    form.toggleSubmitting();
+    expect(form.submitting.value).toBe(false);
+  });
+
   it('focuses and scrolls to the first invalid field after validation fails', async () => {
     const invalidField = {
       focus: vi.fn(),
