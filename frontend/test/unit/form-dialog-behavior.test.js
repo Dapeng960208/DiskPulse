@@ -175,6 +175,7 @@ describe('form dialogs follow create, update, and dependency-change paths', () =
     await flushPromises();
     await wrapper.findComponent({ name: 'ProjectSelect' }).vm.$emit('update:modelValue', 3);
     await wrapper.findComponent({ name: 'StorageClusterSelect' }).vm.$emit('update:modelValue', 8);
+    await wrapper.findComponent({ name: 'GroupTagSelect' }).vm.$emit('update:modelValue', 5);
     await flushPromises();
     await wrapper.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'volume');
     const switches = wrapper.findAllComponents({ name: 'ElSwitch' });
@@ -187,6 +188,7 @@ describe('form dialogs follow create, update, and dependency-change paths', () =
     expect(mocks.apis.group.create).toHaveBeenCalledWith(expect.objectContaining({
       project_id: 3,
       storage_cluster_id: 8,
+      group_tag_id: 5,
       volume_id: null,
     }));
     expect(mocks.apis.group.create.mock.lastCall[0]).not.toHaveProperty('target_type');

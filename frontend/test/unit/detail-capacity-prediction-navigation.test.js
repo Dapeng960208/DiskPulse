@@ -1,8 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { accessMock } = vi.hoisted(() => ({
-  accessMock: vi.fn(),
+const { fetchGroup, setDetailBreadcrumb, visibilityMock } = vi.hoisted(() => ({
+  fetchGroup: vi.fn(),
+  setDetailBreadcrumb: vi.fn(),
+  visibilityMock: vi.fn(),
 }));
 
 vi.mock('vue-router', () => ({
@@ -23,8 +25,16 @@ vi.mock('vue', async (importOriginal) => {
 
 vi.mock('@/api/capacity-prediction-api.js', () => ({
   default: {
-    access: accessMock,
+    visibility: visibilityMock,
   },
+}));
+
+vi.mock('@/api/group-api.js', () => ({
+  default: { fetchById: fetchGroup },
+}));
+
+vi.mock('@/stores/breadcrumbs', () => ({
+  useBreadcrumbs: () => ({ setDetailBreadcrumb }),
 }));
 
 vi.mock('@/api/storage-usage-api.js', () => ({
@@ -64,11 +74,14 @@ const global = {
 
 describe('detail capacity prediction navigation', () => {
   beforeEach(() => {
-    accessMock.mockReset();
+    fetchGroup.mockReset();
+    fetchGroup.mockResolvedValue({ id: 234, name: '研发组', project: { name: '项目 A' } });
+    setDetailBreadcrumb.mockReset();
+    visibilityMock.mockReset();
   });
 
   it('keeps the user-directory detail focused on realtime monitoring', async () => {
-    accessMock.mockResolvedValue({ visible: true, can_manage_plans: false });
+    visibilityMock.mockResolvedValue({ visible: true });
 
     const wrapper = mount(UsageDetailPage, { global });
     await flushPromises();
@@ -77,11 +90,10 @@ describe('detail capacity prediction navigation', () => {
     expect(wrapper.find('.detail-monitor-page__actions').exists()).toBe(false);
     expect(wrapper.find('[data-testid="capacity-prediction-entry"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="capacity-prediction-panel"]').exists()).toBe(false);
+    expect(visibilityMock).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the project-group detail focused on realtime monitoring', async () => {
-    accessMock.mockResolvedValue({ visible: true, can_manage_plans: true });
-
     const wrapper = mount(GroupDetailPage, { global });
     await flushPromises();
 

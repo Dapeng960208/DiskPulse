@@ -214,9 +214,8 @@ describe('component internal spacing preservation guards', () => {
     expect(writeFormSource).toMatch(
       /\.write-form-dialog[\s\S]*?\.el-dialog__body\s*{[^}]*padding:\s*var\(--spacing-xl\)/,
     );
-    expect(projectListSource).toMatch(
-      /\.el-tabs__content\s*{[^}]*padding:\s*var\(--spacing-lg\) 0 0/s,
-    );
+    expect(projectListSource).toContain('<ProjectTable class="project-list-page__table" />');
+    expect(projectListSource).not.toContain('.el-tabs__content');
     expect(dashboardSource).toMatch(
       /\.dashboard-grid\s*{[^}]*gap:\s*var\(--spacing-xl\)/s,
     );

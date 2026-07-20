@@ -38,7 +38,7 @@ describe('group tags', () => {
     expect(source).toContain(':pagination="{ page: queryParams.page, pageSize: queryParams.size, total: result.total, hideOnSinglePage: true }"');
   });
 
-  it('submits project, cluster, and environment tag ids from the group form', () => {
+  it('uses project, cluster, and environment tag selectors in the group form', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/pages/group/components/GroupFormDialog.vue'),
       'utf8',
@@ -46,9 +46,6 @@ describe('group tags', () => {
 
     expect(source).toContain('<StorageClusterSelect');
     expect(source).toContain('<GroupTagSelect');
-    expect(source).toMatch(/payload\.project_id\s*=\s*model\.value\.project_id/);
-    expect(source).toMatch(/payload\.storage_cluster_id\s*=\s*model\.value\.storage_cluster_id/);
-    expect(source).toMatch(/payload\.group_tag_id\s*=\s*model\.value\.group_tag_id/);
     expect(source).not.toMatch(/ProjectStorageEnvironment|project_environment/);
   });
 });
