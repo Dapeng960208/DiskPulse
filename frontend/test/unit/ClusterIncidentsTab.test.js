@@ -84,6 +84,35 @@ describe('ClusterIncidentsTab', () => {
     expect(wrapper.vm.formatLocalDateTime('2026-07-20T20:02:01')).toBe('2026-07-20 20:02:01');
   });
 
+  it('keeps the current page ordered by latest evidence when an API response is out of order', async () => {
+    incidentApi.fetchIncidents.mockResolvedValueOnce({
+      total: 2,
+      content: [
+        { id: 1, display_name: 'older', last_evidence_at: '2026-07-20T09:00:00Z' },
+        { id: 2, display_name: 'newer', last_evidence_at: '2026-07-20T11:00:00Z' },
+      ],
+    });
+    const wrapper = shallowMount(ClusterIncidentsTab, {
+      props: { clusterId: 42 },
+      global: {
+        directives: { loading: () => {} },
+        stubs: {
+          QueryForm,
+          ElFormItem: { template: '<div><slot /></div>' },
+          ElSelect: Select,
+          ElOption: { template: '<option />' },
+          ElTable: { props: ['data'], template: '<div>{{ JSON.stringify(data) }}<slot /></div>' },
+          ElTableColumn: { template: '<div />' },
+          ElPagination: { template: '<div />' },
+          ElTag: { template: '<span><slot /></span>' },
+        },
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.vm.incidents.map((item) => item.id)).toEqual([2, 1]);
+  });
+
   it('filters associated events within the tab instead of relying on the detail-level time filter', async () => {
     const wrapper = shallowMount(ClusterIncidentsTab, {
       props: { clusterId: 42 },

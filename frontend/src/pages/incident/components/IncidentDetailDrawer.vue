@@ -144,9 +144,19 @@ function evidencePresentation(evidence) {
   };
 }
 
+function sortNewestFirst(items, timestampKey) {
+  return [...items].sort((left, right) => {
+    const leftAt = Date.parse(left[timestampKey]);
+    const rightAt = Date.parse(right[timestampKey]);
+    if (Number.isNaN(leftAt)) return Number.isNaN(rightAt) ? Number(right.id || 0) - Number(left.id || 0) : 1;
+    if (Number.isNaN(rightAt)) return -1;
+    return rightAt - leftAt || Number(right.id || 0) - Number(left.id || 0);
+  });
+}
+
 const evidenceGroups = computed(() => {
   const groups = new Map();
-  for (const evidence of current.value.evidence || []) {
+  for (const evidence of sortNewestFirst(current.value.evidence || [], 'observed_at')) {
     const presentation = evidencePresentation(evidence);
     const key = presentation.group_key || evidence.source || 'other';
     if (!groups.has(key)) {
@@ -165,6 +175,8 @@ function timelinePresentation(item) {
     actor_label: item.actor_user_id == null ? '系统' : `用户 #${item.actor_user_id}`,
   };
 }
+
+const timelineItems = computed(() => sortNewestFirst(current.value.timeline || [], 'occurred_at'));
 
 async function load() {
   if (!props.incident?.id || !visible.value) return;
@@ -361,8 +373,13 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
                 <div><dt>发现时间</dt><dd>{{ formatLocalDateTime(evidence.observed_at) }}</dd></div>
               </dl>
               <details>
-                <summary>技术信息</summary>
-                <code>{{ evidence.presentation.technical_ref }}</code>
+                <summary>技术关联信息</summary>
+                <dl class="incident-detail__technical-info">
+                  <div><dt>关联对象</dt><dd>{{ current.display_name || '当前对象' }}</dd></div>
+                  <div><dt>证据范围</dt><dd>{{ evidence.presentation.scope_label || '关联记录' }}</dd></div>
+                  <div><dt>证据类型</dt><dd>{{ evidence.presentation.title }}</dd></div>
+                  <div><dt>原始关联标识</dt><dd><code>{{ evidence.presentation.technical_ref }}</code></dd></div>
+                </dl>
               </details>
             </article>
           </li>
@@ -371,12 +388,12 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
 
       <section class="incident-detail__section">
         <h3>时间线</h3>
-        <p v-if="!(current.timeline || []).length">暂无操作记录。</p>
+        <p v-if="timelineItems.length === 0">暂无操作记录。</p>
         <ol
           v-else
           class="incident-detail__timeline">
           <li
-            v-for="item in current.timeline || []"
+            v-for="item in timelineItems"
             :key="item.id">
             <time>{{ formatLocalDateTime(item.occurred_at) }}</time>
             <div>
@@ -451,6 +468,10 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
 .incident-detail__evidence-item dt { color: var(--text-secondary); font-size: var(--font-size-sm); }
 .incident-detail__evidence-item dd { margin: 0; color: var(--text-primary); font-size: var(--font-size-sm); word-break: break-word; }
 .incident-detail__evidence-item details { color: var(--text-secondary); font-size: var(--font-size-sm); }
+.incident-detail__technical-info { display: grid; gap: 6px; margin: 8px 0 0; }
+.incident-detail__technical-info div { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; }
+.incident-detail__technical-info dt { color: var(--text-secondary); }
+.incident-detail__technical-info dd { margin: 0; color: var(--text-primary); }
 .incident-detail__evidence-item code { display: block; margin-top: 6px; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .incident-detail__timeline { display: grid; gap: var(--spacing-sm); margin: 0; padding: 0; list-style: none; }
 .incident-detail__timeline li { display: grid; grid-template-columns: 156px minmax(0, 1fr); gap: var(--spacing-sm); padding-bottom: var(--spacing-sm); border-bottom: 1px solid var(--border-color); }
@@ -458,5 +479,5 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
 .incident-detail__timeline time, .incident-detail__timeline span { color: var(--text-secondary); font-size: var(--font-size-sm); }
 .incident-detail__timeline p { margin: 4px 0; color: var(--text-primary); font-size: var(--font-size-sm); }
 .incident-detail__comment { justify-self: end; }
-@media (max-width: 640px) { .incident-detail__timeline li { grid-template-columns: 1fr; gap: 4px; } .incident-detail__evidence-item dl div { grid-template-columns: 1fr; gap: 2px; } }
+@media (max-width: 640px) { .incident-detail__timeline li { grid-template-columns: 1fr; gap: 4px; } .incident-detail__evidence-item dl div, .incident-detail__technical-info div { grid-template-columns: 1fr; gap: 2px; } }
 </style>

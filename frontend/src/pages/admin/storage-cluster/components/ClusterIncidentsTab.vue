@@ -23,6 +23,23 @@ const detailVisible = ref(false);
 const filters = reactive({ status: '', category: '' });
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 
+function formatLocalDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function sortLatestEvidence(items) {
+  return [...items].sort((left, right) => {
+    const leftAt = Date.parse(left.last_evidence_at);
+    const rightAt = Date.parse(right.last_evidence_at);
+    if (Number.isNaN(leftAt)) return Number.isNaN(rightAt) ? Number(right.id || 0) - Number(left.id || 0) : 1;
+    if (Number.isNaN(rightAt)) return -1;
+    return rightAt - leftAt || Number(right.id || 0) - Number(left.id || 0);
+  });
+}
+
 async function load(reset = false) {
   if (!props.clusterId) return;
   if (reset) page.value = 1;
@@ -40,7 +57,7 @@ async function load(reset = false) {
       incidentApi.fetchForecasts({ storage_cluster_id: props.clusterId, page: 1, size: 5 }),
       incidentApi.fetchAnomalies({ storage_cluster_id: props.clusterId, page: 1, size: 5 }),
     ]);
-    incidents.value = result.content || [];
+    incidents.value = sortLatestEvidence(result.content || []);
     total.value = Number(result.total) || 0;
     forecastCount.value = Number(forecasts.total) || 0;
     anomalyCount.value = Number(anomalies.total) || 0;
@@ -154,8 +171,11 @@ onMounted(load);
       <ElTableColumn
         v-if="showSecondaryColumns"
         label="最近证据"
-        prop="last_evidence_at"
-        min-width="190" />
+        min-width="190">
+        <template #default="{ row }">
+          <time :datetime="row.last_evidence_at">{{ formatLocalDateTime(row.last_evidence_at) }}</time>
+        </template>
+      </ElTableColumn>
       <ElTableColumn
         label="详情"
         align="right"

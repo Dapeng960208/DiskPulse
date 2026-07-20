@@ -28,6 +28,23 @@ const editVisible = ref(false);
 const savingEdit = ref(false);
 const editForm = reactive({ severity: 'warning', status: 'open' });
 
+function formatLocalDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function sortLatestEvidence(items) {
+  return [...items].sort((left, right) => {
+    const leftAt = Date.parse(left.last_evidence_at);
+    const rightAt = Date.parse(right.last_evidence_at);
+    if (Number.isNaN(leftAt)) return Number.isNaN(rightAt) ? Number(right.id || 0) - Number(left.id || 0) : 1;
+    if (Number.isNaN(rightAt)) return -1;
+    return rightAt - leftAt || Number(right.id || 0) - Number(left.id || 0);
+  });
+}
+
 const statusLabels = {
   open: '未处理',
   acknowledged: '已确认',
@@ -64,7 +81,7 @@ async function query() {
       ...(queryParams.status ? { status: queryParams.status } : {}),
       ...(queryParams.category ? { category: queryParams.category } : {}),
     });
-    incidents.value = result.content || [];
+    incidents.value = sortLatestEvidence(result.content || []);
     total.value = Number(result.total) || 0;
   } catch {
     incidents.value = [];
@@ -186,8 +203,11 @@ onMounted(query);
       </ElTableColumn>
       <ElTableColumn
         label="最近证据"
-        prop="last_evidence_at"
-        min-width="190" />
+        min-width="190">
+        <template #default="{ row }">
+          <time :datetime="row.last_evidence_at">{{ formatLocalDateTime(row.last_evidence_at) }}</time>
+        </template>
+      </ElTableColumn>
       <ElTableColumn
         label="操作"
         align="right"

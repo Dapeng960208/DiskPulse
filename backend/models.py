@@ -706,8 +706,9 @@ class Incident(Base):
         UniqueConstraint("correlation_key", "correlation_bucket_at", name="uq_incident_correlation_bucket"),
         CheckConstraint("status IN ('open', 'acknowledged', 'investigating', 'mitigated', 'resolved')", name="ck_incident_status"),
         CheckConstraint("category IN ('capacity_pressure', 'device_fault', 'performance_contention', 'telemetry_blindspot')", name="ck_incident_category"),
-        Index("ix_incident_project_status_updated", "project_id", "status", desc("updated_at")),
-        Index("ix_incident_cluster_asset_updated", "storage_cluster_id", "asset_type", "asset_id", desc("updated_at")),
+        Index("ix_incident_latest_evidence", desc("last_evidence_at"), desc("opened_at"), desc("id")),
+        Index("ix_incident_project_status_evidence", "project_id", "status", desc("last_evidence_at"), desc("opened_at"), desc("id")),
+        Index("ix_incident_cluster_evidence", "storage_cluster_id", desc("last_evidence_at"), desc("opened_at"), desc("id")),
         Index("ix_incident_correlation_resolved", "correlation_key", "resolved_at"),
     )
 

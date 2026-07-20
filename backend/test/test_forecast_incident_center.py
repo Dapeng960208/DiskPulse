@@ -378,6 +378,45 @@ def test_incident_api_orders_paginated_results_by_latest_evidence_time(db_sessio
     assert [item["id"] for item in response.json()["content"]] == [2, 3]
 
 
+def test_incident_event_ordering_migration_replaces_updated_at_indexes():
+    import importlib.util
+
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    migration_path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000015_incident_event_ordering_indexes.py"
+    spec = importlib.util.spec_from_file_location("incident_event_ordering_indexes", migration_path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    with sa.create_engine("sqlite://").begin() as connection:
+        connection.execute(sa.text("""
+            CREATE TABLE incidents (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER,
+                status VARCHAR(16),
+                storage_cluster_id INTEGER,
+                asset_type VARCHAR(32),
+                asset_id VARCHAR(128),
+                last_evidence_at DATETIME,
+                opened_at DATETIME,
+                updated_at DATETIME
+            )
+        """))
+        connection.execute(sa.text("CREATE INDEX ix_incident_project_status_updated ON incidents (project_id, status, updated_at)"))
+        connection.execute(sa.text("CREATE INDEX ix_incident_cluster_asset_updated ON incidents (storage_cluster_id, asset_type, asset_id, updated_at)"))
+        migration.op = Operations(MigrationContext.configure(connection))
+
+        migration.upgrade()
+        index_names = {item["name"] for item in sa.inspect(connection).get_indexes("incidents")}
+        assert "ix_incident_latest_evidence" in index_names
+        assert "ix_incident_project_status_evidence" in index_names
+        assert "ix_incident_cluster_evidence" in index_names
+        assert "ix_incident_project_status_updated" not in index_names
+        assert "ix_incident_cluster_asset_updated" not in index_names
+
+
 def test_forecast_incident_migration_compiles_and_upgrades_sqlite():
     import importlib.util
     import io

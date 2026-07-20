@@ -39,7 +39,11 @@ def list_incidents(
         statement = statement.where(Incident.category == category)
     total = db.scalar(select(func.count()).select_from(statement.subquery())) or 0
     rows = db.execute(
-        statement.order_by(Incident.updated_at.desc(), Incident.id.desc())
+        statement.order_by(
+            Incident.last_evidence_at.desc(),
+            Incident.opened_at.desc(),
+            Incident.id.desc(),
+        )
         .offset((page - 1) * size)
         .limit(size)
     ).scalars().all()
@@ -163,7 +167,7 @@ def list_incident_timeline(db: Session, incident_id: int) -> list[IncidentTimeli
     return db.execute(
         select(IncidentTimeline)
         .where(IncidentTimeline.incident_id == incident_id)
-        .order_by(IncidentTimeline.occurred_at.asc(), IncidentTimeline.id.asc())
+        .order_by(IncidentTimeline.occurred_at.desc(), IncidentTimeline.id.desc())
     ).scalars().all()
 
 

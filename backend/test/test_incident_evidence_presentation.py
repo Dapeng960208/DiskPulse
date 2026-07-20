@@ -86,6 +86,14 @@ def test_incident_detail_api_returns_readable_evidence_and_timeline_presentation
                 evidence_hash="a" * 64,
             ),
             models.IncidentTimeline(
+                id=2,
+                incident_id=1,
+                event_type="evidence_added",
+                occurred_at=UTC_NOW.replace(minute=30),
+                comment="关联性能采集已过期。",
+            ),
+            models.IncidentTimeline(
+                id=1,
                 incident_id=1,
                 event_type="created",
                 occurred_at=UTC_NOW,
@@ -104,4 +112,5 @@ def test_incident_detail_api_returns_readable_evidence_and_timeline_presentation
     body = response.json()
     assert body["evidence"][0]["presentation"]["title"] == "性能采集已过期"
     assert body["evidence"][0]["presentation"]["summary"] == "性能采集自 2026-07-20 06:15 起未产生新的成功采集记录。"
-    assert body["timeline"][0]["presentation"]["action_label"] == "系统创建事件"
+    assert [item["id"] for item in body["timeline"]] == [2, 1]
+    assert body["timeline"][1]["presentation"]["action_label"] == "系统创建事件"
