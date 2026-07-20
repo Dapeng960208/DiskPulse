@@ -62,6 +62,28 @@ describe('ClusterIncidentsTab', () => {
     expect(wrapper.text()).toContain('性能异常');
   });
 
+  it('formats the latest evidence timestamp for people instead of exposing the API timestamp', async () => {
+    const wrapper = shallowMount(ClusterIncidentsTab, {
+      props: { clusterId: 42 },
+      global: {
+        directives: { loading: () => {} },
+        stubs: {
+          QueryForm,
+          ElFormItem: { template: '<div><slot /></div>' },
+          ElSelect: Select,
+          ElOption: { template: '<option />' },
+          ElTable: { props: ['data'], template: '<div>{{ JSON.stringify(data) }}<slot /></div>' },
+          ElTableColumn: { template: '<div />' },
+          ElPagination: { template: '<div />' },
+          ElTag: { template: '<span><slot /></span>' },
+        },
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.vm.formatLocalDateTime('2026-07-20T20:02:01')).toBe('2026-07-20 20:02:01');
+  });
+
   it('filters associated events within the tab instead of relying on the detail-level time filter', async () => {
     const wrapper = shallowMount(ClusterIncidentsTab, {
       props: { clusterId: 42 },

@@ -310,6 +310,74 @@ def test_incident_api_filters_before_pagination_and_enforces_project_roles(
     assert db_session.query(models.AuditEvent).filter(models.AuditEvent.action == "incident.update").count() == 1
 
 
+def test_incident_api_orders_paginated_results_by_latest_evidence_time(db_session, api_client_factory):
+    import models
+    from routers import forecast_incidents
+    from utils.security import issue_token
+
+    db_session.add_all([
+        models.User(id=2, rd_username="reader"),
+        models.Project(id=1, name="project-alpha"),
+        models.ProjectMembership(project_id=1, user_id=2, role="reader"),
+        models.StorageCluster(id=7, name="cluster-7", storage_type="netapp"),
+        models.Incident(
+            id=1,
+            correlation_key="cluster-7:group:101:device_fault",
+            correlation_bucket_at=UTC_NOW,
+            asset_type="group",
+            asset_id="101",
+            storage_cluster_id=7,
+            project_id=1,
+            vendor="netapp",
+            display_name="old-evidence",
+            category="device_fault",
+            opened_at=UTC_NOW,
+            last_evidence_at=UTC_NOW + timedelta(minutes=5),
+            updated_at=UTC_NOW + timedelta(hours=3),
+        ),
+        models.Incident(
+            id=2,
+            correlation_key="cluster-7:group:102:device_fault",
+            correlation_bucket_at=UTC_NOW,
+            asset_type="group",
+            asset_id="102",
+            storage_cluster_id=7,
+            project_id=1,
+            vendor="netapp",
+            display_name="newest-evidence",
+            category="device_fault",
+            opened_at=UTC_NOW,
+            last_evidence_at=UTC_NOW + timedelta(minutes=15),
+            updated_at=UTC_NOW + timedelta(minutes=1),
+        ),
+        models.Incident(
+            id=3,
+            correlation_key="cluster-7:group:103:device_fault",
+            correlation_bucket_at=UTC_NOW,
+            asset_type="group",
+            asset_id="103",
+            storage_cluster_id=7,
+            project_id=1,
+            vendor="netapp",
+            display_name="middle-evidence",
+            category="device_fault",
+            opened_at=UTC_NOW,
+            last_evidence_at=UTC_NOW + timedelta(minutes=10),
+            updated_at=UTC_NOW + timedelta(hours=2),
+        ),
+    ])
+    db_session.commit()
+
+    client = api_client_factory(
+        [forecast_incidents.router],
+        headers={"Authorization": f"Bearer {issue_token(2)}"},
+    )
+    response = client.get("/storage-pulse/api/v1/incidents", params={"page": 1, "size": 2})
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["content"]] == [2, 3]
+
+
 def test_forecast_incident_migration_compiles_and_upgrades_sqlite():
     import importlib.util
     import io

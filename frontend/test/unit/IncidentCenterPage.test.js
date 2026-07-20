@@ -67,6 +67,12 @@ describe('IncidentCenterPage', () => {
     expect(incidentApi.fetchIncidents).toHaveBeenCalledWith(expect.objectContaining({ page: 1, size: 20 }));
   });
 
+  it('formats the latest evidence timestamp for people instead of exposing the API timestamp', async () => {
+    const wrapper = await mountPage();
+
+    expect(wrapper.vm.formatLocalDateTime('2026-07-20T20:02:01')).toBe('2026-07-20 20:02:01');
+  });
+
   it('resets filters, updates pagination, and opens incident details', async () => {
     const wrapper = await mountPage();
     wrapper.vm.queryParams.status = 'open';

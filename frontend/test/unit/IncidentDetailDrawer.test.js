@@ -154,7 +154,7 @@ describe('IncidentDetailDrawer', () => {
     expect(tooltipContents.join('')).not.toContain('遥测');
   });
 
-  it('groups readable evidence, keeps the technical reference collapsed, and renders a Chinese incident timeline', async () => {
+  it('orders evidence and timeline from newest to oldest, and labels the technical association', async () => {
     incidentApi.fetchIncident.mockResolvedValueOnce({
       ...incident,
       category: 'telemetry_blindspot',
@@ -174,6 +174,21 @@ describe('IncidentDetailDrawer', () => {
             technical_ref: 'quality:7:performance:2026-07-20T06:15:00+00:00:telemetry_stale',
           },
         },
+        {
+          id: 2,
+          source: 'telemetry_quality',
+          source_ref: 'quality:7:performance:2026-07-20T07:15:00+00:00:coverage_insufficient',
+          evidence_type: 'coverage_insufficient',
+          observed_at: '2026-07-20T07:15:00Z',
+          presentation: {
+            group_key: 'telemetry_quality',
+            group_label: '监控可用性异常',
+            title: '性能采集覆盖不足',
+            scope_label: '性能采集',
+            summary: '性能采集覆盖率低于要求。',
+            technical_ref: 'quality:7:performance:2026-07-20T07:15:00+00:00:coverage_insufficient',
+          },
+        },
       ],
       timeline: [
         {
@@ -186,6 +201,16 @@ describe('IncidentDetailDrawer', () => {
             actor_label: '系统',
           },
         },
+        {
+          id: 2,
+          event_type: 'evidence_added',
+          occurred_at: '2026-07-20T07:15:00Z',
+          presentation: {
+            action_label: '关联新证据',
+            summary: '关联性能采集覆盖不足。',
+            actor_label: '系统',
+          },
+        },
       ],
       diagnosis: null,
     });
@@ -194,10 +219,22 @@ describe('IncidentDetailDrawer', () => {
     expect(wrapper.text()).toContain('关联概览');
     expect(wrapper.text()).toContain('监控可用性异常');
     expect(wrapper.text()).toContain('性能采集已过期');
+    expect(wrapper.text()).toContain('性能采集覆盖不足');
     expect(wrapper.text()).toContain('性能采集自 2026-07-20 06:15 起未产生新的成功采集记录。');
     expect(wrapper.text()).toContain('系统创建事件');
     expect(wrapper.text()).not.toContain('追溯编号');
     expect(wrapper.find('details').attributes('open')).toBeUndefined();
-    expect(wrapper.find('details').text()).toContain('技术信息');
+    expect(wrapper.find('details').text()).toContain('技术关联信息');
+    expect(wrapper.find('details').text()).toContain('关联对象');
+    expect(wrapper.find('details').text()).toContain('证据范围');
+    expect(wrapper.find('details').text()).toContain('原始关联标识');
+    expect(wrapper.findAll('.incident-detail__evidence-item h5').map((item) => item.text())).toEqual([
+      '性能采集覆盖不足',
+      '性能采集已过期',
+    ]);
+    expect(wrapper.findAll('.incident-detail__timeline > li').map((item) => item.text())).toEqual([
+      expect.stringContaining('关联新证据'),
+      expect.stringContaining('系统创建事件'),
+    ]);
   });
 });
