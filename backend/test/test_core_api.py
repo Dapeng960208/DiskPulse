@@ -75,6 +75,16 @@ class TestCoreApi:
                 soft_limit=80,
                 soft_use_ratio=50,
             )
+            high_utilization_project = models.Project(
+                id=2,
+                name="beta",
+                recipients="1",
+                is_alert=True,
+                status=1,
+                limit=100,
+                used=75,
+                use_ratio=75,
+            )
             cluster = models.StorageCluster(
                 id=1,
                 name="cluster-a",
@@ -88,6 +98,17 @@ class TestCoreApi:
                 used=250,
                 use_ratio=25,
             )
+            high_utilization_cluster = models.StorageCluster(
+                id=2,
+                name="cluster-b",
+                storage_type="netapp",
+                storage_host="storage-b.local",
+                storage_port=443,
+                is_active=True,
+                limit=1000,
+                used=750,
+                use_ratio=75,
+            )
             group_tag = models.GroupTag(id=1, name="production")
             aggregate_db = models.Aggregate(
                 id=1,
@@ -96,6 +117,15 @@ class TestCoreApi:
                 limit=500,
                 used=125,
                 use_ratio=25,
+                updated_at=datetime.fromisoformat(NOW),
+            )
+            high_utilization_aggregate = models.Aggregate(
+                id=2,
+                storage_cluster_id=1,
+                name="aggr-b",
+                limit=500,
+                used=375,
+                use_ratio=75,
                 updated_at=datetime.fromisoformat(NOW),
             )
             volume = models.Volume(
@@ -114,6 +144,22 @@ class TestCoreApi:
                 allocated=200,
                 updated_at=datetime.fromisoformat(NOW),
             )
+            high_utilization_volume = models.Volume(
+                id=2,
+                storage_cluster_id=1,
+                name="vol-b",
+                vserver="svm-b",
+                aggregate="aggr-b",
+                state="online",
+                type="rw",
+                limit=400,
+                used=300,
+                use_ratio=75,
+                soft_limit=320,
+                soft_use_ratio=93.75,
+                allocated=300,
+                updated_at=datetime.fromisoformat(NOW),
+            )
             qtree = models.Qtree(
                 id=1,
                 storage_cluster_id=1,
@@ -124,6 +170,21 @@ class TestCoreApi:
                 use_ratio=25,
                 soft_limit=240,
                 soft_use_ratio=31.25,
+                style="unix",
+                oplocks="enabled",
+                status="normal",
+                updated_at=datetime.fromisoformat(NOW),
+            )
+            high_utilization_qtree = models.Qtree(
+                id=2,
+                storage_cluster_id=1,
+                volume_id=2,
+                name="qtree-b",
+                limit=300,
+                used=225,
+                use_ratio=75,
+                soft_limit=240,
+                soft_use_ratio=93.75,
                 style="unix",
                 oplocks="enabled",
                 status="normal",
@@ -147,6 +208,24 @@ class TestCoreApi:
                 back_up_enabled=True,
                 updated_at=datetime.fromisoformat(NOW),
             )
+            high_utilization_group = models.Group(
+                id=2,
+                project_id=1,
+                storage_cluster_id=1,
+                group_tag_id=1,
+                qtree_id=2,
+                in_charge_user_id=1,
+                name="beta-team",
+                linux_path="/data/beta",
+                back_path="/backup/beta",
+                limit=300,
+                used=225,
+                use_ratio=75,
+                soft_limit=240,
+                soft_use_ratio=93.75,
+                back_up_enabled=True,
+                updated_at=datetime.fromisoformat(NOW),
+            )
             storage_usage_db = models.StorageUsage(
                 id=1,
                 storage_cluster_id=1,
@@ -158,6 +237,23 @@ class TestCoreApi:
                 use_ratio=20,
                 soft_limit=80,
                 soft_use_ratio=25,
+                file_used=10,
+                file_limit=1000,
+                updated_at=datetime.fromisoformat(NOW),
+                access_time=datetime.fromisoformat(NOW),
+                modify_time=datetime.fromisoformat(NOW),
+            )
+            high_utilization_storage_usage = models.StorageUsage(
+                id=2,
+                storage_cluster_id=1,
+                user_id=1,
+                group_id=2,
+                linux_path="/data/beta/alice",
+                limit=100,
+                used=75,
+                use_ratio=75,
+                soft_limit=80,
+                soft_use_ratio=93.75,
                 file_used=10,
                 file_limit=1000,
                 updated_at=datetime.fromisoformat(NOW),
@@ -208,13 +304,20 @@ class TestCoreApi:
                 [
                     user,
                     project,
+                    high_utilization_project,
                     cluster,
+                    high_utilization_cluster,
                     group_tag,
                     aggregate_db,
+                    high_utilization_aggregate,
                     volume,
+                    high_utilization_volume,
                     qtree,
+                    high_utilization_qtree,
                     group_db,
+                    high_utilization_group,
                     storage_usage_db,
+                    high_utilization_storage_usage,
                     alert,
                     backup,
                     pending_backup,
@@ -267,6 +370,46 @@ class TestCoreApi:
             resource = response.json()["content"][0]
             assert resource["capacity"]["limit"]["unit"] == "GB"
             assert resource["capacity"]["used"]["unit"] == "GB"
+
+    def test_storage_resource_lists_filter_by_inclusive_utilization_range(self):
+        resources = [
+            ("/storage-pulse/api/storage-clusters/", 2),
+            ("/storage-pulse/api/aggregates/", 2),
+            ("/storage-pulse/api/volumes/", 2),
+            ("/storage-pulse/api/qtrees/", 2),
+            ("/storage-pulse/api/groups/", 2),
+            ("/storage-pulse/api/storage-usages/", 2),
+            ("/storage-pulse/api/projects/", 2),
+        ]
+
+        for path, expected_id in resources:
+            response = self.client.get(
+                path,
+                params={"page": 1, "size": 20, "use_ratio_min": 70, "use_ratio_max": 80},
+            )
+
+            assert response.status_code == 200
+            assert response.json()["total"] == 1
+            assert [item["id"] for item in response.json()["content"]] == [expected_id]
+
+    def test_storage_resource_lists_reject_reversed_utilization_range(self):
+        paths = [
+            "/storage-pulse/api/storage-clusters/",
+            "/storage-pulse/api/aggregates/",
+            "/storage-pulse/api/volumes/",
+            "/storage-pulse/api/qtrees/",
+            "/storage-pulse/api/groups/",
+            "/storage-pulse/api/storage-usages/",
+            "/storage-pulse/api/projects/",
+        ]
+
+        for path in paths:
+            response = self.client.get(
+                path,
+                params={"page": 1, "size": 20, "use_ratio_min": 80, "use_ratio_max": 70},
+            )
+
+            assert response.status_code == 422
 
     def test_volume_bound_group_image_resolves_owning_volume(self, tmp_path):
         self.bind_seeded_group_to_volume()
