@@ -334,6 +334,13 @@ def _message_turn_metadata(message: AIMessage, audits_by_message: dict[int, AIAu
     pending_confirmation = ai_quota_confirmation_service.pending_confirmation_from_audit(audit)
     if pending_confirmation is not None:
         metadata["quota_confirmation"] = pending_confirmation
+    else:
+        completed_confirmation = ai_quota_confirmation_service.completed_confirmation_from_audit(audit)
+        if completed_confirmation is not None:
+            metadata["quota_confirmation"] = completed_confirmation
+            # The card carries a device-write failure itself; do not turn a
+            # completed user decision into the unrelated "generation failed" UI.
+            metadata["status"] = "succeeded"
     return metadata
 
 

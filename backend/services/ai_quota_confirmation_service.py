@@ -23,6 +23,7 @@ _PREVIEW_FIELDS = frozenset({
     "old_hard_limit", "old_soft_limit", "new_hard_limit", "new_soft_limit",
     "unit", "change_reason",
 })
+_TERMINAL_CONFIRMATION_STATUSES = frozenset({"succeeded", "failed", "cancelled"})
 _CONSUME_SCRIPT = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
     return redis.call('del', KEYS[1])
@@ -119,6 +120,109 @@ def pending_confirmation_from_audit(
     return None
 
 
+def completed_confirmation_from_audit(audit: AIAuditLog) -> dict | None:
+    """Restore the safe terminal confirmation state for a conversation reload."""
+    if audit.status not in _TERMINAL_CONFIRMATION_STATUSES:
+        return None
+    try:
+        detail = json.loads(audit.detail_payload or "[]")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(detail, list):
+        return None
+    for entry in reversed(detail):
+        if not isinstance(entry, dict) or entry.get("status") not in _TERMINAL_CONFIRMATION_STATUSES:
+            continue
+        confirmation_id = entry.get("confirmation_id")
+        preview = entry.get("preview")
+        decision = entry.get("decision")
+        if (
+            not isinstance(confirmation_id, str)
+            or not isinstance(preview, dict)
+            or decision not in {"confirm", "cancel"}
+        ):
+            continue
+        confirmation = {
+            "confirmation_id": confirmation_id,
+            "preview": {key: preview[key] for key in _PREVIEW_FIELDS if key in preview},
+            "decided": decision,
+        }
+        if decision == "confirm":
+            result = entry.get("result")
+            if not isinstance(result, dict) or not isinstance(result.get("ok"), bool):
+                continue
+            safe_result = {"ok": result["ok"]}
+            error = result.get("error")
+            if isinstance(error, str) and error:
+                safe_result["error"] = error[:256]
+            confirmation["result"] = safe_result
+        return confirmation
+    return None
+
+
+def _safe_result(result: dict | None) -> dict | None:
+    if not isinstance(result, dict) or not isinstance(result.get("ok"), bool):
+        return None
+    safe_result = {"ok": result["ok"]}
+    error = result.get("error")
+    if isinstance(error, str) and error:
+        safe_result["error"] = error[:256]
+    return safe_result
+
+
+def _audit_visibility(audit: AIAuditLog, detail: list) -> dict | None:
+    """Reuse the audit's established visibility marker for terminal traces."""
+    for trace in reversed(detail):
+        if isinstance(trace, dict) and isinstance(trace.get("visibility"), dict):
+            return trace["visibility"]
+    try:
+        response = json.loads(audit.response_payload or "{}")
+    except json.JSONDecodeError:
+        return None
+    visibility = response.get("visibility") if isinstance(response, dict) else None
+    return visibility if isinstance(visibility, dict) else None
+
+
+def _complete_confirmation(
+    audit: AIAuditLog,
+    *,
+    record: dict,
+    confirmation_id: str,
+    decision: str,
+    status_value: str,
+    result: dict | None = None,
+    error_message: str | None = None,
+) -> None:
+    try:
+        detail = json.loads(audit.detail_payload or "[]")
+    except json.JSONDecodeError:
+        detail = []
+    if not isinstance(detail, list):
+        detail = []
+    entry = {
+        "status": status_value,
+        "confirmation_id": confirmation_id,
+        "decision": decision,
+        "preview": {
+            key: value
+            for key, value in (record.get("preview") or {}).items()
+            if key in _PREVIEW_FIELDS
+        },
+    }
+    visibility = _audit_visibility(audit, detail)
+    if visibility is not None:
+        entry["visibility"] = visibility
+    safe_result = _safe_result(result)
+    if safe_result is not None:
+        entry["result"] = safe_result
+    detail.append(entry)
+    audit.status = status_value
+    audit.detail_payload = json.dumps(detail, ensure_ascii=False)
+    audit.error_message = error_message
+    audit.finished_at = datetime.now()
+    audit.updated_at = datetime.now()
+
+
 def prepare_confirmation(
     db: Session,
     *,
@@ -192,16 +296,27 @@ def decide_confirmation(
     if audit is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI audit not found")
     if decision == "cancel":
-        audit.status = "cancelled"
-        audit.finished_at = datetime.now()
-        audit.updated_at = datetime.now()
+        _complete_confirmation(
+            audit,
+            record=record,
+            confirmation_id=confirmation_id,
+            decision="cancel",
+            status_value="cancelled",
+        )
         db.commit()
         return {"decision": "cancel", "confirmation_id": confirmation_id}
     definition = registry.get(record["tool_name"])
     if definition is None or not is_quota_write_tool(definition.name):
-        audit.status = "failed"
-        audit.error_message = "quota tool is no longer registered"
-        audit.finished_at = datetime.now()
+        error_message = "quota tool is no longer registered"
+        _complete_confirmation(
+            audit,
+            record=record,
+            confirmation_id=confirmation_id,
+            decision="confirm",
+            status_value="failed",
+            result={"ok": False, "error": error_message},
+            error_message=error_message,
+        )
         db.commit()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="quota tool is no longer available")
     # Revalidate the Redis-bound, normalized arguments immediately before execution.
@@ -212,8 +327,14 @@ def decide_confirmation(
         arguments=record["arguments"],
         current_user=current_user,
     )
-    audit.status = "succeeded" if result.get("ok") else "failed"
-    audit.finished_at = datetime.now()
-    audit.updated_at = datetime.now()
+    _complete_confirmation(
+        audit,
+        record=record,
+        confirmation_id=confirmation_id,
+        decision="confirm",
+        status_value="succeeded" if result.get("ok") else "failed",
+        result=result,
+        error_message=result.get("error") if not result.get("ok") else None,
+    )
     db.commit()
     return {"decision": "confirm", "confirmation_id": confirmation_id, "result": result}

@@ -938,6 +938,7 @@ def test_history_restores_confirmed_quota_adjustment_result(db_session, monkeypa
             "status": "awaiting_confirmation",
             "confirmation_id": confirmation_id,
             "preview": preview,
+            "visibility": {"known": True, "project_scope_ids": [], "requires_super_admin": False},
         }]),
         status="awaiting_confirmation",
     )
@@ -976,6 +977,7 @@ def test_history_restores_confirmed_quota_adjustment_result(db_session, monkeypa
     history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
 
     restored = history["messages"][-1]["quota_confirmation"]
+    assert history["messages"][-1]["status"] == "succeeded"
     assert restored == {
         "confirmation_id": confirmation_id,
         "preview": preview,

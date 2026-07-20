@@ -65,9 +65,30 @@ async function openConversation(id) {
   const conversation = await aiApi.getConversation(id);
   activeConversationId.value = id;
   selectedModelId.value = conversation.model_id;
-  messages.value = conversation.messages || [];
+  messages.value = (conversation.messages || []).map(restoreQuotaConfirmation);
   autoFollowMessages.value = true;
   await scrollToBottom(true);
+}
+
+function quotaConfirmationFeedback(confirmation) {
+  if (confirmation?.decided === 'cancel') return { type: 'info', text: '已取消配额调整' };
+  const result = confirmation?.result;
+  return {
+    type: result?.ok === true ? 'success' : 'danger',
+    text: result?.ok === true ? '配额调整成功' : (result?.error || '配额调整失败，请稍后重试'),
+  };
+}
+
+function restoreQuotaConfirmation(message) {
+  const confirmation = message?.quota_confirmation;
+  if (!confirmation) return message;
+  const restored = {
+    ...confirmation,
+    deciding: false,
+    error: confirmation.error || '',
+  };
+  if (restored.decided) restored.feedback = quotaConfirmationFeedback(restored);
+  return { ...message, quota_confirmation: restored };
 }
 
 async function removeConversation(id) {
@@ -235,16 +256,14 @@ async function decideQuotaConfirmation(message, decision) {
     );
     confirmation.decided = decision;
     if (decision === 'cancel') {
-      confirmation.feedback = { type: 'info', text: '已取消配额调整' };
+      confirmation.feedback = quotaConfirmationFeedback(confirmation);
       message.status = 'succeeded';
       return;
     }
     const result = response?.result;
     const succeeded = result?.ok === true;
-    confirmation.feedback = {
-      type: succeeded ? 'success' : 'danger',
-      text: succeeded ? '配额调整成功' : (result?.error || '配额调整失败，请稍后重试'),
-    };
+    confirmation.result = result;
+    confirmation.feedback = quotaConfirmationFeedback(confirmation);
     message.status = 'succeeded';
     const pendingTool = message.tool_calls?.find((tool) => tool.status === 'awaiting_confirmation');
     if (pendingTool) {
