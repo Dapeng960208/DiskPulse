@@ -146,8 +146,12 @@ describe('IncidentDetailDrawer', () => {
 
     const descriptionLabels = wrapper.findAllComponents({ name: 'ElDescriptionsItem' })
       .map((item) => item.attributes('label'));
+    const tooltipContents = wrapper.findAllComponents({ name: 'ElTooltip' })
+      .map((tooltip) => tooltip.attributes('content'));
     expect(descriptionLabels).toEqual(expect.arrayContaining(['受影响对象', '事件类型']));
     expect(wrapper.text()).toContain('监控盲区');
+    expect(tooltipContents).toContain('监控盲区：容量、厂商事件或性能监控采集过期、采集失败或覆盖率不足，当前数据不足以可靠判断资产状态。');
+    expect(tooltipContents.join('')).not.toContain('遥测');
   });
 
   it('groups readable evidence, keeps the technical reference collapsed, and renders a Chinese incident timeline', async () => {
