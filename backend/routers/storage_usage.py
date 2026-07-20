@@ -16,7 +16,6 @@ from routers.common import handle_exceptions
 from services import audit_service, quotaService
 from services import project_access_service
 from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
-from utils.auth_service import is_super_admin
 from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 from utils.storageTarget import resolve_group_storage_target
 from fastapi.responses import StreamingResponse
@@ -212,15 +211,6 @@ def adjust_storage_usage_quota(
     current_user: CurrentUserDep,
     db: Session = Depends(get_db),
 ):
-    if not is_super_admin(current_user):
-        storage_usage = storageUsageCrud.get_storage_usage_by_id(db, storage_usage_id)
-        if storage_usage is None or storage_usage.group_id is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="StorageUsage not found")
-        quotaService.require_group_quota_adjustment_permission(
-            db=db,
-            group_id=storage_usage.group_id,
-            current_user=current_user,
-        )
     return quotaService.adjust_storage_usage_quota(
         db,
         storage_usage_id=storage_usage_id,
