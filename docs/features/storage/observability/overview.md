@@ -7,6 +7,7 @@
 - 容量成功表示 PostgreSQL 当前态已提交；厂商事件成功表示事件已落库；性能成功表示 QuestDB 已提交。
 - `empty` 仍表示本轮成功且数据新鲜；失败、跳过和从未成功分别保留不同状态。
 - 容量和厂商事件在最后成功 150 秒内为 `fresh`，性能在 630 秒内为 `fresh`；超过阈值为 `stale`。
+- 遥测质量快照从 QuestDB 读取性能和容量使用原始点时，窗口下限必须以 UTC RFC 3339 `Z` 字符串绑定，不能传递带时区的 Python `datetime`；QuestDB PGWire 不支持 SQLAlchemy 生成的 `timestamptz` 参数类型。该派生读取失败仍不得影响原始采集提交。
 
 ## 健康、指标与权限
 
