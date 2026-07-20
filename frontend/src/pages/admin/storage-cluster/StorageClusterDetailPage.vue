@@ -350,10 +350,10 @@ onBeforeMount(() => {
   <div class="storage-health-page flex flex-col flex-1 min-h-0">
     <ElCard
       v-if="clusterId"
-      class="flex-auto min-h-0">
+      class="storage-health-page__card">
       <ElTabs
         v-model="activeTab"
-        class="h-full">
+        class="storage-health-page__tabs">
         <FilterForm
           v-if="usesTimeRange"
           class="storage-health-filter"
@@ -716,6 +716,49 @@ onBeforeMount(() => {
   overflow-x: hidden;
 }
 
+.storage-health-page__card {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.storage-health-page__card :deep(.el-card__body) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.storage-health-page__tabs {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.storage-health-page__tabs :deep(.el-tabs__header) {
+  flex: 0 0 auto;
+}
+
+.storage-health-page__tabs :deep(.el-tabs__content) {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.storage-health-page__tabs :deep(.el-tab-pane) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
 .storage-health-filter {
   margin-bottom: var(--spacing-md);
 }
@@ -781,10 +824,6 @@ onBeforeMount(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: var(--spacing-md);
-}
-
-:deep(.el-card__body) {
-  height: 100%;
 }
 
 @media (max-width: 960px) {
