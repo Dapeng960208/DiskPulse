@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -218,6 +218,41 @@ def test_global_capacity_trend_binds_cluster_symbol_ids(monkeypatch):
 
     assert captured["params"]["cluster_ids"] == ["2", "1"]
     assert "IN (2, 1)" not in captured["query"]
+
+
+@pytest.mark.parametrize("project_id", [None, 9])
+def test_capacity_trend_binds_aware_questdb_times_as_utc_strings(monkeypatch, project_id):
+    from crud import dashboardCrud
+
+    captured = {}
+
+    class FakeQuestDB:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, _query, params):
+            captured["params"] = params
+            return SimpleNamespace(all=lambda: [])
+
+    monkeypatch.setattr(
+        dashboardCrud,
+        "get_active_clusters",
+        lambda _db: [SimpleNamespace(id=2)],
+    )
+    monkeypatch.setattr(dashboardCrud, "QuestDBSession", FakeQuestDB)
+
+    dashboardCrud.get_capacity_trend(
+        db=object(),
+        project_id=project_id,
+        start_time=datetime(2026, 6, 18, tzinfo=timezone.utc),
+        end_time=datetime(2026, 7, 17, tzinfo=timezone.utc),
+    )
+
+    assert captured["params"]["start_time"] == "2026-06-18T00:00:00Z"
+    assert captured["params"]["end_time"] == "2026-07-17T00:00:00Z"
 
 
 def test_dashboard_service_returns_not_found_for_unknown_project(db_session):

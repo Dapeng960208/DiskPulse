@@ -917,3 +917,45 @@ def test_performance_rows_bind_questdb_cutoff_as_utc_string(monkeypatch):
 
     assert forecast_incidents._performance_rows(cutoff=UTC_NOW) == []
     assert captured["params"]["cutoff"] == "2026-07-18T08:00:00Z"
+
+
+def test_capacity_points_bind_questdb_cutoff_as_utc_string(monkeypatch):
+    """Capacity forecasting must not reintroduce a QuestDB ``timestamptz`` bind."""
+    from celery_tasks.tasks import forecast_incidents
+
+    captured = {}
+
+    class Result:
+        @staticmethod
+        def mappings():
+            return Result()
+
+        @staticmethod
+        def all():
+            return []
+
+    class Connection:
+        @staticmethod
+        def execute(statement, params):
+            captured["params"] = params
+            return Result()
+
+    class QuestDBConnection:
+        @staticmethod
+        def __enter__():
+            return Connection()
+
+        @staticmethod
+        def __exit__(*args):
+            return False
+
+    target = forecast_incidents.CapacityTarget(
+        asset_ref=_asset(),
+        hard_limit=100.0,
+        table_name="group_storage_usages",
+        key_column="group_id",
+    )
+    monkeypatch.setattr(forecast_incidents, "QuestDBSession", QuestDBConnection)
+
+    assert forecast_incidents._quest_capacity_points(target, cutoff=UTC_NOW) == []
+    assert captured["params"]["cutoff"] == "2026-07-18T08:00:00Z"
