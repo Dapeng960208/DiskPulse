@@ -69,7 +69,7 @@ const categoryDescriptions = {
   capacity_pressure: '容量预测显示可能耗尽，或当前资源的有效告警规则达到阈值。默认按硬限额 80%/90%/95%；用户目录优先采用项目组规则，其次项目规则，最后系统规则。',
   device_fault: 'NetApp EMS 或 PowerScale（Isilon）厂商系统事件达到严重级别、同一故障指纹反复出现，或同一时段采集异常时创建。它表示待核查的设备健康风险，不等同于已确认硬件损坏。',
   performance_contention: '同一指标连续三个相邻 5 分钟桶偏离 28 天同星期同小时基线，且鲁棒 Z 分数绝对值均不低于 3.5。',
-  telemetry_blindspot: '监控盲区：容量、厂商事件或性能遥测过期、采集失败或覆盖率不足，当前数据不足以可靠判断资产状态。',
+  telemetry_blindspot: '监控盲区：容量、厂商事件或性能监控采集过期、采集失败或覆盖率不足，当前数据不足以可靠判断资产状态。',
 };
 const confidenceLabels = {
   high: '高',
@@ -122,7 +122,7 @@ const statusLabels = {
 const statusDescriptions = {
   open: '系统已创建事件，尚未确认由谁处理。',
   acknowledged: '已确认收到事件，下一步应开始分析。',
-  investigating: '正在核对原始告警、厂商事件、预测和遥测数据。',
+  investigating: '正在核对原始告警、厂商事件、预测和监控数据。',
   mitigated: '影响已缓解，仍需观察是否出现新证据。',
   resolved: '处理完成；若 24 小时内出现同类新证据，系统会重新打开事件。',
 };
@@ -333,7 +333,9 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
             v-for="group in evidenceGroups"
             :key="group.key">
             <span>{{ group.label }}</span>
-            <ElTag type="info" size="small">{{ group.items.length }} 项</ElTag>
+            <ElTag
+              type="info"
+              size="small">{{ group.items.length }} 项</ElTag>
           </li>
         </ul>
       </section>
