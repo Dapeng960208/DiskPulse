@@ -277,7 +277,12 @@ def test_user_storage_task_aggregates_rows_with_one_consistent_sample_time(
 def test_user_storage_task_empty_data_does_not_open_questdb(monkeypatch, session_factory):
     storages = importlib.import_module("celery_tasks.tasks.storages")
     with session_factory() as db:
-        db.add(StorageUsage(id=1, user_id=None, limit=10, used=5))
+        db.add_all(
+            [
+                User(id=10, rd_username="orphaned-directory-owner", storage_used=5),
+                StorageUsage(id=1, user_id=None, limit=10, used=5),
+            ]
+        )
         db.commit()
     quest_factory = Mock()
     monkeypatch.setattr(storages, "redis_lock", _lock(True, []))
@@ -288,6 +293,8 @@ def test_user_storage_task_empty_data_does_not_open_questdb(monkeypatch, session
 
     assert result["count"] == 0
     quest_factory.assert_not_called()
+    with session_factory() as db:
+        assert db.get(User, 10).storage_used == 0
 
 
 def test_user_storage_task_skips_without_opening_databases(monkeypatch):
