@@ -117,7 +117,7 @@
         <!-- Review source: Mock account markup violated vue/max-attributes-per-line. -->
         <!-- Resolution: keep every multi-line component attribute on its own line. -->
         <div
-          v-if="mockEnabled"
+          v-if="mockEnabled()"
           class="demo-accounts"
           aria-label="Mock 演示账户"
         >
