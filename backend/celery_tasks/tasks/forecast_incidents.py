@@ -613,6 +613,7 @@ def _performance_asset(db, *, cluster: StorageCluster, object_type: str, object_
 
 
 def _performance_rows(*, cutoff: datetime) -> list[dict]:
+    quest_cutoff = _utc(cutoff).isoformat().replace("+00:00", "Z")
     with QuestDBSession() as connection:
         return connection.execute(
             text(
@@ -621,7 +622,7 @@ def _performance_rows(*, cutoff: datetime) -> list[dict]:
                 "FROM storage_performance_metrics WHERE collected_at >= :cutoff "
                 "ORDER BY collected_at ASC"
             ),
-            {"cutoff": cutoff},
+            {"cutoff": quest_cutoff},
         ).mappings().all()
 
 
