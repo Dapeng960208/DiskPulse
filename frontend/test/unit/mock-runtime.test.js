@@ -434,6 +434,21 @@ describe('frontend mock runtime', () => {
     });
   });
 
+  it('supplies a scheduled storage-collection audit with a source and result summary', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    const audits = await gateway.request('get', '/v1/audit-events', undefined, superadmin.token);
+    const collection = audits.content.find((item) => item.action === 'storage.collection.run');
+
+    expect(collection).toMatchObject({
+      actor_type: 'service',
+      resource: { type: 'storage_cluster', name: expect.any(String) },
+      phase: 'result',
+      after_summary: { storage_usage_count: expect.any(Number), group_count: expect.any(Number) },
+    });
+  });
+
   it('mirrors explicit capacity units and TB realtime series from the backend contract', async () => {
     const gateway = createMockGateway();
     const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
