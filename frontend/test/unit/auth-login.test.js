@@ -6,6 +6,7 @@ const loginMock = vi.fn();
 const fetchProfileMock = vi.fn();
 const setTokenMock = vi.fn();
 const pushMock = vi.fn();
+const mockEnabledMock = vi.fn();
 
 vi.mock('@/api/users-api', () => ({
   default: {
@@ -16,6 +17,20 @@ vi.mock('@/api/users-api', () => ({
 
 vi.mock('@/utils/authorization', () => ({
   setToken: setTokenMock,
+}));
+
+vi.mock('@/mocks/runtime', () => ({
+  DEMO_PASSWORD: 'Demo@2026',
+  DEMO_USERS: [
+    {
+      id: 1,
+      username: 'demo-superadmin',
+      commonName: '演示超级管理员',
+      role: 'superadmin',
+      projectIds: [1],
+    },
+  ],
+  mockEnabled: mockEnabledMock,
 }));
 
 vi.mock('vue-router', () => ({
@@ -87,6 +102,8 @@ describe('LoginPage LDAP flow', () => {
     fetchProfileMock.mockReset();
     setTokenMock.mockReset();
     pushMock.mockReset();
+    mockEnabledMock.mockReset();
+    mockEnabledMock.mockReturnValue(false);
   });
 
   it('presents storage cluster context in a split login layout', async () => {
@@ -97,6 +114,19 @@ describe('LoginPage LDAP flow', () => {
     expect(wrapper.find('.login-panel').exists()).toBe(true);
     expect(wrapper.get('h1').text()).toBe('存储集群，一处掌控');
     expect(wrapper.get('.login-visual img').attributes('alt')).toBe('数据中心内的高性能存储服务器集群');
+  });
+
+  it('only shows demo account shortcuts in mock mode', async () => {
+    const { default: LoginPage } = await import('@/pages/auth/LoginPage.vue');
+    const realModeWrapper = mount(LoginPage);
+
+    expect(realModeWrapper.find('.demo-accounts').exists()).toBe(false);
+
+    realModeWrapper.unmount();
+    mockEnabledMock.mockReturnValue(true);
+    const mockModeWrapper = mount(LoginPage);
+
+    expect(mockModeWrapper.find('.demo-accounts').exists()).toBe(true);
   });
 
   it('sends superadmin through backend login instead of local bypass', async () => {
