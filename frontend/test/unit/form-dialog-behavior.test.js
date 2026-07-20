@@ -216,6 +216,30 @@ describe('form dialogs follow create, update, and dependency-change paths', () =
     expect(mocks.apis.group.replace).toHaveBeenCalledWith(17, expect.objectContaining({ qtree_id: 9 }));
   });
 
+  it('does not submit read-only group response fields when editing', async () => {
+    const { default: Dialog } = await import('@/pages/group/components/GroupFormDialog.vue');
+    const wrapper = mount(Dialog, mountOptions());
+
+    wrapper.vm.edit({
+      id: 17,
+      name: 'existing',
+      project_id: 3,
+      storage_cluster_id: 8,
+      qtree_id: 9,
+      project: { id: 3 },
+      storage_target: { type: 'qtree' },
+      capabilities: { adjust_quota: true },
+      capacity: { used: { value: 10, unit: 'GB' } },
+    });
+    await flushPromises();
+    await buttonWithText(wrapper, '保存修改').trigger('click');
+    await flushPromises();
+
+    const payload = mocks.apis.group.replace.mock.lastCall[1];
+    expect(payload).not.toHaveProperty('capabilities');
+    expect(payload).not.toHaveProperty('capacity');
+  });
+
   it('blocks an invalid custom group alert rule before saving', async () => {
     const { default: Dialog } = await import('@/pages/group/components/GroupFormDialog.vue');
     const wrapper = mount(Dialog, mountOptions());
