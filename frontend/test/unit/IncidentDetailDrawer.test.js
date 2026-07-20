@@ -79,7 +79,9 @@ describe('IncidentDetailDrawer', () => {
 
     expect(incidentApi.fetchIncident).toHaveBeenCalledWith(9);
     expect(wrapper.text()).toContain('确定性诊断');
-    expect(wrapper.text()).toContain('这是基于已记录证据生成的规则化排查建议，不是 AI 自由生成的故障结论。');
+    const diagnosisTooltip = wrapper.findAllComponents({ name: 'ElTooltip' })
+      .find((tooltip) => tooltip.text().includes('确定性诊断'));
+    expect(diagnosisTooltip.attributes('content')).toBe('由服务端按固定证据权重计算，不使用 AI 自由生成结论。');
     expect(wrapper.text()).toContain('认领');
     expect(wrapper.text()).toContain('创建维护窗口');
 

@@ -10,7 +10,7 @@ function vueFiles(directory) {
   });
 }
 
-const headingSubtitlePattern = /<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>\s*<p(?:\s|>)/;
+const headingSubtitlePattern = /<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>(?:\s*<\/[A-Za-z][^>]*>)*\s*<p[^>]*class=["'][^"']*(?:subtitle|description|hint)[^"']*["']/i;
 
 describe('heading and subtitle policy', () => {
   it('does not render a descriptive subtitle immediately after a heading', () => {

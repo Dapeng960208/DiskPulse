@@ -318,7 +318,6 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
 
       <section class="incident-detail__section">
         <ElTooltip content="由服务端按固定证据权重计算，不使用 AI 自由生成结论。"><h3>确定性诊断</h3></ElTooltip>
-        <p class="incident-detail__hint">这是基于已记录证据生成的规则化排查建议，不是 AI 自由生成的故障结论。</p>
         <p v-if="!current.diagnosis">尚无足够证据生成诊断。</p>
         <template v-else>
           <p>建议可靠性：<ElTooltip content="高可靠性要求回放验证开关已启用、候选分数至少 0.8，且至少有两类独立证据。"><ElTag>{{ confidenceLabels[current.diagnosis.confidence] || current.diagnosis.confidence }}</ElTag></ElTooltip> {{ confidenceDescriptions[current.diagnosis.confidence] || '请结合证据引用进行核查。' }}</p>
@@ -454,7 +453,6 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
 .incident-detail__section { display: grid; gap: 8px; }
 .incident-detail__section h3 { margin: 0; font-size: var(--font-size-base); color: var(--text-primary); }
 .incident-detail__section p { margin: 0; color: var(--text-secondary); }
-.incident-detail__hint { padding: 8px 10px; border-left: 3px solid var(--primary-color); background: var(--bg-secondary); font-size: var(--font-size-sm); }
 .incident-detail__candidate-list { margin: 0; padding-left: 20px; color: var(--text-primary); }
 .incident-detail__candidate-list span { color: var(--text-secondary); }
 .incident-detail__evidence-overview { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
