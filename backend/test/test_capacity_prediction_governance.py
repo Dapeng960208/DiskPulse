@@ -435,6 +435,81 @@ def test_reader_cannot_list_capacity_plans_until_global_visibility_is_enabled(db
     ) == []
 
 
+def test_related_incidents_use_resource_rbac_when_prediction_publication_is_disabled(db_session):
+    import models
+    from services.capacityPredictionGovernanceService import list_resource_related_incidents
+
+    db_session.add_all([
+        models.User(id=1, rd_username="reader"),
+        models.Project(id=1, name="project-alpha"),
+        models.Project(id=2, name="project-beta"),
+        models.ProjectMembership(project_id=1, user_id=1, role="reader"),
+        models.StorageCluster(id=1, name="cluster-alpha", storage_type="netapp"),
+        models.GroupTag(id=1, name="research"),
+        models.Group(
+            id=11,
+            project_id=1,
+            storage_cluster_id=1,
+            group_tag_id=1,
+            name="group-alpha",
+            enable_monitoring=False,
+        ),
+        models.Group(
+            id=12,
+            project_id=2,
+            storage_cluster_id=1,
+            group_tag_id=1,
+            name="group-beta",
+            enable_monitoring=False,
+        ),
+        models.CapacityPredictionSettings(id=1, user_visible=False),
+        models.Incident(
+            id=1,
+            correlation_key="cluster-1:group:11:capacity_pressure",
+            correlation_bucket_at=UTC_NOW,
+            asset_type="group",
+            asset_id="11",
+            storage_cluster_id=1,
+            project_id=1,
+            vendor="netapp",
+            display_name="group-alpha",
+            category="capacity_pressure",
+            opened_at=UTC_NOW,
+            last_evidence_at=UTC_NOW,
+        ),
+    ])
+    db_session.commit()
+    reader = db_session.get(models.User, 1)
+
+    with pytest.raises(HTTPException) as denied:
+        list_resource_related_incidents(
+            db_session,
+            current_user=reader,
+            asset_type="group",
+            asset_id=12,
+        )
+    assert denied.value.status_code == 403
+    assert denied.value.detail == "project permission required"
+
+    result = list_resource_related_incidents(
+        db_session,
+        current_user=reader,
+        asset_type="group",
+        asset_id=11,
+    )
+
+    assert [
+        (
+            item["id"],
+            item["category"],
+            item["severity"],
+            item["status"],
+            item["rca_confidence"],
+        )
+        for item in result
+    ] == [(1, "capacity_pressure", "warning", "open", None)]
+
+
 def test_project_admin_can_only_create_capacity_plan_for_its_own_resource(db_session):
     import models
     from services.capacityPredictionGovernanceService import create_capacity_plan
@@ -699,6 +774,539 @@ def test_stale_candidate_curve_does_not_override_the_current_baseline(db_session
 
     assert result.curve == baseline_curve
     assert "candidate_version" not in result.input_quality
+
+
+def test_capacity_prediction_list_uses_final_curve_filters_projects_and_paginates(
+    db_session,
+    api_client_factory,
+):
+    import models
+    from routers import forecast_incidents
+    from utils.security import issue_token
+
+    db_session.add_all([
+        models.User(id=1, rd_username="reader"),
+        models.Project(id=1, name="project-alpha"),
+        models.Project(id=2, name="project-beta"),
+        models.ProjectMembership(project_id=1, user_id=1, role="reader"),
+        models.StorageCluster(id=1, name="cluster-alpha", storage_type="netapp"),
+        models.GroupTag(id=1, name="research"),
+        models.Group(
+            id=11,
+            project_id=1,
+            storage_cluster_id=1,
+            group_tag_id=1,
+            name="visible-group",
+            enable_monitoring=False,
+        ),
+        models.Group(
+            id=12,
+            project_id=2,
+            storage_cluster_id=1,
+            group_tag_id=1,
+            name="hidden-group",
+            enable_monitoring=False,
+        ),
+        models.StorageUsage(id=101, storage_cluster_id=1, group_id=11, linux_path="/visible/alice"),
+        models.CapacityPredictionSettings(id=1, user_visible=True),
+        models.AIConfig(
+            id=1,
+            name="forecast-model",
+            provider="ollama",
+            base_url="http://forecast.internal",
+            model="forecast-model",
+            enabled=True,
+            enable_chat=False,
+        ),
+    ])
+    db_session.flush()
+    candidate = models.CapacityPredictionCandidate(
+        version="capacity-ai-v2",
+        ai_model_id=1,
+        enabled=True,
+    )
+    db_session.add(candidate)
+    db_session.flush()
+
+    baseline_curve = _curve(UTC_NOW)
+    final_curve = _curve(UTC_NOW, offset=100)
+    db_session.add_all([
+        models.CapacityForecast(
+            id=1,
+            asset_type="group",
+            asset_id="11",
+            storage_cluster_id=1,
+            project_id=1,
+            vendor="netapp",
+            display_name="visible-group",
+            training_start=UTC_NOW - timedelta(days=45),
+            training_end=UTC_NOW,
+            hard_limit=1000.0,
+            curve=baseline_curve,
+            exhaustion_dates={},
+            algorithm_version="forecast-incident-v1",
+            input_quality={"status": "ready"},
+            created_at=UTC_NOW + timedelta(hours=3),
+        ),
+        models.CapacityForecast(
+            id=2,
+            asset_type="storage_usage",
+            asset_id="101",
+            storage_cluster_id=1,
+            project_id=1,
+            vendor="netapp",
+            display_name="/visible/alice",
+            training_start=UTC_NOW - timedelta(days=45),
+            training_end=UTC_NOW,
+            hard_limit=500.0,
+            curve=baseline_curve,
+            exhaustion_dates={},
+            algorithm_version="forecast-incident-v1",
+            input_quality={"status": "ready"},
+            created_at=UTC_NOW + timedelta(hours=2),
+        ),
+        models.CapacityForecast(
+            id=3,
+            asset_type="group",
+            asset_id="12",
+            storage_cluster_id=1,
+            project_id=2,
+            vendor="netapp",
+            display_name="hidden-group",
+            training_start=UTC_NOW - timedelta(days=45),
+            training_end=UTC_NOW,
+            hard_limit=1000.0,
+            curve=baseline_curve,
+            exhaustion_dates={},
+            algorithm_version="forecast-incident-v1",
+            input_quality={"status": "ready"},
+            created_at=UTC_NOW + timedelta(hours=5),
+        ),
+        models.CapacityForecast(
+            id=4,
+            asset_type="storage_cluster",
+            asset_id="1",
+            storage_cluster_id=1,
+            project_id=1,
+            vendor="netapp",
+            display_name="cluster-alpha",
+            training_start=UTC_NOW - timedelta(days=45),
+            training_end=UTC_NOW,
+            hard_limit=2000.0,
+            curve=baseline_curve,
+            exhaustion_dates={},
+            algorithm_version="forecast-incident-v1",
+            input_quality={"status": "ready"},
+            created_at=UTC_NOW + timedelta(hours=4),
+        ),
+        models.CapacityForecast(
+            id=5,
+            asset_type="group",
+            asset_id="11",
+            storage_cluster_id=1,
+            project_id=1,
+            vendor="netapp",
+            display_name="visible-group-old",
+            training_start=UTC_NOW - timedelta(days=46),
+            training_end=UTC_NOW - timedelta(days=1),
+            hard_limit=1000.0,
+            curve=_curve(UTC_NOW - timedelta(days=1)),
+            exhaustion_dates={},
+            algorithm_version="forecast-incident-v1",
+            input_quality={"status": "ready"},
+            created_at=UTC_NOW + timedelta(hours=6),
+        ),
+        models.CapacityPredictionCandidateForecast(
+            candidate_id=candidate.id,
+            asset_type="group",
+            asset_id="11",
+            project_id=1,
+            forecast_start=UTC_NOW,
+            baseline_curve=baseline_curve,
+            curve=final_curve,
+            source="ai_candidate",
+        ),
+    ])
+    db_session.commit()
+
+    client = api_client_factory(
+        [forecast_incidents.router],
+        headers={"Authorization": f"Bearer {issue_token(1)}"},
+    )
+    first_page = client.get(
+        "/storage-pulse/api/v1/capacity-predictions",
+        params={"page": 1, "size": 1},
+    )
+
+    assert first_page.status_code == 200
+    assert first_page.json()["total"] == 2
+    assert len(first_page.json()["content"]) == 1
+    first = first_page.json()["content"][0]
+    assert first["asset_type"] == "group"
+    assert first["asset_id"] == "11"
+    assert first["curve"] == final_curve
+    assert first["input_quality"]["prediction_source"] == "ai_candidate"
+    assert first["input_quality"]["candidate_version"] == "capacity-ai-v2"
+
+    second_page = client.get(
+        "/storage-pulse/api/v1/capacity-predictions",
+        params={"page": 2, "size": 1},
+    )
+    assert second_page.status_code == 200
+    assert second_page.json()["total"] == 2
+    assert second_page.json()["content"][0]["asset_type"] == "storage_usage"
+
+
+def test_capacity_prediction_list_uses_current_resource_project_after_group_move(
+    db_session,
+    api_client_factory,
+):
+    import models
+    from routers import forecast_incidents
+    from utils.security import issue_token
+
+    db_session.add_all([
+        models.User(id=1, rd_username="reader"),
+        models.User(id=2, rd_username="alice"),
+        models.User(id=3, rd_username="current-reader"),
+        models.Project(id=1, name="old-project"),
+        models.Project(id=2, name="current-project"),
+        models.ProjectMembership(project_id=1, user_id=1, role="reader"),
+        models.ProjectMembership(project_id=2, user_id=3, role="reader"),
+        models.StorageCluster(id=1, name="cluster-alpha", storage_type="netapp"),
+        models.GroupTag(id=1, name="research"),
+        models.Group(
+            id=11,
+            project_id=2,
+            storage_cluster_id=1,
+            group_tag_id=1,
+            name="moved-group",
+            enable_monitoring=False,
+        ),
+        models.StorageUsage(
+            id=101,
+            storage_cluster_id=1,
+            group_id=11,
+            linux_path="/moved/alice",
+        ),
+        models.CapacityPredictionSettings(id=1, user_visible=True),
+        models.CapacityForecast(
+            id=1,
+            asset_type="group",
+            asset_id="11",
+            storage_cluster_id=1,
+            project_id=1,
+            vendor="netapp",
+            display_name="moved-group",
+            training_start=UTC_NOW - timedelta(days=45),
+            training_end=UTC_NOW,
+            hard_limit=1000.0,
+            curve=_curve(UTC_NOW),
+            exhaustion_dates={},
+            algorithm_version="forecast-incident-v1",
+            input_quality={"status": "ready"},
+        ),
+        models.CapacityForecast(
+            id=2,
+            asset_type="storage_usage",
+            asset_id="101",
+            storage_cluster_id=1,
+            project_id=1,
+            vendor="netapp",
+            display_name="/moved/alice",
+            training_start=UTC_NOW - timedelta(days=45),
+            training_end=UTC_NOW,
+            hard_limit=500.0,
+            curve=_curve(UTC_NOW),
+            exhaustion_dates={},
+            algorithm_version="forecast-incident-v1",
+            input_quality={"status": "ready"},
+        ),
+    ])
+    db_session.commit()
+
+    reader = api_client_factory(
+        [forecast_incidents.router],
+        headers={"Authorization": f"Bearer {issue_token(1)}"},
+    )
+    reader_response = reader.get("/storage-pulse/api/v1/capacity-predictions")
+    assert reader_response.status_code == 200
+    assert reader_response.json() == {"content": [], "total": 0}
+
+    current_reader = api_client_factory(
+        [forecast_incidents.router],
+        headers={"Authorization": f"Bearer {issue_token(3)}"},
+    )
+    current_reader_response = current_reader.get(
+        "/storage-pulse/api/v1/capacity-predictions"
+    )
+    assert current_reader_response.status_code == 200
+    assert current_reader_response.json()["total"] == 2
+    assert {
+        item["asset_type"] for item in current_reader_response.json()["content"]
+    } == {"group", "storage_usage"}
+
+    superadmin = api_client_factory(
+        [forecast_incidents.router],
+        headers={"Authorization": f"Bearer {issue_token(2)}"},
+    )
+    superadmin_response = superadmin.get("/storage-pulse/api/v1/capacity-predictions")
+    assert superadmin_response.status_code == 200
+    assert superadmin_response.json()["total"] == 2
+    assert {
+        item["asset_type"] for item in superadmin_response.json()["content"]
+    } == {"group", "storage_usage"}
+
+
+def test_capacity_prediction_list_excludes_deleted_group_and_storage_usage(
+    db_session,
+    api_client_factory,
+):
+    import models
+    from routers import forecast_incidents
+    from utils.security import issue_token
+
+    db_session.add_all([
+        models.User(id=1, rd_username="reader"),
+        models.User(id=2, rd_username="alice"),
+        models.Project(id=1, name="project-alpha"),
+        models.ProjectMembership(project_id=1, user_id=1, role="reader"),
+        models.StorageCluster(id=1, name="cluster-alpha", storage_type="netapp"),
+        models.GroupTag(id=1, name="research"),
+        models.Group(
+            id=11,
+            project_id=1,
+            storage_cluster_id=1,
+            group_tag_id=1,
+            name="deleted-group",
+            enable_monitoring=False,
+        ),
+        models.StorageUsage(
+            id=101,
+            storage_cluster_id=1,
+            group_id=11,
+            linux_path="/deleted/alice",
+        ),
+        models.CapacityPredictionSettings(id=1, user_visible=True),
+        models.CapacityForecast(
+            id=1,
+            asset_type="group",
+            asset_id="11",
+            storage_cluster_id=1,
+            project_id=1,
+            vendor="netapp",
+            display_name="deleted-group",
+            training_start=UTC_NOW - timedelta(days=45),
+            training_end=UTC_NOW,
+            hard_limit=1000.0,
+            curve=_curve(UTC_NOW),
+            exhaustion_dates={},
+            algorithm_version="forecast-incident-v1",
+            input_quality={"status": "ready"},
+        ),
+        models.CapacityForecast(
+            id=2,
+            asset_type="storage_usage",
+            asset_id="101",
+            storage_cluster_id=1,
+            project_id=1,
+            vendor="netapp",
+            display_name="/deleted/alice",
+            training_start=UTC_NOW - timedelta(days=45),
+            training_end=UTC_NOW,
+            hard_limit=500.0,
+            curve=_curve(UTC_NOW),
+            exhaustion_dates={},
+            algorithm_version="forecast-incident-v1",
+            input_quality={"status": "ready"},
+        ),
+    ])
+    db_session.commit()
+
+    db_session.delete(db_session.get(models.StorageUsage, 101))
+    db_session.delete(db_session.get(models.Group, 11))
+    db_session.commit()
+
+    for user_id in (1, 2):
+        client = api_client_factory(
+            [forecast_incidents.router],
+            headers={"Authorization": f"Bearer {issue_token(user_id)}"},
+        )
+        response = client.get("/storage-pulse/api/v1/capacity-predictions")
+        assert response.status_code == 200
+        assert response.json() == {"content": [], "total": 0}
+
+
+def test_capacity_prediction_list_skips_malformed_asset_ids_and_compiles_safe_postgres_cast(
+    db_session,
+):
+    import models
+    from crud.capacityPredictionCrud import _safe_integer_asset_id, list_latest_forecasts
+    from sqlalchemy import select
+    from sqlalchemy.dialects import postgresql
+
+    db_session.add_all([
+        models.Project(id=1, name="project-alpha"),
+        models.StorageCluster(id=1, name="cluster-alpha", storage_type="netapp"),
+        models.GroupTag(id=1, name="research"),
+        models.Group(
+            id=11,
+            project_id=1,
+            storage_cluster_id=1,
+            group_tag_id=1,
+            name="group-alpha",
+            enable_monitoring=False,
+        ),
+        models.StorageUsage(
+            id=101,
+            storage_cluster_id=1,
+            group_id=11,
+            linux_path="/visible/alice",
+        ),
+        models.CapacityForecast(
+            id=1,
+            asset_type="group",
+            asset_id="abc",
+            storage_cluster_id=1,
+            project_id=1,
+            vendor="netapp",
+            display_name="malformed-group",
+            training_start=UTC_NOW - timedelta(days=45),
+            training_end=UTC_NOW,
+            hard_limit=1000.0,
+            curve=_curve(UTC_NOW),
+            exhaustion_dates={},
+            algorithm_version="forecast-incident-v1",
+            input_quality={"status": "ready"},
+        ),
+        models.CapacityForecast(
+            id=2,
+            asset_type="storage_usage",
+            asset_id="99999999999",
+            storage_cluster_id=1,
+            project_id=1,
+            vendor="netapp",
+            display_name="malformed-usage",
+            training_start=UTC_NOW - timedelta(days=45),
+            training_end=UTC_NOW,
+            hard_limit=500.0,
+            curve=_curve(UTC_NOW),
+            exhaustion_dates={},
+            algorithm_version="forecast-incident-v1",
+            input_quality={"status": "ready"},
+        ),
+    ])
+    db_session.commit()
+
+    rows, total = list_latest_forecasts(
+        db_session,
+        visible_project_ids={1},
+        page=1,
+        size=20,
+    )
+    assert rows == []
+    assert total == 0
+
+    compiled = str(
+        select(_safe_integer_asset_id(models.CapacityForecast.asset_id)).compile(
+            dialect=postgresql.dialect()
+        )
+    )
+    case_position = compiled.index("CASE WHEN")
+    cast_position = compiled.index(
+        "THEN CAST(capacity_forecasts.asset_id AS INTEGER)"
+    )
+    end_position = compiled.index(" END", cast_position)
+    assert case_position < cast_position < end_position
+
+
+def test_capacity_prediction_list_requires_publication_and_validates_pagination(
+    db_session,
+    api_client_factory,
+):
+    import models
+    from routers import forecast_incidents
+    from utils.security import issue_token
+
+    db_session.add_all([
+        models.User(id=1, rd_username="reader"),
+        models.Project(id=1, name="project-alpha"),
+        models.ProjectMembership(project_id=1, user_id=1, role="reader"),
+        models.CapacityPredictionSettings(id=1, user_visible=False),
+    ])
+    db_session.commit()
+    client = api_client_factory(
+        [forecast_incidents.router],
+        headers={"Authorization": f"Bearer {issue_token(1)}"},
+    )
+
+    denied = client.get("/storage-pulse/api/v1/capacity-predictions")
+    assert denied.status_code == 403
+    assert client.get(
+        "/storage-pulse/api/v1/capacity-predictions",
+        params={"page": 0},
+    ).status_code == 422
+    assert client.get(
+        "/storage-pulse/api/v1/capacity-predictions",
+        params={"size": 101},
+    ).status_code == 422
+
+
+def test_final_prediction_list_batches_candidate_lookup_after_database_pagination(monkeypatch):
+    from unittest.mock import Mock
+
+    from services import capacityPredictionGovernanceService as governance
+
+    db = object()
+    current_user = object()
+    baselines = [
+        SimpleNamespace(asset_type="group", asset_id="11", training_end=UTC_NOW),
+        SimpleNamespace(asset_type="storage_usage", asset_id="101", training_end=UTC_NOW),
+    ]
+    list_latest = Mock(return_value=(baselines, 7))
+    active_candidate = SimpleNamespace(id=9, version="capacity-ai-v2")
+    list_candidate_batch = Mock(return_value=[])
+    per_resource_lookup = Mock(side_effect=AssertionError("candidate lookup must be batched"))
+
+    monkeypatch.setattr(governance, "_require_prediction_visibility", Mock())
+    monkeypatch.setattr(governance.forecastIncidentService, "visible_project_ids", Mock(return_value={1}))
+    monkeypatch.setattr(governance.capacityPredictionCrud, "list_latest_forecasts", list_latest)
+    monkeypatch.setattr(governance.capacityPredictionCrud, "active_candidate", Mock(return_value=active_candidate))
+    monkeypatch.setattr(
+        governance.capacityPredictionCrud,
+        "list_candidate_forecasts_for_baselines",
+        list_candidate_batch,
+    )
+    monkeypatch.setattr(
+        governance.capacityPredictionCrud,
+        "latest_active_candidate_forecast",
+        per_resource_lookup,
+    )
+
+    rows, total = governance.list_final_predictions(
+        db,
+        current_user=current_user,
+        page=2,
+        size=2,
+    )
+
+    assert rows == baselines
+    assert total == 7
+    list_latest.assert_called_once_with(
+        db,
+        visible_project_ids={1},
+        page=2,
+        size=2,
+    )
+    list_candidate_batch.assert_called_once_with(
+        db,
+        candidate_id=9,
+        baseline_keys=[
+            ("group", "11", UTC_NOW),
+            ("storage_usage", "101", UTC_NOW),
+        ],
+    )
+    per_resource_lookup.assert_not_called()
 
 
 def test_candidate_accepts_any_configured_ai_center_model(db_session):
