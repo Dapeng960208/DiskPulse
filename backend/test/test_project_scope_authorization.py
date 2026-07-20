@@ -16,12 +16,13 @@ def _seed_scoped_resources(session):
     session.add_all(
         [
             models.User(id=1, rd_username="reader", username="Reader"),
-            models.User(id=2, rd_username="other", username="Other"),
+            models.User(id=2, rd_username="project-owner", username="Project Owner"),
             models.User(id=3, rd_username="admin", username="Admin"),
             models.User(id=4, rd_username="project-admin", username="Project Admin"),
-            models.Project(id=1, name="allowed-project", limit=100, used=20),
+            models.Project(id=1, name="allowed-project", in_charge_user_id=2, limit=100, used=20),
             models.Project(id=2, name="forbidden-project", limit=100, used=30),
             models.ProjectMembership(project_id=1, user_id=1, role="reader"),
+            models.ProjectMembership(project_id=1, user_id=2, role="project_admin"),
             models.ProjectMembership(project_id=1, user_id=4, role="project_admin"),
             models.StorageCluster(
                 id=1,
@@ -368,7 +369,7 @@ def test_project_capabilities_are_calculated_from_the_current_user_role(
     }
 
 
-def test_quota_capabilities_only_enable_the_responsible_group_owner(
+def test_quota_capabilities_follow_group_and_project_role_boundaries(
     api_client_factory,
     session_factory,
 ):
@@ -382,9 +383,12 @@ def test_quota_capabilities_only_enable_the_responsible_group_owner(
     finally:
         session.close()
 
-    owner = _client(api_client_factory, [group.router, storage_usage.router], user_id=1)
-    other = _client(api_client_factory, [group.router, storage_usage.router], user_id=4)
+    group_owner = _client(api_client_factory, [group.router, storage_usage.router], user_id=1)
+    project_owner = _client(api_client_factory, [group.router, storage_usage.router], user_id=2)
+    project_admin = _client(api_client_factory, [group.router, storage_usage.router], user_id=4)
 
-    assert owner.get(f"{API_PREFIX}/groups/1").json()["capabilities"] == {"adjust_quota": True}
-    assert owner.get(f"{API_PREFIX}/storage-usages/1").json()["capabilities"] == {"adjust_quota": True}
-    assert other.get(f"{API_PREFIX}/groups/1").json()["capabilities"] == {"adjust_quota": False}
+    assert group_owner.get(f"{API_PREFIX}/groups/1").json()["capabilities"] == {"adjust_quota": False}
+    assert group_owner.get(f"{API_PREFIX}/storage-usages/1").json()["capabilities"] == {"adjust_quota": False}
+    assert project_owner.get(f"{API_PREFIX}/storage-usages/1").json()["capabilities"] == {"adjust_quota": True}
+    assert project_admin.get(f"{API_PREFIX}/groups/1").json()["capabilities"] == {"adjust_quota": False}
+    assert project_admin.get(f"{API_PREFIX}/storage-usages/1").json()["capabilities"] == {"adjust_quota": False}

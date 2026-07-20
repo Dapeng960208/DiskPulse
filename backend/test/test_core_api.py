@@ -593,7 +593,8 @@ class TestCoreApi:
         with patch("routers.storage_cluster.get_storage_cluster_real_time", return_value=[[NOW, 200]]):
             realtime_response = self.client.get(f"/storage-pulse/api/storage-clusters/{cluster_id}/realtime")
         assert realtime_response.status_code == 200
-        assert realtime_response.json()["data"] == [[NOW, 200]]
+        assert realtime_response.json()["data"] == [[NOW, 0.1953]]
+        assert realtime_response.json()["data_unit"] == "TB"
 
         delete_response = self.client.delete(f"/storage-pulse/api/storage-clusters/{cluster_id}")
         assert delete_response.status_code == 200

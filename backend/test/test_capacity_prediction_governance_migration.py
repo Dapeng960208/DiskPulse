@@ -22,10 +22,10 @@ def _migration():
     return module
 
 
-def test_capacity_prediction_governance_is_the_alembic_head():
+def test_capacity_prediction_governance_chain_has_the_current_alembic_head():
     scripts = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
 
-    assert scripts.get_heads() == ["000000000014"]
+    assert scripts.get_heads() == ["000000000015"]
 
 
 @pytest.mark.parametrize("dialect_name", ("sqlite", "postgresql", "mysql"))

@@ -180,7 +180,22 @@ def test_group_create_uses_direct_relations_and_group_tag(tag_api):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["project"] == {"id": 1, "name": "project-1", "limit": 0.0, "soft_limit": None, "used": 0.0, "use_ratio": 0.0, "soft_use_ratio": None, "is_common": False, "status": 1, "project_process_code": None}
+    assert payload["project"] == {
+        "id": 1,
+        "name": "project-1",
+        "limit": 0.0,
+        "soft_limit": None,
+        "used": 0.0,
+        "use_ratio": 0.0,
+        "soft_use_ratio": None,
+        "is_common": False,
+        "status": 1,
+        "project_process_code": None,
+        "capacity": {
+            "limit": {"value": 0, "unit": "MB"},
+            "used": {"value": 0, "unit": "MB"},
+        },
+    }
     assert payload["storage_cluster"] == {
         "id": 1,
         "name": "cluster-1",

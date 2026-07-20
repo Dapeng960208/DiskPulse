@@ -944,7 +944,21 @@ def test_capacity_prediction_list_uses_final_curve_filters_projects_and_paginate
     first = first_page.json()["content"][0]
     assert first["asset_type"] == "group"
     assert first["asset_id"] == "11"
-    assert first["curve"] == final_curve
+    assert len(first["curve"]) == len(final_curve)
+    for serialized_point, expected_point in zip(first["curve"], final_curve, strict=True):
+        assert serialized_point["observed_at"] == expected_point["observed_at"].replace("+00:00", "Z")
+        assert {
+            key: serialized_point[key]
+            for key in ("p10", "p50", "p90")
+        } == {
+            key: expected_point[key]
+            for key in ("p10", "p50", "p90")
+        }
+        assert serialized_point["capacity"] == {
+            key: {"value": int(expected_point[key]), "unit": "GB"}
+            for key in ("p10", "p50", "p90")
+        }
+    assert first["data_unit"] == "GB"
     assert first["input_quality"]["prediction_source"] == "ai_candidate"
     assert first["input_quality"]["candidate_version"] == "capacity-ai-v2"
 
