@@ -1,6 +1,7 @@
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({
@@ -132,8 +133,9 @@ describe('ForecastGovernancePage', () => {
     const wrapper = mountPage();
     await flushPromises();
 
-    wrapper.vm.openCreateDialog();
+    await wrapper.vm.openCreateDialog();
     await wrapper.findComponent({ name: 'ElDialog' }).vm.$emit('update:modelValue', false);
+    await nextTick();
 
     expect(wrapper.vm.createDialogVisible).toBe(false);
   });

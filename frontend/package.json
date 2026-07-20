@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "packageManager": "pnpm@10.34.4",
   "scripts": {
     "dev": "vite --host",
     "mock": "vite --host --mode mock",
@@ -12,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "audit:high": "pnpm audit --registry=https://registry.npmjs.org --audit-level high",
     "lint": "eslint src/**/*.{js,jsx,vue,ts,tsx}",
     "lint:fix": "eslint src/**/*.{js,jsx,vue,ts,tsx} --fix",
     "lint:report": "eslint src/**/*.{js,jsx,vue,ts,tsx} -f node_modules/eslint-html-reporter/reporter.js -o lint-report.html"
@@ -19,16 +21,15 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
     "@vueuse/core": "^10.5.0",
-    "axios": "^1.5.1",
+    "axios": "^1.18.1",
     "dompurify": "^3.4.12",
     "echarts": "^5.4.3",
     "element-plus": "^2.4.2",
-    "js-cookie": "^3.0.5",
+    "js-cookie": "^3.0.8",
     "markdown-it": "^14.3.0",
     "normalize.css": "^8.0.1",
     "nprogress": "^0.2.0",
     "pinia": "^2.1.7",
-    "pnpm": "^10.33.0",
     "vue": "^3.3.4",
     "vue-router": "^4.2.5"
   },
@@ -38,9 +39,9 @@
     "@commitlint/cli": "^17.8.0",
     "@commitlint/config-conventional": "^17.8.0",
     "@iconify-json/ri": "^1.1.12",
-    "@vitejs/plugin-vue": "^4.4.0",
-    "@vitejs/plugin-vue-jsx": "^3.0.2",
-    "@vitest/coverage-v8": "^1.6.1",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "@vitejs/plugin-vue-jsx": "^4.2.0",
+    "@vitest/coverage-v8": "^3.2.6",
     "@vue/test-utils": "^2.4.6",
     "eslint": "^8.53.0",
     "eslint-html-reporter": "^0.7.4",
@@ -50,9 +51,24 @@
     "husky": "^8.0.3",
     "jsdom": "^24.1.0",
     "sass": "^1.98.0",
-    "unocss": "^0.56.5",
+    "unocss": "^0.65.4",
     "unplugin-element-plus": "^0.8.0",
-    "vite": "^4.5.0",
-    "vitest": "^1.6.1"
+    "vite": "^6.4.3",
+    "vitest": "^3.2.6"
+  },
+  "pnpm": {
+    "overrides": {
+      "defu": "6.1.5",
+      "fast-uri": "3.1.2",
+      "form-data": "4.0.6",
+      "glob": "10.5.0",
+      "handlebars": "4.7.9",
+      "lodash": "4.18.0",
+      "lodash-es": "4.18.0"
+    },
+    "patchedDependencies": {
+      "lodash-es@4.18.0": "patches/lodash-es@4.18.0.patch",
+      "lodash@4.18.0": "patches/lodash@4.18.0.patch"
+    }
   }
 }
