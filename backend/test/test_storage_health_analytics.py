@@ -7,6 +7,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import ANY, Mock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 import sqlalchemy as sa
@@ -27,6 +28,7 @@ from utils.netAppClient import NetAppClient
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 START = datetime(2026, 7, 1, tzinfo=timezone.utc)
 END = datetime(2026, 7, 2, tzinfo=timezone.utc)
+SYSTEM_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 def _analytics():
@@ -481,7 +483,7 @@ def test_repeated_fault_crud_allows_only_netapp_and_isilon(db_session):
                     fingerprint=f"{source}:disk.offline:node:node-1",
                     severity="error",
                     alert_level="error",
-                    updated_at=occurred_at.astimezone().replace(tzinfo=None),
+                    updated_at=occurred_at.astimezone(SYSTEM_TIMEZONE).replace(tzinfo=None),
                 )
             )
     db_session.commit()
@@ -1131,7 +1133,9 @@ def test_isilon_latency_rows_include_path_read_and_write_latency():
             "latency_total": 2.4,
             "iops_total": 50.0,
             "throughput_total": 3072.0,
-            "collected_at": datetime.fromtimestamp(1784172559),
+            "collected_at": datetime.fromtimestamp(1784172559, timezone.utc)
+            .astimezone(SYSTEM_TIMEZONE)
+            .replace(tzinfo=None),
         }
     ]
 
@@ -1177,7 +1181,11 @@ def test_isilon_latency_rows_keep_zero_seconds_and_use_device_timestamp():
     )
 
     assert rows[0]["latency_total"] == 0.0
-    assert rows[0]["collected_at"] == datetime.fromtimestamp(captured_at)
+    assert rows[0]["collected_at"] == (
+        datetime.fromtimestamp(captured_at, timezone.utc)
+        .astimezone(SYSTEM_TIMEZONE)
+        .replace(tzinfo=None)
+    )
 
 
 @pytest.mark.parametrize("unit", [None, "", "minutes"])
@@ -1526,7 +1534,11 @@ def test_isilon_event_group_uses_last_event_and_cause_details():
     assert rows[0]["external_event_id"] == "724916"
     assert rows[0]["fingerprint"] == "isilon:QUOTA_THRESHOLD_VIOLATION:node:6"
     assert rows[0]["description"] == "SmartQuotas threshold violation"
-    assert rows[0]["updated_at"] == datetime.fromtimestamp(last_event)
+    assert rows[0]["updated_at"] == (
+        datetime.fromtimestamp(last_event, timezone.utc)
+        .astimezone(SYSTEM_TIMEZONE)
+        .replace(tzinfo=None)
+    )
 
 
 def test_isilon_event_list_normalizes_nested_events():
@@ -1557,7 +1569,11 @@ def test_isilon_event_list_normalizes_nested_events():
     assert rows[0]["external_event_id"] == "6.346657"
     assert rows[0]["fingerprint"] == "isilon:600010001:node:6"
     assert rows[0]["description"] == "Snapshot creation failed"
-    assert rows[0]["updated_at"] == datetime.fromtimestamp(event_time)
+    assert rows[0]["updated_at"] == (
+        datetime.fromtimestamp(event_time, timezone.utc)
+        .astimezone(SYSTEM_TIMEZONE)
+        .replace(tzinfo=None)
+    )
 
 
 def test_storage_health_parser_boundary_values():
