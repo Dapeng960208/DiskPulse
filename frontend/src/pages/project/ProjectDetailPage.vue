@@ -43,9 +43,7 @@ onMounted(() => {
         label="容量概览"
         name="capacity"
         lazy>
-        <ProjectDiskUsage
-          :attribute-id="projectId"
-          :allow-project-selection="false" />
+        <ProjectDiskUsage :attribute-id="projectId" />
       </ElTabPane>
       <ElTabPane
         label="项目组"

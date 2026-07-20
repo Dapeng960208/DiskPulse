@@ -2,7 +2,7 @@
 
 ## 错误内容
 
-`pnpm test` 和 `pnpm run test:coverage` 保留 11 条已在 `main` 复现的失败：操作按钮测试桩 8 条、LDAP 旧入口断言 2 条、AI Chat 缺 active Pinia 1 条。覆盖率命令因此不输出最终汇总。
+`pnpm test` 和扩展前端测试保留既有失败：操作按钮测试桩、LDAP 旧入口断言、AI Chat 缺 active Pinia、授权 mock 缺少 `getToken`，以及对 Windows CRLF 敏感的静态断言。覆盖率命令因此可能无法输出最终汇总。
 
 ## 解决方案
 
@@ -11,6 +11,8 @@
 ## 备注
 
 - 分类：`frontend`
-- 出现次数：1
-- 首次与最近出现：2026-07-20 导航信息架构会话
+- 出现次数：2
+- 首次出现：2026-07-20 导航信息架构会话
+- 最近出现：2026-07-20 项目使用量与成员默认权限会话
 - 出现记录：`sessions/2026-07-20-navigation-information-architecture/errors.md`
+- 出现记录：`sessions/2026-07-20-project-usage-reader-default/errors.md`

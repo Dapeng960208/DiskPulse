@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from fastapi import HTTPException, status
 
-from models import Project, ProjectMembership, User
+from models import Group, Project, ProjectMembership, StorageUsage, User
 from services import project_access_service
 from services.audit_service import AuditContext, append_audit_event
 from utils.auth_service import is_super_admin
@@ -161,6 +161,21 @@ def delete_membership(
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project member was not found")
     _validate_assignable_role(role=membership.role, actor_is_super_admin=actor_is_super_admin)
+    owns_project_directory = (
+        db.query(StorageUsage.id)
+        .join(Group, Group.id == StorageUsage.group_id)
+        .filter(
+            Group.project_id == project_id,
+            StorageUsage.user_id == user_id,
+        )
+        .first()
+        is not None
+    )
+    if owns_project_directory:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="directory owner project membership is required",
+        )
     if audit_context is not None:
         append_audit_event(
             db,

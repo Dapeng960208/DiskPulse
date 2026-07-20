@@ -25,7 +25,7 @@ def _migration():
 def test_capacity_prediction_governance_is_the_alembic_head():
     scripts = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
 
-    assert scripts.get_heads() == ["000000000013"]
+    assert scripts.get_heads() == ["000000000014"]
 
 
 @pytest.mark.parametrize("dialect_name", ("sqlite", "postgresql", "mysql"))

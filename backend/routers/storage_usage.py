@@ -49,6 +49,8 @@ def create_storage_usage(storage_usage: storageUsageSchema.StorageUsageCreate, b
         raise HTTPException(status_code=400, detail="Folder exited .")
     if not storage_usage_db:
         raise HTTPException(status_code=400, detail="Failed to create user folder")
+    project_access_service.ensure_group_directory_readers(db, group_id=storage_usage_db.group_id)
+    db.commit()
     background_tasks.add_task(create_user_folder_by_storage_usage_id, logger, storage_usage_db.id)
     return storageUsageCrud.serialize_storage_usage(storage_usage_db)
 
@@ -290,6 +292,8 @@ def update_storage_usage(storage_usage_id: int, storage_usage: storageUsageSchem
     updated = storageUsageCrud.update_storage_usage(
         db=db, storage_usage_id=storage_usage_id, storage_usage=storage_usage
     )
+    project_access_service.ensure_group_directory_readers(db, group_id=updated.group_id)
+    db.commit()
     return storageUsageCrud.serialize_storage_usage(updated)
 
 

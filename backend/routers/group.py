@@ -99,9 +99,10 @@ def update_group(
     db_group = groupCrud.get_group_by_id(db, group_id=group_id)
     if db_group is None:
         raise HTTPException(status_code=404, detail="Group not found")
-    return groupCrud.serialize_group(
-        groupCrud.update_group(db=db, group_id=group_id, group=group)
-    )
+    updated = groupCrud.update_group(db=db, group_id=group_id, group=group)
+    project_access_service.ensure_group_directory_readers(db, group_id=updated.id)
+    db.commit()
+    return groupCrud.serialize_group(updated)
 
 
 @router.patch(

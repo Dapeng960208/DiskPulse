@@ -49,6 +49,14 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  showResourceSelect: {
+    type: Boolean,
+    default: true,
+  },
+  allowedIndicators: {
+    type: Array,
+    default: null,
+  },
 });
 
 function normalizeResourceIds(value) {
@@ -122,7 +130,11 @@ const { queryParams, reset } = useQueryParams(() => ({
 
 const indicatorOptions = computed(() => {
   const common = { used: '实时使用量', alert_ratio: '告警口径使用率', use_ratio: '硬限额使用率' };
-  return props.apiType === 'storage-usage' ? { ...common, file_used: '实时文件数量' } : common;
+  const options = props.apiType === 'storage-usage' ? { ...common, file_used: '实时文件数量' } : common;
+  if (!props.allowedIndicators) return options;
+  return Object.fromEntries(
+    Object.entries(options).filter(([value]) => props.allowedIndicators.includes(value)),
+  );
 });
 
 const fetchData = async () => {
@@ -231,7 +243,7 @@ const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThre
       @query="query();alertQuery();"
       @reset="reset(); query();alertQuery();">
       <ElFormItem
-        v-if="selectedSelect"
+        v-if="showResourceSelect && selectedSelect"
         :label="props.label">
         <component
           :is="selectedSelect"

@@ -97,6 +97,18 @@ describe('ProjectMembersTab', () => {
     expect(wrapper.findComponent({ name: 'ElDialog' }).props('appendToBody')).toBe(true);
   });
 
+  it('creates a new project member with reader permission by default', async () => {
+    membershipApi.create.mockResolvedValue({});
+    const wrapper = await mountTab({ canManageMembers: true });
+
+    await findButton(wrapper, '添加成员').trigger('click');
+    await wrapper.find('.user-select').trigger('click');
+    await findButton(wrapper, '保存').trigger('click');
+    await flushPromises();
+
+    expect(membershipApi.create).toHaveBeenCalledWith(1, { user_id: 2, role: 'reader' });
+  });
+
   it('renders members when the API returns a paginated response', async () => {
     const members = [{ user_id: 9, role: 'editor', user: { rd_username: 'bob' } }];
     membershipApi.list.mockResolvedValue({ content: members });

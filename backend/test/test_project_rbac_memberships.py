@@ -258,3 +258,82 @@ def test_storage_collection_grants_reader_without_downgrading_existing_membershi
     db_session.commit()
 
     assert db_session.query(models.ProjectMembership).filter_by(project_id=1, user_id=1).one().role == "editor"
+
+
+def test_existing_directory_users_are_added_as_readers_without_downgrading_roles(db_session):
+    db_session.add_all(
+        [
+            models.User(id=11, rd_username="reader", username="Reader"),
+            models.User(id=12, rd_username="editor", username="Editor"),
+            models.Project(id=11, name="project-directory-members"),
+            models.StorageCluster(id=11, name="cluster-directory-members", storage_type="netapp", is_active=True),
+            models.GroupTag(id=11, name="directory-members"),
+            models.Group(
+                id=11,
+                project_id=11,
+                storage_cluster_id=11,
+                group_tag_id=11,
+                name="group-directory-members",
+                linux_path="/data/project-directory-members",
+                enable_monitoring=False,
+            ),
+        ]
+    )
+    db_session.flush()
+    db_session.add_all(
+        [
+            models.StorageUsage(user_id=11, group_id=11, linux_path="/data/project-directory-members/reader", updated_at=datetime.now()),
+            models.StorageUsage(user_id=12, group_id=11, linux_path="/data/project-directory-members/editor", updated_at=datetime.now()),
+            models.ProjectMembership(project_id=11, user_id=12, role="editor"),
+        ]
+    )
+    db_session.commit()
+
+    project_access_service.ensure_group_directory_readers(db_session, group_id=11)
+    db_session.commit()
+
+    memberships = {
+        membership.user_id: membership.role
+        for membership in db_session.query(models.ProjectMembership)
+        .filter_by(project_id=11)
+        .all()
+    }
+    assert memberships == {11: "reader", 12: "editor"}
+
+
+def test_directory_owner_membership_cannot_be_removed_while_directory_exists(db_session):
+    base_config.set("super_admin_usernames", ["super-admin"])
+    admin = models.User(id=21, rd_username="super-admin", username="Admin")
+    owner = models.User(id=22, rd_username="owner", username="Owner")
+    project = models.Project(id=21, name="protected-directory-project")
+    cluster = models.StorageCluster(id=21, name="protected-directory-cluster", storage_type="netapp", is_active=True)
+    tag = models.GroupTag(id=21, name="protected-directory-tag")
+    group = models.Group(
+        id=21,
+        project_id=21,
+        storage_cluster_id=21,
+        group_tag_id=21,
+        name="protected-directory-group",
+        linux_path="/data/protected-directory",
+        enable_monitoring=False,
+    )
+    db_session.add_all([admin, owner, project, cluster, tag, group])
+    db_session.flush()
+    db_session.add_all(
+        [
+            models.StorageUsage(user_id=22, group_id=21, linux_path="/data/protected-directory/owner", updated_at=datetime.now()),
+            models.ProjectMembership(project_id=21, user_id=22, role="reader"),
+        ]
+    )
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as error:
+        project_membership_service.delete_membership(
+            db_session,
+            project_id=21,
+            user_id=22,
+            current_user=admin,
+        )
+
+    assert error.value.status_code == 409
+    assert db_session.query(models.ProjectMembership).filter_by(project_id=21, user_id=22).one()

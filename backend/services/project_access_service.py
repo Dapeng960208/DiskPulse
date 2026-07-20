@@ -57,6 +57,27 @@ def ensure_reader_memberships(db, *, pairs: set[tuple[int, int]]) -> None:
     db.flush()
 
 
+def ensure_group_directory_readers(db, *, group_id: int) -> None:
+    """Grant every directory owner in a group read access to its current project."""
+    group = db.get(Group, group_id)
+    if group is None or group.project_id is None:
+        return
+    user_ids = {
+        user_id
+        for (user_id,) in db.query(StorageUsage.user_id)
+        .filter(
+            StorageUsage.group_id == group_id,
+            StorageUsage.user_id.is_not(None),
+        )
+        .distinct()
+        .all()
+    }
+    ensure_reader_memberships(
+        db,
+        pairs={(group.project_id, user_id) for user_id in user_ids},
+    )
+
+
 def ensure_project_owner_membership(db, *, project_id: int) -> ProjectMembership | None:
     """Ensure the configured project in-charge user is a project administrator."""
     project = db.get(Project, project_id)
