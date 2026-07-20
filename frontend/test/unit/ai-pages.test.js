@@ -18,6 +18,7 @@ const { aiApi, currentUser, router } = vi.hoisted(() => ({
     createConversation: vi.fn(),
     getConversation: vi.fn(),
     deleteConversation: vi.fn(),
+    decideQuotaConfirmation: vi.fn(),
     streamMessage: vi.fn(),
     listAdminModels: vi.fn(),
     createModel: vi.fn(),
@@ -51,6 +52,7 @@ describe('AI pages interactions', () => {
     aiApi.createConversation.mockResolvedValue({ id: 10, model_id: 1, title: '新对话' });
     aiApi.getConversation.mockResolvedValue({ id: 10, model_id: 1, title: '旧会话', messages: [] });
     aiApi.deleteConversation.mockResolvedValue();
+    aiApi.decideQuotaConfirmation.mockResolvedValue({ decision: 'confirm', result: { ok: true, data: {} } });
     aiApi.listAdminModels.mockResolvedValue([{ id: 2, name: 'Admin Model', provider: 'openai', model: 'gpt' }]);
     aiApi.listAudits.mockResolvedValue({ content: [{ id: 7, status: 'succeeded' }], total: 1 });
     aiApi.createModel.mockResolvedValue({});
@@ -117,6 +119,55 @@ describe('AI pages interactions', () => {
 
     expect(wrapper.vm.messages[0].quota_confirmation.confirmation_id).toBe('confirmation-owner-only');
     expect(wrapper.vm.messages[0].status).toBe('awaiting_confirmation');
+  });
+
+  it('shows whether a confirmed AI quota expansion succeeded or failed', async () => {
+    const wrapper = shallowMount(AiChatPage);
+    await flushPromises();
+    wrapper.vm.activeConversationId = 10;
+    wrapper.vm.messages = [{
+      id: 8,
+      role: 'assistant',
+      status: 'awaiting_confirmation',
+      tool_calls: [{ call_id: 'quota-1', tool_name: 'adjust_storage_usage_quota', status: 'awaiting_confirmation' }],
+      quota_confirmation: {
+        confirmation_id: 'quota-confirmation',
+        deciding: false,
+        decided: null,
+        error: '',
+        preview: { resource: '/data/alice', old_hard_limit: 100, new_hard_limit: 120, unit: 'GiB' },
+      },
+    }];
+
+    await wrapper.vm.decideQuotaConfirmation(wrapper.vm.messages[0], 'confirm');
+
+    expect(aiApi.decideQuotaConfirmation).toHaveBeenCalledWith(10, 'quota-confirmation', 'confirm');
+    expect(wrapper.vm.messages[0].quota_confirmation.feedback).toEqual({
+      type: 'success',
+      text: '配额调整成功',
+    });
+    expect(wrapper.vm.messages[0].tool_calls[0]).toEqual(expect.objectContaining({ status: 'succeeded' }));
+
+    aiApi.decideQuotaConfirmation.mockResolvedValueOnce({
+      decision: 'confirm',
+      result: { ok: false, error: '设备拒绝写入' },
+    });
+    wrapper.vm.messages[0].quota_confirmation = {
+      confirmation_id: 'quota-confirmation-2',
+      deciding: false,
+      decided: null,
+      error: '',
+      preview: { resource: '/data/alice', old_hard_limit: 100, new_hard_limit: 120, unit: 'GiB' },
+    };
+    wrapper.vm.messages[0].tool_calls = [{ call_id: 'quota-2', tool_name: 'adjust_storage_usage_quota', status: 'awaiting_confirmation' }];
+
+    await wrapper.vm.decideQuotaConfirmation(wrapper.vm.messages[0], 'confirm');
+
+    expect(wrapper.vm.messages[0].quota_confirmation.feedback).toEqual({
+      type: 'danger',
+      text: '设备拒绝写入',
+    });
+    expect(wrapper.vm.messages[0].tool_calls[0]).toEqual(expect.objectContaining({ status: 'failed' }));
   });
 
   it('streams text and tool status into the assistant message accepted for its turn', async () => {

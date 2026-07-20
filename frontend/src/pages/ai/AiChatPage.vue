@@ -226,9 +226,31 @@ async function decideQuotaConfirmation(message, decision) {
   const confirmation = message?.quota_confirmation;
   if (!confirmation || confirmation.deciding || confirmation.decided) return;
   confirmation.deciding = true;
+  confirmation.error = '';
   try {
-    await aiApi.decideQuotaConfirmation(activeConversationId.value, confirmation.confirmation_id, decision);
+    const response = await aiApi.decideQuotaConfirmation(
+      activeConversationId.value,
+      confirmation.confirmation_id,
+      decision,
+    );
     confirmation.decided = decision;
+    if (decision === 'cancel') {
+      confirmation.feedback = { type: 'info', text: '已取消配额调整' };
+      message.status = 'succeeded';
+      return;
+    }
+    const result = response?.result;
+    const succeeded = result?.ok === true;
+    confirmation.feedback = {
+      type: succeeded ? 'success' : 'danger',
+      text: succeeded ? '配额调整成功' : (result?.error || '配额调整失败，请稍后重试'),
+    };
+    message.status = 'succeeded';
+    const pendingTool = message.tool_calls?.find((tool) => tool.status === 'awaiting_confirmation');
+    if (pendingTool) {
+      pendingTool.status = succeeded ? 'succeeded' : 'failed';
+      pendingTool.result = result;
+    }
   } catch (error) {
     confirmation.error = error.message || '确认操作失败';
   } finally {
@@ -454,6 +476,10 @@ onMounted(loadInitial);
             <p
               v-if="message.quota_confirmation.error"
               class="failed-label">{{ message.quota_confirmation.error }}</p>
+            <p
+              v-if="message.quota_confirmation.feedback"
+              class="quota-confirmation__feedback"
+              :class="`is-${message.quota_confirmation.feedback.type}`">{{ message.quota_confirmation.feedback.text }}</p>
             <div class="quota-confirmation__actions">
               <ElButton
                 size="small"
@@ -596,6 +622,9 @@ onMounted(loadInitial);
 .message-recovery__action:disabled { cursor: not-allowed; opacity: .65; }
 .quota-confirmation { grid-column: 2; display: grid; gap: 6px; padding: var(--spacing-sm); border: 1px solid var(--el-color-warning-light-5); border-radius: var(--radius-sm); background: var(--el-color-warning-light-9); color: var(--text-primary); font-size: 12px; }
 .quota-confirmation p { margin: 0; }
+.quota-confirmation__feedback.is-success { color: var(--el-color-success); }
+.quota-confirmation__feedback.is-danger { color: var(--el-color-danger); }
+.quota-confirmation__feedback.is-info { color: var(--el-color-info); }
 .quota-confirmation__actions { display: flex; gap: var(--spacing-sm); }
 .tool-trace { grid-column: 2; display: grid; gap: 6px; margin-top: -8px; color: var(--text-secondary); font-size: 12px; }
 .tool-trace__title { color: var(--text-tertiary); font-weight: 600; }
