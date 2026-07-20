@@ -9,7 +9,7 @@ from sqlalchemy import func, select, update
 from dependencies import DBSession
 from database import SessionLocal
 from questdb.database import QuestDBSessionLocal
-from questdb.models import UserStorageUsage
+from questdb.models import ProjectStorageUsage, UserStorageUsage
 from celery_worker import diskpulse_app
 from celery_tasks.manager.remoteFileManager import RemoteFileManager
 from celery.utils.log import get_task_logger
@@ -143,6 +143,45 @@ def finalize_project_totals(db, cluster_results, collected_at):
         )
         refreshed.add(project_id)
     return refreshed
+
+
+def write_project_usage_metrics(db, project_ids, *, collected_at, session_factory=QuestDBSessionLocal):
+    """Write refreshed project totals to QuestDB only after PostgreSQL commits."""
+    if not project_ids:
+        return 0
+    projects = db.execute(
+        select(Project).where(Project.id.in_(project_ids)).order_by(Project.id)
+    ).scalars().all()
+    if not projects:
+        return 0
+    samples = [
+        ProjectStorageUsage(
+            project_id=str(project.id),
+            used=project.used or 0,
+            used_ratio=project.use_ratio or 0,
+            soft_limit=project.soft_limit,
+            soft_use_ratio=project.soft_use_ratio,
+            updated_at=collected_at,
+        )
+        for project in projects
+    ]
+    quest_db = None
+    try:
+        quest_db = session_factory()
+        quest_db.add_all(samples)
+        quest_db.commit()
+    except Exception:
+        logger.exception("Project storage trend QuestDB write failed: count=%s", len(samples))
+        if quest_db is not None:
+            try:
+                quest_db.rollback()
+            except Exception:
+                logger.exception("Project storage trend QuestDB rollback failed")
+        return 0
+    finally:
+        if quest_db is not None:
+            quest_db.close()
+    return len(samples)
 
 
 def _cluster_snapshots(snapshot):
@@ -432,11 +471,20 @@ def storages_schedule_fetching_task(self, storage_cluster_id=None, audit_context
                 )
                 with SessionLocal() as db:
                     with db.begin():
-                        finalize_project_totals(
+                        refreshed_project_ids = finalize_project_totals(
                             db,
                             cluster_results=summary["cluster_results"],
                             collected_at=collected_at,
                         )
+                    project_metric_count = write_project_usage_metrics(
+                        db,
+                        refreshed_project_ids,
+                        collected_at=collected_at,
+                    )
+                logger.info(
+                    "Project storage trends written: count=%s",
+                    project_metric_count,
+                )
                 try:
                     from celery_tasks.tasks import forecast_incidents
 
