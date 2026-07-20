@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createPinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,6 +15,14 @@ vi.mock('@/api/group-api.js', () => ({
 
 vi.mock('@/api/storage-usage-api.js', () => ({
   default: { fetch: fetchUsages },
+}));
+
+vi.mock('@/pages/group/components/GroupFormDialog.vue', () => ({
+  default: { name: 'GroupFormDialog', template: '<div />' },
+}));
+
+vi.mock('@/components/form/QuotaAdjustmentDialog.vue', () => ({
+  default: { name: 'QuotaAdjustmentDialog', template: '<div />' },
 }));
 
 vi.mock('@/components/form/Progress.vue', () => ({
@@ -60,8 +69,9 @@ const dataTableStub = {
 
 const mountGroupsTab = (projectId = 7) => mount(ProjectGroupsTab, {
   props: { projectId },
-  global: {
-    stubs: {
+    global: {
+      plugins: [createPinia()],
+      stubs: {
       DataTable: dataTableStub,
       ElTableColumn: {
         template: '<div><slot :row="{}" /></div>',

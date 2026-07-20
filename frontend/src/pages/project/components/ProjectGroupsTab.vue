@@ -11,6 +11,10 @@ import QtreeSelect from '@/components/form/QtreeSelect.vue';
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import VolumeSelect from '@/components/form/VolumeSelect.vue';
 import { formatStorageTargetType } from '@/utils/storage-resource';
+import { hasRole } from '@/utils/authorization';
+import GroupFormDialog from '@/pages/group/components/GroupFormDialog.vue';
+import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 
 const props = defineProps({
   projectId: {
@@ -22,6 +26,8 @@ const props = defineProps({
 const groups = ref([]);
 const loading = ref(false);
 const error = ref('');
+const groupFormDialogRef = ref();
+const quotaAdjustmentDialogRef = ref();
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 });
 const filters = reactive({
   nameLike: '',
@@ -102,6 +108,10 @@ function updatePagination(next) {
   pagination.page = next.page;
   pagination.pageSize = next.pageSize;
   query();
+}
+
+function canAdjustQuota(row) {
+  return row?.capabilities?.adjust_quota === true;
 }
 
 query();
@@ -194,7 +204,44 @@ query();
         prop="linux_path"
         min-width="220"
         show-overflow-tooltip />
+      <ElTableColumn
+        label="操作"
+        align="right"
+        width="180"
+        fixed="right">
+        <template #header>
+          <TableActionButton
+            v-if="hasRole('disk-monitor:admin')"
+            action="create"
+            @click="groupFormDialogRef.edit()">
+            添加项目组
+          </TableActionButton>
+        </template>
+        <template #default="{ row }">
+          <div class="list-row-actions">
+            <TableActionButton
+              v-if="hasRole('disk-monitor:admin')"
+              action="edit"
+              @click="groupFormDialogRef.edit(row)">
+              编辑
+            </TableActionButton>
+            <TableActionButton
+              v-if="canAdjustQuota(row)"
+              action="edit"
+              @click="quotaAdjustmentDialogRef.open(row)">
+              调整额度
+            </TableActionButton>
+          </div>
+        </template>
+      </ElTableColumn>
     </DataTable>
+    <GroupFormDialog
+      ref="groupFormDialogRef"
+      @submitted="query" />
+    <QuotaAdjustmentDialog
+      ref="quotaAdjustmentDialogRef"
+      resource-type="group"
+      @submitted="query" />
   </section>
 </template>
 
