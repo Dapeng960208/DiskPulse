@@ -331,6 +331,72 @@ def test_tool_loop_sync_endpoints_and_audit_filters(api_client_factory, db_sessi
     assert client.delete(f"/storage-pulse/api/ai/conversations/{conversation['id']}").status_code == 204
 
 
+def test_stream_reuses_successful_tool_results_and_repairs_failed_calls(db_session, monkeypatch):
+    """A failed call may be corrected, but a prior successful identical call is never sent again."""
+    seed_user(db_session)
+    configured = seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, title="告警查询")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    app = FastAPI()
+    invocations = []
+
+    @app.get(
+        "/alerts",
+        openapi_extra={"ai_exposed": True, "ai_name": "list_storage_alerts", "ai_description": "查询告警"},
+    )
+    def alerts(cluster_id: int):
+        invocations.append(cluster_id)
+        return {"data": {"cluster_id": cluster_id, "total": 0}}
+
+    provider_messages = []
+
+    def provider_stream(_model, messages, **_kwargs):
+        provider_messages.append(messages)
+        round_number = len(provider_messages)
+        if round_number == 1:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[AIClientToolCall(tool_id="alerts-1", name="list_storage_alerts", arguments={"cluster_id": 9})],
+                stop_reason="tool_calls",
+            )
+        elif round_number == 2:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[AIClientToolCall(tool_id="alerts-invalid", name="list_storage_alerts", arguments={"cluster_id": "invalid"})],
+                stop_reason="tool_calls",
+            )
+        elif round_number == 3:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[AIClientToolCall(tool_id="alerts-reused", name="list_storage_alerts", arguments={"cluster_id": 9})],
+                stop_reason="tool_calls",
+            )
+        else:
+            yield AICompletionStreamEvent(kind="delta", text="当前没有异常告警。")
+            yield AICompletionStreamEvent(kind="completed", text="当前没有异常告警。", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    events = list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=1,
+            content="珠海集群有什么异常告警吗？",
+        )
+    )
+
+    completed = next(data for event, data in events if event == "completed")
+    assert completed["message"]["content"] == "当前没有异常告警。"
+    assert invocations == [9]
+    assert [item["status"] for item in completed["message"]["tool_calls"]] == ["succeeded", "failed", "reused"]
+    assert "调用失败" in json.dumps(provider_messages[2], ensure_ascii=False)
+    assert "修改参数" in json.dumps(provider_messages[2], ensure_ascii=False)
+
+
 def test_stream_persists_live_tool_trace_with_distinct_call_ids_and_truncated_results(db_session, monkeypatch):
     seed_user(db_session)
     configured = seed_model(db_session)

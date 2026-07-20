@@ -22,6 +22,7 @@ from routers import (
     ai,
     ai_admin,
     config,
+    forecast_incidents,
     group,
     group_tag,
     qtrees,
@@ -159,6 +160,36 @@ def test_dynamic_tool_registry_only_exposes_marked_get_routes():
         tool_name="get_visible",
         arguments={"item_id": "not-an-integer"},
     )["error"] == "工具参数无效"
+
+
+def test_performance_and_incident_analysis_tools_are_exposed_with_their_access_boundaries(monkeypatch):
+    app = FastAPI()
+    app.include_router(forecast_incidents.router)
+    app.include_router(volumes.router)
+
+    original_get = base_config.get
+
+    def configured_get(key, default=None):
+        return ["ai-admin"] if key == "super_admin_usernames" else original_get(key, default)
+
+    monkeypatch.setattr(base_config, "get", configured_get)
+    reader = User(id=101, username="reader", rd_username="reader", email="reader@example.com")
+    admin = User(id=102, username="ai-admin", rd_username="ai-admin", email="admin@example.com")
+
+    reader_registry = build_tool_registry(app, current_user=reader)
+    admin_registry = build_tool_registry(app, current_user=admin)
+
+    assert {
+        name: (reader_registry[name].route_path, reader_registry[name].method)
+        for name in {"list_performance_anomalies", "list_incidents", "get_incident_diagnosis"}
+    } == {
+        "list_performance_anomalies": ("/v1/anomalies", "GET"),
+        "list_incidents": ("/v1/incidents", "GET"),
+        "get_incident_diagnosis": ("/v1/incidents/{incident_id}/diagnosis", "GET"),
+    }
+    assert "get_volume_performance_monitoring" not in reader_registry
+    assert admin_registry["get_volume_performance_monitoring"].route_path == "/volumes/{volume_id}/monitoring/ai"
+    assert admin_registry["get_volume_performance_monitoring"].system_management is True
 
 
 def test_system_management_tools_require_super_admin_for_registry_and_execution(monkeypatch):

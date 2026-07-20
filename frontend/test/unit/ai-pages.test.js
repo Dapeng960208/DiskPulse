@@ -175,6 +175,13 @@ describe('AI pages interactions', () => {
     ]);
   });
 
+  it('labels a duplicate successful query as a reused result', async () => {
+    const wrapper = shallowMount(AiChatPage);
+    await flushPromises();
+
+    expect(wrapper.vm.toolStatusText('reused')).toBe('复用已获取结果');
+  });
+
   it('reconciles a completed message in place and preserves expanded tool details', async () => {
     const wrapper = shallowMount(AiChatPage);
     await flushPromises();
