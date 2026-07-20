@@ -16,6 +16,7 @@ from fastapi import HTTPException
 import models
 from appConfig import base_config
 from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
+from crud import projectsCrud
 from routers import project_memberships
 from schemas import projectsSchema, storageUsageSchema
 from services import project_access_service, project_membership_service
@@ -56,6 +57,24 @@ def test_project_owner_is_initialized_as_project_admin_and_pt_user_is_absent(db_
     assert membership.role == "project_admin"
     assert "pt_user_id" not in projectsSchema.ProjectUpdate.model_fields
     assert not hasattr(models.Project, "pt_user_id")
+
+
+def test_updating_project_owner_transfers_the_project_admin_role(db_session):
+    _seed_project_users(db_session)
+    new_owner = models.User(id=5, rd_username="next-owner", username="Next Owner")
+    db_session.add(new_owner)
+    project_access_service.ensure_project_owner_membership(db_session, project_id=1)
+    db_session.commit()
+
+    projectsCrud.update_project(
+        db_session,
+        1,
+        projectsSchema.ProjectUpdate(name="project-a", in_charge_user_id=new_owner.id),
+    )
+
+    assert db_session.query(models.ProjectMembership).filter_by(project_id=1, user_id=2).one_or_none() is None
+    membership = db_session.query(models.ProjectMembership).filter_by(project_id=1, user_id=5).one()
+    assert membership.role == "project_admin"
 
 
 def test_project_membership_migration_compiles_for_supported_dialects():
