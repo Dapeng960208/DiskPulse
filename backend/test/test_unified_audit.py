@@ -328,6 +328,50 @@ def test_ai_message_lifecycle_appends_unscoped_redacted_audit_event(db_session, 
     )
 
 
+def test_audit_event_list_serializes_numeric_resource_ids_as_strings(
+    api_client_factory,
+    session_factory,
+):
+    from routers import audit_events
+    from utils.security import issue_token
+
+    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("super_admin_usernames", ["audit-admin"])
+    session = session_factory()
+    try:
+        session.add_all(
+            [
+                User(id=1, rd_username="audit-admin", username="Audit Admin"),
+                AuditEvent(
+                    id="32d85a48-2667-4ee7-b369-5c4d670eb610",
+                    operation_id="54248ded-a2cb-45b5-b464-b5c12a2dc90d",
+                    phase="result",
+                    actor_type="user",
+                    actor_user_id=1,
+                    action="quota.adjust",
+                    resource_type="storage_usage",
+                    resource_id=296,
+                    outcome="success",
+                    request_id="c57c77c9-46ed-4c3f-92fc-bfd6d9e7eae6",
+                    trace_id="ee874b8d-e657-45eb-b6f2-c0a7c4cefb39",
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    client = api_client_factory(
+        [audit_events.router],
+        headers={"Authorization": f"Bearer {issue_token(1)}"},
+    )
+
+    response = client.get("/storage-pulse/api/v1/audit-events")
+
+    assert response.status_code == 200
+    assert response.json()["content"][0]["resource_id"] == "296"
+
+
 def test_audit_event_detail_is_available_only_within_the_authorized_project_scope(
     api_client_factory,
     session_factory,
