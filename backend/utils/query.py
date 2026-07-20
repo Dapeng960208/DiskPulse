@@ -17,3 +17,11 @@ def require_allowed(value: str, allowed: set[str], field_name: str) -> str:
     if value not in allowed:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid {field_name}: {value}")
     return value
+
+
+def apply_use_ratio_range(query, model, use_ratio_min: float | None, use_ratio_max: float | None):
+    if use_ratio_min is not None:
+        query = query.filter(model.use_ratio >= use_ratio_min)
+    if use_ratio_max is not None:
+        query = query.filter(model.use_ratio <= use_ratio_max)
+    return query

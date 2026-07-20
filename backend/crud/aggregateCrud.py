@@ -7,7 +7,7 @@ from utils.common import convert_GB_to_TB
 from typing import List
 from datetime import datetime
 from crud.questDbCrud import get_real_time_data_by_id
-from utils.query import get_sort_column, require_allowed
+from utils.query import apply_use_ratio_range, get_sort_column, require_allowed
 
 
 def _attach_tree_units(nodes: list[dict], value_unit: str) -> list[dict]:
@@ -23,12 +23,14 @@ def get_aggregate_by_id(db: Session, aggregate_id: int):
 
 
 def get_aggregates(db: Session, page: int, size: int, nameLike: str | None = None, prop: str | None = None,
-                   order: str | None = None, storage_cluster_id: int | None = None):
+                    order: str | None = None, storage_cluster_id: int | None = None,
+                    use_ratio_min: float | None = None, use_ratio_max: float | None = None):
     query = db.query(Aggregate)
     if nameLike and len(nameLike.strip()) > 0:
         query = query.filter(Aggregate.name.like(f"%{nameLike}%"))
     if storage_cluster_id:
         query = query.filter(Aggregate.storage_cluster_id == storage_cluster_id)
+    query = apply_use_ratio_range(query, Aggregate, use_ratio_min, use_ratio_max)
     total = query.count()
     sort_column = get_sort_column(Aggregate, prop)
     if sort_column is not None:

@@ -5,7 +5,7 @@ from typing import Annotated, List
 from datetime import datetime
 from schemas import volumeSchema, commonSchema, storageTrendSchema
 from crud import volumeCrud
-from dependencies import get_db, require_super_admin
+from dependencies import UseRatioMaximum, UseRatioMinimum, get_db, require_super_admin, validate_use_ratio_range
 from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
 
 router = APIRouter(
@@ -39,9 +39,13 @@ def create_volume(
     },
 )
 def read_volumes(page: int | None = 1, size: int | None = 20, nameLike: str | None = None, prop: str | None = None,
-                 order: str | None = None, storage_cluster_id: int | None = None, db: Session = Depends(get_db)):
+                 order: str | None = None, storage_cluster_id: int | None = None,
+                 use_ratio_min: UseRatioMinimum = None, use_ratio_max: UseRatioMaximum = None,
+                 db: Session = Depends(get_db)):
+    use_ratio_min, use_ratio_max = validate_use_ratio_range(use_ratio_min, use_ratio_max)
     volumes, total = volumeCrud.get_volumes(db=db, page=page, size=size, nameLike=nameLike, prop=prop, order=order,
-                                           storage_cluster_id=storage_cluster_id)
+                                           storage_cluster_id=storage_cluster_id,
+                                           use_ratio_min=use_ratio_min, use_ratio_max=use_ratio_max)
     return commonSchema.ResponseModel[volumeSchema.Volume](content=volumes, total=total)
 
 

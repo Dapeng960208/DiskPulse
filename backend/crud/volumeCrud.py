@@ -15,7 +15,7 @@ from crud.configCrud import get_storage_config
 from dependencies import QuestDBSession
 from sqlalchemy import text
 from services.volumeMonitoringService import METRICS, resolve_performance_identity, validate_metrics
-from utils.query import get_sort_column
+from utils.query import apply_use_ratio_range, get_sort_column
 
 
 def get_volume_by_id(db: Session, volume_id: int):
@@ -23,12 +23,14 @@ def get_volume_by_id(db: Session, volume_id: int):
 
 
 def get_volumes(db: Session, page: int, size: int, nameLike: str | None = None, prop: str | None = None,
-                order: str | None = None, storage_cluster_id: int | None = None):
+                 order: str | None = None, storage_cluster_id: int | None = None,
+                 use_ratio_min: float | None = None, use_ratio_max: float | None = None):
     query = db.query(Volume)
     if nameLike and len(nameLike.strip()) > 0:
         query = query.filter(or_(Volume.name.like(f"%{nameLike}%"), Volume.vserver.like(f"%{nameLike}%")))
     if storage_cluster_id:
         query = query.filter(Volume.storage_cluster_id == storage_cluster_id)
+    query = apply_use_ratio_range(query, Volume, use_ratio_min, use_ratio_max)
     total = query.count()
     sort_column = get_sort_column(Volume, prop)
     if sort_column is not None:

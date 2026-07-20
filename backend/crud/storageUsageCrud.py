@@ -11,7 +11,7 @@ import os
 from sqlalchemy.orm import Session
 import pandas as pd
 from utils.pdf.pdfReporter import PDFReportGenerator
-from utils.query import get_sort_column
+from utils.query import apply_use_ratio_range, get_sort_column
 from utils.storageTarget import resolve_group_storage_target
 
 
@@ -22,9 +22,10 @@ def get_storage_usage_by_id(db: Session, storage_usage_id: int):
 def get_storage_usages(db: Session, page: int | None = None, size: int | None = None, nameLike: str | None = None,
                        prop: str | None = None,
                        order: str | None = None, user_id: int | None = None, group_id: int | None = None,
-                       storage_cluster_id: int | None = None, project_id: int | None = None,
-                       group_tag_id: int | None = None,
-                       accessible_project_ids: set[int] | None = None):
+                        storage_cluster_id: int | None = None, project_id: int | None = None,
+                        group_tag_id: int | None = None,
+                        accessible_project_ids: set[int] | None = None,
+                        use_ratio_min: float | None = None, use_ratio_max: float | None = None):
     query = db.query(StorageUsage)
     conditions = []
     if nameLike and len(nameLike.strip()) > 0:
@@ -49,6 +50,7 @@ def get_storage_usages(db: Session, page: int | None = None, size: int | None = 
     if storage_cluster_id is not None:
         conditions.append(Group.storage_cluster_id == storage_cluster_id)
     query = query.filter(*conditions)
+    query = apply_use_ratio_range(query, StorageUsage, use_ratio_min, use_ratio_max)
     total = query.count()
     sort_column = get_sort_column(StorageUsage, prop)
     if sort_column is not None:

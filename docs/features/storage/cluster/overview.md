@@ -6,6 +6,10 @@
 
 核心接口位于 `/storage-pulse/api/storage-clusters`，支持集群列表、创建、详情、更新、删除和实时趋势。设备协议由集群的 `protocol` 决定，`tls_verify` 只适用于 HTTPS；HTTP 仅应在可信隔离网络中使用。
 
+## 列表利用率筛选
+
+存储资源的分页列表 `GET /storage-clusters/`、`/aggregates/`、`/volumes/`、`/qtrees/`、`/groups/`、`/storage-usages/` 和 `/projects/` 均支持可选的 `use_ratio_min` 与 `use_ratio_max` 查询参数。两者使用 0--100 的百分比口径并按闭区间筛选；省略任一边界时不限制该边界，最小值大于最大值或任一值超出范围时返回 `422`。现有认证、项目隔离、名称筛选、资源归属筛选、排序和分页先后语义保持不变。
+
 容量类资源响应、实时曲线和容量树遵守[容量单位 API 契约](../../../standards/backend/capacity-unit-contract.md)，避免把利用率与容量混淆。
 
 创建、启用或更新已启用集群后会异步触发采集，保存请求不等待设备响应。采集失败保留已有资源数据并记录安全诊断日志，不输出设备地址、账号或密码。

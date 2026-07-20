@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from schemas import groupSchema, commonSchema, quotaSchema, storageTrendSchema
 from crud import groupCrud
-from dependencies import CurrentUserDep, get_db, require_super_admin
+from dependencies import CurrentUserDep, UseRatioMaximum, UseRatioMinimum, get_db, require_super_admin, validate_use_ratio_range
 from services import audit_service, quotaService
 from services import project_access_service
 from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
@@ -37,8 +37,10 @@ def read_groups(page: int | None = 1, size: int | None = 20, nameLike: str | Non
                 order: str | None = None, qtree_id: int | None = None,
                 volume_id: int | None = None, project_id: int | None = None,
                 storage_cluster_id: int | None = None, group_tag_id: int | None = None,
+                use_ratio_min: UseRatioMinimum = None, use_ratio_max: UseRatioMaximum = None,
                 current_user: CurrentUserDep = None,
                 db: Session = Depends(get_db)):
+    use_ratio_min, use_ratio_max = validate_use_ratio_range(use_ratio_min, use_ratio_max)
     if project_id is not None:
         project_access_service.require_project_permission(db, current_user, project_id, "reader")
     groups, total = groupCrud.get_groups(db=db, page=page, size=size, nameLike=nameLike, prop=prop, order=order,
@@ -46,7 +48,8 @@ def read_groups(page: int | None = 1, size: int | None = 20, nameLike: str | Non
                                          project_id=project_id,
                                          storage_cluster_id=storage_cluster_id,
                                          group_tag_id=group_tag_id,
-                                         accessible_project_ids=project_access_service.accessible_project_ids(db, current_user))
+                                         accessible_project_ids=project_access_service.accessible_project_ids(db, current_user),
+                                         use_ratio_min=use_ratio_min, use_ratio_max=use_ratio_max)
     return commonSchema.ResponseModel[groupSchema.Group](
         content=[
             groupCrud.serialize_group(

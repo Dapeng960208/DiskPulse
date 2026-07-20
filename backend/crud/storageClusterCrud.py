@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from models import Group, StorageCluster
 from schemas.storageClusterSchema import StorageClusterCreate, StorageClusterUpdate
 from typing import Optional, List
-from utils.query import get_sort_column
+from utils.query import apply_use_ratio_range, get_sort_column
 
 
 def get_storage_cluster(db: Session, storage_cluster_id: int) -> Optional[StorageCluster]:
@@ -15,13 +15,15 @@ def get_storage_cluster(db: Session, storage_cluster_id: int) -> Optional[Storag
 
 
 def get_storage_clusters(db: Session, page: int | None = None, size: int | None = None, nameLike: str | None = None,
-                       prop: str | None = None,
-                       order: str | None = None, is_active: Optional[bool] = None):
+                        prop: str | None = None,
+                        order: str | None = None, is_active: Optional[bool] = None,
+                        use_ratio_min: float | None = None, use_ratio_max: float | None = None):
     query = db.query(StorageCluster)
     if is_active is not None:
         query = query.filter(StorageCluster.is_active.is_(is_active))
     if nameLike and len(nameLike.strip()) > 0:
         query = query.filter(StorageCluster.name.like(f"%{nameLike}%"))
+    query = apply_use_ratio_range(query, StorageCluster, use_ratio_min, use_ratio_max)
     total = query.count()
     sort_column = get_sort_column(StorageCluster, prop)
     if sort_column is not None:

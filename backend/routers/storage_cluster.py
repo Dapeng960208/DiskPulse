@@ -9,7 +9,7 @@ from datetime import datetime
 from schemas import storageClusterSchema, commonSchema, storageTrendSchema
 from crud import storageClusterCrud
 from crud.questDbCrud import get_storage_cluster_real_time
-from dependencies import CurrentUserDep, get_db, require_super_admin
+from dependencies import CurrentUserDep, UseRatioMaximum, UseRatioMinimum, get_db, require_super_admin, validate_use_ratio_range
 from services import audit_service
 from services.storageClusterService import schedule_storage_collection as _schedule_storage_collection
 from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
@@ -67,9 +67,14 @@ def read_storage_clusters(
         prop: str | None = None,
         order: str | None = None,
         is_active: Optional[bool] = None,
+        use_ratio_min: UseRatioMinimum = None,
+        use_ratio_max: UseRatioMaximum = None,
     db: Session = Depends(get_db)
 ):
-    total,storage_clusters = storageClusterCrud.get_storage_clusters(db, page, size, nameLike, prop, order, is_active)
+    use_ratio_min, use_ratio_max = validate_use_ratio_range(use_ratio_min, use_ratio_max)
+    total,storage_clusters = storageClusterCrud.get_storage_clusters(
+        db, page, size, nameLike, prop, order, is_active, use_ratio_min, use_ratio_max,
+    )
     return commonSchema.ResponseModel[storageClusterSchema.StorageCluster](content=storage_clusters, total=total)
 
 

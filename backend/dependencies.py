@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Query, Request, status
 from database import SessionLocal
 from questdb.database import QuestDBSessionLocal, questdb_engine
 from crud import usersCrud
@@ -63,6 +63,28 @@ def get_current_token(
 
 
 CurrentTokenDep = Annotated[str, Depends(get_current_token)]
+
+
+UseRatioMinimum = Annotated[
+    float | None,
+    Query(ge=0, le=100, description="Minimum storage utilization percentage"),
+]
+UseRatioMaximum = Annotated[
+    float | None,
+    Query(ge=0, le=100, description="Maximum storage utilization percentage"),
+]
+
+
+def validate_use_ratio_range(
+    use_ratio_min: float | None,
+    use_ratio_max: float | None,
+) -> tuple[float | None, float | None]:
+    if use_ratio_min is not None and use_ratio_max is not None and use_ratio_min > use_ratio_max:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="use_ratio_min cannot exceed use_ratio_max",
+        )
+    return use_ratio_min, use_ratio_max
 
 
 def require_super_admin(current_user: CurrentUserDep) -> None:

@@ -15,7 +15,7 @@ from models import (
 from schemas import projectsSchema
 from services.project_access_service import ensure_project_owner_membership
 from utils.common import convert_GB_to_TB
-from utils.query import get_sort_column, require_allowed
+from utils.query import apply_use_ratio_range, get_sort_column, require_allowed
 
 
 def get_project_by_name(db: Session, name: str):
@@ -102,6 +102,8 @@ def get_projects(
     order: str | None = None,
     status: int | None = None,
     accessible_project_ids: set[int] | None = None,
+    use_ratio_min: float | None = None,
+    use_ratio_max: float | None = None,
 ):
     query = db.query(Project)
     if nameLike and len(nameLike.strip()) > 0:
@@ -112,6 +114,8 @@ def get_projects(
         query = query.filter(Project.status == status)
     if accessible_project_ids is not None:
         query = query.filter(Project.id.in_(accessible_project_ids))
+
+    query = apply_use_ratio_range(query, Project, use_ratio_min, use_ratio_max)
 
     total = query.count()
     sort_column = get_sort_column(Project, prop)

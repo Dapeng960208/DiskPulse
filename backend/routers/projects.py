@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from crud import projectsCrud
-from dependencies import CurrentUserDep, get_db, require_super_admin
+from dependencies import CurrentUserDep, UseRatioMaximum, UseRatioMinimum, get_db, require_super_admin, validate_use_ratio_range
 from schemas import commonSchema, projectsSchema, storageTrendSchema
 from services import project_access_service
 from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
@@ -26,8 +26,11 @@ def read_projects(
     prop: str = Query(None),
     order: str = Query(None),
     status: int | None = None,
+    use_ratio_min: UseRatioMinimum = None,
+    use_ratio_max: UseRatioMaximum = None,
     db: Session = Depends(get_db),
 ):
+    use_ratio_min, use_ratio_max = validate_use_ratio_range(use_ratio_min, use_ratio_max)
     projects, total = projectsCrud.get_projects(
         db,
         page=page,
@@ -37,6 +40,8 @@ def read_projects(
         prop=prop,
         order=order,
         accessible_project_ids=project_access_service.accessible_project_ids(db, current_user),
+        use_ratio_min=use_ratio_min,
+        use_ratio_max=use_ratio_max,
     )
     return commonSchema.ResponseModel[projectsSchema.ProjectOverview](
         content=projects,

@@ -7,7 +7,7 @@ from schemas import groupSchema
 from sqlalchemy import or_, desc, asc
 from datetime import datetime, timedelta
 from crud.questDbCrud import get_real_time_data_by_id
-from utils.query import get_sort_column
+from utils.query import apply_use_ratio_range, get_sort_column
 from utils.storageTarget import resolve_group_storage_target
 
 
@@ -16,10 +16,11 @@ def get_group_by_id(db: Session, group_id: int):
 
 
 def get_groups(db: Session, page: int | None = None, size: int | None = None, nameLike: str | None = None,
-               prop: str | None = None,
-               order: str | None = None, qtree_id: int | None = None, project_id: int | None = None,
-               storage_cluster_id: int | None = None, group_tag_id: int | None = None,
-               volume_id: int | None = None, accessible_project_ids: set[int] | None = None):
+                prop: str | None = None,
+                order: str | None = None, qtree_id: int | None = None, project_id: int | None = None,
+                storage_cluster_id: int | None = None, group_tag_id: int | None = None,
+                volume_id: int | None = None, accessible_project_ids: set[int] | None = None,
+                use_ratio_min: float | None = None, use_ratio_max: float | None = None):
     if volume_id is not None and qtree_id is not None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -43,6 +44,7 @@ def get_groups(db: Session, page: int | None = None, size: int | None = None, na
         conditions.append(Group.group_tag_id == group_tag_id)
 
     query = query.filter(*conditions)
+    query = apply_use_ratio_range(query, Group, use_ratio_min, use_ratio_max)
     total = query.count()
     sort_column = get_sort_column(Group, prop)
     if sort_column is not None:

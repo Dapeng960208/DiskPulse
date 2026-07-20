@@ -7,7 +7,7 @@ from models import Group, Qtree, Volume
 from schemas import qtreeSchema
 from sqlalchemy import or_, desc, asc
 from crud.questDbCrud import get_real_time_data_by_id
-from utils.query import get_sort_column
+from utils.query import apply_use_ratio_range, get_sort_column
 from datetime import datetime, timedelta
 
 
@@ -16,7 +16,8 @@ def get_qtree_by_id(db: Session, qtree_id: int):
 
 
 def get_qtrees(db: Session, page: int, size: int, nameLike: str | None = None, prop: str | None = None,
-               order: str | None = None, volume_id: int | None = None, storage_cluster_id: int | None = None):
+               order: str | None = None, volume_id: int | None = None, storage_cluster_id: int | None = None,
+               use_ratio_min: float | None = None, use_ratio_max: float | None = None):
     query = db.query(Qtree)
     conditions = []
     if nameLike and len(nameLike.strip()) > 0:
@@ -27,6 +28,7 @@ def get_qtrees(db: Session, page: int, size: int, nameLike: str | None = None, p
     if storage_cluster_id:
         conditions.append(Qtree.storage_cluster_id == storage_cluster_id)
     query = query.filter(*conditions)
+    query = apply_use_ratio_range(query, Qtree, use_ratio_min, use_ratio_max)
     total = query.count()
     sort_column = get_sort_column(Qtree, prop)
     if sort_column is not None:

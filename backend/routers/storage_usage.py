@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
 from schemas import storageUsageSchema, commonSchema, quotaSchema, storageTrendSchema
 from crud import storageUsageCrud, usersCrud, groupCrud
-from dependencies import CurrentUserDep, get_db, require_super_admin
+from dependencies import CurrentUserDep, UseRatioMaximum, UseRatioMinimum, get_db, require_super_admin, validate_use_ratio_range
 from datetime import datetime, timedelta
 from utils.plot import plot_real_time_line
 from utils.common import convert_timestamp_to_datetime
@@ -62,16 +62,19 @@ def read_storage_usages(page: int | None = 1, size: int | None = 20, nameLike: s
                          prop: str | None = None,
                          order: str | None = None, user_id: int | str = Query(None), group_id: int | None = None,
                          storage_cluster_id: int | None = None, project_id: int | None = None,
-                         group_tag_id: int | None = None, current_user: CurrentUserDep = None,
+                         group_tag_id: int | None = None, use_ratio_min: UseRatioMinimum = None,
+                         use_ratio_max: UseRatioMaximum = None, current_user: CurrentUserDep = None,
                          db: Session = Depends(get_db)):
     if user_id == "":
         user_id = None
+    use_ratio_min, use_ratio_max = validate_use_ratio_range(use_ratio_min, use_ratio_max)
     storage_usages, total = storageUsageCrud.get_storage_usages(db=db, page=page, size=size, nameLike=nameLike,
                                                                  prop=prop, order=order, user_id=user_id,
                                                                  group_id=group_id, storage_cluster_id=storage_cluster_id,
-                                                                 project_id=project_id,
-                                                                 group_tag_id=group_tag_id,
-                                                                 accessible_project_ids=project_access_service.accessible_project_ids(db, current_user))
+                                                                  project_id=project_id,
+                                                                  group_tag_id=group_tag_id,
+                                                                  accessible_project_ids=project_access_service.accessible_project_ids(db, current_user),
+                                                                  use_ratio_min=use_ratio_min, use_ratio_max=use_ratio_max)
     return commonSchema.ResponseModel[storageUsageSchema.StorageUsage](
         content=[
             storageUsageCrud.serialize_storage_usage(
