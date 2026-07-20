@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import io
+import logging
 from pathlib import Path
 
 import pytest
@@ -894,6 +895,40 @@ def test_stream_setup_failure_still_emits_the_precreated_turn(db_session, monkey
     assert error["turn_id"] == accepted["turn_id"]
     assert error["message"]["id"] == accepted["message_id"]
     assert error["message"]["status"] == "failed"
+
+
+def test_stream_setup_failure_logs_traceable_server_error(db_session, monkeypatch, caplog):
+    base_config.set("ai.config_secret_key", "test-ai-config-secret-key")
+    _seed_user(db_session)
+    model = _seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=model.id, title="日志失败")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    def broken_registry(*_args, **_kwargs):
+        raise RuntimeError("synthetic setup failure")
+
+    monkeypatch.setattr(ai_chat_service, "build_tool_registry", broken_registry)
+    with caplog.at_level(logging.ERROR, logger=ai_chat_service.__name__):
+        events = list(
+            ai_chat_service.stream_message(
+                app=FastAPI(),
+                db=db_session,
+                conversation_id=conversation.id,
+                user_id=1,
+                content="记录后端失败日志",
+            )
+        )
+
+    accepted = next(data for event, data in events if event == "accepted")
+    error = events[-1][1]
+    assert error["error"] == "AI 服务暂不可用"
+    record = next(record for record in caplog.records if record.name == ai_chat_service.__name__)
+    assert record.levelno == logging.ERROR
+    assert accepted["trace_id"] in record.getMessage()
+    assert "RuntimeError" in record.getMessage()
+    assert record.exc_info is not None
 
 
 def test_rate_limit_returns_503_when_redis_is_unavailable():
