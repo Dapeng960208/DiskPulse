@@ -33,6 +33,12 @@ vi.mock('element-plus', () => ({
   },
   ElForm: { name: 'ElForm', template: '<form><slot /></form>' },
   ElFormItem: { name: 'ElFormItem', template: '<div><slot /></div>' },
+  ElInput: {
+    name: 'ElInput',
+    props: { modelValue: String, placeholder: String },
+    emits: ['update:modelValue'],
+    template: '<input :placeholder="placeholder" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
   ElMessage: { error: ui.error, success: ui.success, warning: vi.fn() },
   ElMessageBox: { confirm: ui.confirm },
   ElOption: { name: 'ElOption', template: '<option><slot /></option>' },
@@ -52,6 +58,9 @@ async function mountTab({ canManageMembers = false, canManageProjectAdmins = fal
     props: { projectId: 1, canManageMembers, canManageProjectAdmins },
     global: {
       directives: { loading: () => undefined },
+      stubs: {
+        QueryForm: { name: 'QueryForm', template: '<form><slot /></form>' },
+      },
     },
   });
   await flushPromises();
@@ -116,6 +125,21 @@ describe('ProjectMembersTab', () => {
     const wrapper = await mountTab();
 
     expect(wrapper.findComponent({ name: 'ElTable' }).props('data')).toEqual(members);
+  });
+
+  it('filters the loaded members by username without requesting a broader project membership list', async () => {
+    const members = [
+      { user_id: 9, role: 'editor', user: { rd_username: 'bob' } },
+      { user_id: 10, role: 'reader', user: { rd_username: 'alice' } },
+    ];
+    membershipApi.list.mockResolvedValue(members);
+
+    const wrapper = await mountTab();
+    await wrapper.find('input[placeholder="按用户名筛选"]').setValue('bob');
+
+    expect(wrapper.findComponent({ name: 'ElTable' }).props('data')).toEqual([members[0]]);
+    expect(membershipApi.list).toHaveBeenCalledTimes(1);
+    expect(membershipApi.list).toHaveBeenCalledWith(1);
   });
 
   it('shows an error when confirmed removal fails instead of treating it as cancellation', async () => {

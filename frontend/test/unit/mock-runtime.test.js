@@ -82,6 +82,27 @@ describe('frontend mock runtime', () => {
       .rejects.toMatchObject({ status: 403 });
   });
 
+  it('returns current storage distribution as a project-group to user tree', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    const tree = await gateway.request('get', '/projects/1/storage-tree', undefined, superadmin.token, {
+      params: { value_type: 'used' },
+    });
+
+    expect(tree.data).toHaveLength(1);
+    expect(tree.data[0]).toMatchObject({
+      name: expect.any(String),
+      value: expect.any(Number),
+      used: expect.any(Number),
+      children: [{
+        name: expect.any(String),
+        value: expect.any(Number),
+        used: expect.any(Number),
+      }],
+    });
+  });
+
   it('keeps system resource reads and writes exclusive to the superadmin', async () => {
     // Review source: the generic Mock table map exposed system inventory to
     // project-scoped roles. Resolution contract: mirror real route RBAC while

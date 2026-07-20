@@ -4,7 +4,7 @@ import RealTimePage from '@/pages/common/RealTimePage.vue';
 defineProps({
   attributeId: {
     type: Number,
-    required: true,
+    default: null,
   },
 });
 </script>
@@ -15,6 +15,7 @@ defineProps({
     api-type="project"
     label="项目"
     :show-header="false"
-    :show-resource-select="false"
-    :allowed-indicators="['used']" />
+    :show-resource-select="!attributeId"
+    :allowed-indicators="['used']"
+    :fill-content="Boolean(attributeId)" />
 </template>

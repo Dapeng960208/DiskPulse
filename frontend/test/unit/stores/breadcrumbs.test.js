@@ -16,4 +16,14 @@ describe('breadcrumb store', () => {
     expect(breadcrumbs.detailTitleFor('UsagesDetail')).toBe('');
     expect(breadcrumbs.detailTitleFor('GroupDetail')).toBe('');
   });
+
+  it('keeps a loaded project hierarchy scoped to the detail route', () => {
+    const breadcrumbs = useBreadcrumbs();
+
+    breadcrumbs.setDetailBreadcrumb('UsagesDetail', ['项目', '存储平台', 'alice用户详情']);
+    breadcrumbs.setDetailBreadcrumb('UsagesDetail', []);
+
+    expect(breadcrumbs.detailBreadcrumbFor('UsagesDetail')).toEqual([]);
+    expect(breadcrumbs.detailBreadcrumbFor('GroupDetail')).toEqual([]);
+  });
 });

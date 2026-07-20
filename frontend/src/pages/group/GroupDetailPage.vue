@@ -4,10 +4,30 @@ import { onBeforeMount, ref } from 'vue';
 import RealTimePage from '@/pages/common/RealTimePage.vue';
 import { useRoute } from 'vue-router';
 import { formatStorageTargetType } from '@/utils/storage-resource';
+import groupApi from '@/api/group-api.js';
+import { useBreadcrumbs } from '@/stores/breadcrumbs';
 const route = useRoute();
+const breadcrumbs = useBreadcrumbs();
 const attributeId = ref(null);
+
+async function loadProjectBreadcrumb() {
+  try {
+    const group = await groupApi.fetchById(attributeId.value);
+    const projectName = group?.project?.name;
+    const groupName = group?.name;
+    breadcrumbs.setDetailBreadcrumb(
+      route.name,
+      projectName && groupName ? ['项目', projectName, `${groupName}项目组详情`] : [],
+    );
+  } catch {
+    breadcrumbs.setDetailBreadcrumb(route.name, []);
+  }
+}
+
 onBeforeMount(() => {
   attributeId.value = parseInt(route.params?.id);
+  breadcrumbs.setDetailBreadcrumb(route.name, []);
+  loadProjectBreadcrumb();
 });
 
 </script>

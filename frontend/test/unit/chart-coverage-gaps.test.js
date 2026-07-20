@@ -95,6 +95,7 @@ describe('chart coverage gaps', () => {
     const instance = latestChart();
     const option = latestOption();
     expect(option.series[0].name).toBe('容量');
+    expect(option.series[0].visibleMin).toBe(0);
     expect(option.series[0].levels).toHaveLength(3);
     expect(option.tooltip.formatter({
       data: { limit: 2048, used: 1024, used_ratio: 50 },

@@ -57,6 +57,10 @@ const props = defineProps({
     type: Array,
     default: null,
   },
+  fillContent: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 function normalizeResourceIds(value) {
@@ -231,7 +235,9 @@ const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThre
 
 </script>
 <template>
-  <div class="real-time-page flex flex-col flex-1 min-h-0">
+  <div
+    class="real-time-page flex flex-col flex-1 min-h-0"
+    :class="{ 'real-time-page--fill': fillContent }">
     <section
       v-if="showHeader"
       class="real-time-page__header">
@@ -530,6 +536,28 @@ const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThre
 
   &.flex-auto {
     gap: var(--spacing-lg);
+  }
+}
+
+.real-time-page--fill {
+  height: 100%;
+  min-height: 0;
+
+  .real-time-page__workspace {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .real-time-page__chart-panel,
+  .real-time-page__alerts-panel {
+    display: flex;
+    min-height: 0;
+  }
+
+  .real-time-page__chart-panel :deep(.el-card),
+  .real-time-page__alerts-panel :deep(.el-card) {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 }
 

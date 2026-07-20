@@ -20,6 +20,22 @@ vi.mock('@/components/form/Progress.vue', () => ({
   default: { name: 'Progress', template: '<span />' },
 }));
 
+const simpleFormControl = (name) => ({ name, template: '<div><slot /></div>' });
+
+vi.mock('@/components/form/QueryForm.vue', () => ({
+  default: {
+    name: 'QueryForm',
+    emits: ['query', 'reset'],
+    template: '<form><slot /><slot name="advanced" /></form>',
+  },
+}));
+vi.mock('@/components/form/RdUserSelect.vue', () => ({ default: simpleFormControl('RdUserSelect') }));
+vi.mock('@/components/form/StorageClusterSelect.vue', () => ({ default: simpleFormControl('StorageClusterSelect') }));
+vi.mock('@/components/form/GroupTagSelect.vue', () => ({ default: simpleFormControl('GroupTagSelect') }));
+vi.mock('@/components/form/GroupSelect.vue', () => ({ default: simpleFormControl('GroupSelect') }));
+vi.mock('@/components/form/VolumeSelect.vue', () => ({ default: simpleFormControl('VolumeSelect') }));
+vi.mock('@/components/form/QtreeSelect.vue', () => ({ default: simpleFormControl('QtreeSelect') }));
+
 const { default: ProjectGroupsTab } = await import('@/pages/project/components/ProjectGroupsTab.vue');
 const { default: ProjectUsagesTab } = await import('@/pages/project/components/ProjectUsagesTab.vue');
 
@@ -138,13 +154,18 @@ describe('project detail information architecture', () => {
     const page = source('src/pages/project/ProjectDetailPage.vue');
 
     expect(page).toContain('ProjectDiskUsage');
+    expect(page).toContain('ProjectStorageDistribution');
     expect(page).toContain('ProjectUsagesTab');
-    expect(page).toContain('label="容量概览"');
+    expect(page).toContain('label="项目使用实时"');
+    expect(page).toContain('label="存储分布"');
     expect(page).toContain('label="项目组"');
     expect(page).toContain('label="用户目录"');
     expect(page).toContain('label="成员与权限"');
     expect(page).toContain(':attribute-id="projectId"');
     expect(page).toContain(':project-id="projectId"');
+    expect(page).toContain('class="project-detail-page__tabs"');
+    expect(page).toContain('class="project-detail-page__visual-tab"');
+    expect(page).toMatch(/\.project-detail-page \{\r?\n  display: flex;\r?\n  flex: 1 1 auto;\r?\n  flex-direction: column;\r?\n  min-height: 0;\r?\n  height: 100%;/);
   });
 
   it('loads only the selected project user directories and links to their details', () => {
@@ -152,8 +173,29 @@ describe('project detail information architecture', () => {
 
     expect(tab).toContain('project_id: props.projectId');
     expect(tab).toContain("name: 'UsagesDetail'");
+    expect(tab).toContain('<QueryForm');
+    expect(tab).toContain('<RdUserSelect');
+    expect(tab).toContain('<StorageClusterSelect');
+    expect(tab).toContain('<GroupTagSelect');
+    expect(tab).toContain('<GroupSelect');
+    expect(tab).toContain('label="项目组标签"');
+    expect(tab).toContain('label="软限额使用率(%)"');
     expect(tab).toContain('<DataTable');
     expect(tab).toContain('<AccessibleResourceLink');
+    expect(tab).toContain('离职账户');
+    expect(tab).not.toContain('公共账户');
+    expect(tab).not.toContain('label="项目"');
+    expect(tab).not.toContain('label="存储类型"');
+    expect(tab).not.toContain('StorageTypeTag');
+  });
+
+  it('keeps the project storage overview while exposing storage distribution in project details', () => {
+    const listPage = source('src/pages/project/ProjectListPage.vue');
+    const detailPage = source('src/pages/project/ProjectDetailPage.vue');
+
+    expect(listPage).toContain('label="项目存储概览图"');
+    expect(detailPage).toContain('label="项目使用实时"');
+    expect(detailPage).toContain('label="存储分布"');
   });
 
   it('loads project groups through a lazy paged tab instead of the detail page mount', () => {
@@ -161,12 +203,18 @@ describe('project detail information architecture', () => {
     const tab = source('src/pages/project/components/ProjectGroupsTab.vue');
 
     expect(page).toContain("const ProjectGroupsTab = defineAsyncComponent(() => import('./components/ProjectGroupsTab.vue'));");
-    expect(page).toContain('label="项目组"\n        name="groups"\n        lazy');
+    expect(page).toMatch(/label="项目组"\r?\n\s+name="groups"\r?\n\s+lazy/);
     expect(page).toContain('<ProjectGroupsTab :project-id="projectId" />');
     expect(page).not.toContain("groupApi.fetch({ project_id: projectId.value, page: 1, size: 100 })");
 
     expect(tab).toContain('project_id: props.projectId');
     expect(tab).toContain('pageSize: 20');
+    expect(tab).toContain('<QueryForm');
+    expect(tab).toContain('label="项目组名称"');
+    expect(tab).toContain('<StorageClusterSelect');
+    expect(tab).toContain('<GroupTagSelect');
+    expect(tab).toContain('<VolumeSelect');
+    expect(tab).toContain('<QtreeSelect');
     expect(tab).toContain('<DataTable');
     expect(tab).toContain('<AccessibleResourceLink');
     expect(tab).toContain('<StorageTypeTag');

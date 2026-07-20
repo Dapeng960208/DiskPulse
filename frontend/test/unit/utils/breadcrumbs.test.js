@@ -43,4 +43,14 @@ describe('buildBreadcrumbItems', () => {
       { label: '项目组详情', title: '项目组详情' },
     ]);
   });
+
+  it('uses a loaded project resource hierarchy when a child detail provides it', () => {
+    expect(buildBreadcrumbItems([
+      { meta: { title: '用户目录详情', breadcrumb: ['用户目录', '用户目录详情'] } },
+    ], 'alice', ['项目', '存储平台', 'alice用户详情'])).toEqual([
+      { label: '项目', title: '项目' },
+      { label: '存储平台', title: '存储平台' },
+      { label: 'alice用户详情', title: 'alice用户详情' },
+    ]);
+  });
 });
