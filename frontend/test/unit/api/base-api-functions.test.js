@@ -26,11 +26,11 @@ describe('BaseApi helper methods', () => {
 
     expect(await baseApi.$all(Promise.resolve(1), Promise.resolve(2))).toEqual([1, 2]);
     expect(request.all).toHaveBeenCalled();
-    expect(baseApi.$post('/raw', { id: 1 })).resolves.toEqual({ data: { ok: true } });
-    expect(baseApi.$delete('/raw')).resolves.toEqual({ data: { ok: true } });
-    expect(baseApi.$put('/raw', { id: 2 })).resolves.toEqual({ data: { ok: true } });
-    expect(baseApi.$patch('/raw', { id: 3 })).resolves.toEqual({ data: { ok: true } });
-    expect(baseApi.$get('/raw')).resolves.toEqual({ data: { ok: true } });
+    await expect(baseApi.$post('/raw', { id: 1 })).resolves.toEqual({ data: { ok: true } });
+    await expect(baseApi.$delete('/raw')).resolves.toEqual({ data: { ok: true } });
+    await expect(baseApi.$put('/raw', { id: 2 })).resolves.toEqual({ data: { ok: true } });
+    await expect(baseApi.$patch('/raw', { id: 3 })).resolves.toEqual({ data: { ok: true } });
+    await expect(baseApi.$get('/raw')).resolves.toEqual({ data: { ok: true } });
     expect(baseApi.addPrefix('/daily')).toBe('/reports/daily');
 
     expect(spread(2, 3)).toBe(5);
