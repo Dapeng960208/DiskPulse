@@ -9,7 +9,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from models import StorageUsage
+from models import StorageUsage, User
 from schemas.usersSchema import UserSyncResult
 
 
@@ -183,6 +183,9 @@ def _seed_usage_rows(session_factory):
     with session_factory() as db:
         db.add_all(
             [
+                User(id=10, rd_username="directory-owner", storage_used=0),
+                User(id=20, rd_username="empty-usage-owner", storage_used=0),
+                User(id=30, rd_username="removed-directory-owner", storage_used=999),
                 StorageUsage(
                     id=1,
                     user_id=10,
@@ -261,6 +264,9 @@ def test_user_storage_task_aggregates_rows_with_one_consistent_sample_time(
     assert samples[20].use_ratio == 0
     assert samples[20].soft_use_ratio == 0
     assert {sample.updated_at for sample in samples.values()} == {sampled_at}
+    with session_factory() as db:
+        totals = dict(db.query(User.id, User.storage_used).all())
+    assert totals == {10: 45.0, 20: 0.0, 30: 0.0}
     info = _log_text(task_logger, "info").lower()
     assert "started" in info
     assert "completed" in info
