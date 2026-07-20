@@ -881,3 +881,39 @@ def test_telemetry_quality_raw_point_query_binds_questdb_time_as_utc_string(
     assert point_count == 1
     assert latest_point == UTC_NOW
     assert captured["params"]["started_at"] == "2026-07-18T08:00:00Z"
+
+
+def test_performance_rows_bind_questdb_cutoff_as_utc_string(monkeypatch):
+    """QuestDB PGWire rejects SQLAlchemy's aware-datetime ``timestamptz`` bind."""
+    from celery_tasks.tasks import forecast_incidents
+
+    captured = {}
+
+    class Result:
+        @staticmethod
+        def mappings():
+            return Result()
+
+        @staticmethod
+        def all():
+            return []
+
+    class Connection:
+        @staticmethod
+        def execute(statement, params):
+            captured["params"] = params
+            return Result()
+
+    class QuestDBConnection:
+        @staticmethod
+        def __enter__():
+            return Connection()
+
+        @staticmethod
+        def __exit__(*args):
+            return False
+
+    monkeypatch.setattr(forecast_incidents, "QuestDBSession", QuestDBConnection)
+
+    assert forecast_incidents._performance_rows(cutoff=UTC_NOW) == []
+    assert captured["params"]["cutoff"] == "2026-07-18T08:00:00Z"
