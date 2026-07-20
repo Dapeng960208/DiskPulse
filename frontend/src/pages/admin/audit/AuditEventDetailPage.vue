@@ -5,6 +5,14 @@ import { ElButton, ElDescriptions, ElDescriptionsItem, ElEmpty, ElTag } from 'el
 import auditEventsApi from '@/api/audit-events-api.js';
 import AccessibleResourceLink from '@/components/basic/AccessibleResourceLink.vue';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
+import {
+  auditActionDescription,
+  auditActorTypeLabel,
+  auditOutcomeLabel,
+  auditPhaseLabel,
+  auditRequesterLabel,
+  formatAuditOccurredAt,
+} from '@/utils/audit-event-display.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -20,10 +28,6 @@ function summary(value) {
 
 function outcomeType(outcome) {
   return { success: 'success', denied: 'warning', failure: 'danger' }[outcome] || 'info';
-}
-
-function actorName(current) {
-  return current.actor?.display_name || current.actor?.rd_username || current.actor?.username || current.actor_user_id || '-';
 }
 
 function resourceName(current) {
@@ -86,11 +90,13 @@ onMounted(loadEvent);
       v-loading="loading"
       :column="2"
       border>
-      <ElDescriptionsItem label="发生时间">{{ event.occurred_at }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="结果"><ElTag :type="outcomeType(event.outcome)">{{ event.outcome }}</ElTag></ElDescriptionsItem>
-      <ElDescriptionsItem label="操作">{{ event.action }}</ElDescriptionsItem>
+      <ElDescriptionsItem label="发生时间">{{ formatAuditOccurredAt(event.occurred_at) }}</ElDescriptionsItem>
+      <ElDescriptionsItem label="结果"><ElTag :type="outcomeType(event.outcome)">{{ auditOutcomeLabel(event.outcome) }}</ElTag></ElDescriptionsItem>
+      <ElDescriptionsItem label="操作">{{ auditActionDescription(event.action) }}</ElDescriptionsItem>
+      <ElDescriptionsItem label="记录阶段">{{ auditPhaseLabel(event.phase) }}</ElDescriptionsItem>
       <ElDescriptionsItem label="原因码">{{ event.reason_code || '-' }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="主体">{{ actorName(event) }}</ElDescriptionsItem>
+      <ElDescriptionsItem label="请求/触发方">{{ auditRequesterLabel(event) }}</ElDescriptionsItem>
+      <ElDescriptionsItem label="执行来源">{{ auditActorTypeLabel(event.actor_type) }}</ElDescriptionsItem>
       <ElDescriptionsItem label="项目"><AccessibleResourceLink :to="{ name: 'ProjectDetail', params: { id: event.project?.id } }">{{ event.project?.name || event.project_id || '-' }}</AccessibleResourceLink></ElDescriptionsItem>
       <ElDescriptionsItem label="资源"><AccessibleResourceLink :to="resourceRoute(event)">{{ resourceName(event) }}</AccessibleResourceLink></ElDescriptionsItem>
       <ElDescriptionsItem label="关联项目">

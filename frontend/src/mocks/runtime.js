@@ -306,6 +306,33 @@ const alerts = incidents.map((incident, index) => ({
       detail: 'Mock 演示审计记录',
     };
   });
+  audits.unshift({
+    id: 99,
+    action: 'storage.collection.run',
+    actor_type: 'service',
+    outcome: 'success',
+    result: 'success',
+    phase: 'result',
+    occurred_at: '2026-07-20T20:33:32.932602',
+    created_at: '2026-07-20T20:33:32.932602',
+    project_id: null,
+    project: null,
+    actor_user_id: null,
+    actor: null,
+    resource_type: 'storage_cluster',
+    resource_id: String(clusters[0].id),
+    resource_name: clusters[0].name,
+    resource: { type: 'storage_cluster', id: String(clusters[0].id), name: clusters[0].name },
+    related_projects: projects.slice(0, 2),
+    relation_path: '存储集群 → 项目组 → 项目',
+    trace_id: 'mock-collection-trace-99',
+    request_id: 'mock-collection-request-99',
+    reason_code: null,
+    before_summary: null,
+    after_summary: { storage_usage_count: 12, group_count: 3 },
+    metadata: null,
+    detail: 'Mock 定时存储采集完成记录',
+  });
   const aiModels = ['容量助手', '告警分析', '运维问答', '归档顾问', '报表生成'].map((name, index) => ({
     id: index + 1,
     name,

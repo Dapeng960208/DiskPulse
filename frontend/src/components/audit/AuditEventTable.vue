@@ -3,6 +3,7 @@ import { ElButton, ElTableColumn, ElTag } from 'element-plus';
 import AccessibleResourceLink from '@/components/basic/AccessibleResourceLink.vue';
 import DataTable from '@/components/data/DataTable.vue';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
+import { auditActionLabel, auditRequesterLabel, formatAuditOccurredAt } from '@/utils/audit-event-display.js';
 
 defineProps({
   events: {
@@ -23,10 +24,6 @@ defineProps({
 });
 
 const emit = defineEmits(['update:pagination', 'show-detail']);
-
-function actorLabel(row) {
-  return row.actor?.display_name || row.actor?.rd_username || row.actor?.username || row.actor_user_id || '-';
-}
 
 function resourceLabel(row) {
   const resource = row.resource;
@@ -82,19 +79,21 @@ function outcomeType(outcome) {
     :pagination="pagination"
     @update:pagination="emit('update:pagination', $event)">
     <ElTableColumn
-      prop="occurred_at"
       label="时间"
-      min-width="176" />
+      min-width="176">
+      <template #default="{ row }"><time :datetime="row.occurred_at">{{ formatAuditOccurredAt(row.occurred_at) }}</time></template>
+    </ElTableColumn>
     <ElTableColumn
       label="主体"
       min-width="130">
-      <template #default="{ row }">{{ actorLabel(row) }}</template>
+      <template #default="{ row }">{{ auditRequesterLabel(row) }}</template>
     </ElTableColumn>
     <ElTableColumn
-      prop="action"
       label="操作"
       min-width="180"
-      show-overflow-tooltip />
+      show-overflow-tooltip>
+      <template #default="{ row }"><span :title="row.action">{{ auditActionLabel(row.action) }}</span></template>
+    </ElTableColumn>
     <ElTableColumn
       label="资源"
       min-width="210"

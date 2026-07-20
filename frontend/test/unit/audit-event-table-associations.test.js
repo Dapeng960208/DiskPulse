@@ -61,6 +61,8 @@ describe('AuditEventTable associations', () => {
     });
 
     expect(wrapper.get('[data-column="主体"]').text()).toContain('collector');
+    expect(wrapper.get('[data-column="时间"]').text()).toContain('2026-07-20 15:06:53');
+    expect(wrapper.get('[data-column="操作"]').text()).toContain('存储采集');
     expect(wrapper.get('[data-column="资源"]').text()).toContain('华东存储集群');
     expect(wrapper.get('[data-column="关联项目"]').text()).toContain('芯片设计平台');
     expect(wrapper.get('[data-column="关联项目"]').text()).toContain('仿真平台');

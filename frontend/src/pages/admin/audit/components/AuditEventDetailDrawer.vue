@@ -3,6 +3,16 @@ import { computed, ref, watch } from 'vue';
 import { ElDescriptions, ElDescriptionsItem, ElDrawer, ElEmpty, ElTag } from 'element-plus';
 import auditEventsApi from '@/api/audit-events-api.js';
 import AccessibleResourceLink from '@/components/basic/AccessibleResourceLink.vue';
+import {
+  auditActionDescription,
+  auditActorTypeLabel,
+  auditOutcomeLabel,
+  auditPhaseLabel,
+  auditRequesterLabel,
+  auditSummaryEntries,
+  formatAuditOccurredAt,
+  hasAuditValue,
+} from '@/utils/audit-event-display.js';
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -27,10 +37,6 @@ function summary(value) {
 
 function outcomeType(outcome) {
   return { success: 'success', denied: 'warning', failure: 'danger' }[outcome] || 'info';
-}
-
-function actorName(event) {
-  return event.actor?.display_name || event.actor?.common_name || event.actor?.commonName || event.actor?.rd_username || event.actor?.username || event.actor_user_id || '-';
 }
 
 function resourceName(event) {
@@ -96,12 +102,17 @@ watch(() => [props.event?.id, visible.value], load, { immediate: true });
       v-loading="loading"
       :column="1"
       border>
-      <ElDescriptionsItem label="发生时间">{{ current.occurred_at || current.created_at || '-' }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="结果"><ElTag :type="outcomeType(current.outcome)">{{ current.outcome || current.result || '-' }}</ElTag></ElDescriptionsItem>
-      <ElDescriptionsItem label="操作">{{ current.action || '-' }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="主体">{{ actorName(current) }}</ElDescriptionsItem>
+      <ElDescriptionsItem label="发生时间">{{ formatAuditOccurredAt(current.occurred_at || current.created_at) }}</ElDescriptionsItem>
+      <ElDescriptionsItem label="结果"><ElTag :type="outcomeType(current.outcome)">{{ auditOutcomeLabel(current.outcome || current.result) }}</ElTag></ElDescriptionsItem>
+      <ElDescriptionsItem label="操作">{{ auditActionDescription(current.action) }}</ElDescriptionsItem>
+      <ElDescriptionsItem label="记录阶段">{{ auditPhaseLabel(current.phase) }}</ElDescriptionsItem>
+      <ElDescriptionsItem label="请求/触发方">{{ auditRequesterLabel(current) }}</ElDescriptionsItem>
+      <ElDescriptionsItem label="执行来源">{{ auditActorTypeLabel(current.actor_type) }}</ElDescriptionsItem>
       <ElDescriptionsItem label="项目">
-        <AccessibleResourceLink :to="{ name: 'ProjectDetail', params: { id: current.project?.id } }">{{ current.project?.name || current.project_id || '-' }}</AccessibleResourceLink>
+        <AccessibleResourceLink
+          v-if="current.project?.id"
+          :to="{ name: 'ProjectDetail', params: { id: current.project.id } }">{{ current.project.name }}</AccessibleResourceLink>
+        <span v-else>无直接项目</span>
       </ElDescriptionsItem>
       <ElDescriptionsItem label="资源"><AccessibleResourceLink :to="resourceRoute(current)">{{ resourceName(current) }}</AccessibleResourceLink></ElDescriptionsItem>
       <ElDescriptionsItem label="关联项目">
@@ -115,16 +126,60 @@ watch(() => [props.event?.id, visible.value], load, { immediate: true });
         </div>
         <span v-else>无项目关联</span>
       </ElDescriptionsItem>
-      <ElDescriptionsItem label="关联路径">{{ current.relation_path || '-' }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="资源路径">{{ current.resource_path || '-' }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="Trace ID">{{ current.trace_id || '-' }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="请求 ID">{{ current.request_id || '-' }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="原因码">{{ current.reason_code || '-' }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="客户端 IP">{{ current.metadata?.client_ip || '-' }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="请求地址">{{ current.metadata?.endpoint || '-' }}</ElDescriptionsItem>
-      <ElDescriptionsItem label="变更前摘要"><pre>{{ summary(current.before_summary) }}</pre></ElDescriptionsItem>
-      <ElDescriptionsItem label="变更后摘要"><pre>{{ summary(current.after_summary) }}</pre></ElDescriptionsItem>
-      <ElDescriptionsItem label="附加元数据"><pre>{{ summary(current.metadata) }}</pre></ElDescriptionsItem>
+      <ElDescriptionsItem
+        v-if="current.relation_path"
+        label="关联路径">{{ current.relation_path }}</ElDescriptionsItem>
+      <ElDescriptionsItem
+        v-if="current.trace_id"
+        label="Trace ID">{{ current.trace_id }}</ElDescriptionsItem>
+      <ElDescriptionsItem
+        v-if="current.request_id"
+        label="请求 ID">{{ current.request_id }}</ElDescriptionsItem>
+      <ElDescriptionsItem
+        v-if="current.reason_code"
+        label="原因码">{{ current.reason_code }}</ElDescriptionsItem>
+      <ElDescriptionsItem
+        v-if="hasAuditValue(current.before_summary)"
+        label="变更前摘要">
+        <dl
+          v-if="auditSummaryEntries(current.before_summary).length"
+          class="audit-event-detail-drawer__summary">
+          <template
+            v-for="entry in auditSummaryEntries(current.before_summary)"
+            :key="entry.label">
+            <dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd>
+          </template>
+        </dl>
+        <pre v-else>{{ summary(current.before_summary) }}</pre>
+      </ElDescriptionsItem>
+      <ElDescriptionsItem
+        v-if="hasAuditValue(current.after_summary)"
+        :label="current.action === 'storage.collection.run' ? '采集结果' : '变更后摘要'">
+        <dl
+          v-if="auditSummaryEntries(current.after_summary).length"
+          class="audit-event-detail-drawer__summary">
+          <template
+            v-for="entry in auditSummaryEntries(current.after_summary)"
+            :key="entry.label">
+            <dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd>
+          </template>
+        </dl>
+        <pre v-else>{{ summary(current.after_summary) }}</pre>
+      </ElDescriptionsItem>
+      <ElDescriptionsItem
+        v-if="hasAuditValue(current.metadata)"
+        label="附加元数据">
+        <dl
+          v-if="auditSummaryEntries(current.metadata).length"
+          class="audit-event-detail-drawer__summary">
+          <template
+            v-for="entry in auditSummaryEntries(current.metadata)"
+            :key="entry.label">
+            <dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd>
+          </template>
+        </dl>
+        <pre v-else>{{ summary(current.metadata) }}</pre>
+      </ElDescriptionsItem>
     </ElDescriptions>
     <ElEmpty
       v-else-if="!loading"
@@ -139,4 +194,7 @@ watch(() => [props.event?.id, visible.value], load, { immediate: true });
 pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-size-sm); }
 .audit-event-detail-drawer__error { margin: var(--spacing-md) 0 0; color: var(--color-danger); }
 .audit-event-detail-drawer__project-links { display: grid; gap: var(--spacing-xs); }
+.audit-event-detail-drawer__summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--spacing-xs) var(--spacing-md); margin: 0; }
+.audit-event-detail-drawer__summary dt { color: var(--text-secondary); }
+.audit-event-detail-drawer__summary dd { margin: 0; text-align: right; }
 </style>
