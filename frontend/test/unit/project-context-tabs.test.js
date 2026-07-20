@@ -20,6 +20,22 @@ vi.mock('@/components/form/Progress.vue', () => ({
   default: { name: 'Progress', template: '<span />' },
 }));
 
+const simpleFormControl = (name) => ({ name, template: '<div><slot /></div>' });
+
+vi.mock('@/components/form/QueryForm.vue', () => ({
+  default: {
+    name: 'QueryForm',
+    emits: ['query', 'reset'],
+    template: '<form><slot /><slot name="advanced" /></form>',
+  },
+}));
+vi.mock('@/components/form/RdUserSelect.vue', () => ({ default: simpleFormControl('RdUserSelect') }));
+vi.mock('@/components/form/StorageClusterSelect.vue', () => ({ default: simpleFormControl('StorageClusterSelect') }));
+vi.mock('@/components/form/GroupTagSelect.vue', () => ({ default: simpleFormControl('GroupTagSelect') }));
+vi.mock('@/components/form/GroupSelect.vue', () => ({ default: simpleFormControl('GroupSelect') }));
+vi.mock('@/components/form/VolumeSelect.vue', () => ({ default: simpleFormControl('VolumeSelect') }));
+vi.mock('@/components/form/QtreeSelect.vue', () => ({ default: simpleFormControl('QtreeSelect') }));
+
 const { default: ProjectGroupsTab } = await import('@/pages/project/components/ProjectGroupsTab.vue');
 const { default: ProjectUsagesTab } = await import('@/pages/project/components/ProjectUsagesTab.vue');
 

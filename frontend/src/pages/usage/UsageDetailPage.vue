@@ -12,12 +12,14 @@ import {
 import { useRoute } from 'vue-router';
 import RealTimePage from '@/pages/common/RealTimePage.vue';
 import DataTable from '@/components/data/DataTable.vue';
+import { useBreadcrumbs } from '@/stores/breadcrumbs';
 import storageUsageApi from '@/api/storage-usage-api.js';
 import capacityPredictionApi from '@/api/capacity-prediction-api.js';
 import alertApi from '@/api/alert-api.js';
 import { formatQuotaLimit } from '@/utils/quota';
 
 const route = useRoute();
+const breadcrumbs = useBreadcrumbs();
 const usageId = computed(() => Number(route.params?.id));
 const activeTab = ref('capacity');
 const usage = ref(null);
@@ -68,10 +70,19 @@ async function loadUsage() {
     usage.value = await storageUsageApi.fetchById(usageId.value, undefined, {
       errorHandlerDisabled: true,
     });
+    const projectName = usage.value?.project?.name;
+    const userName = usage.value?.user?.rd_username
+      || usage.value?.user?.username
+      || usage.value?.linux_path?.split('/').filter(Boolean).at(-1);
+    breadcrumbs.setDetailBreadcrumb(
+      route.name,
+      projectName && userName ? ['项目', projectName, `${userName}用户详情`] : [],
+    );
     await loadActiveTab();
   } catch {
     usage.value = null;
     usageError.value = '加载用户目录详情失败，请稍后重试';
+    breadcrumbs.setDetailBreadcrumb(route.name, []);
   } finally {
     usageLoading.value = false;
   }
@@ -178,6 +189,7 @@ async function loadActiveTab() {
 
 watch(activeTab, loadActiveTab);
 onMounted(() => {
+  breadcrumbs.setDetailBreadcrumb(route.name, []);
   loadUsage();
   loadPredictionVisibility();
 });

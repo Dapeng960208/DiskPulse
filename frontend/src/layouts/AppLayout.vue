@@ -24,6 +24,7 @@ const footerHeight = ref('40px');
 const breadcrumbItems = computed(() => buildBreadcrumbItems(
   route.matched,
   breadcrumbs.detailTitleFor(route.name),
+  breadcrumbs.detailBreadcrumbFor(route.name),
 ));
 </script>
 

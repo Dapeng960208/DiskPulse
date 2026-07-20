@@ -23,15 +23,19 @@ const canManageProjectAdmins = computed(() => project.value?.capabilities?.manag
 async function loadProject() {
   try {
     project.value = await projectApi.fetchById(projectId.value);
-    breadcrumbs.setDetailTitle(route.name, project.value?.name);
+    const projectName = project.value?.name || '';
+    breadcrumbs.setDetailTitle(route.name, projectName);
+    breadcrumbs.setDetailBreadcrumb(route.name, projectName ? ['项目', projectName] : []);
   } catch {
     project.value = null;
     breadcrumbs.setDetailTitle(route.name, '');
+    breadcrumbs.setDetailBreadcrumb(route.name, []);
   }
 }
 
 onMounted(() => {
   breadcrumbs.setDetailTitle(route.name, '');
+  breadcrumbs.setDetailBreadcrumb(route.name, []);
   loadProject();
 });
 </script>
@@ -40,7 +44,7 @@ onMounted(() => {
   <section class="project-detail-page">
     <ElTabs v-model="activeTab">
       <ElTabPane
-        label="容量概览"
+        label="存储分布"
         name="capacity"
         lazy>
         <ProjectDiskUsage

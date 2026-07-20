@@ -5,6 +5,7 @@ import {
   ElDialog,
   ElForm,
   ElFormItem,
+  ElInput,
   ElMessage,
   ElMessageBox,
   ElOption,
@@ -16,6 +17,7 @@ import {
 import membershipApi from '@/api/project-membership-api.js';
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
+import QueryForm from '@/components/form/QueryForm.vue';
 
 const props = defineProps({
   projectId: {
@@ -32,6 +34,23 @@ const dialogVisible = ref(false);
 const submitting = ref(false);
 const editingUserId = ref(null);
 const form = reactive({ user_id: null, role: 'reader' });
+const memberFilters = reactive({ keyword: '', role: '' });
+const filteredMembers = computed(() => {
+  const keyword = memberFilters.keyword.trim().toLocaleLowerCase();
+  return members.value.filter((member) => {
+    const userText = [member.user?.rd_username, member.user?.username, member.user_id]
+      .filter((value) => value != null)
+      .join(' ')
+      .toLocaleLowerCase();
+    return (!keyword || userText.includes(keyword))
+      && (!memberFilters.role || member.role === memberFilters.role);
+  });
+});
+const memberRoleFilterOptions = [
+  { value: 'reader', label: '只读成员' },
+  { value: 'editor', label: '编辑成员' },
+  { value: 'project_admin', label: '项目管理员' },
+];
 const roleOptions = computed(() => {
   const options = [
     { value: 'reader', label: '只读成员' },
@@ -43,6 +62,11 @@ const roleOptions = computed(() => {
 
 function canManage(member) {
   return member.role !== 'project_admin' || props.canManageProjectAdmins;
+}
+
+function resetMemberFilters() {
+  memberFilters.keyword = '';
+  memberFilters.role = '';
 }
 
 async function loadMembers() {
@@ -118,9 +142,29 @@ onMounted(loadMembers);
 
 <template>
   <section class="project-members-tab">
+    <QueryForm @reset="resetMemberFilters">
+      <ElFormItem label="用户">
+        <ElInput
+          v-model="memberFilters.keyword"
+          clearable
+          placeholder="按用户名筛选" />
+      </ElFormItem>
+      <ElFormItem label="项目角色">
+        <ElSelect
+          v-model="memberFilters.role"
+          clearable
+          placeholder="全部角色">
+          <ElOption
+            v-for="option in memberRoleFilterOptions"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value" />
+        </ElSelect>
+      </ElFormItem>
+    </QueryForm>
     <ElTable
       v-loading="loading"
-      :data="members">
+      :data="filteredMembers">
       <ElTableColumn
         label="用户"
         min-width="180">
