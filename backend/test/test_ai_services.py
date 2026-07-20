@@ -352,9 +352,11 @@ def test_stream_reuses_successful_tool_results_and_repairs_failed_calls(db_sessi
         return {"data": {"cluster_id": cluster_id, "total": 0}}
 
     provider_messages = []
+    provider_tools = []
 
     def provider_stream(_model, messages, **_kwargs):
         provider_messages.append(messages)
+        provider_tools.append(_kwargs["tools"])
         round_number = len(provider_messages)
         if round_number == 1:
             yield AICompletionStreamEvent(
@@ -375,6 +377,7 @@ def test_stream_reuses_successful_tool_results_and_repairs_failed_calls(db_sessi
                 stop_reason="tool_calls",
             )
         else:
+            assert _kwargs["tools"] == []
             yield AICompletionStreamEvent(kind="delta", text="当前没有异常告警。")
             yield AICompletionStreamEvent(kind="completed", text="当前没有异常告警。", tool_calls=[], stop_reason="final")
 
@@ -395,6 +398,7 @@ def test_stream_reuses_successful_tool_results_and_repairs_failed_calls(db_sessi
     assert [item["status"] for item in completed["message"]["tool_calls"]] == ["succeeded", "failed", "reused"]
     assert "调用失败" in json.dumps(provider_messages[2], ensure_ascii=False)
     assert "修改参数" in json.dumps(provider_messages[2], ensure_ascii=False)
+    assert provider_tools[-1] == []
 
 
 def test_stream_persists_live_tool_trace_with_distinct_call_ids_and_truncated_results(db_session, monkeypatch):
