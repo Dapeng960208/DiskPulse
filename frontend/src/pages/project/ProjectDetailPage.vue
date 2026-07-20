@@ -61,12 +61,14 @@ onMounted(() => {
         <ProjectStorageDistribution :project-id="projectId" />
       </ElTabPane>
       <ElTabPane
+        class="project-detail-page__table-tab"
         label="项目组"
         name="groups"
         lazy>
         <ProjectGroupsTab :project-id="projectId" />
       </ElTabPane>
       <ElTabPane
+        class="project-detail-page__table-tab"
         label="用户目录"
         name="usages"
         lazy>
@@ -74,6 +76,7 @@ onMounted(() => {
       </ElTabPane>
       <ElTabPane
         v-if="canManageMembers"
+        class="project-detail-page__table-tab"
         label="成员与权限"
         name="members">
         <ProjectMembersTab
@@ -83,6 +86,7 @@ onMounted(() => {
       </ElTabPane>
       <ElTabPane
         v-if="canViewAuditEvents"
+        class="project-detail-page__table-tab"
         label="项目审计"
         name="audit">
         <ProjectAuditTab :project-id="projectId" />
@@ -117,6 +121,14 @@ onMounted(() => {
 }
 
 :deep(.project-detail-page__tabs .project-detail-page__visual-tab) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+:deep(.project-detail-page__tabs .project-detail-page__table-tab) {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;

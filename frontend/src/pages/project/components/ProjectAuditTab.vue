@@ -59,7 +59,17 @@ onMounted(loadEvents);
 </template>
 
 <style scoped>
-.section-heading { margin-bottom: var(--spacing-md); }
-.section-heading h3 { margin: 0 0 4px; color: var(--text-primary); font-size: var(--font-size-lg); }
-.section-heading p { margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
+.project-audit-tab {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.project-audit-tab :deep(.data-table-card) {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
 </style>

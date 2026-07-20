@@ -59,6 +59,12 @@ async function mountTab({ canManageMembers = false, canManageProjectAdmins = fal
     global: {
       directives: { loading: () => undefined },
       stubs: {
+        DataTable: {
+          name: 'DataTable',
+          props: ['data', 'loading', 'pagination'],
+          emits: ['update:pagination'],
+          template: '<section><slot /></section>',
+        },
         QueryForm: { name: 'QueryForm', template: '<form><slot /></form>' },
       },
     },
@@ -124,7 +130,7 @@ describe('ProjectMembersTab', () => {
 
     const wrapper = await mountTab();
 
-    expect(wrapper.findComponent({ name: 'ElTable' }).props('data')).toEqual(members);
+    expect(wrapper.findComponent({ name: 'DataTable' }).props('data')).toEqual(members);
   });
 
   it('filters the loaded members by username without requesting a broader project membership list', async () => {
@@ -137,9 +143,35 @@ describe('ProjectMembersTab', () => {
     const wrapper = await mountTab();
     await wrapper.find('input[placeholder="按用户名筛选"]').setValue('bob');
 
-    expect(wrapper.findComponent({ name: 'ElTable' }).props('data')).toEqual([members[0]]);
+    expect(wrapper.findComponent({ name: 'DataTable' }).props('data')).toEqual([members[0]]);
     expect(membershipApi.list).toHaveBeenCalledTimes(1);
     expect(membershipApi.list).toHaveBeenCalledWith(1);
+  });
+
+  it('paginates more than 20 filtered members so the table can scroll independently of the pager', async () => {
+    const members = Array.from({ length: 21 }, (_, index) => ({
+      user_id: index + 1,
+      role: 'reader',
+      user: { rd_username: `user-${index + 1}` },
+    }));
+    membershipApi.list.mockResolvedValue(members);
+
+    const wrapper = await mountTab();
+    const table = wrapper.getComponent({ name: 'DataTable' });
+
+    expect(table.props('pagination')).toMatchObject({
+      page: 1,
+      pageSize: 20,
+      total: 21,
+      hideOnSinglePage: true,
+      showJumper: true,
+    });
+    expect(table.props('data')).toEqual(members.slice(0, 20));
+
+    table.vm.$emit('update:pagination', { page: 2, pageSize: 20 });
+    await flushPromises();
+
+    expect(table.props('data')).toEqual(members.slice(20));
   });
 
   it('shows an error when confirmed removal fails instead of treating it as cancellation', async () => {

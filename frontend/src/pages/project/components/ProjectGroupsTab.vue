@@ -197,3 +197,20 @@ query();
     </DataTable>
   </section>
 </template>
+
+<style scoped>
+.project-groups-tab {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  gap: var(--spacing-md);
+}
+
+.project-groups-tab :deep(.data-table-card) {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+</style>

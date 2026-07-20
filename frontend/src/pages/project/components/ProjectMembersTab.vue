@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   ElButton,
   ElDialog,
@@ -10,13 +10,13 @@ import {
   ElMessageBox,
   ElOption,
   ElSelect,
-  ElTable,
   ElTableColumn,
   ElTag,
 } from 'element-plus';
 import membershipApi from '@/api/project-membership-api.js';
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
+import DataTable from '@/components/data/DataTable.vue';
 import QueryForm from '@/components/form/QueryForm.vue';
 
 const props = defineProps({
@@ -35,6 +35,7 @@ const submitting = ref(false);
 const editingUserId = ref(null);
 const form = reactive({ user_id: null, role: 'reader' });
 const memberFilters = reactive({ keyword: '', role: '' });
+const memberPagination = reactive({ page: 1, pageSize: 20 });
 const filteredMembers = computed(() => {
   const keyword = memberFilters.keyword.trim().toLocaleLowerCase();
   return members.value.filter((member) => {
@@ -51,6 +52,10 @@ const memberRoleFilterOptions = [
   { value: 'editor', label: '编辑成员' },
   { value: 'project_admin', label: '项目管理员' },
 ];
+const paginatedMembers = computed(() => {
+  const start = (memberPagination.page - 1) * memberPagination.pageSize;
+  return filteredMembers.value.slice(start, start + memberPagination.pageSize);
+});
 const roleOptions = computed(() => {
   const options = [
     { value: 'reader', label: '只读成员' },
@@ -68,6 +73,15 @@ function resetMemberFilters() {
   memberFilters.keyword = '';
   memberFilters.role = '';
 }
+
+function updateMemberPagination(next) {
+  memberPagination.page = next.page;
+  memberPagination.pageSize = next.pageSize;
+}
+
+watch(memberFilters, () => {
+  memberPagination.page = 1;
+}, { deep: true });
 
 async function loadMembers() {
   loading.value = true;
@@ -162,9 +176,18 @@ onMounted(loadMembers);
         </ElSelect>
       </ElFormItem>
     </QueryForm>
-    <ElTable
-      v-loading="loading"
-      :data="filteredMembers">
+    <DataTable
+      :data="paginatedMembers"
+      :loading="loading"
+      :pagination="{
+        page: memberPagination.page,
+        pageSize: memberPagination.pageSize,
+        total: filteredMembers.length,
+        pageSizes: [20, 50, 100],
+        hideOnSinglePage: true,
+        showJumper: true,
+      }"
+      @update:pagination="updateMemberPagination">
       <ElTableColumn
         label="用户"
         min-width="180">
@@ -203,7 +226,7 @@ onMounted(loadMembers);
           </div>
         </template>
       </ElTableColumn>
-    </ElTable>
+    </DataTable>
 
     <ElDialog
       v-model="dialogVisible"
@@ -246,3 +269,20 @@ onMounted(loadMembers);
     </ElDialog>
   </section>
 </template>
+
+<style scoped>
+.project-members-tab {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  gap: var(--spacing-md);
+}
+
+.project-members-tab :deep(.data-table-card) {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+</style>

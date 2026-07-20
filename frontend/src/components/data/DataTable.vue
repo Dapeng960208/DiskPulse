@@ -142,6 +142,7 @@ function handleSortChange({ column, prop, order }) {
 // 数据表格卡片
 .data-table-card {
   margin: 0;
+  min-height: 0;
 }
 
 :deep(.el-card) {
@@ -150,6 +151,7 @@ function handleSortChange({ column, prop, order }) {
 
   .el-card__body {
     height: 100%;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     padding: var(--spacing-md) var(--spacing-xl);
@@ -173,7 +175,9 @@ function handleSortChange({ column, prop, order }) {
 
 // 表格容器
 .table-wrapper {
-  overflow: auto hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   border-radius: var(--radius-md);
 }
 
