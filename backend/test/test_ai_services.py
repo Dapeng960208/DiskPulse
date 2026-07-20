@@ -602,6 +602,24 @@ def _openai_text_response(text: str):
     )
 
 
+def test_openai_stream_ignores_empty_choice_status_frames(monkeypatch):
+    response = FakeResponse(
+        lines=[
+            "data: " + json.dumps({"choices": [], "usage": {"prompt_tokens": 12}}),
+            "data: " + json.dumps({"choices": [{"delta": {"content": "容量正常"}}]}, ensure_ascii=False),
+            "data: [DONE]",
+        ]
+    )
+    monkeypatch.setattr(ai_client.httpx, "stream", lambda *_args, **_kwargs: response)
+
+    events = list(ai_client.chat_completion_stream(model(), [{"role": "user", "content": "查询容量"}]))
+
+    assert [(event.kind, event.text) for event in events] == [
+        ("delta", "容量正常"),
+        ("completed", "容量正常"),
+    ]
+
+
 @pytest.mark.parametrize(
     ("raw_arguments", "case"),
     [
