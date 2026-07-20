@@ -10,7 +10,6 @@ import Progress from '@/components/form/Progress.vue';
 import QueryForm from '@/components/form/QueryForm.vue';
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
-import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 
 const props = defineProps({
@@ -159,20 +158,9 @@ query();
         <template #default="{ row }">
           <span>{{ row.user?.rd_username || row.user?.username || '-' }}</span>
           <ElTag
-            v-if="row.user?.user_type === 1"
-            type="warning"
-            class="ml-2.5">公共账户</ElTag>
-          <ElTag
             v-if="row.user?.user_type === 0"
             type="danger"
             class="ml-2.5">离职账户</ElTag>
-        </template>
-      </ElTableColumn>
-      <ElTableColumn
-        label="项目"
-        min-width="120">
-        <template #default="{ row }">
-          <AccessibleResourceLink :to="{ name: 'ProjectDetail', params: { id: row.project?.id } }">{{ row.project?.name || '-' }}</AccessibleResourceLink>
         </template>
       </ElTableColumn>
       <ElTableColumn
@@ -196,11 +184,6 @@ query();
         <template #default="{ row }">
           <AccessibleResourceLink :to="{ name: 'StorageClusterDetail', params: { id: row.storage_cluster?.id } }">{{ row.storage_cluster?.name || '-' }}</AccessibleResourceLink>
         </template>
-      </ElTableColumn>
-      <ElTableColumn
-        label="存储类型"
-        width="120">
-        <template #default="{ row }"><StorageTypeTag :value="row.storage_cluster?.storage_type" /></template>
       </ElTableColumn>
       <ElTableColumn
         label="Linux 路径"

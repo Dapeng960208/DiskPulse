@@ -182,6 +182,11 @@ describe('project detail information architecture', () => {
     expect(tab).toContain('label="软限额使用率(%)"');
     expect(tab).toContain('<DataTable');
     expect(tab).toContain('<AccessibleResourceLink');
+    expect(tab).toContain('离职账户');
+    expect(tab).not.toContain('公共账户');
+    expect(tab).not.toContain('label="项目"');
+    expect(tab).not.toContain('label="存储类型"');
+    expect(tab).not.toContain('StorageTypeTag');
   });
 
   it('keeps the project storage overview while exposing storage distribution in project details', () => {
