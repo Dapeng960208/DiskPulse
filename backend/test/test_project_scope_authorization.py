@@ -171,7 +171,7 @@ def test_project_reader_cannot_bypass_scope_through_group_or_storage_usage_route
     assert forbidden_usage_trend.status_code == 403
     assert forbidden_export.status_code == 200
     assert export_args is not None
-    assert export_args[0][-1] == {1}
+    assert export_args[1]["accessible_project_ids"] == {1}
 
 
 def test_project_reader_filters_large_files_alerts_and_dashboard_before_pagination(

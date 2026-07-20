@@ -150,6 +150,7 @@ def test_dashboard_service_builds_independent_global_and_project_data(db_session
         "alert_count": 2,
     }
     assert [item["name"] for item in dashboardService.get_capacity_items(db_session)] == ["项目 A"]
+    assert dashboardService.get_capacity_items(db_session, use_ratio_min=70) == []
     assert dashboardService.get_capacity_trend(db_session)[-1]["used_gb"] == 600.0
     assert dashboardService.get_alert_levels(db_session) == [
         {"level": "important", "name": "重要", "count": 1},
@@ -163,6 +164,15 @@ def test_dashboard_service_builds_independent_global_and_project_data(db_session
     assert project_summary["summary"]["used_gb"] == 200.0
     assert project_summary["summary"]["storage_cluster_count"] == 1
     assert [item["name"] for item in dashboardService.get_capacity_items(db_session, project.id)] == ["项目组 A"]
+    assert [
+        item["name"]
+        for item in dashboardService.get_capacity_items(
+            db_session,
+            project.id,
+            use_ratio_min=70,
+            use_ratio_max=80,
+        )
+    ] == ["项目组 A"]
     assert project_summary["summary"]["alert_count"] == 2
 
     top_users = dashboardService.get_top_users(db_session, project.id)
@@ -298,7 +308,11 @@ def test_dashboard_router_validates_project_id(
     }
     monkeypatch.setattr(dashboard.dashboardService, "get_summary", lambda _db, project_id=None: summary)
     monkeypatch.setattr(dashboard.dashboardService, "get_capacity_trend", lambda _db, project_id=None: [])
-    monkeypatch.setattr(dashboard.dashboardService, "get_capacity_items", lambda _db, project_id=None: [])
+    monkeypatch.setattr(
+        dashboard.dashboardService,
+        "get_capacity_items",
+        lambda _db, project_id=None, use_ratio_min=None, use_ratio_max=None: [],
+    )
     monkeypatch.setattr(dashboard.dashboardService, "get_alert_levels", lambda _db, project_id=None: [])
     monkeypatch.setattr(dashboard.dashboardService, "get_top_users", lambda _db, project_id: [])
     base_config.set("super_admin_usernames", ["dashboard-admin"])

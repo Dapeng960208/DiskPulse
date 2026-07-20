@@ -7,7 +7,7 @@ from utils.common import convert_GB_to_TB
 from typing import List
 from datetime import datetime
 from crud.questDbCrud import get_real_time_data_by_id
-from utils.query import apply_use_ratio_range, get_sort_column, require_allowed
+from utils.query import apply_use_ratio_range, filter_tree_by_use_ratio, get_sort_column, require_allowed
 
 
 def _attach_tree_units(nodes: list[dict], value_unit: str) -> list[dict]:
@@ -75,6 +75,8 @@ def get_aggregate_tree_summary(
     db: Session,
     value_type: str,
     storage_cluster_id: int | None = None,
+    use_ratio_min: float | None = None,
+    use_ratio_max: float | None = None,
 ) -> List:
     value_type = require_allowed(value_type, {"limit", "used", "use_ratio", "soft_limit", "soft_use_ratio"}, "value_type")
     query = db.query(Volume).filter(Volume.used >= 0)
@@ -102,10 +104,19 @@ def get_aggregate_tree_summary(
              'children': qtrees
              }
         )
-    return _attach_tree_units(volumes, "%" if "ratio" in value_type else "TB")
+    return _attach_tree_units(
+        filter_tree_by_use_ratio(volumes, use_ratio_min, use_ratio_max),
+        "%" if "ratio" in value_type else "TB",
+    )
 
 
-def get_aggregate_tree_summary_by_name(db: Session, aggregate_name: str, value_type: str) -> List:
+def get_aggregate_tree_summary_by_name(
+    db: Session,
+    aggregate_name: str,
+    value_type: str,
+    use_ratio_min: float | None = None,
+    use_ratio_max: float | None = None,
+) -> List:
     value_type = require_allowed(value_type, {"limit", "used", "use_ratio", "soft_limit", "soft_use_ratio"}, "value_type")
     volume_dbs = db.query(Volume).filter(Volume.aggregate == aggregate_name, Volume.used >= 0).all()
     volumes = []
@@ -133,7 +144,10 @@ def get_aggregate_tree_summary_by_name(db: Session, aggregate_name: str, value_t
                 "children": qtrees,
             }
         )
-    return _attach_tree_units(volumes, "%" if "ratio" in value_type else "TB")
+    return _attach_tree_units(
+        filter_tree_by_use_ratio(volumes, use_ratio_min, use_ratio_max),
+        "%" if "ratio" in value_type else "TB",
+    )
 
 
 def get_aggregate_real_time_data_by_id(db: Session, aggregate_id: int, start_time: datetime | None = None,

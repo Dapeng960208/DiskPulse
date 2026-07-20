@@ -126,21 +126,35 @@ def delete_aggregate(
 def get_aggregate_storage_trees(
     value_type: str = 'limit',
     storage_cluster_id: Annotated[int | None, Query(ge=1)] = None,
+    use_ratio_min: UseRatioMinimum = None,
+    use_ratio_max: UseRatioMaximum = None,
     db: Session = Depends(get_db),
 ):
+    use_ratio_min, use_ratio_max = validate_use_ratio_range(use_ratio_min, use_ratio_max)
     tree = aggregateCrud.get_aggregate_tree_summary(
         db=db,
         value_type=value_type,
         storage_cluster_id=storage_cluster_id,
+        use_ratio_min=use_ratio_min,
+        use_ratio_max=use_ratio_max,
     )
     return commonSchema.ResponseResourceModel(data=tree, data_unit="TB")
 
 
 @router.get('/{aggregate_id}/storage-tree', response_model=commonSchema.ResponseResourceModel, openapi_extra={"ai_exposed": True, "ai_name": "get_aggregate_storage_tree", "ai_description": "查询指定容量池存储树"})
-def get_aggregate_storage_tree_by_id(aggregate_id: int, value_type: str = 'used', db: Session = Depends(get_db)):
+def get_aggregate_storage_tree_by_id(
+    aggregate_id: int,
+    value_type: str = 'used',
+    use_ratio_min: UseRatioMinimum = None,
+    use_ratio_max: UseRatioMaximum = None,
+    db: Session = Depends(get_db),
+):
+    use_ratio_min, use_ratio_max = validate_use_ratio_range(use_ratio_min, use_ratio_max)
     db_aggregate = aggregateCrud.get_aggregate_by_id(db, aggregate_id=aggregate_id)
     if db_aggregate is None:
         raise HTTPException(status_code=404, detail="Aggregate not found")
     tree = aggregateCrud.get_aggregate_tree_summary_by_name(db=db, aggregate_name=db_aggregate.name,
-                                                            value_type=value_type)
+                                                            value_type=value_type,
+                                                            use_ratio_min=use_ratio_min,
+                                                            use_ratio_max=use_ratio_max)
     return commonSchema.ResponseResourceModel(data=tree, data_unit="TB")

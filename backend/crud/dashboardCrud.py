@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from dependencies import QuestDBSession
 from models import Group, Project, StorageAlerts, StorageCluster, StorageUsage, User
+from utils.query import apply_use_ratio_range
 
 
 def _questdb_time(value):
@@ -24,15 +25,23 @@ def get_active_clusters(db: Session):
     ).all()
 
 
-def get_capacity_items(db: Session, project_id: int | None):
+def get_capacity_items(
+    db: Session,
+    project_id: int | None,
+    use_ratio_min: float | None = None,
+    use_ratio_max: float | None = None,
+):
     if project_id is None:
         statement = select(Project).where(Project.is_common.is_(False))
+        model = Project
     else:
         statement = select(Group).where(
             Group.project_id == project_id,
             Group.enable_monitoring.is_(True),
         )
+        model = Group
     used_column = Project.used if project_id is None else Group.used
+    statement = apply_use_ratio_range(statement, model, use_ratio_min, use_ratio_max)
     return db.scalars(statement.order_by(used_column.desc()).limit(10)).all()
 
 

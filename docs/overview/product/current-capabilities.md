@@ -4,7 +4,7 @@
 
 | 能力域 | 当前行为 | 事实来源 |
 | --- | --- | --- |
-| 存储采集与资源映射 | 统一展示 NetApp 与 PowerScale 的存储资源；系统管理在“存储集群”下组织集群列表、容量池、存储空间和 Qtree（NetApp），集群详情按需展示当前集群的三类资源，其表格正文可滚动且底部分页始终可达，Isilon 不展示 Qtree。集群、容量池、存储空间、Qtree、项目组、用户目录和项目的分页 API 可按利用率区间查询。 | [存储集群总览](../../features/storage/cluster/overview.md) |
+| 存储采集与资源映射 | 统一展示 NetApp 与 PowerScale 的存储资源；系统管理在“存储集群”下组织集群列表、容量池、存储空间和 Qtree（NetApp），集群详情按需展示当前集群的三类资源，其表格正文可滚动且底部分页始终可达，Isilon 不展示 Qtree。存储分页列表、容量树、项目容量汇总/分布、仪表盘容量项、用户目录导出和存储告警均可按利用率区间查询。 | [存储集群总览](../../features/storage/cluster/overview.md) |
 | 性能、事件与健康分析 | 集群详情提供容量、性能、厂商事件、故障分析和导出；无稳定对象映射时不伪造性能数据。 | [健康分析](../../features/storage/cluster/health-analytics.md) |
 | 配额与告警 | 支持软限额展示、受控直接配额调整、规则继承和异步告警投递。 | [配额](../../features/storage/quota/overview.md) · [告警规则](../../features/storage/alerts/design.md) |
 | 容量趋势与概览 | Dashboard 与资源详情使用统一趋势口径，容量响应携带字段级显示单位；容量池、存储空间、项目、项目组和集群实时容量曲线使用 TB。 | [趋势](../../features/storage/trends/design.md) · [Dashboard](../../features/experience/dashboard/design.md) |

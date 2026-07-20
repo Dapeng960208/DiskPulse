@@ -3,14 +3,15 @@ from sqlalchemy.orm import Session
 from models import Group, Project, StorageAlerts, StorageCluster, StorageUsage
 from schemas import storageAlertsSchema
 from sqlalchemy import and_, or_, desc, asc, select
-from utils.query import get_sort_column
+from utils.query import apply_numeric_range, get_sort_column
 
 
 def get_storage_alerts(db: Session, page: int, size: int, nameLike: str | None = None, prop: str | None = None,
                        order: str | None = None, related_type: str | None = None, related_id: int | None = None,
                        alert_type: str | None = None, event_type: str | None = None,
                        quota_basis: str | None = None, delivery_status: str | None = None,
-                       accessible_project_ids: set[int] | None = None):
+                       accessible_project_ids: set[int] | None = None,
+                       use_ratio_min: float | None = None, use_ratio_max: float | None = None):
     query = db.query(StorageAlerts).filter(StorageAlerts.source == "diskpulse")
     conditions = []
     if nameLike and len(nameLike.strip()) > 0:
@@ -49,6 +50,7 @@ def get_storage_alerts(db: Session, page: int, size: int, nameLike: str | None =
             )
         )
     query = query.filter(*conditions)
+    query = apply_numeric_range(query, StorageAlerts.avg_use_ratio, use_ratio_min, use_ratio_max)
     total = query.count()
     sort_column = get_sort_column(StorageAlerts, prop)
     if sort_column is not None:

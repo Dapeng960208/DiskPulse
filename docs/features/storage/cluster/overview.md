@@ -6,9 +6,14 @@
 
 核心接口位于 `/storage-pulse/api/storage-clusters`，支持集群列表、创建、详情、更新、删除和实时趋势。设备协议由集群的 `protocol` 决定，`tls_verify` 只适用于 HTTPS；HTTP 仅应在可信隔离网络中使用。
 
-## 列表利用率筛选
+## 容量查询利用率筛选
 
-存储资源的分页列表 `GET /storage-clusters/`、`/aggregates/`、`/volumes/`、`/qtrees/`、`/groups/`、`/storage-usages/` 和 `/projects/` 均支持可选的 `use_ratio_min` 与 `use_ratio_max` 查询参数。两者使用 0--100 的百分比口径并按闭区间筛选；省略任一边界时不限制该边界，最小值大于最大值或任一值超出范围时返回 `422`。现有认证、项目隔离、名称筛选、资源归属筛选、排序和分页先后语义保持不变。
+所有返回当前容量对象集合的查询均支持可选的 `use_ratio_min` 与 `use_ratio_max`。两者使用 0--100 的百分比口径并按闭区间筛选；省略任一边界时不限制该边界，最小值大于最大值或任一值超出范围时返回 `422`。现有认证、项目隔离、名称筛选、资源归属筛选、排序和分页语义保持不变。
+
+- 分页资源列表：`GET /storage-clusters/`、`/aggregates/`、`/volumes/`、`/qtrees/`、`/groups/`、`/storage-usages/` 和 `/projects/`。
+- 容量集合及导出：`GET /storage-usages/export/`、`/dashboard/capacity-items`、`/aggregates/storage-trees/`、`/aggregates/{aggregate_id}/storage-tree`、`/projects/storage/summary`、`/projects/storage/groups`、`/projects/{project_id}/storage-tree` 和 `/storage-alerts/`。告警按其 `avg_use_ratio` 筛选，其余接口按当前对象的 `use_ratio` 筛选。
+
+存储树会保留命中节点所需的父级路径，并移除不命中的叶节点；因此作为结构上下文保留的父节点可能不在指定区间。单资源详情、实时或历史趋势、Dashboard 汇总/趋势/Top 用户、遥测运行记录以及容量预测不提供这些参数：它们返回单一对象、时间序列、汇总值或不含当前利用率，不能把区间筛选伪造成同一语义。
 
 容量类资源响应、实时曲线和容量树遵守[容量单位 API 契约](../../../standards/backend/capacity-unit-contract.md)，避免把利用率与容量混淆。
 

@@ -63,19 +63,37 @@ def create_project(
 @router.get("/storage/summary", response_model=commonSchema.ResponseResourceModel, openapi_extra={"ai_exposed": True, "ai_name": "get_project_storage_summary", "ai_description": "查询项目存储汇总"})
 def get_project_storage_summary(
     _admin: None = Depends(require_super_admin),
+    use_ratio_min: UseRatioMinimum = None,
+    use_ratio_max: UseRatioMaximum = None,
     db: Session = Depends(get_db),
 ):
-    summary = projectsCrud.get_project_storage_summary(db=db)
-    tree = projectsCrud.get_project_tree_summary(db=db)
+    use_ratio_min, use_ratio_max = validate_use_ratio_range(use_ratio_min, use_ratio_max)
+    summary = projectsCrud.get_project_storage_summary(
+        db=db,
+        use_ratio_min=use_ratio_min,
+        use_ratio_max=use_ratio_max,
+    )
+    tree = projectsCrud.get_project_tree_summary(
+        db=db,
+        use_ratio_min=use_ratio_min,
+        use_ratio_max=use_ratio_max,
+    )
     return commonSchema.ResponseResourceModel(data=summary, tree=tree, data_unit="TB")
 
 
 @router.get("/storage/groups", response_model=commonSchema.ResponseResourceModel, openapi_extra={"ai_exposed": True, "ai_name": "list_project_storage_groups", "ai_description": "查询项目存储组"})
 def get_project_groups_storage_usage(
     _admin: None = Depends(require_super_admin),
+    use_ratio_min: UseRatioMinimum = None,
+    use_ratio_max: UseRatioMaximum = None,
     db: Session = Depends(get_db),
 ):
-    groups = projectsCrud.get_project_groups_storage_usage(db=db)
+    use_ratio_min, use_ratio_max = validate_use_ratio_range(use_ratio_min, use_ratio_max)
+    groups = projectsCrud.get_project_groups_storage_usage(
+        db=db,
+        use_ratio_min=use_ratio_min,
+        use_ratio_max=use_ratio_max,
+    )
     return commonSchema.ResponseResourceModel(data=groups, data_unit="TB")
 
 
@@ -142,8 +160,17 @@ def get_project_storage_tree_by_id(
     project_id: int,
     value_type: str = "limit",
     current_user: CurrentUserDep = None,
+    use_ratio_min: UseRatioMinimum = None,
+    use_ratio_max: UseRatioMaximum = None,
     db: Session = Depends(get_db),
 ):
     project_access_service.require_project_permission(db, current_user, project_id, "reader")
-    tree = projectsCrud.get_project_tree_summary_by_id(db=db, project_id=project_id, value_type=value_type)
+    use_ratio_min, use_ratio_max = validate_use_ratio_range(use_ratio_min, use_ratio_max)
+    tree = projectsCrud.get_project_tree_summary_by_id(
+        db=db,
+        project_id=project_id,
+        value_type=value_type,
+        use_ratio_min=use_ratio_min,
+        use_ratio_max=use_ratio_max,
+    )
     return commonSchema.ResponseResourceModel(data=tree, data_unit="TB")

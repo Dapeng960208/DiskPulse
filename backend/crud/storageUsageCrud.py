@@ -173,12 +173,14 @@ def get_export_data(db: Session, nameLike: str | None = None, prop: str | None =
                     order: str | None = None, user_id: int | None = None, group_id: int | None = None,
                     storage_cluster_id: int | None = None, project_id: int | None = None,
                     group_tag_id: int | None = None,
-                    accessible_project_ids: set[int] | None = None):
+                    accessible_project_ids: set[int] | None = None,
+                    use_ratio_min: float | None = None, use_ratio_max: float | None = None):
     storage_usage_dbs, _ = get_storage_usages(db=db, nameLike=nameLike, prop=prop, order=order, user_id=user_id,
                                               group_id=group_id, storage_cluster_id=storage_cluster_id,
                                               project_id=project_id,
                                               group_tag_id=group_tag_id,
-                                              accessible_project_ids=accessible_project_ids)
+                                              accessible_project_ids=accessible_project_ids,
+                                              use_ratio_min=use_ratio_min, use_ratio_max=use_ratio_max)
     rows = []
     for storage_usage in storage_usage_dbs:
         group = storage_usage.group
@@ -226,9 +228,11 @@ def export_storage_usage_to_excel(db: Session, nameLike: str | None = None, prop
                                   order: str | None = None, user_id: int | None = None, group_id: int | None = None,
                                   storage_cluster_id: int | None = None, project_id: int | None = None,
                                   group_tag_id: int | None = None,
-                                  accessible_project_ids: set[int] | None = None):
+                                  accessible_project_ids: set[int] | None = None,
+                                  use_ratio_min: float | None = None, use_ratio_max: float | None = None):
     df_storage_usage = get_export_data(db, nameLike, prop, order, user_id, group_id, storage_cluster_id,
-                                       project_id, group_tag_id, accessible_project_ids)
+                                       project_id, group_tag_id, accessible_project_ids,
+                                       use_ratio_min, use_ratio_max)
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_storage_usage.to_excel(writer, sheet_name='存储使用明细', index=False)
@@ -240,10 +244,12 @@ def export_storage_usage_to_pdf(db: Session, nameLike: str | None = None, prop: 
                                 order: str | None = None, user_id: int | None = None, group_id: int | None = None,
                                 storage_cluster_id: int | None = None, project_id: int | None = None,
                                 group_tag_id: int | None = None,
-                                accessible_project_ids: set[int] | None = None):
+                                accessible_project_ids: set[int] | None = None,
+                                use_ratio_min: float | None = None, use_ratio_max: float | None = None):
     from appConfig import base_config
     df_storage_usage = get_export_data(db, nameLike, prop, order, user_id, group_id, storage_cluster_id,
-                                       project_id, group_tag_id, accessible_project_ids)
+                                       project_id, group_tag_id, accessible_project_ids,
+                                       use_ratio_min, use_ratio_max)
     company_name = base_config.get('application.company_name')
     logo_path = str(base_config.app_logo_path)
     pdf_generator = PDFReportGenerator(company_name=company_name, logo_path=logo_path, title='存储使用明细报告',

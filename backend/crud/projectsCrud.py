@@ -15,7 +15,7 @@ from models import (
 from schemas import projectsSchema
 from services.project_access_service import ensure_project_owner_membership
 from utils.common import convert_GB_to_TB
-from utils.query import apply_use_ratio_range, get_sort_column, require_allowed
+from utils.query import apply_use_ratio_range, filter_tree_by_use_ratio, get_sort_column, require_allowed
 
 
 def get_project_by_name(db: Session, name: str):
@@ -188,13 +188,17 @@ def _attach_tree_units(nodes: list[dict], value_unit: str) -> list[dict]:
     return nodes
 
 
-def get_project_storage_summary(db: Session) -> List[List[Any]]:
-    all_groups = (
+def get_project_storage_summary(
+    db: Session,
+    use_ratio_min: float | None = None,
+    use_ratio_max: float | None = None,
+) -> List[List[Any]]:
+    query = (
         db.query(Group.name, Group.used, Project.name)
         .join(Project, Project.id == Group.project_id)
         .filter(Project.name != "Common", Group.enable_monitoring.is_(True), Group.qtree_id.isnot(None))
-        .all()
     )
+    all_groups = apply_use_ratio_range(query, Group, use_ratio_min, use_ratio_max).all()
     project_names = sorted(set(group[2] for group in all_groups))
     group_names = sorted(set(group[0] for group in all_groups))
     summary = [["project"] + project_names]
@@ -209,7 +213,11 @@ def get_project_storage_summary(db: Session) -> List[List[Any]]:
     return summary
 
 
-def get_project_tree_summary(db: Session):
+def get_project_tree_summary(
+    db: Session,
+    use_ratio_min: float | None = None,
+    use_ratio_max: float | None = None,
+):
     project_dbs = db.query(Project).filter(Project.name != "Common").all()
     result = []
     for project_db in project_dbs:
@@ -261,10 +269,19 @@ def get_project_tree_summary(db: Session):
                 "children": groups,
             }
         )
-    return _attach_tree_units(result, "TB")
+    return _attach_tree_units(
+        filter_tree_by_use_ratio(result, use_ratio_min, use_ratio_max),
+        "TB",
+    )
 
 
-def get_project_tree_summary_by_id(db: Session, project_id: int, value_type: str) -> List:
+def get_project_tree_summary_by_id(
+    db: Session,
+    project_id: int,
+    value_type: str,
+    use_ratio_min: float | None = None,
+    use_ratio_max: float | None = None,
+) -> List:
     value_type = require_allowed(value_type, {"limit", "used", "use_ratio", "soft_limit", "soft_use_ratio"}, "value_type")
     group_dbs = (
         db.query(Group)
@@ -300,22 +317,29 @@ def get_project_tree_summary_by_id(db: Session, project_id: int, value_type: str
                 "children": storages,
             }
         )
-    return _attach_tree_units(groups, "%" if "ratio" in value_type else "TB")
+    return _attach_tree_units(
+        filter_tree_by_use_ratio(groups, use_ratio_min, use_ratio_max),
+        "%" if "ratio" in value_type else "TB",
+    )
 
 
-def get_project_groups_storage_usage(db: Session):
+def get_project_groups_storage_usage(
+    db: Session,
+    use_ratio_min: float | None = None,
+    use_ratio_max: float | None = None,
+):
     result = {}
     project_dbs = db.query(Project).all()
     for project_db in project_dbs:
-        group_dbs = (
+        query = (
             db.query(Group)
             .filter(
                 Group.project_id == project_db.id,
                 Group.enable_monitoring.is_(True),
                 Group.qtree_id.isnot(None),
             )
-            .all()
         )
+        group_dbs = apply_use_ratio_range(query, Group, use_ratio_min, use_ratio_max).all()
         if group_dbs:
             categories = [group_db.name for group_db in group_dbs]
             used = [convert_GB_to_TB(group_db.used) if group_db.used else 0 for group_db in group_dbs]

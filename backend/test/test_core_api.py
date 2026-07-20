@@ -170,6 +170,7 @@ class TestCoreApi:
                 id=1,
                 alert_level="warning",
                 alert_type="usage",
+                source="diskpulse",
                 description="usage is high",
                 threshold=80,
                 avg_use_ratio=85,
@@ -268,7 +269,7 @@ class TestCoreApi:
                     ),
                     models.StorageAlerts(
                         id=2, alert_level="warning", alert_type="usage", description="usage is low",
-                        threshold=80, avg_use_ratio=25, related_id=1, related_type="group",
+                        threshold=80, avg_use_ratio=25, related_id=1, related_type="group", source="diskpulse",
                         updated_at=datetime.fromisoformat(NOW),
                     ),
                 ]
@@ -410,7 +411,10 @@ class TestCoreApi:
             params=query,
         )
         assert project_summary_response.status_code == 200
-        assert project_summary_response.json()["data"] == [["project"], ["beta-team"]]
+        summary_data = project_summary_response.json()["data"]
+        assert [row[0] for row in summary_data] == ["project", "beta-team"]
+        assert summary_data[0][1:] == ["alpha"]
+        assert summary_data[1][1:] == [0.22]
         project_tree = project_summary_response.json()["tree"]
         assert [item["name"] for item in project_tree] == ["alpha", "beta"]
         assert [item["name"] for item in project_tree[0]["children"]] == ["beta-team"]
@@ -432,7 +436,7 @@ class TestCoreApi:
 
         alerts_response = self.client.get(
             "/storage-pulse/api/storage-alerts/",
-            params={"page": 1, "size": 20, **query},
+            params={"page": 1, "size": 20, "use_ratio_min": 80, "use_ratio_max": 90},
         )
         assert alerts_response.status_code == 200
         assert [item["id"] for item in alerts_response.json()["content"]] == [1]
@@ -469,6 +473,25 @@ class TestCoreApi:
                 params={"use_ratio_min": 80, "use_ratio_max": 70},
             )
 
+            assert response.status_code == 422, path
+
+    def test_all_capacity_collections_reject_out_of_bounds_utilization_range(self):
+        paths = [
+            "/storage-pulse/api/dashboard/capacity-items",
+            "/storage-pulse/api/aggregates/storage-trees/",
+            "/storage-pulse/api/aggregates/1/storage-tree",
+            "/storage-pulse/api/projects/storage/summary",
+            "/storage-pulse/api/projects/storage/groups",
+            "/storage-pulse/api/projects/1/storage-tree",
+            "/storage-pulse/api/storage-usages/export/",
+            "/storage-pulse/api/storage-alerts/",
+        ]
+
+        for path in paths:
+            response = self.client.get(path, params={"use_ratio_min": -1})
+            assert response.status_code == 422, path
+
+            response = self.client.get(path, params={"use_ratio_max": 101})
             assert response.status_code == 422, path
 
     def test_volume_bound_group_image_resolves_owning_volume(self, tmp_path):

@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from dependencies import CurrentUserDep, get_db
+from dependencies import CurrentUserDep, UseRatioMaximum, UseRatioMinimum, get_db, validate_use_ratio_range
 from schemas import dashboardSchema
 from services import dashboardService
 from services import project_access_service
@@ -53,9 +53,17 @@ def capacity_items(
     current_user: CurrentUserDep,
     db: DBDep,
     project_id: OptionalProjectId = None,
+    use_ratio_min: UseRatioMinimum = None,
+    use_ratio_max: UseRatioMaximum = None,
 ):
     _require_dashboard_scope(db, current_user, project_id)
-    return dashboardService.get_capacity_items(db, project_id=project_id)
+    use_ratio_min, use_ratio_max = validate_use_ratio_range(use_ratio_min, use_ratio_max)
+    return dashboardService.get_capacity_items(
+        db,
+        project_id=project_id,
+        use_ratio_min=use_ratio_min,
+        use_ratio_max=use_ratio_max,
+    )
 
 
 @router.get("/alert-levels", response_model=list[dashboardSchema.AlertLevelItem])

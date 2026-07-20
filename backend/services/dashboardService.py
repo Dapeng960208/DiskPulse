@@ -118,11 +118,21 @@ def get_capacity_trend(db: Session, project_id: int | None = None):
     ]
 
 
-def get_capacity_items(db: Session, project_id: int | None = None):
+def get_capacity_items(
+    db: Session,
+    project_id: int | None = None,
+    use_ratio_min: float | None = None,
+    use_ratio_max: float | None = None,
+):
     _project(db, project_id)
     return [
         _capacity(item)
-        for item in dashboardCrud.get_capacity_items(db, project_id)
+        for item in dashboardCrud.get_capacity_items(
+            db,
+            project_id,
+            use_ratio_min=use_ratio_min,
+            use_ratio_max=use_ratio_max,
+        )
     ]
 
 
