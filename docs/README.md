@@ -1,80 +1,58 @@
 # DiskPulse 文档索引
 
-本文档目录是项目文档的唯一入口。专题文档不直接放在 `docs/` 根目录，按用途进入对应子目录。
+`docs/` 是项目文档的唯一入口。每个事实只保留一个来源；跨领域关联只能通过相对 Markdown 链接引用，不能复制接口、权限、配置或验证结论。
 
-## 目录结构
+## 分类规则
 
-```text
-docs/
-  README.md
-  overview/
-  features/
-  guides/
-  standards/
-  tracking/
-```
+文档按“一级领域 / 二级主题”组织。一级领域说明文档职责，二级主题说明具体功能或专业域：
+
+| 一级领域 | 二级主题规则 | 用途 |
+| --- | --- | --- |
+| 概览 | `product`、`architecture` | 稳定的产品与架构入口。 |
+| 规范 | `frontend`、`backend`、`database`、`documentation`、`git` | 开发、文档与交付的强制约束。 |
+| 功能专题 | `<领域>/<功能>` | 事实来源；同一功能的概览、前端、后端和运维说明放在同一二级功能目录。 |
+| 指南 | `<专业域>/<操作主题>` | 可执行的测试、部署、排障或验收步骤。 |
+| 跟踪 | 固定文件 | 短期交付状态和可复现错误。 |
+
+功能专题的一级领域当前固定为：`ai`、`storage`、`identity`、`organization`、`experience`。新功能先归入现有领域，再在其下新建语义明确的二级功能目录；没有合适领域时，先更新本索引与[文档规范](./standards/documentation/documentation-standard.md)再创建目录。
+
+AI 相关文档必须进入 `docs/features/ai/<功能>/`。不得在 `docs/features/` 下新建 `ai-*` 平铺目录；例如对话能力放在 `ai/chat/`，新的 AI 功能应在 `ai/` 下建立自己的二级功能目录。
+
+## 开发前入口
+
+所有任务先阅读[文档规范](./standards/documentation/documentation-standard.md)和[Git 提交规范](./standards/git/git-commit-standard.md)，再按[开发阅读矩阵](./standards/documentation/development-reading-guide.md)选择实现层规范与功能专题。
+
+例如，开发 AI 对话后端时必须阅读[后端规范](./standards/backend/backend-development-standard.md)和[AI 对话专题](./features/ai/chat/overview.md)及其[后端说明](./features/ai/chat/backend.md)；涉及模型或迁移时再阅读[数据库规范](./standards/database/database-development-standard.md)。
 
 ## 概览
 
 | 文档 | 说明 |
 | --- | --- |
-| [overview/backend-architecture.md](./overview/backend-architecture.md) | 后端架构、数据层、任务流和维护边界。 |
-| [overview/latest-features.md](./overview/latest-features.md) | 最新功能、用户可见修复和测试覆盖进展。 |
-
-## 指南
-
-| 文档 | 说明 |
-| --- | --- |
-| [guides/frontend-testing-guide.md](./guides/frontend-testing-guide.md) | 前端测试命令、覆盖率门禁和 mock 约定。 |
-| [guides/storage-performance-event-troubleshooting.md](./guides/storage-performance-event-troubleshooting.md) | NetApp/PowerScale 性能与事件采集排障、验证命令和验收清单。 |
+| [产品概览](./overview/product/overview.md) | 产品范围、主要入口和专题导航。 |
+| [当前能力](./overview/product/current-capabilities.md) | 已可用能力及其唯一事实来源。 |
+| [系统架构](./overview/architecture/system.md) | 前端、后端、数据与任务的整体边界。 |
+| [前端架构](./overview/architecture/frontend.md) | Vue 应用、路由、状态和 UI 分层。 |
+| [后端架构](./overview/architecture/backend.md) | FastAPI、API、任务和服务端运行边界。 |
+| [数据库架构](./overview/architecture/database.md) | PostgreSQL、QuestDB、Redis 与迁移职责。 |
 
 ## 功能专题
 
-| 专题 | 文档 |
+| 一级领域 | 二级功能与文档 |
 | --- | --- |
-| LDAP 认证 | [features/authentication/backend.md](./features/authentication/backend.md) |
-| 应用壳布局 | [页脚固定设计](./features/app-shell/design.md) · [内容区统一间距设计](./features/app-shell/content-spacing.md) |
-| 用户信息管理 | [features/user-management/overview.md](./features/user-management/overview.md) |
-| 项目组标签 | [features/group-tag/design.md](./features/group-tag/design.md) |
-| 写入表单体验 | [features/form-experience/design.md](./features/form-experience/design.md) |
-| 系统设置废弃配置清理 | [features/system-settings-cleanup/design.md](./features/system-settings-cleanup/design.md) |
-| 存储集群 | [总览](./features/storage-cluster/overview.md) · [性能与事件设计](./features/storage-cluster/performance-event-collection.md) · [厂商/API 契约](./features/storage-cluster/vendor-api-contracts.md) |
-| 存储告警规则与飞书通知 | [features/storage-alerts/design.md](./features/storage-alerts/design.md) |
-| 存储配额软限额 | [features/storage-quota/overview.md](./features/storage-quota/overview.md) |
-| 全站存储趋势图 | [设计](./features/storage-trends/design.md) · [详情路由加载修复](./features/storage-trends/detail-route-loading-fix.md) · [用户目录扩展字段隐藏](./features/storage-trends/usage-detail-field-visibility.md) · [实时页头与告警等级](./features/storage-trends/realtime-header-alert-level.md) |
-| AI 对话与管理中心 | [总览](./features/ai-chat/overview.md) · [后端实现](./features/ai-chat/backend.md) · [前端实现](./features/ai-chat/frontend.md) |
-| 项目级 RBAC 与统一操作审计 | [设计](./features/project-rbac/design.md) · [功能](./features/project-rbac/requirements.md) · [实施](./features/project-rbac/implementation.md) · [验收](./features/project-rbac/verification.md) |
-| 企业级 AI 存储智能运维 | [调研报告与建设基线](./features/ai-storage-management/research.md) |
-| 遥测新鲜度与平台可观测 | [总览](./features/telemetry-observability/overview.md) · [设计复盘](./features/telemetry-observability/design.md) · [功能说明](./features/telemetry-observability/feature.md) · [实施复盘](./features/telemetry-observability/implementation.md) · [验收复盘](./features/telemetry-observability/acceptance.md) |
-| 预测、RCA 与事件中心 | [总览](./features/forecast-incident-center/overview.md) · [操作指南](./features/forecast-incident-center/operations-guide.md) |
-| 2026-07-18 代码审查修复 | [问题与验证复盘](./features/review-remediation/verification.md) |
+| AI | [对话与管理中心](./features/ai/chat/overview.md) · [流式工具轨迹](./features/ai/chat/streaming-tool-trace-reconciliation.md) · [智能存储运维调研](./features/ai/storage-management/research.md) |
+| 存储 | [存储集群](./features/storage/cluster/overview.md) · [配额](./features/storage/quota/overview.md) · [告警](./features/storage/alerts/design.md) · [趋势](./features/storage/trends/design.md) · [可观测性](./features/storage/observability/overview.md) · [事件中心](./features/storage/incident-center/overview.md) |
+| 身份与权限 | [认证](./features/identity/authentication/backend.md) · [用户管理](./features/identity/user-management/overview.md) · [项目级 RBAC 与审计](./features/identity/project-rbac/backend.md) |
+| 组织 | [项目组标签](./features/organization/group-tags/design.md) |
+| 前端体验 | [应用壳](./features/experience/application-shell/design.md) · [Dashboard](./features/experience/dashboard/design.md) · [Mock 运行时](./features/experience/mock-runtime/frontend.md) |
 
-## 规范
+## 规范、指南与跟踪
 
-| 文档 | 说明 |
+| 分类 | 文档 |
 | --- | --- |
-| [standards/documentation-standard.md](./standards/documentation-standard.md) | 文档更新和放置规则。 |
-| [standards/domain-terminology.md](./standards/domain-terminology.md) | DiskPulse 领域术语和权限命名约定。 |
-| [standards/document-naming-convention.md](./standards/document-naming-convention.md) | 文档命名和目录约定。 |
-| [standards/domain-terminology.md](./standards/domain-terminology.md) | DiskPulse 存储监控领域术语。 |
-| [standards/backend-development-standard.md](./standards/backend-development-standard.md) | 后端开发规范。 |
-| [standards/frontend-design-standard.md](./standards/frontend-design-standard.md) | 前端设计规范。 |
-| [standards/ai-development-standard.md](./standards/ai-development-standard.md) | AI 协作开发规范。 |
-| [standards/development-error-summary.md](./standards/development-error-summary.md) | 错误记录格式参考。 |
-
-## 跟踪记录
-
-| 文档 | 说明 |
-| --- | --- |
-| [tracking/current-release.md](./tracking/current-release.md) | 当前交付、风险和验证状态。 |
-| [tracking/error-log.md](./tracking/error-log.md) | 可复现错误、环境问题和规范缺口记录。 |
-| [tracking/backend-schema-review-2026-06-30.md](./tracking/backend-schema-review-2026-06-30.md) | 后端 schema 审查记录。 |
-| [tracking/unused-field-audit-2026-07-13.md](./tracking/unused-field-audit-2026-07-13.md) | ORM 未使用字段、无效重复配置和后续清理范围审计。 |
-
-## 维护规则
-
-- 新增专题文档优先放入 `features/<feature>/`。
-- 项目级稳定说明放入 `overview/`。
-- 部署、迁移、排障、验收类文档放入 `guides/`。
-- 当前交付、风险和错误记录放入 `tracking/`。
-- 文件名和目录名使用英文 `kebab-case`。
+| 前端规范 | [前端设计与开发规范](./standards/frontend/frontend-design-standard.md) |
+| 后端规范 | [后端开发规范](./standards/backend/backend-development-standard.md) |
+| 数据库规范 | [数据库开发规范](./standards/database/database-development-standard.md) |
+| 文档规范 | [文档规范](./standards/documentation/documentation-standard.md) · [命名与链接](./standards/documentation/document-naming-convention.md) · [开发阅读矩阵](./standards/documentation/development-reading-guide.md) · [领域术语](./standards/documentation/domain-terminology.md) · [错误记录规则](./standards/documentation/development-error-summary.md) |
+| Git 规范 | [Git 提交与交付规范](./standards/git/git-commit-standard.md) |
+| 指南 | [前端测试](./guides/frontend/testing.md) · [存储性能与事件排障](./guides/storage/performance-event-troubleshooting.md) |
+| 跟踪 | [当前交付](./tracking/current-release.md) · [可复现错误](./tracking/error-log.md) |
