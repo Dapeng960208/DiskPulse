@@ -176,6 +176,15 @@ describe('user management LDAP sync contracts', () => {
       return wrapper;
     }
 
+    it('requests users by storage usage descending by default', async () => {
+      await mountPage();
+
+      expect(fetchSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+        prop: 'storage_used',
+        order: 'descending',
+      }));
+    });
+
     it('exposes add and LDAP sync actions with the complete safety confirmation', async () => {
       const wrapper = await mountPage();
       const addButton = findButton(wrapper, '新增用户');
