@@ -10,18 +10,18 @@ const activeName = ref('first');
 <template>
   <ElTabs
     v-model="activeName"
-    class="flex flex-col h-full">
+    class="flex flex-col flex-1 min-h-0 h-full">
     <ElTabPane
       label="项目列表"
       name="first"
-      class="flex flex-col h-full">
+      class="flex flex-col flex-1 min-h-0 h-full">
       <ProjectTable></ProjectTable>
     </ElTabPane>
     <ElTabPane
       label="项目存储概览图"
       name="second"
       :lazy="true"
-      class="flex flex-col h-full">
+      class="flex flex-col flex-1 min-h-0 h-full">
       <ProjectDiskUsage></ProjectDiskUsage>
     </ElTabPane>
   </ElTabs>
@@ -71,9 +71,19 @@ const activeName = ref('first');
   }
 
   .el-tabs__content {
-    flex: 1;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
     height: 100%;
     padding: var(--spacing-lg) 0 0;
+
+    .el-tab-pane {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-height: 0;
+    }
   }
 }
 </style>

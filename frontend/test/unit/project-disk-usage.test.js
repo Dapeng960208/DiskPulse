@@ -11,7 +11,7 @@ describe('ProjectDiskUsage', () => {
     expect(source).toContain('api-type="project"');
     expect(source).toContain(':show-resource-select="!attributeId"');
     expect(source).toContain(':allowed-indicators="[\'used\']"');
-    expect(source).toContain(':fill-content="Boolean(attributeId)"');
+    expect(source).toContain(':fill-content="true"');
     expect(realTimePage).toContain('label="时间范围"');
     expect(realTimePage).toContain('v-if="showResourceSelect && selectedSelect"');
     expect(realTimePage).toContain('fillContent');

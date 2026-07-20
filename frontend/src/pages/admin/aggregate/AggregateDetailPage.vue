@@ -15,5 +15,6 @@ onBeforeMount(() => {
     :attribute-id="attributeId"
     :api-type="'aggregate'"
     :label="'容量池名'"
-    :show-header="false"></RealTimePage>
+    :show-header="false"
+    :fill-content="true"></RealTimePage>
 </template>

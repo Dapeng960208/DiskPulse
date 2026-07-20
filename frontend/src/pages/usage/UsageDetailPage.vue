@@ -198,15 +198,20 @@ onMounted(() => {
 
 <template>
   <section class="usage-detail-page">
-    <ElTabs v-model="activeTab">
+    <ElTabs
+      v-model="activeTab"
+      class="usage-detail-page__tabs">
       <ElTabPane
+        class="usage-detail-page__capacity-tab"
         label="容量趋势"
         name="capacity">
         <RealTimePage
+          class="usage-detail-page__realtime-content"
           :attribute-id="usageId"
           api-type="storage-usage"
           label="用户目录"
-          :show-header="false">
+          :show-header="false"
+          :fill-content="true">
           <!-- 暂时隐藏第 2–4 行扩展字段，恢复时移出此注释并补回 ElDescriptionsItem 导入。
           <template #extra-descriptions="{ info }">
             <ElDescriptionsItem label="文件数量">{{ info?.file_used }}</ElDescriptionsItem>
@@ -367,9 +372,44 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.usage-detail-page { height: 100%; min-height: 0; }
-.usage-detail-page :deep(.el-tabs) { height: 100%; }
-.usage-detail-page :deep(.el-tabs__content),
-.usage-detail-page :deep(.el-tab-pane) { height: calc(100% - 28px); min-height: 0; }
+.usage-detail-page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.usage-detail-page__tabs {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.usage-detail-page__tabs :deep(.el-tabs__header) {
+  flex: 0 0 auto;
+}
+
+.usage-detail-page__tabs :deep(.el-tabs__content) {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.usage-detail-page__capacity-tab {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.usage-detail-page__realtime-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
 .prediction-loading { min-height: 160px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
 </style>

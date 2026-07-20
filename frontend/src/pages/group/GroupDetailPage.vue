@@ -35,10 +35,12 @@ onBeforeMount(() => {
 <template>
   <section class="detail-monitor-page">
     <RealTimePage
+      class="detail-monitor-page__content"
       :attribute-id="attributeId"
       :api-type="'group'"
       :label="'项目组'"
-      :show-header="false">
+      :show-header="false"
+      :fill-content="true">
       <template #extra-descriptions="{ info }">
         <ElDescriptionsItem label="项目路径">{{ info?.linux_path }}</ElDescriptionsItem>
         <ElDescriptionsItem label="归属项目">{{ info?.project?.name }}</ElDescriptionsItem>
@@ -50,3 +52,19 @@ onBeforeMount(() => {
     </RealTimePage>
   </section>
 </template>
+
+<style scoped>
+.detail-monitor-page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.detail-monitor-page__content {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+</style>

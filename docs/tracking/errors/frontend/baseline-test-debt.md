@@ -11,8 +11,9 @@
 ## 备注
 
 - 分类：`frontend`
-- 出现次数：2
+- 出现次数：3
 - 首次出现：2026-07-20 导航信息架构会话
-- 最近出现：2026-07-20 项目使用量与成员默认权限会话
+- 最近出现：2026-07-20 实时页面布局复查会话
 - 出现记录：`sessions/2026-07-20-navigation-information-architecture/errors.md`
 - 出现记录：`sessions/2026-07-20-project-usage-reader-default/errors.md`
+- 出现记录：`sessions/2026-07-20-realtime-layout-audit/errors.md`；`detail-capacity-prediction-navigation.test.js` 在收集阶段经由 `AppHeader.vue -> users-api.js` 报 `CrudApi` 基类为 `undefined`，与本次实时布局变更无关。

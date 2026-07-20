@@ -19,7 +19,7 @@ defineProps({
       :show-header="false"
       :show-resource-select="!attributeId"
       :allowed-indicators="['used']"
-      :fill-content="Boolean(attributeId)" />
+      :fill-content="true" />
   </section>
 </template>
 
