@@ -9,6 +9,7 @@ from appConfig import base_config
 import models
 from routers import (
     aggregate,
+    dashboard,
     group,
     large_files,
     projects,
@@ -39,6 +40,7 @@ class TestCoreApi:
                 projects.router,
                 storage_cluster.router,
                 aggregate.router,
+                dashboard.router,
                 volumes.router,
                 qtrees.router,
                 group.router,
@@ -243,7 +245,7 @@ class TestCoreApi:
                         use_ratio=75, updated_at=datetime.fromisoformat(NOW),
                     ),
                     models.Volume(
-                        id=2, storage_cluster_id=1, name="vol-b", vserver="svm-b", aggregate="aggr-b",
+                        id=2, storage_cluster_id=1, name="vol-b", vserver="svm-b", aggregate="aggr-a",
                         state="online", type="rw", limit=400, used=300, use_ratio=75, soft_limit=320,
                         soft_use_ratio=93.75, allocated=300, updated_at=datetime.fromisoformat(NOW),
                     ),
@@ -263,6 +265,11 @@ class TestCoreApi:
                         limit=100, used=75, use_ratio=75, soft_limit=80, soft_use_ratio=93.75, file_used=10,
                         file_limit=1000, updated_at=datetime.fromisoformat(NOW),
                         access_time=datetime.fromisoformat(NOW), modify_time=datetime.fromisoformat(NOW),
+                    ),
+                    models.StorageAlerts(
+                        id=2, alert_level="warning", alert_type="usage", description="usage is low",
+                        threshold=80, avg_use_ratio=25, related_id=1, related_type="group",
+                        updated_at=datetime.fromisoformat(NOW),
                     ),
                 ]
             )
@@ -371,6 +378,98 @@ class TestCoreApi:
 
             response = self.client.get(path, params={"page": 1, "size": 20, "use_ratio_max": 101})
             assert response.status_code == 422
+
+    def test_all_capacity_collections_filter_by_utilization_range(self):
+        self.seed_high_utilization_data()
+        query = {"use_ratio_min": 70, "use_ratio_max": 80}
+
+        dashboard_response = self.client.get(
+            "/storage-pulse/api/dashboard/capacity-items",
+            params=query,
+        )
+        assert dashboard_response.status_code == 200
+        assert [item["name"] for item in dashboard_response.json()] == ["beta"]
+
+        aggregate_tree_response = self.client.get(
+            "/storage-pulse/api/aggregates/storage-trees/",
+            params=query,
+        )
+        assert aggregate_tree_response.status_code == 200
+        assert [item["name"] for item in aggregate_tree_response.json()["data"]] == ["vol-b"]
+        assert [item["name"] for item in aggregate_tree_response.json()["data"][0]["children"]] == ["qtree-b"]
+
+        aggregate_by_id_tree_response = self.client.get(
+            "/storage-pulse/api/aggregates/1/storage-tree",
+            params=query,
+        )
+        assert aggregate_by_id_tree_response.status_code == 200
+        assert [item["name"] for item in aggregate_by_id_tree_response.json()["data"]] == ["vol-b"]
+
+        project_summary_response = self.client.get(
+            "/storage-pulse/api/projects/storage/summary",
+            params=query,
+        )
+        assert project_summary_response.status_code == 200
+        assert project_summary_response.json()["data"] == [["project"], ["beta-team"]]
+        project_tree = project_summary_response.json()["tree"]
+        assert [item["name"] for item in project_tree] == ["alpha", "beta"]
+        assert [item["name"] for item in project_tree[0]["children"]] == ["beta-team"]
+
+        project_groups_response = self.client.get(
+            "/storage-pulse/api/projects/storage/groups",
+            params=query,
+        )
+        assert project_groups_response.status_code == 200
+        assert project_groups_response.json()["data"]["alpha"]["categories"] == ["beta-team"]
+
+        project_tree_response = self.client.get(
+            "/storage-pulse/api/projects/1/storage-tree",
+            params=query,
+        )
+        assert project_tree_response.status_code == 200
+        assert [item["name"] for item in project_tree_response.json()["data"]] == ["beta-team"]
+        assert [item["name"] for item in project_tree_response.json()["data"][0]["children"]] == ["alice"]
+
+        alerts_response = self.client.get(
+            "/storage-pulse/api/storage-alerts/",
+            params={"page": 1, "size": 20, **query},
+        )
+        assert alerts_response.status_code == 200
+        assert [item["id"] for item in alerts_response.json()["content"]] == [1]
+
+    def test_storage_usage_export_passes_utilization_range_to_crud(self):
+        with patch(
+            "routers.storage_usage.storageUsageCrud.export_storage_usage_to_pdf",
+            return_value=io.BytesIO(b"pdf"),
+        ) as export_pdf:
+            response = self.client.get(
+                "/storage-pulse/api/storage-usages/export/",
+                params={"use_ratio_min": 70, "use_ratio_max": 80},
+            )
+
+        assert response.status_code == 200
+        assert export_pdf.call_args.kwargs["use_ratio_min"] == 70
+        assert export_pdf.call_args.kwargs["use_ratio_max"] == 80
+
+    def test_all_capacity_collections_reject_reversed_utilization_range(self):
+        paths = [
+            "/storage-pulse/api/dashboard/capacity-items",
+            "/storage-pulse/api/aggregates/storage-trees/",
+            "/storage-pulse/api/aggregates/1/storage-tree",
+            "/storage-pulse/api/projects/storage/summary",
+            "/storage-pulse/api/projects/storage/groups",
+            "/storage-pulse/api/projects/1/storage-tree",
+            "/storage-pulse/api/storage-usages/export/",
+            "/storage-pulse/api/storage-alerts/",
+        ]
+
+        for path in paths:
+            response = self.client.get(
+                path,
+                params={"use_ratio_min": 80, "use_ratio_max": 70},
+            )
+
+            assert response.status_code == 422, path
 
     def test_volume_bound_group_image_resolves_owning_volume(self, tmp_path):
         self.bind_seeded_group_to_volume()
