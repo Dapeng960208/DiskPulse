@@ -67,6 +67,22 @@ describe('CapacityPredictionPanel', () => {
     expect(api.fetchRelatedIncidents).not.toHaveBeenCalled();
   });
 
+  it('renders forecast values from the response capacity map and keeps the declared curve unit', async () => {
+    api.fetchPrediction.mockResolvedValue({
+      data_unit: 'GB',
+      curve: [],
+      exhaustion_dates: {}, input_quality: {}, algorithm_version: 'capacity-ai-v2',
+    });
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    expect(wrapper.vm.curveUnit).toBe('GB');
+    expect(wrapper.vm.formatCurveCapacity({
+      p50: 2048,
+      capacity: { p50: { value: 2, unit: 'TB' } },
+    }, 'p50')).toBe('2 TB');
+  });
+
   it('creates a resource-scoped capacity plan and reloads the panel', async () => {
     api.fetchPrediction.mockRejectedValue({ response: { status: 404 } });
     const wrapper = mountPanel({ canManagePlans: true });

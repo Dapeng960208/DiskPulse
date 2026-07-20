@@ -104,6 +104,7 @@ async function renderChart() {
         const limit = info.data.limit || '0';
         const used = info.data.used || '0';
         const usedRatio = info.data.used_ratio || '0';
+        const capacityUnit = info.data.capacity_unit || 'TB';
 
         const treePathInfo = info.treePathInfo;
         const treePath = [];
@@ -115,8 +116,8 @@ async function renderChart() {
           '<div class="tooltip-title">' +
             formatUtil.encodeHTML(treePath.join('/')) +
             '</div>',
-          '限额: ' + formatUtil.addCommas(limit) + ' TB',
-          '使用量: ' + formatUtil.addCommas(used) + ' TB',
+          '限额: ' + formatUtil.addCommas(limit) + ' ' + capacityUnit,
+          '使用量: ' + formatUtil.addCommas(used) + ' ' + capacityUnit,
           '使用率: ' + usedRatio + '%'
         ].join('<br/>');
       }

@@ -4,6 +4,7 @@ import { ElAlert, ElButton, ElDatePicker, ElDescriptions, ElDescriptionsItem, El
 import capacityPredictionApi from '@/api/capacity-prediction-api.js';
 import { getChartColors, loadEcharts } from '@/lib/echarts.js';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
+import { formatCapacity, formatCapacityFromGb } from '@/utils/capacity';
 
 const props = defineProps({ assetType: { type: String, required: true }, assetId: { type: Number, required: true }, visible: { type: Boolean, default: false }, canManagePlans: { type: Boolean, default: false } });
 const prediction = ref(null);
@@ -20,10 +21,16 @@ const qualityLabel = computed(() => prediction.value?.input_quality?.coverage_ra
 const qualityStatus = computed(() => prediction.value?.input_quality?.status || 'unknown');
 const predictionSource = computed(() => prediction.value?.input_quality?.prediction_source || 'baseline');
 const fallbackReason = computed(() => prediction.value?.input_quality?.fallback_reason || null);
+const curveUnit = computed(() => prediction.value?.data_unit || 'GB');
 const auditSummary = computed(() => {
   if (plans.value.length === 0) return '暂无针对该资源的容量计划审计记录';
   return `该资源已有 ${plans.value.length} 项已审计容量计划，最新生效时间：${plans.value.at(-1)?.effective_at || '-'}`;
 });
+
+function formatCurveCapacity(point, field) {
+  if (point?.capacity?.[field]) return formatCapacity(point.capacity[field]);
+  return formatCapacityFromGb(point?.[field]);
+}
 
 async function load() {
   if (!props.visible || !props.assetId) return;
@@ -61,9 +68,12 @@ async function renderChart() {
   chart.setOption({
     color: [colors[0], colors[2], colors[3]],
     grid: { top: 24, right: 24, bottom: 28, left: 56 },
-    tooltip: { trigger: 'axis' },
+    tooltip: {
+      trigger: 'axis',
+      valueFormatter: (value) => formatCapacityFromGb(value),
+    },
     xAxis: { type: 'category', data: curve.map((point) => String(point.observed_at).slice(0, 10)) },
-    yAxis: { type: 'value', name: '容量' },
+    yAxis: { type: 'value', name: `容量（${curveUnit.value}）` },
     series: [
       { name: 'P10', type: 'line', data: curve.map((point) => point.p10), symbol: 'none' },
       { name: 'P50', type: 'line', data: curve.map((point) => point.p50), symbol: 'none', lineStyle: { width: 3 } },
@@ -141,15 +151,15 @@ async function createPlan() {
           label="日期"
           prop="observed_at"
           min-width="180" />
-        <ElTableColumn
-          label="P10"
-          prop="p10" />
-        <ElTableColumn
-          label="P50"
-          prop="p50" />
-        <ElTableColumn
-          label="P90"
-          prop="p90" />
+        <ElTableColumn label="P10">
+          <template #default="{ row }">{{ formatCurveCapacity(row, 'p10') }}</template>
+        </ElTableColumn>
+        <ElTableColumn label="P50">
+          <template #default="{ row }">{{ formatCurveCapacity(row, 'p50') }}</template>
+        </ElTableColumn>
+        <ElTableColumn label="P90">
+          <template #default="{ row }">{{ formatCurveCapacity(row, 'p90') }}</template>
+        </ElTableColumn>
       </ElTable>
       <div class="capacity-prediction-panel__plans"><span>已批准容量计划：{{ plans.length }} 项</span><TableActionButton
         v-if="canManagePlans"
@@ -183,7 +193,7 @@ async function createPlan() {
           v-model="planForm.effectiveAt"
           type="datetime"
           class="!w-full" /></ElFormItem>
-        <ElFormItem label="容量变化"><ElInputNumber
+        <ElFormItem label="容量变化（GB）"><ElInputNumber
           v-model="planForm.capacityDelta"
           :min="-1000000000"
           :max="1000000000"

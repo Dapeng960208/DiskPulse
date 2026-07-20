@@ -2,6 +2,7 @@
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from datetime import datetime
 from typing import Literal, Optional
+from schemas.capacitySchema import CapacityResponseBase
 
 
 class StorageClusterBase(BaseModel):
@@ -65,7 +66,7 @@ class StorageClusterUpdate(BaseModel):
         return self
 
 
-class StorageCluster(StorageClusterBase):
+class StorageCluster(CapacityResponseBase, StorageClusterBase):
     id: int
     used: Optional[float] = None
     use_ratio: Optional[float] = None

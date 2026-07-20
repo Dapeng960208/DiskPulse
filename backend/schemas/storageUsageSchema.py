@@ -2,6 +2,7 @@
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from datetime import datetime
 from schemas import usersSchema, groupSchema
+from schemas.capacitySchema import CapacityResponseBase
 
 class StorageUsageBase(BaseModel):
     user_id: int
@@ -45,7 +46,7 @@ class ProjectSummary(BaseModel):
     name: str
 
 
-class StorageUsage(StorageUsageBase):
+class StorageUsage(CapacityResponseBase, StorageUsageBase):
     id: int
     capabilities: dict[str, bool] = Field(default_factory=dict)
 

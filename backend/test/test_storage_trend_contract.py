@@ -33,12 +33,14 @@ def test_public_realtime_and_dashboard_schemas_expose_trend_meta():
     from schemas.storageTrendSchema import StorageTrendMeta
 
     assert "trend_meta" in ResponseStorageUsageModel.model_fields
+    assert "data_unit" in ResponseStorageUsageModel.model_fields
     assert "trend_meta" in DashboardSummaryResponse.model_fields
     assert set(StorageTrendMeta.model_fields) == {
         "quota_basis",
         "rule_source",
         "thresholds",
         "quota_limit_gb",
+        "quota_limit_tb",
         "ratio_indicator",
     }
 
@@ -72,7 +74,9 @@ def test_effective_trend_meta_uses_group_project_system_precedence(monkeypatch):
         "rule_source": "group",
         "thresholds": {"important": 75, "serious": 88, "emergency": 96},
         "quota_limit_gb": 90.0,
+        "quota_limit_tb": 0.0879,
         "ratio_indicator": "soft_use_ratio",
+        "capacity": {"quota_limit_gb": {"value": 90, "unit": "GB"}},
     }
 
     group.storage_alert_rule = None
@@ -197,7 +201,23 @@ def test_realtime_api_validates_indicator_and_uses_effective_soft_history(
         "rule_source": "system",
         "thresholds": {"important": 72, "serious": 86, "emergency": 94},
         "quota_limit_gb": 90.0,
+        "quota_limit_tb": 0.0879,
         "ratio_indicator": "soft_use_ratio",
+        "capacity": {"quota_limit_gb": {"value": 90, "unit": "GB"}},
     }
+    assert response.json()["data_unit"] == "%"
     assert realtime.call_args.kwargs["indicator"] == "soft_use_ratio"
     assert client.get("/storage-pulse/api/volumes/1/realtime?indicator=unknown").status_code == 422
+
+
+def test_capacity_realtime_curves_use_tb_and_non_capacity_indicators_keep_their_units():
+    from services.storageTrendService import format_trend_data, trend_data_unit
+
+    for target_type in ("aggregate", "volume", "qtree", "project", "group", "storage_cluster"):
+        assert trend_data_unit(target_type, "used") == "TB"
+    assert format_trend_data([["2026-07-20 10:00:00", 2048]], "TB") == [
+        ["2026-07-20 10:00:00", 2.0]
+    ]
+    assert trend_data_unit("storage_usage", "used") == "GB"
+    assert trend_data_unit("storage_usage", "file_used") == "count"
+    assert trend_data_unit("volume", "use_ratio") == "%"

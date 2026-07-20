@@ -24,6 +24,7 @@ import { getDefaultTime } from '@/composables/common';
 import { useQuery, useQueryParams } from '@/composables/query';
 import { useStorageAlertThresholds } from '@/stores/storage-alert-thresholds';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
+import { formatCapacity } from '@/utils/capacity';
 
 const props = defineProps({
   apiType: {
@@ -142,7 +143,7 @@ const indicatorOptions = computed(() => {
 });
 
 const fetchData = async () => {
-  if (resourceIds.value.length === 0) return { data: {}, info: {}, trend_meta: null };
+  if (resourceIds.value.length === 0) return { data: {}, info: {}, trend_meta: null, data_unit: null };
   const promises = resourceIds.value.map(id =>
     selectedApi.value.fetchStorageRealTimeDataById(id, queryParams.value)
   );
@@ -159,7 +160,12 @@ const fetchData = async () => {
   }, {});
   const info = results[0]?.info ?? {};
 
-  return { data, info, trend_meta: results[0]?.trend_meta ?? null };
+  return {
+    data,
+    info,
+    trend_meta: results[0]?.trend_meta ?? null,
+    data_unit: results[0]?.data_unit ?? null,
+  };
 };
 
 const { result, querying, query } = useQuery(fetchData, {
@@ -226,9 +232,9 @@ watch(() => props.attributeId, (value) => {
   attributeId.value = normalizeResourceIds(value);
 }, { deep: true });
 const yAxisUnit = computed(() => {
-  return queryParams.value.indicator === 'used'
-    ? 'G'
-    : ['use_ratio', 'alert_ratio'].includes(queryParams.value.indicator) ? '%' : '';
+  if (result.value?.data_unit === 'count') return '个';
+  if (result.value?.data_unit) return result.value.data_unit;
+  return queryParams.value.indicator === 'used' ? 'GB' : ['use_ratio', 'alert_ratio'].includes(queryParams.value.indicator) ? '%' : '';
 });
 const trendSeries = computed(() => Object.entries(result.value.data || {}).map(([name, data]) => ({ name, data })));
 const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThresholds.thresholds : null);
@@ -297,8 +303,8 @@ const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThre
         <ElDescriptionsItem
           v-else
           :label="props.label">{{ result.info?.name }}</ElDescriptionsItem>
-        <ElDescriptionsItem label="限额">{{ result.info?.limit }} G</ElDescriptionsItem>
-        <ElDescriptionsItem label="使用量">{{ result.info?.used }} G</ElDescriptionsItem>
+        <ElDescriptionsItem label="限额">{{ formatCapacity(result.info?.capacity?.limit, { emptyText: '无硬限额' }) }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="使用量">{{ formatCapacity(result.info?.capacity?.used) }}</ElDescriptionsItem>
         <ElDescriptionsItem label="利用率">{{ result.info?.use_ratio }} %</ElDescriptionsItem>
         <slot
           name="extra-descriptions"

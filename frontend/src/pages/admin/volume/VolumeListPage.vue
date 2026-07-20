@@ -9,6 +9,7 @@ import { useQuery, useQueryParams } from '@/composables/query';
 import Progress from '@/components/form/Progress.vue'
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
+import { formatCapacity } from '@/utils/capacity';
 import { getStorageResourceNativeType } from '@/utils/storage-resource';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
@@ -147,7 +148,7 @@ query();
         min-width="100"
       >
         <template #default="{ row }">
-          <span v-if="row.limit">{{ formatQuotaLimit(row.limit) }}</span>
+          <span v-if="row.limit">{{ formatQuotaLimit(row.capacity?.limit ?? row.limit) }}</span>
           <ElTag
             v-else
             type="danger">无硬限额</ElTag>
@@ -162,7 +163,7 @@ query();
         min-width="100"
       >
         <template #default="{ row }">
-          <span v-if="row.soft_limit">{{ formatQuotaLimit(row.soft_limit, { emptyText: '无软限额' }) }}</span>
+          <span v-if="row.soft_limit">{{ formatQuotaLimit(row.capacity?.soft_limit ?? row.soft_limit, { emptyText: '无软限额' }) }}</span>
           <ElTag
             v-else
             type="warning">无软限额</ElTag>
@@ -199,7 +200,7 @@ query();
         min-width="100"
       >
         <template #default="{ row }">
-          <span>{{ row.used>=1024 ? `${(row.used/1024).toFixed(1)} T`: `${row.used} G` }}</span>
+          <span>{{ formatCapacity(row.capacity?.used, { emptyText: '-' }) }}</span>
         </template>
       </ElTableColumn>
       <ElTableColumn

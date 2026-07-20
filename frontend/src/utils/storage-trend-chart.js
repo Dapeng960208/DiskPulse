@@ -63,12 +63,12 @@ function thresholdPercentages(meta, systemThresholds, multiple, percentage) {
     .filter(({ percentage: value }) => value !== null);
 }
 
-function thresholdValues({ indicator, trendMeta, systemThresholds, multiple }) {
+function thresholdValues({ indicator, trendMeta, systemThresholds, multiple, unit }) {
   const percentage = indicator === 'use_ratio' || indicator === 'alert_ratio';
   const definitions = thresholdPercentages(trendMeta, systemThresholds, multiple, percentage);
   if (percentage) return definitions.map((item) => ({ ...item, value: item.percentage }));
   if (indicator !== 'used' || multiple) return [];
-  const limit = finiteNumber(trendMeta?.quota_limit_gb);
+  const limit = finiteNumber(unit === 'TB' ? trendMeta?.quota_limit_tb : trendMeta?.quota_limit_gb);
   if (limit === null || limit <= 0) return [];
   return definitions.map((item) => ({ ...item, value: limit * item.percentage / 100 }));
 }
@@ -143,7 +143,7 @@ export function buildStorageTrendOption({
 }) {
   const multiple = series.length > 1;
   const percentage = indicator === 'use_ratio' || indicator === 'alert_ratio';
-  const values = thresholdValues({ indicator, trendMeta, systemThresholds, multiple });
+  const values = thresholdValues({ indicator, trendMeta, systemThresholds, multiple, unit });
   const pieces = !multiple ? visualPieces(values, palette) : [];
   const basisLabel = trendMeta?.quota_basis === 'soft' ? '软限额' : '硬限额';
   const ruleSourceLabel = RULE_SOURCE_LABELS[trendMeta?.rule_source] || '系统规则';

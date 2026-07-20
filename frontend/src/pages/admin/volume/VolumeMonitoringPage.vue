@@ -15,7 +15,7 @@ const breadcrumbs = useBreadcrumbs();
 const volumeId = computed(() => Number(route.params.id));
 const dateRange = ref(getDefaultTime(8));
 const selectedMetrics = ref(['latency_total', 'iops_total', 'throughput_total']);
-const monitoring = ref({ info: null, binding: null, capacity: [], performance: [] });
+const monitoring = ref({ info: null, binding: null, capacity: [], capacity_unit: 'TB', performance: [] });
 const loading = ref(false);
 
 const metricOptions = [
@@ -28,6 +28,7 @@ const metricOptions = [
 const metricLabels = Object.fromEntries(metricOptions.map((item) => [item.value, item.label]));
 const performanceByMetric = computed(() => new Map((monitoring.value.performance || []).map((item) => [item.metric, item])));
 const capacitySeries = computed(() => [{ name: '已用容量', data: monitoring.value.capacity || [] }]);
+const capacityUnit = computed(() => monitoring.value.capacity_unit || 'TB');
 
 function metricSeries(metric) {
   const item = performanceByMetric.value.get(metric);
@@ -51,6 +52,7 @@ async function load() {
       info: null,
       binding: null,
       capacity: [],
+      capacity_unit: 'TB',
       performance: [],
       ...(result && typeof result === 'object' ? result : {}),
     };
@@ -108,7 +110,7 @@ onMounted(load);
       class="volume-monitoring-page__binding volume-monitoring-page__binding--empty">未关联项目目录；仍可查看存储空间容量与性能采集数据。</div>
 
     <section class="volume-monitoring-page__section">
-      <div class="volume-monitoring-page__section-heading"><h2>容量变化</h2><span>已用容量（G）</span></div>
+      <div class="volume-monitoring-page__section-heading"><h2>容量变化</h2><span>已用容量（{{ capacityUnit }}）</span></div>
       <div class="volume-monitoring-page__chart-card volume-monitoring-page__chart-card--capacity">
         <LoadingCharts
           v-if="loading"
@@ -123,7 +125,7 @@ onMounted(load);
           v-else
           :series="capacitySeries"
           indicator="used"
-          unit="G"
+          :unit="capacityUnit"
           aria-label="存储空间容量变化"
           height="360px" />
       </div>

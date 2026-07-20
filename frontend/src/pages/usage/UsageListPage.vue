@@ -18,6 +18,7 @@ import { useCurrentUser } from '@/stores/current-user';
 import { exportReport } from '@/utils/common.js';
 import ExportDialog from '@/components/form/ExportDialog.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
+import { formatCapacity } from '@/utils/capacity';
 import { formatStorageTargetType } from '@/utils/storage-resource';
 import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
@@ -213,13 +214,13 @@ query();
             class="usage-descriptions">
             <ElDescriptionsItem
               label="文件数量"
-              align="center">{{ props.row?.file_used }} G</ElDescriptionsItem>
+              align="center">{{ props.row?.file_used }} 个</ElDescriptionsItem>
             <ElDescriptionsItem
               label="权限"
               align="center">{{ props.row?.access }} %</ElDescriptionsItem>
             <ElDescriptionsItem
               label="使用量"
-              align="center">{{ props.row?.used }} G</ElDescriptionsItem>
+              align="center">{{ formatCapacity(props.row?.capacity?.used, { emptyText: '-' }) }}</ElDescriptionsItem>
             <ElDescriptionsItem
               label="硬利用率"
               align="center">{{ props.row?.use_ratio }} %</ElDescriptionsItem>
@@ -356,7 +357,7 @@ query();
         min-width="100"
       >
         <template #default="{ row }">
-          <span v-if="row.limit">{{ formatQuotaLimit(row.limit) }}</span>
+          <span v-if="row.limit">{{ formatQuotaLimit(row.capacity?.limit ?? row.limit) }}</span>
           <ElTag
             v-else
             type="danger">无硬限额</ElTag>
@@ -371,7 +372,7 @@ query();
         min-width="100"
       >
         <template #default="{ row }">
-          <span v-if="row.soft_limit">{{ formatQuotaLimit(row.soft_limit, { emptyText: '无软限额' }) }}</span>
+          <span v-if="row.soft_limit">{{ formatQuotaLimit(row.capacity?.soft_limit ?? row.soft_limit, { emptyText: '无软限额' }) }}</span>
           <ElTag
             v-else
             type="warning">无软限额</ElTag>
@@ -386,7 +387,7 @@ query();
         min-width="100"
       >
         <template #default="{ row }">
-          <span>{{ row.used>=1024 ? `${(row.used/1024).toFixed(1)} T`: `${row.used} G` }}</span>
+          <span>{{ formatCapacity(row.capacity?.used, { emptyText: '-' }) }}</span>
         </template>
       </ElTableColumn>
       <ElTableColumn

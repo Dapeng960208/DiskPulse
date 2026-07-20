@@ -2,9 +2,10 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from schemas.volumeSchema import VolumeBase,VolumeName
+from schemas.capacitySchema import CapacityResponseBase
 from schemas.storageClusterSchema import StorageCluster
 
-class QtreeVolume(BaseModel):
+class QtreeVolume(CapacityResponseBase):
     name: str
     volume_name: str
     limit: float | None = None
@@ -43,7 +44,7 @@ class QtreeUpdate(QtreeBase):
     pass
 
 
-class Qtree(QtreeBase):
+class Qtree(CapacityResponseBase, QtreeBase):
     id: int
     volume: VolumeBase
     storage_cluster: StorageCluster | None = None

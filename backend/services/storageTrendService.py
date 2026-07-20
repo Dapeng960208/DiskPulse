@@ -8,6 +8,7 @@ from services.storageAlertRuleService import resolve_storage_alert_rule
 
 
 PHYSICAL_HARD_QUOTA_TYPES = {"storage_cluster", "aggregate"}
+TB_TREND_TARGET_TYPES = {"aggregate", "volume", "qtree", "project", "group", "storage_cluster"}
 
 
 def _parents(target_type, target):
@@ -45,6 +46,7 @@ def build_storage_trend_meta(db, *, target_type, target) -> StorageTrendMeta:
             emergency=rule["emergency"]["threshold"],
         ),
         quota_limit_gb=float(quota_limit) if quota_limit is not None else None,
+        quota_limit_tb=round(float(quota_limit) / 1024, 4) if quota_limit is not None else None,
         ratio_indicator="soft_use_ratio" if quota_basis == "soft" else "used_ratio",
     )
 
@@ -60,3 +62,22 @@ def build_dashboard_trend_meta(db, *, project, quota_limit_gb) -> StorageTrendMe
 
 def resolve_trend_indicator(indicator: str, trend_meta: StorageTrendMeta) -> str:
     return trend_meta.ratio_indicator if indicator == "alert_ratio" else indicator
+
+
+def trend_data_unit(target_type: str, indicator: str) -> str:
+    if indicator in {"use_ratio", "alert_ratio"}:
+        return "%"
+    if indicator == "file_used":
+        return "count"
+    return "TB" if target_type in TB_TREND_TARGET_TYPES else "GB"
+
+
+def format_trend_data(data: list, data_unit: str) -> list:
+    if data_unit != "TB":
+        return data
+    return [
+        [*point[:-1], round(float(point[-1]) / 1024, 4)]
+        if isinstance(point, (list, tuple)) and point
+        else point
+        for point in data
+    ]

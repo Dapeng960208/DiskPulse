@@ -22,6 +22,8 @@ describe('volume performance monitoring detail', () => {
     expect(page).toContain('v-for="metric in selectedMetrics"');
     expect(page).toContain('performance-grid');
     expect(page).toContain('monitoring.value.performance || []');
+    expect(page).toContain("capacity_unit: 'TB'");
+    expect(page).toContain(':unit="capacityUnit"');
   });
 
   it('starts with the filter toolbar instead of a duplicate page header', () => {

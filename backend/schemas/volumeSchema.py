@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
+from schemas.capacitySchema import CapacityResponseBase
 from schemas.storageClusterSchema import StorageCluster
 
 class VolumeName(BaseModel):
@@ -38,7 +39,7 @@ class VolumeUpdate(VolumeBase):
     pass
 
 
-class Volume(VolumeBase):
+class Volume(CapacityResponseBase, VolumeBase):
     id: int
     storage_cluster: Optional[StorageCluster] = None
 
@@ -67,4 +68,5 @@ class VolumeMonitoring(BaseModel):
     info: Volume
     binding: VolumeMonitoringBinding | None = None
     capacity: list[list]
+    capacity_unit: Literal["TB"] = "TB"
     performance: list[VolumePerformanceSeries]

@@ -2,7 +2,8 @@
 from pydantic import BaseModel, ConfigDict, field_serializer
 from datetime import datetime
 from schemas import usersSchema, groupSchema
-from typing import List, Optional
+from schemas.capacitySchema import CapacityResponseBase
+from typing import ClassVar, List, Optional
 
 
 class LargeFileBase(BaseModel):
@@ -21,6 +22,7 @@ class LargeFileBase(BaseModel):
         return value.strftime("%Y-%m-%d %H:%M:%S") if value else None
 
 
-class LargeFileList(LargeFileBase):
+class LargeFileList(CapacityResponseBase, LargeFileBase):
+    capacity_field_names: ClassVar[tuple[str, ...]] = ("size",)
     user: usersSchema.OnlyUser
     group: groupSchema.GroupBase

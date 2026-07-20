@@ -171,6 +171,14 @@ def get_common_project(db: Session):
     return db.query(Project).filter(Project.is_common.is_(True)).first()
 
 
+def _attach_tree_units(nodes: list[dict], value_unit: str) -> list[dict]:
+    for node in nodes:
+        node["capacity_unit"] = "TB"
+        node["value_unit"] = value_unit
+        _attach_tree_units(node.get("children", []), value_unit)
+    return nodes
+
+
 def get_project_storage_summary(db: Session) -> List[List[Any]]:
     all_groups = (
         db.query(Group.name, Group.used, Project.name)
@@ -244,7 +252,7 @@ def get_project_tree_summary(db: Session):
                 "children": groups,
             }
         )
-    return result
+    return _attach_tree_units(result, "TB")
 
 
 def get_project_tree_summary_by_id(db: Session, project_id: int, value_type: str) -> List:
@@ -283,7 +291,7 @@ def get_project_tree_summary_by_id(db: Session, project_id: int, value_type: str
                 "children": storages,
             }
         )
-    return groups
+    return _attach_tree_units(groups, "%" if "ratio" in value_type else "TB")
 
 
 def get_project_groups_storage_usage(db: Session):

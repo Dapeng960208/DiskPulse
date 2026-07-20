@@ -10,6 +10,7 @@ from utils.common import convert_GB_to_TB
 from typing import List
 from datetime import datetime, timedelta
 from crud.questDbCrud import get_real_time_data_by_id
+from services.storageTrendService import format_trend_data
 from crud.configCrud import get_storage_config
 from dependencies import QuestDBSession
 from sqlalchemy import text
@@ -140,7 +141,8 @@ def get_volume_monitoring(db: Session, volume_id: int, start_time: datetime | No
         data = [[row[-1].strftime("%Y-%m-%d %H:%M:00"), row[index]] for row in rows]
         performance.append({"metric": metric, "unit": METRICS[metric][1], "data": data,
                             "status": "data" if data else "empty", "match_source": match_source})
-    return {"info": volume, "binding": binding, "capacity": capacity, "performance": performance}
+    return {"info": volume, "binding": binding, "capacity": format_trend_data(capacity, "TB"),
+            "capacity_unit": "TB", "performance": performance}
 
 # def get_aggregate_tree_summary_by_name(db: Session, aggregate_name: int, value_type: str) -> List:
 #     volume_dbs = db.query(Volume).filter(Volume.aggregate == aggregate_name, Volume.used >= 0).all()

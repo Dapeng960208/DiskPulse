@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from schemas import projectsSchema, qtreeSchema, usersSchema
+from schemas.capacitySchema import CapacityResponseBase
 from schemas.storageAlertRuleSchema import StorageAlertRule
 
 
@@ -119,7 +120,7 @@ class StorageTargetSummary(BaseModel):
     name: str
 
 
-class GroupBase(BaseModel):
+class GroupBase(CapacityResponseBase):
     model_config = ConfigDict(from_attributes=True)
 
     project_id: int | None = None

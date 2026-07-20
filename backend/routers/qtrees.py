@@ -6,7 +6,7 @@ from typing import List
 from schemas import qtreeSchema, commonSchema, storageTrendSchema
 from crud import qtreeCrud
 from dependencies import get_db, require_super_admin
-from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
+from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
 from datetime import datetime
 import logging
 logger = logging.getLogger('app:qtrees')
@@ -64,9 +64,11 @@ def read_qtree_realtime_data(qtree_id: int, start_time: datetime | None = None,
     real_time_data = qtreeCrud.get_qtree_real_time_data_by_id(db=db, qtree_id=qtree_id,
                                                               start_time=start_time, end_time=end_time,
                                                               indicator=resolve_trend_indicator(indicator, trend_meta))
-    return commonSchema.ResponseStorageUsageModel[qtreeSchema.Qtree](data=real_time_data,
+    data_unit = trend_data_unit("qtree", indicator)
+    return commonSchema.ResponseStorageUsageModel[qtreeSchema.Qtree](data=format_trend_data(real_time_data, data_unit),
                                                                      info=db_qtree,
-                                                                     trend_meta=trend_meta)
+                                                                     trend_meta=trend_meta,
+                                                                     data_unit=data_unit)
 
 
 @router.put(

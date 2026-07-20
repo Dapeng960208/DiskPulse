@@ -4,10 +4,11 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from schemas import usersSchema
+from schemas.capacitySchema import CapacityResponseBase
 from schemas.storageAlertRuleSchema import StorageAlertRule
 
 
-class ProjectBaseInfo(BaseModel):
+class ProjectBaseInfo(CapacityResponseBase):
     id: int
     name: str
     limit: float | None = None

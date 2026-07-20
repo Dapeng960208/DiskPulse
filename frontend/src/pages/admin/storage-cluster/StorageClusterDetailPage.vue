@@ -32,6 +32,7 @@ import storageClusterApi from '@/api/storage-cluster-api';
 import { useQuery } from '@/composables/query';
 import { getDefaultTime } from '@/composables/common';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
+import { formatCapacity } from '@/utils/capacity';
 const ClusterIncidentsTab = defineAsyncComponent(() => import('./components/ClusterIncidentsTab.vue'));
 
 const route = useRoute();
@@ -84,6 +85,8 @@ const systemEventQueryParams = () => ({
 
 const capacityData = computed(() => capacity.value?.data || []);
 const capacityChartData = computed(() => capacityData.value.map((item) => [item.updated_at, Number(item.used)]));
+const capacityUnit = computed(() => capacity.value?.data_unit || 'TB');
+const capacityLabel = (field) => formatCapacity(capacity.value?.capacity?.[field]);
 const latencyData = computed(() => latency.value?.data || []);
 const performanceObjectOptions = computed(() => {
   const uniqueOptions = new Map();
@@ -455,9 +458,9 @@ onBeforeMount(() => {
             <ElDescriptions
               :column="4"
               border>
-              <ElDescriptionsItem label="期初已使用">{{ capacity.start_used ?? '-' }}</ElDescriptionsItem>
-              <ElDescriptionsItem label="期末已使用">{{ capacity.end_used ?? '-' }}</ElDescriptionsItem>
-              <ElDescriptionsItem label="变化量">{{ capacity.change ?? '-' }}</ElDescriptionsItem>
+              <ElDescriptionsItem label="期初已使用">{{ capacityLabel('start_used') }}</ElDescriptionsItem>
+              <ElDescriptionsItem label="期末已使用">{{ capacityLabel('end_used') }}</ElDescriptionsItem>
+              <ElDescriptionsItem label="变化量">{{ capacityLabel('change') }}</ElDescriptionsItem>
               <ElDescriptionsItem label="变化率">{{ capacity.change_percent == null ? '-' : `${capacity.change_percent}%` }}</ElDescriptionsItem>
             </ElDescriptions>
             <StorageTrendChart
@@ -466,7 +469,7 @@ onBeforeMount(() => {
               :trend-meta="capacity.trend_meta"
               aria-label="存储集群已使用容量趋势"
               height="520px"
-              unit="G" />
+              :unit="capacityUnit" />
           </div>
         </ElTabPane>
 

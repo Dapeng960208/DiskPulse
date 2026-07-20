@@ -2,6 +2,7 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional
+from schemas.capacitySchema import CapacityResponseBase
 from schemas.storageClusterSchema import StorageCluster
 
 
@@ -22,7 +23,7 @@ class AggregateUpdate(AggregateBase):
     pass
 
 
-class Aggregate(AggregateBase):
+class Aggregate(CapacityResponseBase, AggregateBase):
     id: int
     storage_cluster: StorageCluster|None = None
 

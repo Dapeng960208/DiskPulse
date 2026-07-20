@@ -264,12 +264,14 @@ describe('storage cluster health analytics page', () => {
 
   it('keeps the time filter inside supported tabs and gives the primary charts enough room', async () => {
     storageClusterApi.fetchCapacityChange.mockResolvedValue({
-      data: [{ updated_at: initialRange[0], used: 100 }],
+      data: [{ updated_at: initialRange[0], used: 1 }],
+      data_unit: 'TB',
       trend_meta: {
         quota_basis: 'hard',
         rule_source: 'system',
         thresholds: { important: 80, serious: 90, emergency: 95 },
         quota_limit_gb: 1000,
+        quota_limit_tb: 0.9766,
         ratio_indicator: 'used_ratio',
       },
     });
@@ -283,7 +285,7 @@ describe('storage cluster health analytics page', () => {
     expect(datePicker.attributes('end-placeholder')).toBe('结束日期时间');
     expect(wrapper.findComponent({ name: 'StorageTrendChart' }).props()).toMatchObject({
       indicator: 'used',
-      unit: 'G',
+      unit: 'TB',
       ariaLabel: '存储集群已使用容量趋势',
       height: '520px',
     });

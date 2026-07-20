@@ -17,6 +17,7 @@ import storageUsageApi from '@/api/storage-usage-api.js';
 import capacityPredictionApi from '@/api/capacity-prediction-api.js';
 import alertApi from '@/api/alert-api.js';
 import { formatQuotaLimit } from '@/utils/quota';
+import { formatCapacity } from '@/utils/capacity';
 
 const route = useRoute();
 const breadcrumbs = useBreadcrumbs();
@@ -59,7 +60,7 @@ function predictionSource(value) {
 
 function latestP50(curve) {
   const values = Array.isArray(curve) ? curve : [];
-  return values.length ? values.at(-1)?.p50 ?? '-' : '-';
+  return values.length ? formatCapacity(values.at(-1)?.capacity?.p50, { emptyText: values.at(-1)?.p50 ?? '-' }) : '-';
 }
 
 async function loadUsage() {

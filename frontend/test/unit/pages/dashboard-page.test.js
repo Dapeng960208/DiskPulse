@@ -64,6 +64,11 @@ const summaryResponse = (mode = 'global') => ({
     limit_gb: mode === 'project' ? 300 : 1024,
     used_gb: mode === 'project' ? 200 : 640,
     available_gb: mode === 'project' ? 100 : 384,
+    capacity: {
+      limit_gb: { value: mode === 'project' ? 300 : 1024, unit: 'GB' },
+      used_gb: { value: mode === 'project' ? 200 : 640, unit: 'GB' },
+      available_gb: { value: mode === 'project' ? 100 : 384, unit: 'GB' },
+    },
     use_ratio: mode === 'project' ? 66.67 : 62.5,
     storage_cluster_count: mode === 'project' ? 1 : 6,
     alert_count: 3,
@@ -128,7 +133,7 @@ describe('DashboardPage', () => {
     expect(dashboardApi.fetchTopUsers).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('物理总容量');
     expect(wrapper.text()).toContain('项目容量对比');
-    expect(wrapper.text()).toContain('1.00 TB');
+    expect(wrapper.text()).toContain('1024 GB');
     expect(wrapper.findComponent(PieCharts).props()).toMatchObject({
       variant: 'dashboard',
       centerLabel: '62.5%',

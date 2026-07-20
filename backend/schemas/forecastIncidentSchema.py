@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from schemas.capacitySchema import CapacityResponseBase
 
 
 class AssetRefOut(BaseModel):
@@ -14,14 +15,26 @@ class AssetRefOut(BaseModel):
     display_name: str
 
 
-class ForecastOut(AssetRefOut):
+class ForecastCurvePoint(CapacityResponseBase):
+    capacity_field_names: ClassVar[tuple[str, ...]] = ("p10", "p50", "p90")
+
+    observed_at: datetime
+    p10: float
+    p50: float
+    p90: float
+
+
+class ForecastOut(CapacityResponseBase, AssetRefOut):
     model_config = ConfigDict(from_attributes=True)
+
+    capacity_field_names: ClassVar[tuple[str, ...]] = ("hard_limit",)
 
     id: int
     training_start: datetime
     training_end: datetime
     hard_limit: float
-    curve: list[dict]
+    curve: list[ForecastCurvePoint]
+    data_unit: Literal["GB"] = "GB"
     exhaustion_dates: dict
     algorithm_version: str
     input_quality: dict

@@ -6,7 +6,7 @@ from datetime import datetime
 from schemas import aggregateSchema, commonSchema, storageTrendSchema
 from crud import aggregateCrud
 from dependencies import get_db, require_super_admin
-from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
+from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
 
 router = APIRouter(
     prefix="/aggregates",
@@ -74,9 +74,11 @@ def read_aggregate_realtime_data(aggregate_id: int, start_time: datetime | None 
                                                                       end_time=end_time,
                                                                       aggregate_id=aggregate_id,
                                                                       indicator=resolve_trend_indicator(indicator, trend_meta))
-    return commonSchema.ResponseStorageUsageModel[aggregateSchema.Aggregate](data=real_time_data,
+    data_unit = trend_data_unit("aggregate", indicator)
+    return commonSchema.ResponseStorageUsageModel[aggregateSchema.Aggregate](data=format_trend_data(real_time_data, data_unit),
                                                                              info=db_aggregate,
-                                                                             trend_meta=trend_meta)
+                                                                             trend_meta=trend_meta,
+                                                                             data_unit=data_unit)
 
 
 @router.put(
@@ -127,7 +129,7 @@ def get_aggregate_storage_trees(
         value_type=value_type,
         storage_cluster_id=storage_cluster_id,
     )
-    return commonSchema.ResponseResourceModel(data=tree)
+    return commonSchema.ResponseResourceModel(data=tree, data_unit="TB")
 
 
 @router.get('/{aggregate_id}/storage-tree', response_model=commonSchema.ResponseResourceModel, openapi_extra={"ai_exposed": True, "ai_name": "get_aggregate_storage_tree", "ai_description": "查询指定容量池存储树"})
@@ -137,4 +139,4 @@ def get_aggregate_storage_tree_by_id(aggregate_id: int, value_type: str = 'used'
         raise HTTPException(status_code=404, detail="Aggregate not found")
     tree = aggregateCrud.get_aggregate_tree_summary_by_name(db=db, aggregate_name=db_aggregate.name,
                                                             value_type=value_type)
-    return commonSchema.ResponseResourceModel(data=tree)
+    return commonSchema.ResponseResourceModel(data=tree, data_unit="TB")

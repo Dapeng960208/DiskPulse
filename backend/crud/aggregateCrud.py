@@ -10,6 +10,14 @@ from crud.questDbCrud import get_real_time_data_by_id
 from utils.query import get_sort_column, require_allowed
 
 
+def _attach_tree_units(nodes: list[dict], value_unit: str) -> list[dict]:
+    for node in nodes:
+        node["capacity_unit"] = "TB"
+        node["value_unit"] = value_unit
+        _attach_tree_units(node.get("children", []), value_unit)
+    return nodes
+
+
 def get_aggregate_by_id(db: Session, aggregate_id: int):
     return db.query(Aggregate).filter(Aggregate.id == aggregate_id).first()
 
@@ -92,7 +100,7 @@ def get_aggregate_tree_summary(
              'children': qtrees
              }
         )
-    return volumes
+    return _attach_tree_units(volumes, "%" if "ratio" in value_type else "TB")
 
 
 def get_aggregate_tree_summary_by_name(db: Session, aggregate_name: str, value_type: str) -> List:
@@ -123,7 +131,7 @@ def get_aggregate_tree_summary_by_name(db: Session, aggregate_name: str, value_t
                 "children": qtrees,
             }
         )
-    return volumes
+    return _attach_tree_units(volumes, "%" if "ratio" in value_type else "TB")
 
 
 def get_aggregate_real_time_data_by_id(db: Session, aggregate_id: int, start_time: datetime | None = None,

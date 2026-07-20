@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from schemas.capacitySchema import CapacityResponseBase
 from schemas.storageTrendSchema import StorageTrendMeta
 
 
@@ -16,7 +17,7 @@ class DashboardScope(BaseModel):
     updated_at: datetime
 
 
-class DashboardSummary(BaseModel):
+class DashboardSummary(CapacityResponseBase):
     limit_gb: float
     used_gb: float
     available_gb: float
@@ -25,12 +26,12 @@ class DashboardSummary(BaseModel):
     alert_count: int
 
 
-class CapacityTrendPoint(BaseModel):
+class CapacityTrendPoint(CapacityResponseBase):
     timestamp: datetime
     used_gb: float
 
 
-class CapacityItem(BaseModel):
+class CapacityItem(CapacityResponseBase):
     id: int
     name: str
     limit_gb: float
@@ -51,7 +52,7 @@ class DashboardSummaryResponse(BaseModel):
     trend_meta: StorageTrendMeta
 
 
-class TopUser(BaseModel):
+class TopUser(CapacityResponseBase):
     id: int
     name: str
     used_gb: float

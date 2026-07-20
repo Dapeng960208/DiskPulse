@@ -337,7 +337,7 @@ capacityPredictionApi.visibility().then((value) => {
         min-width="100"
       >
         <template #default="{ row }">
-          <span v-if="row.limit">{{ formatQuotaLimit(row.limit) }}</span>
+          <span v-if="row.limit">{{ formatQuotaLimit(row.capacity?.limit ?? row.limit) }}</span>
           <ElTag
             v-else
             type="danger">无硬限额</ElTag>
@@ -352,7 +352,7 @@ capacityPredictionApi.visibility().then((value) => {
         min-width="100"
       >
         <template #default="{ row }">
-          <span v-if="row.soft_limit">{{ formatQuotaLimit(row.soft_limit, { emptyText: '无软限额' }) }}</span>
+          <span v-if="row.soft_limit">{{ formatQuotaLimit(row.capacity?.soft_limit ?? row.soft_limit, { emptyText: '无软限额' }) }}</span>
           <ElTag
             v-else
             type="warning">无软限额</ElTag>

@@ -10,6 +10,8 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from schemas.capacitySchema import format_capacity_fields
+
 from appConfig import base_config
 from crud import storageHealthAnalyticsCrud
 from models import Volume
@@ -124,7 +126,21 @@ def get_capacity_change(
         start_used=start_used,
         end_used=end_used,
     )
-    result["data"] = result.pop("points")
+    result["capacity"] = format_capacity_fields(
+        {key: result.get(key) for key in ("start_used", "end_used", "change")}
+    )
+    result["data"] = [
+        {
+            **point,
+            "used": round(float(point["used"]) / 1024, 4),
+            "capacity": format_capacity_fields({"used": point.get("used")}),
+        }
+        for point in result.pop("points")
+    ]
+    for key in ("start_used", "end_used", "change"):
+        if result[key] is not None:
+            result[key] = round(float(result[key]) / 1024, 4)
+    result["data_unit"] = "TB"
     return result
 
 
@@ -230,6 +246,7 @@ def _section_rows(section: str, report: dict[str, dict]) -> list[dict]:
             key: report[section].get(key)
             for key in ("start_used", "end_used", "change", "change_percent")
         }
+        summary["data_unit"] = report[section].get("data_unit")
         points = report[section]["data"]
         return [{**point, **summary} for point in points] or [summary]
     if section == "severity":

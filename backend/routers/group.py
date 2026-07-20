@@ -7,7 +7,7 @@ from crud import groupCrud
 from dependencies import CurrentUserDep, get_db, require_super_admin
 from services import audit_service, quotaService
 from services import project_access_service
-from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
+from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
 import logging
 from utils.common import convert_timestamp_to_datetime
 from utils.plot import plot_real_time_line
@@ -78,7 +78,8 @@ def read_group_realtime_data(group_id: int, start_time: datetime | None = None, 
     real_time_data = groupCrud.get_group_real_time_data_by_id(db=db, group_id=group_id,
                                                               start_time=start_time, end_time=end_time,
                                                               indicator=resolve_trend_indicator(indicator, trend_meta))
-    return commonSchema.ResponseStorageUsageModel[groupSchema.Group](data=real_time_data,
+    data_unit = trend_data_unit("group", indicator)
+    return commonSchema.ResponseStorageUsageModel[groupSchema.Group](data=format_trend_data(real_time_data, data_unit),
                                                                       info=groupCrud.serialize_group(
                                                                           db_group,
                                                                           capabilities=project_access_service.group_capabilities(
@@ -86,7 +87,8 @@ def read_group_realtime_data(group_id: int, start_time: datetime | None = None, 
                                                                               db_group,
                                                                           ),
                                                                       ),
-                                                                      trend_meta=trend_meta)
+                                                                      trend_meta=trend_meta,
+                                                                      data_unit=data_unit)
 
 
 @router.put("/{group_id}", response_model=groupSchema.Group)

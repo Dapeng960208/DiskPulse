@@ -24,3 +24,9 @@ def test_performance_identity_requires_stable_id_and_leaves_unmatched_volume_emp
     assert resolve_performance_identity(
         performance_object_id=None, volume_name="vol-a", candidate_ids=set(), candidate_names=set()
     ) == (None, "unmatched")
+
+
+def test_volume_monitoring_declares_tb_for_its_capacity_curve():
+    from schemas.volumeSchema import VolumeMonitoring
+
+    assert VolumeMonitoring.model_fields["capacity_unit"].default == "TB"

@@ -14,6 +14,7 @@ import { useResponsiveTableColumns } from '@/composables/responsive-table-column
 import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
 import AccessibleResourceLink from '@/components/basic/AccessibleResourceLink.vue';
+import { formatCapacity } from '@/utils/capacity';
 const projectFormDialogRef = ref();
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 const { queryParams, reset } = useQueryParams(() => ({
@@ -131,7 +132,7 @@ query();
         min-width="100"
       >
         <template #default="{ row }">
-          <span v-if="row.limit">{{ row.limit>=1024 ? `${(row.limit/1024).toFixed(1)} T`: `${row.limit}` }}</span>
+          <span v-if="row.limit">{{ formatCapacity(row.capacity?.limit, { emptyText: '-' }) }}</span>
           <ElTag
             v-else
             type="danger">无硬限额</ElTag>
@@ -146,7 +147,7 @@ query();
         min-width="100"
       >
         <template #default="{ row }">
-          <span>{{ row.used>=1024 ? `${(row.used/1024).toFixed(1)} T`: `${row.used} G` }}</span>
+          <span>{{ formatCapacity(row.capacity?.used, { emptyText: '-' }) }}</span>
         </template>
       </ElTableColumn>
       <ElTableColumn

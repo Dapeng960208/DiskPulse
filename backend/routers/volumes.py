@@ -6,7 +6,7 @@ from datetime import datetime
 from schemas import volumeSchema, commonSchema, storageTrendSchema
 from crud import volumeCrud
 from dependencies import get_db, require_super_admin
-from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
+from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
 
 router = APIRouter(
     prefix="/volumes",
@@ -74,9 +74,11 @@ def read_volume_realtime_data(volume_id: int, start_time: datetime | None = None
                                                                 end_time=end_time,
                                                                 volume_id=volume_id,
                                                                 indicator=resolve_trend_indicator(indicator, trend_meta))
-    return commonSchema.ResponseStorageUsageModel[volumeSchema.Volume](data=real_time_data,
+    data_unit = trend_data_unit("volume", indicator)
+    return commonSchema.ResponseStorageUsageModel[volumeSchema.Volume](data=format_trend_data(real_time_data, data_unit),
                                                                        info=db_volume,
-                                                                       trend_meta=trend_meta)
+                                                                       trend_meta=trend_meta,
+                                                                       data_unit=data_unit)
 
 
 @router.get("/{volume_id}/monitoring", response_model=volumeSchema.VolumeMonitoring)

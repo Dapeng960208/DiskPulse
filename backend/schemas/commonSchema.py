@@ -18,6 +18,7 @@ class ResponseResourceModel(BaseModel):
     data: Dict | List
     avg: Dict | None = None
     tree: List | None = None
+    data_unit: str | None = None
 
 
 class ResponseSummary(BaseModel, Generic[T]):
@@ -42,6 +43,7 @@ class ResponseStorageUsageModel(BaseModel, Generic[T]):
     info: T | None = None
     data: List = None
     trend_meta: StorageTrendMeta | None = None
+    data_unit: str | None = None
 
 
 class ResponseSummaryModel(BaseModel):

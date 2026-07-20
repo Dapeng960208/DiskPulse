@@ -9,6 +9,7 @@ import { useQuery, useQueryParams } from '@/composables/query';
 import UserFormDialog from './components/UserFormDialog.vue';
 import UserAvatar from '@/components/data/UserAvatar.vue';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
+import { formatCapacity } from '@/utils/capacity';
 // 定义引用
 const userFormDialogRef = ref();
 const syncing = ref(false);
@@ -213,8 +214,7 @@ onBeforeMount(() => {
         min-width="100"
       >
         <template #default="{ row }">
-          <span v-if="row.storage_used>1024">{{ parseFloat(row.storage_used/1024).toFixed(2) }} TB </span>
-          <span v-else>{{ row.storage_used }} GB </span>
+          <span>{{ formatCapacity(row.capacity?.storage_used, { emptyText: '-' }) }}</span>
         </template>
       </ElTableColumn>
       <ElTableColumn

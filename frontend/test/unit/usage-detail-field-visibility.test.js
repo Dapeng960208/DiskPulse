@@ -7,6 +7,10 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { id: '234' } }),
 }));
 
+vi.mock('@/stores/breadcrumbs', () => ({
+  useBreadcrumbs: () => ({ setDetailBreadcrumb: vi.fn() }),
+}));
+
 vi.mock('@/pages/common/RealTimePage.vue', () => ({
   default: {
     name: 'RealTimePage',

@@ -198,7 +198,7 @@ query();
         label="硬限额"
         min-width="110">
         <template #default="{ row }">
-          <span v-if="row.limit">{{ formatQuotaLimit(row.limit) }}</span>
+          <span v-if="row.limit">{{ formatQuotaLimit(row.capacity?.limit ?? row.limit) }}</span>
           <ElTag
             v-else
             type="danger">无硬限额</ElTag>
@@ -208,7 +208,7 @@ query();
         label="软限额"
         min-width="110">
         <template #default="{ row }">
-          <span v-if="row.soft_limit">{{ formatQuotaLimit(row.soft_limit) }}</span>
+          <span v-if="row.soft_limit">{{ formatQuotaLimit(row.capacity?.soft_limit ?? row.soft_limit) }}</span>
           <ElTag
             v-else
             type="warning">无软限额</ElTag>
@@ -217,7 +217,7 @@ query();
       <ElTableColumn
         label="使用量"
         min-width="110">
-        <template #default="{ row }">{{ formatQuotaLimit(row.used, { emptyText: '-' }) }}</template>
+        <template #default="{ row }">{{ formatQuotaLimit(row.capacity?.used ?? row.used, { emptyText: '-' }) }}</template>
       </ElTableColumn>
       <ElTableColumn
         label="硬限额使用率(%)"
@@ -247,3 +247,20 @@ query();
     </DataTable>
   </section>
 </template>
+
+<style scoped>
+.project-usages-tab {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  gap: var(--spacing-md);
+}
+
+.project-usages-tab :deep(.data-table-card) {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+</style>

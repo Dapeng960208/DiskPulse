@@ -414,6 +414,29 @@ describe('frontend mock runtime', () => {
     });
   });
 
+  it('mirrors explicit capacity units and TB realtime series from the backend contract', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const [volumes, realtime, monitoring, clusterCapacity, dashboard, forecast] = await Promise.all([
+      gateway.request('get', '/volumes', undefined, superadmin.token),
+      gateway.request('get', '/volumes/1/realtime', undefined, superadmin.token),
+      gateway.request('get', '/volumes/1/monitoring', undefined, superadmin.token),
+      gateway.request('get', '/storage-clusters/1/analytics/capacity-change', undefined, superadmin.token),
+      gateway.request('get', '/dashboard/summary', undefined, superadmin.token),
+      gateway.request('get', '/v1/capacity-predictions/storage_usage/101', undefined, superadmin.token),
+    ]);
+
+    expect(volumes.content[0].capacity).toMatchObject({ limit: { unit: expect.any(String) }, used: { unit: expect.any(String) } });
+    expect(realtime).toMatchObject({ data_unit: 'TB', trend_meta: { quota_limit_tb: expect.any(Number) } });
+    expect(monitoring).toMatchObject({ capacity_unit: 'TB' });
+    expect(clusterCapacity.data_unit).toBe('TB');
+    expect(clusterCapacity.capacity.start_used.unit).toEqual(expect.any(String));
+    expect(clusterCapacity.data[0].capacity.used.unit).toEqual(expect.any(String));
+    expect(dashboard.summary.capacity.limit_gb.unit).toEqual(expect.any(String));
+    expect(forecast.data_unit).toBe('GB');
+    expect(forecast.curve[0].capacity.p50.unit).toEqual(expect.any(String));
+  });
+
   it('accepts double-slash resource paths emitted by the shared API client', async () => {
     const gateway = createMockGateway();
     const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);

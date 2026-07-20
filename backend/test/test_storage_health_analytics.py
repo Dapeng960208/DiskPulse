@@ -641,7 +641,9 @@ def test_storage_health_read_endpoints_return_service_results(
             "rule_source": "system",
             "thresholds": {"important": 80, "serious": 90, "emergency": 95},
             "quota_limit_gb": None,
+            "quota_limit_tb": None,
             "ratio_indicator": "used_ratio",
+            "capacity": {},
         }
     assert body == payload
 

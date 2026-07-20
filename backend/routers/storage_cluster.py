@@ -12,7 +12,7 @@ from crud.questDbCrud import get_storage_cluster_real_time
 from dependencies import CurrentUserDep, get_db, require_super_admin
 from services import audit_service
 from services.storageClusterService import schedule_storage_collection as _schedule_storage_collection
-from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
+from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
 from services.storageHealthAnalyticsService import (
     export_storage_health,
     get_capacity_change,
@@ -181,10 +181,12 @@ def read_storage_cluster_realtime(
         end_time=end_time,
         indicator=resolve_trend_indicator(indicator, trend_meta)
     )
+    data_unit = trend_data_unit("storage_cluster", indicator)
     return commonSchema.ResponseStorageUsageModel[storageClusterSchema.StorageCluster](
-        data=real_time_data,
+        data=format_trend_data(real_time_data, data_unit),
         info=db_cluster,
         trend_meta=trend_meta,
+        data_unit=data_unit,
     )
 
 

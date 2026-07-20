@@ -11,6 +11,7 @@ from pydantic import (
     StringConstraints,
     field_serializer,
 )
+from schemas.capacitySchema import CapacityResponseBase
 
 
 UserType = Literal[0, 1, 2]
@@ -46,7 +47,7 @@ class OnlyUser(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class User(UserBase):
+class User(CapacityResponseBase, UserBase):
     id: int
 
     user_group_ids: List[int] = Field(default_factory=list)

@@ -1,5 +1,23 @@
 const traceId = () => `mock-${Math.random().toString(36).slice(2, 10)}`;
 
+const CAPACITY_FIELDS = ['limit', 'soft_limit', 'used', 'allocated', 'storage_used', 'limit_gb', 'used_gb', 'available_gb', 'quota_limit_gb', 'capacity_delta', 'size', 'hard_limit', 'p10', 'p50', 'p90'];
+
+function capacityDisplay(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const magnitude = Math.abs(numeric);
+  const divisor = magnitude > 1024 * 1024 ? 1024 * 1024 : magnitude > 1024 ? 1024 : magnitude < 1 ? 1 / 1024 : 1;
+  const unit = magnitude > 1024 * 1024 ? 'PB' : magnitude > 1024 ? 'TB' : magnitude < 1 ? 'MB' : 'GB';
+  return { value: Math.round((numeric / divisor) * 100) / 100, unit };
+}
+
+function withCapacity(item) {
+  const capacity = Object.fromEntries(CAPACITY_FIELDS
+    .filter((field) => item?.[field] != null && Number.isFinite(Number(item[field])))
+    .map((field) => [field, capacityDisplay(item[field])]));
+  return { ...item, capacity };
+}
+
 export const DEMO_PASSWORD = 'Demo@2026';
 export const DEMO_USERS = [
   { id: 1, username: 'demo-superadmin', commonName: '演示超级管理员', role: 'superadmin', projectIds: [1, 2] },
@@ -30,6 +48,8 @@ const seed = () => {
       protocol: 'https',
       enabled: true,
       status: index === 3 ? 'warning' : 'healthy',
+      limit: 2200 + index * 320,
+      used: 980 + index * 150,
     }));
   const tags = ['研发', '生产', '测试', '归档', '共享'].map((name, index) => ({ id: index + 1, name }));
   const users = ['alice', 'bob', 'carol', 'david', 'emma'].map((rd_username, index) => ({
@@ -40,6 +60,7 @@ const seed = () => {
     user_type: 1,
     email: `${rd_username}@example.test`,
     enabled: true,
+    storage_used: 180 + index * 42,
   }));
   projects.forEach((project, index) => {
     const limit = 1200 + index * 180;
@@ -135,6 +156,8 @@ const seed = () => {
       capabilities: {},
     };
   });
+  [...projects, ...clusters, ...users, ...groups, ...aggregates, ...volumes, ...qtrees, ...usages]
+    .forEach((item) => Object.assign(item, { capacity: withCapacity(item).capacity }));
   const incidents = ['容量压力', '磁盘故障', '性能争用', '遥测延迟', '复制滞后'].map((display_name, index) => {
     const category = ['capacity_pressure', 'device_fault', 'performance_contention', 'telemetry_blindspot', 'capacity_pressure'][index];
     const status = ['open', 'acknowledged', 'investigating', 'mitigated', 'resolved'][index];
@@ -343,8 +366,8 @@ const alerts = incidents.map((incident, index) => ({
     aiModels,
     capacityPredictionSettings: { visible: true },
     capacityPredictionPlans: [
-      { id: 1, asset_type: 'storage_usage', asset_id: '101', project_id: 1, effective_at: '2026-08-01T00:00:00Z', capacity_delta: 80, reason: 'Mock 演示扩容计划', created_at: '2026-07-18T09:00:00Z' },
-      { id: 2, asset_type: 'group', asset_id: '11', project_id: 1, effective_at: '2026-08-15T00:00:00Z', capacity_delta: 150, reason: 'Mock 演示项目组扩容计划', created_at: '2026-07-18T09:30:00Z' },
+      withCapacity({ id: 1, asset_type: 'storage_usage', asset_id: '101', project_id: 1, effective_at: '2026-08-01T00:00:00Z', capacity_delta: 80, reason: 'Mock 演示容量计划', created_at: '2026-07-18T09:00:00Z' }),
+      withCapacity({ id: 2, asset_type: 'group', asset_id: '11', project_id: 1, effective_at: '2026-08-15T00:00:00Z', capacity_delta: 150, reason: 'Mock 演示项目组扩容计划', created_at: '2026-07-18T09:30:00Z' }),
     ],
     capacityPredictionCandidates,
     conversations,
@@ -435,7 +458,7 @@ export function createMockGateway() {
     if (!item) throw error(404, '容量预测资源不存在');
     return item;
   };
-  const capacityPrediction = (assetType, item) => ({
+  const capacityPrediction = (assetType, item) => withCapacity({
     id: 1000 + item.id,
     asset_type: assetType,
     asset_id: String(item.id),
@@ -446,7 +469,8 @@ export function createMockGateway() {
     training_start: '2026-06-13T09:00:00Z',
     training_end: '2026-07-18T09:00:00Z',
     hard_limit: item.limit,
-    curve: resourceTrend(item).map(([observed_at, p50]) => ({ observed_at, p10: Math.round(p50 * 0.95), p50, p90: Math.round(p50 * 1.05) })),
+    curve: resourceTrend(item).map(([observed_at, p50]) => withCapacity({ observed_at, p10: Math.round(p50 * 0.95), p50, p90: Math.round(p50 * 1.05) })),
+    data_unit: 'GB',
     exhaustion_dates: { p10: '2026-09-08', p50: '2026-09-22', p90: '2026-10-06' },
     algorithm_version: 'capacity-ai-v2',
     input_quality: { status: 'ready', coverage_ratio: 0.98, sample_count: 36, latest_observed_at: '2026-07-18T09:00:00Z', forecast_fresh_at: '2026-07-18T09:05:00Z', prediction_source: 'ai_candidate', candidate_version: 'capacity-ai-v2' },
@@ -454,9 +478,9 @@ export function createMockGateway() {
     created_at: '2026-07-18T09:05:00Z',
   });
   const findResource = (path, suffix) => {
-    const match = path.match(new RegExp(`^/(projects|groups|storage-usages|aggregates|volumes|qtrees)/(\\d+)/${suffix}$`));
+    const match = path.match(new RegExp(`^/(projects|groups|storage-usages|aggregates|volumes|qtrees|storage-clusters)/(\\d+)/${suffix}$`));
     if (!match) return null;
-    const key = { projects: 'projects', groups: 'groups', 'storage-usages': 'usages', aggregates: 'aggregates', volumes: 'volumes', qtrees: 'qtrees' }[match[1]];
+    const key = { projects: 'projects', groups: 'groups', 'storage-usages': 'usages', aggregates: 'aggregates', volumes: 'volumes', qtrees: 'qtrees', 'storage-clusters': 'clusters' }[match[1]];
     return state[key].find((item) => item.id === Number(match[2]));
   };
   const request = async (method, rawPath, body, token, options = {}) => {
@@ -476,19 +500,19 @@ export function createMockGateway() {
     if (systemResource && account.role !== 'superadmin') throw error(403);
     if (path.startsWith('/admin') && account.role !== 'superadmin') throw error(403);
     if (path === '/dashboard/summary') return {
-      summary: { used_gb: 3210, limit_gb: 5200, available_gb: 1990, alert_count: state.alerts.length },
+      summary: withCapacity({ used_gb: 3210, limit_gb: 5200, available_gb: 1990, alert_count: state.alerts.length }),
       scope: { project_name: account.role === 'superadmin' ? '全局' : '芯片设计平台' },
     };
-    if (path === '/dashboard/capacity-trend') return state.projects.map((project, index) => ({
+    if (path === '/dashboard/capacity-trend') return state.projects.map((project, index) => withCapacity({
       timestamp: `2026-07-${String(14 + index).padStart(2, '0')}`, used_gb: 2780 + index * 110,
     }));
-    if (path === '/dashboard/capacity-items') return state.projects.map((project, index) => ({
-      name: project.name, used_gb: 360 + index * 75, available_gb: 240 + index * 25,
+    if (path === '/dashboard/capacity-items') return state.projects.map((project, index) => withCapacity({
+      name: project.name, limit_gb: 600 + index * 100, used_gb: 360 + index * 75, available_gb: 240 + index * 25,
     }));
     if (path === '/dashboard/alert-levels') return [
       { name: '低', count: 5 }, { name: '中', count: 4 }, { name: '重要', count: 3 }, { name: '严重', count: 2 }, { name: '紧急', count: 1 },
     ];
-    if (path === '/dashboard/top-users') return state.usages.map((usage) => ({ name: usage.rd_username, used_gb: usage.used }));
+    if (path === '/dashboard/top-users') return state.usages.map((usage) => withCapacity({ name: usage.rd_username, used_gb: usage.used }));
     if (path === '/config/storage') return state.config;
     if (path === '/config/storage-alert-thresholds') {
       const { important, serious, emergency } = state.config.storage_alert_rule;
@@ -556,7 +580,7 @@ export function createMockGateway() {
       if (endpoint === 'plans') {
         if (verb === 'post') {
           if (!canManagePlans) throw error(403);
-          const plan = { id: state.capacityPredictionPlans.length + 1, asset_type: assetType, asset_id: String(assetId), project_id: item.project_id, effective_at: body?.effective_at, capacity_delta: body?.capacity_delta, reason: body?.reason, created_at: '2026-07-18T10:00:00Z' };
+          const plan = withCapacity({ id: state.capacityPredictionPlans.length + 1, asset_type: assetType, asset_id: String(assetId), project_id: item.project_id, effective_at: body?.effective_at, capacity_delta: body?.capacity_delta, reason: body?.reason, created_at: '2026-07-18T10:00:00Z' });
           state.capacityPredictionPlans.push(plan);
           return plan;
         }
@@ -590,11 +614,16 @@ export function createMockGateway() {
       };
     }
     const realtimeItem = findResource(path, 'realtime') || findResource(path, 'storage');
-    if (realtimeItem) return {
-      info: realtimeItem,
-      data: resourceTrend(realtimeItem),
-      trend_meta: { indicator: 'used', unit: 'GiB' },
-    };
+    if (realtimeItem) {
+      const dataUnit = /^\/(aggregates|volumes|qtrees|projects|groups|storage-clusters)\//.test(path) ? 'TB' : 'GB';
+      const quotaLimitGb = Number(realtimeItem.limit) || null;
+      return {
+        info: withCapacity(realtimeItem),
+        data: resourceTrend(realtimeItem).map(([time, value]) => [time, dataUnit === 'TB' ? Math.round((value / 1024) * 10000) / 10000 : value]),
+        data_unit: dataUnit,
+        trend_meta: { indicator: 'used', quota_limit_gb: quotaLimitGb, quota_limit_tb: quotaLimitGb == null ? null : Math.round((quotaLimitGb / 1024) * 10000) / 10000 },
+      };
+    }
     const quotaHistory = path.match(/^\/storage-usages\/(\d+)\/quota\/history$/);
     if (quotaHistory) {
       const usage = state.usages.find((item) => item.id === Number(quotaHistory[1]));
@@ -621,9 +650,10 @@ export function createMockGateway() {
       const metrics = options.params?.metrics || ['latency_total', 'iops_total', 'throughput_total'];
       const points = resourceTrend(volume);
       return {
-        info: volume,
+        info: withCapacity(volume),
         binding: { group_id: 1, group_name: '项目目录', project_id: 1, project_name: '演示项目', linux_path: '/proj/demo' },
-        capacity: points,
+        capacity: points.map(([time, value]) => [time, Math.round((value / 1024) * 10000) / 10000]),
+        capacity_unit: 'TB',
         performance: metrics.map((metric, metricIndex) => ({ metric, unit: metric.includes('latency') ? 'ms' : metric === 'iops_total' ? 'IOPS' : 'B/s', status: 'data', match_source: 'stable_id', data: points.map(([time, value], index) => [time, Math.round(value / (metricIndex + 2) + index * 3)]) })),
       };
     }
@@ -641,6 +671,8 @@ export function createMockGateway() {
         path,
         used_ratio: record.use_ratio,
         soft_used_ratio: record.soft_use_ratio,
+        capacity_unit: 'TB',
+        value_unit: valueType.includes('ratio') ? '%' : 'TB',
       });
       const groups = state.groups
         .filter((group) => group.project_id === projectId)
@@ -650,7 +682,7 @@ export function createMockGateway() {
             .filter((usage) => usage.group_id === group.id)
             .map((usage) => storageNode(usage, usage.user?.rd_username || usage.rd_username || '', usage.linux_path)),
         }));
-      return { data: groups };
+      return { data: groups, data_unit: 'TB' };
     }
     const projectMembers = path.match(/^\/projects\/(\d+)\/members(?:\/(\d+))?$/);
     if (projectMembers) {
@@ -658,9 +690,9 @@ export function createMockGateway() {
       if (projectMembers[2]) return members.find((member) => member.user_id === Number(projectMembers[2])) || {};
       return page(members);
     }
-    if (path === '/aggregates/storage-trees') return { data: state.volumes };
+    if (path === '/aggregates/storage-trees') return { data: state.volumes, data_unit: 'TB' };
     const aggregateTree = path.match(/^\/aggregates\/(\d+)\/storage-tree$/);
-    if (aggregateTree) return { data: state.volumes.filter((volume) => volume.aggregate_id === Number(aggregateTree[1])) };
+    if (aggregateTree) return { data: state.volumes.filter((volume) => volume.aggregate_id === Number(aggregateTree[1])), data_unit: 'TB' };
     const clusterAnalytics = path.match(/^\/storage-clusters\/(\d+)\/analytics\/(capacity-change|error-severity|top-latency|repeated-faults|system-events|export)$/);
     if (clusterAnalytics) {
       const [, clusterId, endpoint] = clusterAnalytics;
@@ -668,7 +700,18 @@ export function createMockGateway() {
         id: Number(clusterId) * 100 + index + 1,
         name: `vol_cluster_${clusterId}_${index + 1}`,
       }));
-      if (endpoint === 'capacity-change') return { data: Array.from({ length: 6 }, (_, index) => ({ updated_at: `2026-07-${String(13 + index).padStart(2, '0')} 09:00:00`, used: 420 + index * 22 })) };
+      if (endpoint === 'capacity-change') {
+        const rawData = Array.from({ length: 6 }, (_, index) => ({ updated_at: `2026-07-${String(13 + index).padStart(2, '0')} 09:00:00`, used: 420 + index * 22 }));
+        const startUsed = rawData[0].used;
+        const endUsed = rawData.at(-1).used;
+        const change = endUsed - startUsed;
+        return {
+          start_used: startUsed / 1024, end_used: endUsed / 1024, change: change / 1024,
+          change_percent: Number(((change / startUsed) * 100).toFixed(2)), data_unit: 'TB',
+          capacity: { start_used: capacityDisplay(startUsed), end_used: capacityDisplay(endUsed), change: capacityDisplay(change) },
+          data: rawData.map((point) => ({ updated_at: point.updated_at, used: point.used / 1024, capacity: { used: capacityDisplay(point.used) } })),
+        };
+      }
       if (endpoint === 'error-severity') return { total: 5, counts: { critical: 1, error: 1, warning: 2, info: 1 }, sources: { netapp: 5 } };
       if (endpoint === 'top-latency') return { supported: true, data: resources.map((resource, index) => ({ object_id: resource.id, object_name: resource.name, p95_latency: 4 + index, avg_latency: 2 + index, max_latency: 8 + index, avg_read_latency: 1.5 + index, avg_write_latency: 2.5 + index, avg_iops: 800 + index * 120, avg_throughput: 1024 * 1024 * (index + 1) })) };
       if (endpoint === 'repeated-faults') return { data: state.incidents.map((incident) => ({ ...incident, count: 2 })) };

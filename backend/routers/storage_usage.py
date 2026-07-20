@@ -15,6 +15,7 @@ import logging
 from routers.common import handle_exceptions
 from services import audit_service, quotaService
 from services import project_access_service
+from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
 from utils.auth_service import is_super_admin
 from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 from utils.storageTarget import resolve_group_storage_target
@@ -170,7 +171,8 @@ def read_storage_usage_realtime_data(storage_usage_id: int, start_time: datetime
     real_time_data = storageUsageCrud.get_storage_usages_real_time_data_by_id(db=db, storage_usage_id=storage_usage_id,
                                                                               start_time=start_time, end_time=end_time,
                                                                               indicator=resolve_trend_indicator(indicator, trend_meta))
-    return commonSchema.ResponseStorageUsageModel[storageUsageSchema.StorageUsage](data=real_time_data,
+    data_unit = trend_data_unit("storage_usage", indicator)
+    return commonSchema.ResponseStorageUsageModel[storageUsageSchema.StorageUsage](data=format_trend_data(real_time_data, data_unit),
                                                                                    info=storageUsageCrud.serialize_storage_usage(
                                                                                        db_storage_usage,
                                                                                        capabilities=project_access_service.storage_usage_capabilities(
@@ -178,7 +180,8 @@ def read_storage_usage_realtime_data(storage_usage_id: int, start_time: datetime
                                                                                            db_storage_usage,
                                                                                        ),
                                                                                    ),
-                                                                                   trend_meta=trend_meta)
+                                                                                   trend_meta=trend_meta,
+                                                                                   data_unit=data_unit)
 
 
 @router.patch(

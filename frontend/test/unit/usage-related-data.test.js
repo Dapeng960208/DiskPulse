@@ -2,8 +2,9 @@ import { defineComponent, h } from 'vue';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { alertApi, capacityPredictionApi, storageUsageApi } = vi.hoisted(() => ({
+const { alertApi, breadcrumbs, capacityPredictionApi, storageUsageApi } = vi.hoisted(() => ({
   alertApi: { fetch: vi.fn() },
+  breadcrumbs: { setDetailBreadcrumb: vi.fn() },
   capacityPredictionApi: {
     visibility: vi.fn(),
     fetchPrediction: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('vue-router', () => ({
 vi.mock('@/api/alert-api.js', () => ({ default: alertApi }));
 vi.mock('@/api/capacity-prediction-api.js', () => ({ default: capacityPredictionApi }));
 vi.mock('@/api/storage-usage-api.js', () => ({ default: storageUsageApi }));
+vi.mock('@/stores/breadcrumbs', () => ({ useBreadcrumbs: () => breadcrumbs }));
 vi.mock('@/pages/common/RealTimePage.vue', () => ({
   default: { name: 'RealTimePage', template: '<div>容量趋势</div>' },
 }));
@@ -136,6 +138,16 @@ describe('user-directory related data', () => {
       page: 1,
       size: 20,
     });
+  });
+
+  it('renders the final P50 value from the API capacity map', async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.vm.latestP50([{
+      p50: 2048,
+      capacity: { p50: { value: 2, unit: 'TB' } },
+    }])).toBe('2 TB');
   });
 
   it('does not request quota history when the current user lacks its narrower permission', async () => {

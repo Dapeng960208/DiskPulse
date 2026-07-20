@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 import math
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from schemas.capacitySchema import CapacityResponseBase
 
 
 PredictionAssetType = Literal["group", "storage_usage"]
@@ -76,8 +77,10 @@ class CapacityPredictionPlanCreate(BaseModel):
         return value
 
 
-class CapacityPredictionPlanOut(BaseModel):
+class CapacityPredictionPlanOut(CapacityResponseBase):
     model_config = ConfigDict(from_attributes=True)
+
+    capacity_field_names: ClassVar[tuple[str, ...]] = ("capacity_delta",)
 
     id: int
     asset_type: PredictionAssetType

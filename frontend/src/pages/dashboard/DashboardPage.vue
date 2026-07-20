@@ -8,6 +8,7 @@ import StorageTrendChart from '@/components/dashboard/StorageTrendChart.vue';
 import ProjectSelect from '@/components/form/ProjectSelect.vue';
 import { getCssColor } from '@/lib/echarts.js';
 import { hasRole } from '@/utils/authorization';
+import { formatCapacity, formatCapacityFromGb } from '@/utils/capacity';
 
 const projectId = ref(null);
 const summaryResponse = ref(null);
@@ -40,25 +41,18 @@ const pieData = computed(() => [
   { name: '可使用', value: Number(summary.value.available_gb) || 0 },
 ]);
 
-function formatCapacity(value) {
-  const number = Number(value) || 0;
-  if (number >= 1024 * 1024) return `${(number / 1024 / 1024).toFixed(2)} PB`;
-  if (number >= 1024) return `${(number / 1024).toFixed(2)} TB`;
-  return `${number.toFixed(2)} GB`;
-}
-
 const trendSeries = computed(() => [{
   name: '已使用',
   data: capacityTrend.value.map((item) => [item.timestamp, item.used_gb]),
 }]);
 
 const comparisonOption = computed(() => ({
-  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => formatCapacity(value) },
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => formatCapacityFromGb(value) },
   legend: { bottom: 0, textStyle: { color: axisColor() } },
   grid: { left: 8, right: 20, top: 12, bottom: 36, containLabel: true },
   xAxis: {
     type: 'value',
-    axisLabel: { color: axisColor(), formatter: (value) => formatCapacity(value) },
+    axisLabel: { color: axisColor(), formatter: (value) => formatCapacityFromGb(value) },
     splitLine: { lineStyle: { color: gridColor(), type: 'dashed' } },
   },
   yAxis: {
@@ -76,11 +70,11 @@ const comparisonOption = computed(() => ({
 }));
 
 const topUsersOption = computed(() => ({
-  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => formatCapacity(value) },
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => formatCapacityFromGb(value) },
   grid: { left: 8, right: 28, top: 12, bottom: 12, containLabel: true },
   xAxis: {
     type: 'value',
-    axisLabel: { color: axisColor(), formatter: (value) => formatCapacity(value) },
+    axisLabel: { color: axisColor(), formatter: (value) => formatCapacityFromGb(value) },
     splitLine: { lineStyle: { color: gridColor(), type: 'dashed' } },
   },
   yAxis: {
@@ -96,7 +90,7 @@ const topUsersOption = computed(() => ({
     type: 'bar',
     barWidth: 14,
     itemStyle: { color: primary(), borderRadius: [0, 4, 4, 0] },
-    label: { show: true, position: 'right', color: axisColor(), formatter: ({ value }) => formatCapacity(value) },
+    label: { show: true, position: 'right', color: axisColor(), formatter: ({ value }) => formatCapacityFromGb(value) },
     data: topUsers.value.map((item) => item.used_gb),
   }],
 }));
@@ -204,15 +198,15 @@ onMounted(loadDashboard);
       <template v-else-if="summaryResponse">
         <div class="summary-item">
           <span>{{ limitLabel }}</span>
-          <strong>{{ formatCapacity(summary.limit_gb) }}</strong>
+          <strong>{{ formatCapacity(summary.capacity?.limit_gb) }}</strong>
         </div>
         <div class="summary-item">
           <span>已使用</span>
-          <strong>{{ formatCapacity(summary.used_gb) }}</strong>
+          <strong>{{ formatCapacity(summary.capacity?.used_gb) }}</strong>
         </div>
         <div class="summary-item">
           <span>可使用</span>
-          <strong>{{ formatCapacity(summary.available_gb) }}</strong>
+          <strong>{{ formatCapacity(summary.capacity?.available_gb) }}</strong>
         </div>
         <div class="summary-item summary-alert">
           <span>近 30 天告警</span>
@@ -266,8 +260,8 @@ onMounted(loadDashboard);
             width="100%"
             height="230px" />
           <div class="usage-caption">
-            <span><i class="used-dot"></i>已使用 {{ formatCapacity(summary.used_gb) }}</span>
-            <span><i class="available-dot"></i>可使用 {{ formatCapacity(summary.available_gb) }}</span>
+            <span><i class="used-dot"></i>已使用 {{ formatCapacity(summary.capacity?.used_gb) }}</span>
+            <span><i class="available-dot"></i>可使用 {{ formatCapacity(summary.capacity?.available_gb) }}</span>
           </div>
         </template>
         <ElEmpty

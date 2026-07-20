@@ -1,14 +1,12 @@
+import { formatCapacity, formatCapacityFromGb } from '@/utils/capacity';
+
 export function formatQuotaLimit(value, { emptyText = '无硬限额' } = {}) {
-  if (value === null || value === undefined || Number(value) <= 0) {
+  if (value === null || value === undefined) {
     return emptyText;
   }
-
-  const numericValue = Number(value);
-  if (numericValue >= 1024) {
-    return `${(numericValue / 1024).toFixed(1)} T`;
-  }
-
-  return `${numericValue} G`;
+  if (typeof value === 'object') return formatCapacity(value, { emptyText });
+  if (Number(value) <= 0) return emptyText;
+  return formatCapacityFromGb(value, { emptyText });
 }
 
 export function canRenderQuotaProgress({ used, total }) {
