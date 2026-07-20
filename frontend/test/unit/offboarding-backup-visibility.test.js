@@ -29,7 +29,7 @@ vi.mock('vue-router', async () => ({
 vi.mock('@/stores/current-user', () => ({
   useCurrentUser: () => ({ extensionAttributes: {} }),
 }));
-vi.mock('@/utils/authorization', () => ({ hasRole: () => true }));
+vi.mock('@/utils/authorization', () => ({ getToken: () => null, hasRole: () => true }));
 vi.mock('@/composables/query', () => ({
   useQuery: (_request, initialValue) => ({
     result: ref(initialValue),

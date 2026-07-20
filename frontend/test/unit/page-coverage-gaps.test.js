@@ -48,7 +48,7 @@ vi.mock('@/api/alert-api.js', () => ({ default: mocks.alertApi }));
 vi.mock('@/api/users-api', () => ({ default: mocks.usersApi }));
 vi.mock('@/api/storage-cluster-api', () => ({ default: mocks.storageClusterApi }));
 vi.mock('@/api/aggregate-api.js', () => ({ default: mocks.aggregateApi }));
-vi.mock('@/utils/authorization', () => ({ hasRole: mocks.hasRole }));
+vi.mock('@/utils/authorization', () => ({ getToken: () => null, hasRole: mocks.hasRole }));
 vi.mock('@/utils/common.js', () => ({ exportReport: mocks.exportReport }));
 vi.mock('@/stores/current-user', () => ({ useCurrentUser: () => mocks.currentUser }));
 vi.mock('@/stores/storage-alert-thresholds', () => ({
@@ -298,6 +298,7 @@ const commonStubs = {
   QueryForm: FilterForm,
   DataTable,
   ElButton: Button,
+  TableActionButton: Button,
   ElDropdown: Dropdown,
   ElDropdownItem: DropdownItem,
   ElDropdownMenu: passthrough('ElDropdownMenu'),
@@ -643,7 +644,13 @@ describe('alert and user page coverage gaps', () => {
     expect(mocks.usersApi.syncLdap).not.toHaveBeenCalled();
     await wrapper.findComponent({ name: 'FilterForm' }).vm.$emit('reset');
     await flushPromises();
-    expect(mocks.usersApi.fetch).toHaveBeenLastCalledWith({ page: 1, size: 20, nameLike: null });
+    expect(mocks.usersApi.fetch).toHaveBeenLastCalledWith({
+      page: 1,
+      size: 20,
+      nameLike: null,
+      prop: 'storage_used',
+      order: 'descending',
+    });
   });
 });
 

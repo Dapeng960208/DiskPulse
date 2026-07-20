@@ -1,5 +1,6 @@
 import { defineComponent, h } from 'vue';
 import { flushPromises, shallowMount } from '@vue/test-utils';
+import { createPinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { aiApi, breadcrumbs, groupApi, projectApi } = vi.hoisted(() => ({
@@ -8,7 +9,12 @@ const { aiApi, breadcrumbs, groupApi, projectApi } = vi.hoisted(() => ({
     listConversations: vi.fn(),
     listModels: vi.fn(),
   },
-  breadcrumbs: { setDetailTitle: vi.fn() },
+  breadcrumbs: {
+    detailBreadcrumbFor: vi.fn(() => []),
+    detailTitleFor: vi.fn(() => ''),
+    setDetailBreadcrumb: vi.fn(),
+    setDetailTitle: vi.fn(),
+  },
   groupApi: { fetch: vi.fn() },
   projectApi: { fetchById: vi.fn() },
 }));
@@ -111,7 +117,9 @@ describe('project RBAC and unified audit frontend contract', () => {
   });
 
   it('creates an unassigned AI conversation without forcing a project identifier', async () => {
-    const wrapper = shallowMount(AiChatPage);
+    const wrapper = shallowMount(AiChatPage, {
+      global: { plugins: [createPinia()] },
+    });
     await flushPromises();
 
     await wrapper.vm.createConversation();

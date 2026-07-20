@@ -103,6 +103,7 @@ const pageStubs = {
   FilterForm: passthrough('FilterForm'),
   DataTable: passthrough('DataTable', { pagination: Object, loading: Boolean, data: Array }),
   ElButton: ButtonStub,
+  TableActionButton: ButtonStub,
   ElCard: passthrough('ElCard'),
   ElDivider: passthrough('ElDivider'),
   ElFormItem: FormItemStub,

@@ -252,6 +252,7 @@ const stubs = {
   FilterForm,
   DataTable,
   ElButton: Button,
+  TableActionButton: Button,
   ElCard: passthrough('ElCard'),
   ElDatePicker: passthrough('ElDatePicker', 'input'),
   ElDescriptions: passthrough('ElDescriptions'),

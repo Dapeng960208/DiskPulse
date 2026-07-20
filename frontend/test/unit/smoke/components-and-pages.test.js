@@ -32,7 +32,9 @@ vi.mock('@/stores/app-settings', () => ({
 
 vi.mock('@/stores/breadcrumbs', () => ({
   useBreadcrumbs: () => ({
+    detailBreadcrumbFor: vi.fn(() => []),
     detailTitleFor: vi.fn(() => ''),
+    setDetailBreadcrumb: vi.fn(),
     setDetailTitle: vi.fn(),
   }),
 }));
