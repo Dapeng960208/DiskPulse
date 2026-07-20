@@ -23,6 +23,9 @@ vi.mock('@/api/alert-api.js', () => ({ default: alertApi }));
 vi.mock('@/api/capacity-prediction-api.js', () => ({ default: capacityPredictionApi }));
 vi.mock('@/api/storage-usage-api.js', () => ({ default: storageUsageApi }));
 vi.mock('@/stores/breadcrumbs', () => ({ useBreadcrumbs: () => breadcrumbs }));
+vi.mock('@/components/form/QuotaAdjustmentDialog.vue', () => ({
+  default: { name: 'QuotaAdjustmentDialog', template: '<div />' },
+}));
 vi.mock('@/pages/common/RealTimePage.vue', () => ({
   default: { name: 'RealTimePage', template: '<div>容量趋势</div>' },
 }));
@@ -106,14 +109,14 @@ describe('user-directory related data', () => {
     });
   });
 
-  it('exposes quota history, final prediction, incidents, and alerts as lazy detail tabs', async () => {
+  it('exposes quota history, final prediction, and incidents without a duplicate alert tab', async () => {
     const wrapper = mountPage();
     await flushPromises();
 
     expect(wrapper.text()).toContain('配额历史');
     expect(wrapper.text()).toContain('容量预测最终结果');
     expect(wrapper.text()).toContain('关联事件');
-    expect(wrapper.text()).toContain('告警');
+    expect(wrapper.find('[data-tab="alerts"]').exists()).toBe(false);
     expect(storageUsageApi.fetchById).toHaveBeenCalledWith(234, undefined, expect.objectContaining({ errorHandlerDisabled: true }));
     expect(capacityPredictionApi.visibility).toHaveBeenCalledTimes(1);
     expect(storageUsageApi.quotaHistory).not.toHaveBeenCalled();
@@ -132,12 +135,7 @@ describe('user-directory related data', () => {
 
     wrapper.vm.activeTab = 'alerts';
     await flushPromises();
-    expect(alertApi.fetch).toHaveBeenCalledWith({
-      related_type: 'StorageUsage',
-      related_id: 234,
-      page: 1,
-      size: 20,
-    });
+    expect(alertApi.fetch).not.toHaveBeenCalled();
   });
 
   it('renders the final P50 value from the API capacity map', async () => {
@@ -227,7 +225,7 @@ describe('user-directory related data', () => {
     expect(wrapper.text()).toContain('capacity-ai-v3');
   });
 
-  it('keeps incidents and alerts available when no final prediction exists', async () => {
+  it('keeps incidents available when no final prediction exists', async () => {
     capacityPredictionApi.fetchPrediction.mockRejectedValueOnce({ response: { status: 404 } });
     const wrapper = mountPage();
     await flushPromises();
@@ -238,10 +236,8 @@ describe('user-directory related data', () => {
 
     wrapper.vm.activeTab = 'incidents';
     await flushPromises();
-    wrapper.vm.activeTab = 'alerts';
-    await flushPromises();
 
     expect(capacityPredictionApi.fetchRelatedIncidents).toHaveBeenCalledTimes(1);
-    expect(alertApi.fetch).toHaveBeenCalledTimes(1);
+    expect(alertApi.fetch).not.toHaveBeenCalled();
   });
 });
