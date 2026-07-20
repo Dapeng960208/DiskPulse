@@ -275,7 +275,7 @@ def test_quota_adjustment_rejects_a_busy_target_before_device_write(db_session, 
 def test_timeout_verifies_by_reading_device_without_repeating_the_write(db_session, monkeypatch):
     seed_quota_target(db_session)
     client = TimeoutThenReadbackQuotaClient(
-        {"hard_limit": 120 * GiB, "soft_limit": None, "soft_grace": None}
+        {"hard_limit": 120 * GiB, "soft_limit": 108 * GiB, "soft_grace": None}
     )
     monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
 
@@ -604,35 +604,19 @@ def test_netapp_volume_group_accepts_only_hard_limit(db_session, monkeypatch):
     assert result.soft_limit is None
 
 
-def test_isilon_user_adjustment_requires_grace_and_uses_current_username(db_session, monkeypatch):
+def test_isilon_user_adjustment_defaults_soft_limit_and_grace_and_uses_current_username(db_session, monkeypatch):
     seed_quota_target(db_session, storage_type="isilon", volume_target=True)
     client = FakeQuotaClient()
     monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
     monkeypatch.setattr(quotaService, "_send_adjustment_email", lambda *args, **kwargs: None)
     monkeypatch.setattr(quotaService, "_enqueue_adjustment_feishu", lambda _event_id: None)
 
-    with pytest.raises(HTTPException) as error:
-        quotaService.adjust_storage_usage_quota(
-            db_session,
-            storage_usage_id=1,
-            request=QuotaAdjustmentRequest(
-                hard_limit=80,
-                soft_limit=60,
-                unit="GiB",
-            ),
-            current_user=quota_owner(db_session),
-        )
-    assert error.value.status_code == 422
-
     result = quotaService.adjust_storage_usage_quota(
         db_session,
         storage_usage_id=1,
         request=QuotaAdjustmentRequest(
             hard_limit=80,
-            soft_limit=60,
             unit="GiB",
-            soft_grace=2,
-            soft_grace_unit="hours",
         ),
         current_user=quota_owner(db_session),
     )
@@ -646,13 +630,34 @@ def test_isilon_user_adjustment_requires_grace_and_uses_current_username(db_sess
                 "path": "/ifs/project-1",
                 "username": "alice",
                 "hard_limit": 80 * GiB,
-                "soft_limit": 60 * GiB,
-                "soft_grace": 7200,
+                "soft_limit": 72 * GiB,
+                "soft_grace": 7 * 24 * 3600,
             },
         )
     ]
     assert result.storage_type == "isilon"
-    assert db_session.get(models.StorageUsage, 1).soft_limit == 60
+    assert result.soft_limit == 72
+    assert result.soft_grace_seconds == 7 * 24 * 3600
+    assert db_session.get(models.StorageUsage, 1).soft_limit == 72
+
+
+def test_isilon_user_adjustment_defaults_grace_when_soft_limit_is_explicit(db_session, monkeypatch):
+    """Callers may override the soft limit without specifying Isilon's grace period."""
+    seed_quota_target(db_session, storage_type="isilon", volume_target=True)
+    client = FakeQuotaClient()
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+    monkeypatch.setattr(quotaService, "_send_adjustment_email", lambda *args, **kwargs: None)
+    monkeypatch.setattr(quotaService, "_enqueue_adjustment_feishu", lambda _event_id: None)
+
+    quotaService.adjust_storage_usage_quota(
+        db_session,
+        storage_usage_id=1,
+        request=QuotaAdjustmentRequest(hard_limit=80, soft_limit=60, unit="GiB"),
+        current_user=quota_owner(db_session),
+    )
+
+    assert client.calls[0][1]["soft_limit"] == 60 * GiB
+    assert client.calls[0][1]["soft_grace"] == 7 * 24 * 3600
 
 
 def test_quota_adjustment_preserves_native_device_json_error(db_session, monkeypatch):

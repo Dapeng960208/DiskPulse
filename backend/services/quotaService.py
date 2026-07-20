@@ -27,6 +27,8 @@ from utils.storageTarget import resolve_group_storage_target
 logger = logging.getLogger("app:quota-adjustment")
 GiB = 1024 ** 3
 _LOCK_TTL_SECONDS = 600
+_DEFAULT_SOFT_LIMIT_RATIO = 0.9
+_ISILON_DEFAULT_SOFT_GRACE_DAYS = 7
 _LOCK_RELEASE_SCRIPT = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
     return redis.call('del', KEYS[1])
@@ -74,6 +76,35 @@ def _validate_storage_request(storage_type: str, request: QuotaAdjustmentRequest
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Unsupported storage type",
         )
+
+
+def _with_quota_defaults(
+    *,
+    request: QuotaAdjustmentRequest,
+    storage_type: str,
+    resource_type: str,
+    target,
+) -> QuotaAdjustmentRequest:
+    """Apply the product defaults after the storage target is known."""
+    supports_soft_limit = not (
+        resource_type == "Group"
+        and storage_type == "netapp"
+        and isinstance(target, Volume)
+    )
+    updates = {}
+    if request.soft_limit is None and supports_soft_limit:
+        updates["soft_limit"] = request.hard_limit * _DEFAULT_SOFT_LIMIT_RATIO
+    effective_soft_limit = updates.get("soft_limit", request.soft_limit)
+    if (
+        storage_type == "isilon"
+        and effective_soft_limit is not None
+        and request.soft_grace_seconds is None
+    ):
+        updates.update({
+            "soft_grace": _ISILON_DEFAULT_SOFT_GRACE_DAYS,
+            "soft_grace_unit": "days",
+        })
+    return request.model_copy(update=updates) if updates else request
 
 
 def _ratio(used: float | None, limit: float | None) -> float | None:
@@ -330,6 +361,12 @@ def _execute_adjustment(
 ) -> QuotaAdjustmentResponse:
     cluster = resource.storage_cluster if isinstance(resource, Group) else resource.group.storage_cluster
     storage_type = (cluster.storage_type or "").lower()
+    request = _with_quota_defaults(
+        request=request,
+        storage_type=storage_type,
+        resource_type=resource_type,
+        target=target,
+    )
     _validate_storage_request(storage_type, request)
     if target is None or volume is None:
         raise HTTPException(

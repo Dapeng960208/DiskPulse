@@ -95,10 +95,12 @@ describe('quota adjustment dialog', () => {
     expect(wrapper.text()).not.toContain('软限额');
   });
 
-  it('shows soft grace only for Isilon and submits the final user quota', async () => {
+  it('defaults missing soft limit and Isilon grace before submitting a user quota', async () => {
     const wrapper = await mountDialog('storage_usage');
     wrapper.vm.$.exposed.open(row({
       id: 9,
+      limit: 120,
+      soft_limit: null,
       user: { rd_username: 'alice' },
       storage_cluster: { storage_type: 'isilon' },
       storage_target: { type: 'volume', name: 'dir-a' },
@@ -106,16 +108,18 @@ describe('quota adjustment dialog', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('软限额宽限期');
-    wrapper.vm.$.exposed.model.hard_limit = 120;
-    wrapper.vm.$.exposed.model.soft_limit = 90;
-    wrapper.vm.$.exposed.model.soft_grace = 7;
-    wrapper.vm.$.exposed.model.soft_grace_unit = 'days';
+    expect(wrapper.vm.$.exposed.model).toMatchObject({
+      hard_limit: 120,
+      soft_limit: 108,
+      soft_grace: 7,
+      soft_grace_unit: 'days',
+    });
     await wrapper.findAll('button').find((button) => button.text() === '确认调整').trigger('click');
     await flushPromises();
 
     expect(apis.usage.adjustQuota).toHaveBeenCalledWith(9, {
       hard_limit: 120,
-      soft_limit: 90,
+      soft_limit: 108,
       unit: 'GiB',
       soft_grace: 7,
       soft_grace_unit: 'days',

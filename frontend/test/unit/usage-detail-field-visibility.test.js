@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
+
+const storageUsageApi = vi.hoisted(() => ({
+  fetchById: vi.fn(() => Promise.resolve({ id: 234, capabilities: {} })),
+  quotaHistory: vi.fn(() => Promise.resolve([])),
+}));
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { id: '234' } }),
@@ -26,14 +31,18 @@ vi.mock('@/api/capacity-prediction-api.js', () => ({
 }));
 
 vi.mock('@/api/storage-usage-api.js', () => ({
-  default: {
-    fetchById: vi.fn(() => Promise.resolve({ id: 234, capabilities: {} })),
-    quotaHistory: vi.fn(() => Promise.resolve([])),
-  },
+  default: storageUsageApi,
 }));
 
 vi.mock('@/api/alert-api.js', () => ({
   default: { fetch: vi.fn(() => Promise.resolve({ content: [], total: 0 })) },
+}));
+
+vi.mock('@/components/form/QuotaAdjustmentDialog.vue', () => ({
+  default: {
+    name: 'QuotaAdjustmentDialog',
+    template: '<div />',
+  },
 }));
 
 import UsageDetailPage from '@/pages/usage/UsageDetailPage.vue';
@@ -77,5 +86,18 @@ describe('usage detail extended field visibility', () => {
 
     expect(source).toContain('暂时隐藏第 2–4 行扩展字段');
     hiddenLabels.forEach((label) => expect(source).toContain(`label="${label}"`));
+  });
+
+  it('shows an adjust quota action on an authorized user-directory detail', async () => {
+    storageUsageApi.fetchById.mockResolvedValue({
+      id: 234,
+      limit: 100,
+      soft_limit: 90,
+      capabilities: { adjust_quota: true },
+    });
+    const wrapper = mount(UsageDetailPage);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('调整额度');
   });
 });

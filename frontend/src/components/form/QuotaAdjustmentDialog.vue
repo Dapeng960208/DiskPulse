@@ -51,6 +51,8 @@ const supportsSoftLimit = computed(() => !(
 ));
 const title = computed(() => props.resourceType === 'group' ? '调整项目组配额' : '调整用户配额');
 const limitPrecision = computed(() => model.unit === 'TiB' ? 4 : 2);
+const DEFAULT_SOFT_LIMIT_RATIO = 0.9;
+const DEFAULT_ISILON_SOFT_GRACE_DAYS = 7;
 
 const rules = {
   hard_limit: [
@@ -81,13 +83,24 @@ const rules = {
   }],
 };
 
+function defaultSoftLimit(hardLimit) {
+  const value = Number(hardLimit);
+  return Number.isFinite(value) && value > 0
+    ? Number((value * DEFAULT_SOFT_LIMIT_RATIO).toFixed(2))
+    : null;
+}
+
 function open(row) {
   resource.value = row;
+  const hardLimit = row.limit ?? null;
+  const softLimit = supportsSoftLimit.value
+    ? (row.soft_limit ?? defaultSoftLimit(hardLimit))
+    : null;
   Object.assign(model, {
-    hard_limit: row.limit ?? null,
-    soft_limit: supportsSoftLimit.value ? (row.soft_limit ?? null) : null,
+    hard_limit: hardLimit,
+    soft_limit: softLimit,
     unit: 'GiB',
-    soft_grace: null,
+    soft_grace: isIsilon.value && softLimit != null ? DEFAULT_ISILON_SOFT_GRACE_DAYS : null,
     soft_grace_unit: 'days',
     force_below_usage: false,
     change_reason: '',
@@ -152,12 +165,18 @@ async function submit() {
     if (!model.change_reason.trim()) model.change_reason = '已确认危险缩减';
   }
 
+  const softLimit = supportsSoftLimit.value
+    ? (model.soft_limit ?? defaultSoftLimit(model.hard_limit))
+    : null;
+  const softGrace = isIsilon.value && softLimit != null
+    ? (model.soft_grace ?? DEFAULT_ISILON_SOFT_GRACE_DAYS)
+    : null;
   const payload = {
     hard_limit: model.hard_limit,
-    soft_limit: supportsSoftLimit.value ? model.soft_limit : null,
+    soft_limit: softLimit,
     unit: model.unit,
-    soft_grace: isIsilon.value && model.soft_limit != null ? model.soft_grace : null,
-    soft_grace_unit: isIsilon.value && model.soft_limit != null ? model.soft_grace_unit : null,
+    soft_grace: softGrace,
+    soft_grace_unit: softGrace != null ? model.soft_grace_unit : null,
   };
   if (belowUsage) {
     payload.force_below_usage = model.force_below_usage;
@@ -258,7 +277,7 @@ defineExpose({ open, model });
       </section>
       <ElFormItem
         v-if="supportsSoftLimit"
-        label="软限额（可选）"
+        label="软限额（默认硬限额的 90%）"
         prop="soft_limit">
         <div class="quota-input-row">
           <ElInputNumber
@@ -280,7 +299,7 @@ defineExpose({ open, model });
       </ElFormItem>
       <ElFormItem
         v-if="isIsilon"
-        label="软限额宽限期"
+        label="软限额宽限期（默认 7 天）"
         prop="soft_grace">
         <div class="quota-input-row">
           <ElInputNumber

@@ -18,6 +18,8 @@ import capacityPredictionApi from '@/api/capacity-prediction-api.js';
 import alertApi from '@/api/alert-api.js';
 import { formatQuotaLimit } from '@/utils/quota';
 import { formatCapacity } from '@/utils/capacity';
+import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 
 const route = useRoute();
 const breadcrumbs = useBreadcrumbs();
@@ -36,6 +38,7 @@ const loaded = reactive({ quotaHistory: false, prediction: false, incidents: fal
 const loading = reactive({ quotaHistory: false, prediction: false, incidents: false, alerts: false });
 const errors = reactive({ quotaHistory: '', prediction: '', incidents: '', alerts: '' });
 const canViewQuotaHistory = computed(() => usage.value?.capabilities?.adjust_quota === true);
+const quotaAdjustmentDialogRef = ref();
 
 function statusType(value) {
   if (['success', 'resolved', 'ready'].includes(value)) return 'success';
@@ -104,6 +107,16 @@ async function loadQuotaHistory() {
   } finally {
     loading.quotaHistory = false;
   }
+}
+
+function openQuotaAdjustment() {
+  quotaAdjustmentDialogRef.value?.open?.(usage.value);
+}
+
+async function handleQuotaAdjusted() {
+  loaded.quotaHistory = false;
+  quotaHistory.value = [];
+  await loadUsage();
 }
 
 async function loadPredictionVisibility() {
@@ -198,6 +211,13 @@ onMounted(() => {
 
 <template>
   <section class="usage-detail-page">
+    <div
+      v-if="canViewQuotaHistory"
+      class="usage-detail-page__actions">
+      <TableActionButton
+        action="edit"
+        @click="openQuotaAdjustment">调整额度</TableActionButton>
+    </div>
     <ElTabs
       v-model="activeTab"
       class="usage-detail-page__tabs">
@@ -368,6 +388,10 @@ onMounted(() => {
         </DataTable>
       </ElTabPane>
     </ElTabs>
+    <QuotaAdjustmentDialog
+      ref="quotaAdjustmentDialogRef"
+      resource-type="storage_usage"
+      @submitted="handleQuotaAdjusted" />
   </section>
 </template>
 
@@ -378,6 +402,12 @@ onMounted(() => {
   flex-direction: column;
   min-height: 0;
   height: 100%;
+}
+
+.usage-detail-page__actions {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
 }
 
 .usage-detail-page__tabs {
@@ -396,6 +426,12 @@ onMounted(() => {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+}
+
+.usage-detail-page__tabs :deep(.el-tab-pane) {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
 }
 
 .usage-detail-page__capacity-tab {
