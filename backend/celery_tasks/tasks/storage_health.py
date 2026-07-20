@@ -15,6 +15,7 @@ from dependencies import QuestDBSession
 from models import StorageAlerts, StorageCluster, Volume
 from services.storageHealthAnalyticsService import normalize_severity
 from services import telemetryObservabilityService
+from utils.datetime_utils import SYSTEM_TIMEZONE, to_system_local_naive, to_utc_z
 
 
 logger = get_task_logger(__name__)
@@ -48,17 +49,14 @@ def _datetime(value, default: datetime | None = None) -> datetime:
     elif isinstance(value, str):
         result = datetime.fromisoformat(value.replace("Z", "+00:00"))
     elif isinstance(value, (int, float)):
-        result = datetime.fromtimestamp(value)
+        result = datetime.fromtimestamp(value, timezone.utc)
     else:
-        result = default or datetime.now()
-    if result.tzinfo is not None:
-        return result.astimezone().replace(tzinfo=None)
-    return result
+        result = default or datetime.now(SYSTEM_TIMEZONE)
+    return to_system_local_naive(result)
 
 
 def _utc_z(value: datetime) -> str:
-    value = value.astimezone(timezone.utc).replace(tzinfo=None)
-    return value.isoformat(timespec="seconds") + "Z"
+    return to_utc_z(value)
 
 
 def _event_identity(vendor: str, record: dict) -> tuple[str, str, str, str]:

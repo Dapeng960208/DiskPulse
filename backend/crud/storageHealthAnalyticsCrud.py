@@ -7,10 +7,11 @@ from sqlalchemy.orm import Session
 from crud.configCrud import get_storage_config
 from dependencies import QuestDBSession
 from models import StorageAlerts
+from utils.datetime_utils import to_system_local_naive
 
 
 def _naive(value: datetime) -> datetime:
-    return value.astimezone().replace(tzinfo=None) if value.tzinfo is not None else value
+    return to_system_local_naive(value)
 
 
 def get_capacity_points(
