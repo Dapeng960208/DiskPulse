@@ -11,6 +11,6 @@
 | 认证与用户管理 | LDAP/JWT 认证、人工用户维护和受控 LDAP 同步。 | [认证](../../features/identity/authentication/backend.md) · [用户管理](../../features/identity/user-management/overview.md) |
 | 项目隔离与审计 | 项目详情集中展示容量、项目组、用户目录、成员和审计；服务端负责项目隔离、能力字段和追加式统一审计。 | [RBAC 与审计](../../features/identity/project-rbac/backend.md) |
 | 遥测可观测性 | 采集运行账本、新鲜度、健康检查、就绪检查和受令牌保护的指标。 | [遥测与可观测性](../../features/storage/observability/overview.md) |
-| AI 对话 | 流式对话、受限工具、恢复降级、模型管理和审计。 | [AI 对话](../../features/ai/chat/overview.md) |
+| AI 对话 | 流式对话、受限工具、恢复降级、模型管理、审计及按当前权限恢复历史消息。 | [AI 对话](../../features/ai/chat/overview.md) |
 | 预测与事件中心 | 一级容量预测列表、资源最终预测、异常/RCA、关联事件和项目范围访问控制。 | [预测、RCA 与事件中心](../../features/storage/incident-center/overview.md) |
 | 前端体验与演示 | 应用壳、统一写入交互、页面级 Mock 演示和角色边界；登录页演示账户入口仅在 Mock 模式提供。 | [应用壳](../../features/experience/application-shell/design.md) · [Mock](../../features/experience/mock-runtime/frontend.md) |
