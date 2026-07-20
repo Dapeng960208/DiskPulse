@@ -146,6 +146,26 @@ describe('frontend mock runtime', () => {
     expect(events.map((event) => event.event)).toContain('completed');
   });
 
+  it('filters associated incidents by cluster, status, and category before pagination', async () => {
+    const gateway = createMockGateway();
+    const admin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    const response = await gateway.request('get', '/v1/incidents', undefined, admin.token, {
+      params: {
+        storage_cluster_id: 1,
+        status: 'acknowledged',
+        category: 'device_fault',
+        page: 1,
+        size: 20,
+      },
+    });
+
+    expect(response).toMatchObject({ total: 1 });
+    expect(response.content).toEqual([
+      expect.objectContaining({ status: 'acknowledged', category: 'device_fault' }),
+    ]);
+  });
+
   it('returns complete incident detail mock data for the incident drawer', async () => {
     const gateway = createMockGateway();
     const admin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
