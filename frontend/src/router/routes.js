@@ -188,50 +188,43 @@ export default [
     },
     children: [
       {
-        path: '',
+        path: 'storage-clusters',
+        name: 'StorageClusters',
+        component: () => import('@/pages/admin/storage-cluster/StorageClusterListPage.vue'),
         meta: {
           title: '存储集群',
           icon: 'i-ri-server-line',
-          menuKey: 'admin-storage-resources',
         },
-        children: [
-          {
-            path: 'storage-clusters',
-            name: 'StorageClusters',
-            component: () => import('@/pages/admin/storage-cluster/StorageClusterListPage.vue'),
-            meta: {
-              title: '集群列表',
-              icon: 'i-ri-server-line',
-            },
-          },
-          {
-            path: 'aggregates',
-            name: 'Aggregates',
-            component: () => import('@/pages/admin/aggregate/AggregateListPage.vue'),
-            meta: {
-              title: '容量池',
-              icon: 'i-ri-pie-chart-2-line',
-            },
-          },
-          {
-            path: 'volumes',
-            name: 'Volumes',
-            component: () => import('@/pages/admin/volume/VolumeListPage.vue'),
-            meta: {
-              title: '存储空间',
-              icon: 'i-ri-database-2-line',
-            },
-          },
-          {
-            path: 'qtrees',
-            name: 'Qtrees',
-            component: () => import('@/pages/admin/qtree/QtreeListPage.vue'),
-            meta: {
-              title: 'Qtree（NetApp）',
-              icon: 'i-ri-folder-2-line',
-            },
-          },
-        ],
+      },
+      {
+        path: 'aggregates',
+        name: 'Aggregates',
+        component: () => import('@/pages/admin/aggregate/AggregateListPage.vue'),
+        meta: {
+          title: '容量池',
+          icon: 'i-ri-pie-chart-2-line',
+          isHidden: true,
+        },
+      },
+      {
+        path: 'volumes',
+        name: 'Volumes',
+        component: () => import('@/pages/admin/volume/VolumeListPage.vue'),
+        meta: {
+          title: '存储空间',
+          icon: 'i-ri-database-2-line',
+          isHidden: true,
+        },
+      },
+      {
+        path: 'qtrees',
+        name: 'Qtrees',
+        component: () => import('@/pages/admin/qtree/QtreeListPage.vue'),
+        meta: {
+          title: 'Qtree（NetApp）',
+          icon: 'i-ri-folder-2-line',
+          isHidden: true,
+        },
       },
       {
         path: 'storage-cluster/:id',

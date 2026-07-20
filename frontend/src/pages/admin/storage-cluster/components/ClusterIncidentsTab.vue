@@ -4,6 +4,7 @@ import { ElButton, ElPagination, ElTable, ElTableColumn, ElTag } from 'element-p
 import incidentApi from '@/api/incident-api.js';
 import IncidentDetailDrawer from '@/pages/incident/components/IncidentDetailDrawer.vue';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
+import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 
 const props = defineProps({
   clusterId: { type: Number, required: true },
@@ -18,6 +19,7 @@ const forecastCount = ref(0);
 const anomalyCount = ref(0);
 const selectedIncident = ref(null);
 const detailVisible = ref(false);
+const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 
 async function load(reset = false) {
   if (!props.clusterId) return;
@@ -86,10 +88,12 @@ onMounted(load);
         <template #default="{ row }"><ElTag :type="row.severity === 'critical' ? 'danger' : 'warning'">{{ row.severity }}</ElTag></template>
       </ElTableColumn>
       <ElTableColumn
+        v-if="showCapacityColumns"
         label="状态"
         prop="status"
         width="130" />
       <ElTableColumn
+        v-if="showSecondaryColumns"
         label="最近证据"
         prop="last_evidence_at"
         min-width="190" />
@@ -128,5 +132,7 @@ onMounted(load);
 .cluster-incidents-tab__summary dt { color: var(--text-secondary); font-size: var(--font-size-sm); }
 .cluster-incidents-tab__summary dd { margin: 4px 0 0; color: var(--text-primary); font-size: var(--font-size-lg); font-weight: 600; }
 .cluster-incidents-tab__pagination { display: flex; justify-content: flex-end; margin-top: var(--spacing-md); }
+.cluster-incidents-tab :deep(.el-table__body-wrapper) { overflow-x: hidden !important; }
+.cluster-incidents-tab :deep(.el-table .cell) { overflow-wrap: anywhere; white-space: normal; }
 @media (max-width: 640px) { .cluster-incidents-tab__summary { grid-template-columns: 1fr; } }
 </style>

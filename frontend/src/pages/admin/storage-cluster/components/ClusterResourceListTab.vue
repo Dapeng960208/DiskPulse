@@ -12,6 +12,7 @@ import VolumeSelect from '@/components/form/VolumeSelect.vue';
 import { canRenderQuotaProgress } from '@/utils/quota';
 import { formatCapacity } from '@/utils/capacity';
 import { getStorageResourceNativeType } from '@/utils/storage-resource';
+import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 
 const props = defineProps({
   clusterId: {
@@ -47,6 +48,7 @@ const resourceDefinitions = {
 };
 
 const resource = computed(() => resourceDefinitions[props.resourceType]);
+const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 const result = ref({ content: [], total: 0 });
 const querying = ref(false);
 const error = ref('');
@@ -170,11 +172,13 @@ watch(
           </template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showSecondaryColumns"
           label="原生类型"
           min-width="140">
           <template #default="{ row }">{{ getStorageResourceNativeType('aggregate', row) }}</template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showCapacityColumns"
           label="限额"
           prop="limit"
           sortable="custom"
@@ -187,6 +191,7 @@ watch(
           </template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showCapacityColumns"
           label="使用量"
           prop="used"
           sortable="custom"
@@ -194,6 +199,7 @@ watch(
           <template #default="{ row }">{{ capacityLabel(row, 'used') }}</template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showSecondaryColumns"
           label="使用率(%)"
           prop="use_ratio"
           sortable="custom"
@@ -221,23 +227,28 @@ watch(
           </template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showSecondaryColumns"
           label="服务域（SVM / Access Zone）"
           prop="vserver"
           min-width="180" />
         <ElTableColumn
+          v-if="showCapacityColumns"
           label="所属容量池"
           prop="aggregate"
           min-width="140" />
         <ElTableColumn
+          v-if="showSecondaryColumns"
           label="原生类型"
           min-width="150">
           <template #default="{ row }">{{ getStorageResourceNativeType('volume', row) }}</template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showCapacityColumns"
           label="状态"
           prop="state"
           min-width="100" />
         <ElTableColumn
+          v-if="showCapacityColumns"
           label="硬限额"
           prop="limit"
           sortable="custom"
@@ -250,6 +261,7 @@ watch(
           </template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showSecondaryColumns"
           label="软限额"
           prop="soft_limit"
           sortable="custom"
@@ -262,6 +274,7 @@ watch(
           </template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showCapacityColumns"
           label="使用量"
           prop="used"
           sortable="custom"
@@ -269,6 +282,7 @@ watch(
           <template #default="{ row }">{{ capacityLabel(row, 'used') }}</template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showSecondaryColumns"
           label="硬限额使用率(%)"
           prop="use_ratio"
           sortable="custom"
@@ -282,6 +296,7 @@ watch(
           </template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showSecondaryColumns"
           label="软限额使用率(%)"
           prop="soft_use_ratio"
           sortable="custom"
@@ -312,6 +327,7 @@ watch(
           </template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showCapacityColumns"
           label="所属存储空间"
           min-width="180"
           show-overflow-tooltip>
@@ -322,10 +338,12 @@ watch(
           </template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showSecondaryColumns"
           label="状态"
           prop="status"
           min-width="100" />
         <ElTableColumn
+          v-if="showCapacityColumns"
           label="硬限额"
           prop="limit"
           sortable="custom"
@@ -338,6 +356,7 @@ watch(
           </template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showSecondaryColumns"
           label="软限额"
           prop="soft_limit"
           sortable="custom"
@@ -350,6 +369,7 @@ watch(
           </template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showCapacityColumns"
           label="使用量"
           prop="used"
           sortable="custom"
@@ -357,6 +377,7 @@ watch(
           <template #default="{ row }">{{ capacityLabel(row, 'used') }}</template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showSecondaryColumns"
           label="硬限额使用率(%)"
           prop="use_ratio"
           sortable="custom"
@@ -370,6 +391,7 @@ watch(
           </template>
         </ElTableColumn>
         <ElTableColumn
+          v-if="showSecondaryColumns"
           label="软限额使用率(%)"
           prop="soft_use_ratio"
           sortable="custom"
@@ -404,5 +426,19 @@ watch(
   flex: 1 1 auto;
   min-height: 0;
   height: auto;
+}
+
+.cluster-resource-list-tab :deep(.table-wrapper) {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.cluster-resource-list-tab :deep(.el-table__body-wrapper) {
+  overflow-x: hidden !important;
+}
+
+.cluster-resource-list-tab :deep(.el-table .cell) {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 </style>
