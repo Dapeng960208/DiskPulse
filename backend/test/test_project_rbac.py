@@ -2,12 +2,15 @@
 import pytest
 from fastapi import HTTPException
 
-from models import Project, User
+from models import Group, Project, StorageUsage, User
 from services.project_access_service import (
     ensure_reader_membership,
+    group_capabilities,
     require_project_permission,
     set_project_member,
+    storage_usage_capabilities,
 )
+from appConfig import base_config
 
 
 def _user(username: str) -> User:
@@ -53,3 +56,20 @@ def test_project_role_cannot_read_another_project(db_session):
     with pytest.raises(HTTPException) as error:
         require_project_permission(db_session, user, other_project.id, "reader")
     assert error.value.status_code == 403
+
+
+def test_quota_capabilities_limit_groups_to_super_admins_and_users_to_project_owners():
+    base_config.set("super_admin_usernames", ["super-admin"])
+    group_owner = _user("group-owner")
+    project_owner = _user("project-owner")
+    super_admin = _user("super-admin")
+    project = Project(id=1, name="project-a", in_charge_user_id=project_owner.id)
+    group = Group(id=1, project=project, in_charge_user_id=group_owner.id)
+    storage_usage = StorageUsage(id=1, group=group)
+
+    assert group_capabilities(group_owner, group) == {"adjust_quota": False}
+    assert group_capabilities(project_owner, group) == {"adjust_quota": False}
+    assert group_capabilities(super_admin, group) == {"adjust_quota": True}
+    assert storage_usage_capabilities(project_owner, storage_usage) == {"adjust_quota": True}
+    assert storage_usage_capabilities(group_owner, storage_usage) == {"adjust_quota": False}
+    assert storage_usage_capabilities(super_admin, storage_usage) == {"adjust_quota": True}

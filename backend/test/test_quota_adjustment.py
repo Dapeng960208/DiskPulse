@@ -69,10 +69,11 @@ class TimeoutThenReadbackQuotaClient(FakeQuotaClient):
 
 
 def seed_quota_target(db, *, storage_type="netapp", volume_target=False):
+    base_config.set("super_admin_usernames", ["alice"])
     db.add_all(
         [
             models.User(id=1, username="alice", rd_username="alice"),
-            models.Project(id=1, name="project-1"),
+            models.Project(id=1, name="project-1", in_charge_user_id=1),
             models.StorageCluster(
                 id=1,
                 name="cluster-1",
@@ -355,6 +356,53 @@ def test_quota_adjustment_requires_authenticated_user(db_session, monkeypatch):
 
     assert error.value.status_code == 401
     assert client.calls == []
+
+
+def test_group_quota_is_super_admin_only_and_project_owner_adjusts_project_users(
+    db_session,
+    monkeypatch,
+):
+    seed_quota_target(db_session)
+    project_owner = models.User(id=2, username="project-owner", rd_username="project-owner")
+    group_owner = models.User(id=3, username="group-owner", rd_username="group-owner")
+    db_session.add_all([project_owner, group_owner])
+    project = db_session.get(models.Project, 1)
+    group = db_session.get(models.Group, 1)
+    project.in_charge_user_id = project_owner.id
+    group.in_charge_user_id = group_owner.id
+    base_config.set("super_admin_usernames", ["super-admin"])
+    db_session.commit()
+
+    client = FakeQuotaClient()
+    monkeypatch.setattr(quotaService, "_build_client", lambda _cluster: client)
+    request = QuotaAdjustmentRequest(hard_limit=120, unit="GiB")
+
+    with pytest.raises(HTTPException) as group_error:
+        quotaService.adjust_group_quota(
+            db_session,
+            group_id=1,
+            request=request,
+            current_user=group_owner,
+        )
+    assert group_error.value.status_code == 403
+
+    with pytest.raises(HTTPException) as non_owner_error:
+        quotaService.adjust_storage_usage_quota(
+            db_session,
+            storage_usage_id=1,
+            request=request,
+            current_user=group_owner,
+        )
+    assert non_owner_error.value.status_code == 403
+
+    result = quotaService.adjust_storage_usage_quota(
+        db_session,
+        storage_usage_id=1,
+        request=request,
+        current_user=project_owner,
+    )
+    assert result.hard_limit == 120
+    assert len(client.calls) == 1
 
 
 def test_netapp_qtree_group_adjustment_updates_device_and_local_state(db_session, monkeypatch):
