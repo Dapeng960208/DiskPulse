@@ -834,3 +834,50 @@ def test_capacity_forecast_task_is_registered_for_daily_utc_aligned_execution():
 
     entry = diskpulse_app.conf.beat_schedule["capacity_forecast_daily_task"]
     assert entry["task"] == "celery_tasks.tasks.forecast_incidents.capacity_forecast_daily_task"
+
+
+@pytest.mark.parametrize(
+    ("component", "timestamp_key"),
+    [("performance", "collected_at"), ("storage_usage", "updated_at")],
+)
+def test_telemetry_quality_raw_point_query_binds_questdb_time_as_utc_string(
+    monkeypatch, component, timestamp_key
+):
+    """QuestDB PGWire rejects SQLAlchemy's aware-datetime ``timestamptz`` bind."""
+    from celery_tasks.tasks import forecast_incidents
+
+    captured = {}
+
+    class Result:
+        @staticmethod
+        def mappings():
+            return Result()
+
+        @staticmethod
+        def all():
+            return [{timestamp_key: UTC_NOW.isoformat()}]
+
+    class Connection:
+        @staticmethod
+        def execute(statement, params):
+            captured["params"] = params
+            return Result()
+
+    class QuestDBConnection:
+        @staticmethod
+        def __enter__():
+            return Connection()
+
+        @staticmethod
+        def __exit__(*args):
+            return False
+
+    monkeypatch.setattr(forecast_incidents, "QuestDBSession", QuestDBConnection)
+
+    point_count, latest_point = forecast_incidents._raw_point_count(
+        7, component, started_at=UTC_NOW
+    )
+
+    assert point_count == 1
+    assert latest_point == UTC_NOW
+    assert captured["params"]["started_at"] == "2026-07-18T08:00:00Z"
