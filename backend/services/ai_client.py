@@ -244,7 +244,10 @@ def _openai_stream(
             if raw == "[DONE]":
                 break
             data = json.loads(raw)
-            delta = data.get("choices", [{}])[0].get("delta", {})
+            choices = data.get("choices", [{}])
+            if not choices:
+                continue
+            delta = choices[0].get("delta", {})
             content = delta.get("content")
             if content:
                 text = str(content)

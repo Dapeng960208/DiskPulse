@@ -49,6 +49,7 @@
 
 - `openai`、`openrouter`、`ollama` 共用 OpenAI Chat Completions 协议；`claude` 使用 Messages API。
 - Provider 客户端把文本和工具调用统一为 `AICompletionStreamEvent`，对话服务不解析厂商原始响应。
+- OpenAI 兼容 Provider 可能发送 `choices: []` 的用量或状态帧；该帧不含增量或工具调用，客户端会忽略并继续读取后续有效帧。
 - OpenAI 工具名称和 JSON 参数可能分多个 delta 到达，按工具索引拼接后再校验 JSON。
 - Claude 的 `tool_use` 和 `input_json_delta` 分开到达；缺失的 `input` 才兼容为空对象，显式空字符串、数组、`null` 或其他非对象均保留为参数错误，避免误执行为 `{}`。
 - 非 JSON 或非对象参数抛出带工具 ID、工具名和错误类别的内部异常；编排层只将安全的格式提示回送给模型，最多重试两次，不将原始参数写入 SSE 或审计。
