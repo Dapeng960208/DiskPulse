@@ -182,6 +182,11 @@ describe('project detail information architecture', () => {
     expect(tab).toContain('label="软限额使用率(%)"');
     expect(tab).toContain('<DataTable');
     expect(tab).toContain('<AccessibleResourceLink');
+    expect(tab).toContain('label="操作"');
+    expect(tab).toContain('v-if="canAdjustQuota(row)"');
+    expect(tab).toContain('调整额度');
+    expect(tab).toContain('<QuotaAdjustmentDialog');
+    expect(tab).toContain('fixed="right"');
     expect(tab).toContain('离职账户');
     expect(tab).not.toContain('公共账户');
     expect(tab).not.toContain('label="项目"');
@@ -189,11 +194,14 @@ describe('project detail information architecture', () => {
     expect(tab).not.toContain('StorageTypeTag');
   });
 
-  it('keeps the project storage overview while exposing storage distribution in project details', () => {
+  it('removes the redundant project storage overview while retaining project detail views', () => {
     const listPage = source('src/pages/project/ProjectListPage.vue');
     const detailPage = source('src/pages/project/ProjectDetailPage.vue');
 
-    expect(listPage).toContain('label="项目存储概览图"');
+    expect(listPage).not.toContain('<ElTabs');
+    expect(listPage).not.toContain('label="项目列表"');
+    expect(listPage).not.toContain('项目存储概览图');
+    expect(listPage).not.toContain('ProjectDiskUsage');
     expect(detailPage).toContain('label="项目使用实时"');
     expect(detailPage).toContain('label="存储分布"');
   });

@@ -11,6 +11,8 @@ import QueryForm from '@/components/form/QueryForm.vue';
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
+import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 
 const props = defineProps({
   projectId: {
@@ -22,6 +24,7 @@ const props = defineProps({
 const usages = ref([]);
 const loading = ref(false);
 const error = ref('');
+const quotaAdjustmentDialogRef = ref();
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 });
 const filters = reactive({
   user_id: null,
@@ -91,6 +94,10 @@ function updatePagination(next) {
   pagination.page = next.page;
   pagination.pageSize = next.pageSize;
   query();
+}
+
+function canAdjustQuota(row) {
+  return row?.capabilities?.adjust_quota === true;
 }
 
 query();
@@ -244,7 +251,25 @@ query();
             type="warning">无软限额</ElTag>
         </template>
       </ElTableColumn>
+      <ElTableColumn
+        label="操作"
+        align="right"
+        width="112"
+        fixed="right">
+        <template #default="{ row }">
+          <div class="list-row-actions">
+            <TableActionButton
+              v-if="canAdjustQuota(row)"
+              action="edit"
+              @click="quotaAdjustmentDialogRef.open(row)">调整额度</TableActionButton>
+          </div>
+        </template>
+      </ElTableColumn>
     </DataTable>
+    <QuotaAdjustmentDialog
+      ref="quotaAdjustmentDialogRef"
+      resource-type="storage_usage"
+      @submitted="query" />
   </section>
 </template>
 
