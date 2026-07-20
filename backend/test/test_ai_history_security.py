@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI
 
+from appConfig import base_config
 import models
 from services import ai_audit_service, ai_chat_service
 from services.ai_client import AIClientToolCall, AICompletionStreamEvent
@@ -250,6 +251,29 @@ def test_legacy_ai_turn_without_visibility_or_tool_trace_is_hidden_safely(db_ses
     assert assistant["status"] == "restricted"
     assert assistant["content"] == HIDDEN_HISTORY_CONTENT
     assert assistant["tool_calls"] == []
+
+
+def test_superadmin_can_read_own_legacy_unknown_scope_history(db_session, monkeypatch):
+    user, _model, conversation = _seed_conversation(db_session)
+    original_get = base_config.get
+
+    def configured_get(key, default=None):
+        return [user.rd_username] if key == "super_admin_usernames" else original_get(key, default)
+
+    monkeypatch.setattr(base_config, "get", configured_get)
+    _add_assistant_turn(
+        db_session,
+        conversation,
+        content="超级管理员自己的历史项目数据",
+        response_payload={},
+        detail_payload=[],
+    )
+
+    history = ai_chat_service.get_conversation(db_session, conversation.id, user.id)
+    assistant = history["messages"][-1]
+
+    assert assistant["status"] == "succeeded"
+    assert assistant["content"] == "超级管理员自己的历史项目数据"
 
 
 def test_legacy_assistant_without_an_audit_record_is_hidden_safely(db_session):
