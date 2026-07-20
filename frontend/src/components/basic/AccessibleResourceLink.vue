@@ -26,7 +26,7 @@ function navigate() {
     v-if="isAccessible"
     class="accessible-resource-link__link"
     v-bind="$attrs"
-    underline="never"
+    :underline="false"
     @click="navigate">
     <slot></slot>
   </ElLink>
