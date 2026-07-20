@@ -14,7 +14,7 @@ from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from crud import forecastIncidentCrud
-from models import Diagnosis, Incident, IncidentEvidence, IncidentTimeline, MaintenanceWindow
+from models import Diagnosis, Incident, IncidentEvidence, IncidentTimeline, MaintenanceWindow, User
 from services import audit_service, project_access_service
 from utils.auth_service import is_super_admin
 
@@ -602,6 +602,15 @@ def build_timeline_presentation(timeline, *, actor_label: str | None) -> dict[st
         "summary": str(timeline.comment).strip() if timeline.comment else default_summary,
         "actor_label": actor_label or "系统",
     }
+
+
+def timeline_actor_label(db, timeline) -> str | None:
+    if timeline.actor_user_id is None:
+        return None
+    actor = db.get(User, timeline.actor_user_id)
+    if actor is None:
+        return f"用户 #{timeline.actor_user_id}"
+    return actor.rd_username or actor.username or f"用户 #{timeline.actor_user_id}"
 
 
 def _append_evidence(db, incident: Incident, envelope: TelemetryEnvelope) -> None:

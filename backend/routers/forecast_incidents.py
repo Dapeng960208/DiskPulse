@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from crud import forecastIncidentCrud
 from dependencies import CurrentUserDep, get_db, require_super_admin
-from models import User
 from schemas.forecastIncidentSchema import (
     AnomalyOut,
     AnomalyPage,
@@ -282,10 +281,6 @@ def _incident_evidence_out(evidence) -> IncidentEvidenceOut:
 
 
 def _incident_timeline_out(db: Session, timeline) -> IncidentTimelineOut:
-    actor_label = None
-    if timeline.actor_user_id is not None:
-        actor = db.get(User, timeline.actor_user_id)
-        actor_label = (actor.rd_username or actor.username) if actor is not None else f"用户 #{timeline.actor_user_id}"
     return IncidentTimelineOut(
         id=timeline.id,
         event_type=timeline.event_type,
@@ -295,7 +290,10 @@ def _incident_timeline_out(db: Session, timeline) -> IncidentTimelineOut:
         comment=timeline.comment,
         occurred_at=timeline.occurred_at,
         presentation=IncidentTimelinePresentationOut(
-            **forecastIncidentService.build_timeline_presentation(timeline, actor_label=actor_label)
+            **forecastIncidentService.build_timeline_presentation(
+                timeline,
+                actor_label=forecastIncidentService.timeline_actor_label(db, timeline),
+            )
         ),
     )
 
