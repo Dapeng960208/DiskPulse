@@ -15,7 +15,6 @@ import DataTable from '@/components/data/DataTable.vue';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
 import storageUsageApi from '@/api/storage-usage-api.js';
 import capacityPredictionApi from '@/api/capacity-prediction-api.js';
-import alertApi from '@/api/alert-api.js';
 import { formatQuotaLimit } from '@/utils/quota';
 import { formatCapacity } from '@/utils/capacity';
 import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
@@ -33,10 +32,9 @@ const predictionVisibilityChecked = ref(false);
 const quotaHistory = ref([]);
 const prediction = ref(null);
 const incidents = ref([]);
-const alerts = ref([]);
-const loaded = reactive({ quotaHistory: false, prediction: false, incidents: false, alerts: false });
-const loading = reactive({ quotaHistory: false, prediction: false, incidents: false, alerts: false });
-const errors = reactive({ quotaHistory: '', prediction: '', incidents: '', alerts: '' });
+const loaded = reactive({ quotaHistory: false, prediction: false, incidents: false });
+const loading = reactive({ quotaHistory: false, prediction: false, incidents: false });
+const errors = reactive({ quotaHistory: '', prediction: '', incidents: '' });
 const canViewQuotaHistory = computed(() => usage.value?.capabilities?.adjust_quota === true);
 const quotaAdjustmentDialogRef = ref();
 
@@ -172,33 +170,11 @@ async function loadIncidents() {
   }
 }
 
-async function loadAlerts() {
-  if (loaded.alerts || loading.alerts) return;
-  loading.alerts = true;
-  errors.alerts = '';
-  try {
-    const result = await alertApi.fetch({
-      related_type: 'StorageUsage',
-      related_id: usageId.value,
-      page: 1,
-      size: 20,
-    });
-    alerts.value = result.content || [];
-    loaded.alerts = true;
-  } catch {
-    alerts.value = [];
-    errors.alerts = '加载关联告警失败，请稍后重试';
-  } finally {
-    loading.alerts = false;
-  }
-}
-
 async function loadActiveTab() {
   if (!Number.isInteger(usageId.value) || usageId.value < 1) return;
   if (activeTab.value === 'quota-history') return loadQuotaHistory();
   if (activeTab.value === 'prediction') return loadPrediction();
   if (activeTab.value === 'incidents') return loadIncidents();
-  if (activeTab.value === 'alerts') return loadAlerts();
 }
 
 watch(activeTab, loadActiveTab);
@@ -352,37 +328,6 @@ onMounted(() => {
             width="130" />
           <ElTableColumn
             label="更新时间"
-            prop="updated_at"
-            min-width="190" />
-        </DataTable>
-      </ElTabPane>
-      <ElTabPane
-        label="告警"
-        name="alerts"
-        lazy>
-        <DataTable
-          :data="alerts"
-          :loading="loading.alerts"
-          :error="errors.alerts">
-          <ElTableColumn
-            label="级别"
-            width="100">
-            <template #default="{ row }"><ElTag :type="statusType(row.alert_level)">{{ row.alert_level || '-' }}</ElTag></template>
-          </ElTableColumn>
-          <ElTableColumn
-            label="事件类型"
-            prop="event_type"
-            width="120" />
-          <ElTableColumn
-            label="内容"
-            prop="description"
-            min-width="280" />
-          <ElTableColumn
-            label="触发值"
-            prop="avg_use_ratio"
-            width="100" />
-          <ElTableColumn
-            label="时间"
             prop="updated_at"
             min-width="190" />
         </DataTable>
