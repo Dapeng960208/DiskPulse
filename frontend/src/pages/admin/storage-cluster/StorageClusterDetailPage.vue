@@ -86,7 +86,6 @@ const systemEventQueryParams = () => ({
 });
 
 const capacityData = computed(() => capacity.value?.data || []);
-const usesTimeRange = computed(() => !['distribution', ...resourceTabNames].includes(activeTab.value));
 const capacityChartData = computed(() => capacityData.value.map((item) => [item.updated_at, Number(item.used)]));
 const capacityUnit = computed(() => capacity.value?.data_unit || 'TB');
 const capacityLabel = (field) => formatCapacity(capacity.value?.capacity?.[field]);
@@ -256,6 +255,7 @@ function loadActiveTab(force = false) {
   if (resourceTabNames.includes(activeTab.value)) return undefined;
   if (activeTab.value === 'performance') return loadPerformance(force);
   if (activeTab.value === 'faults') return loadFaults(force);
+  if (activeTab.value === 'incidents') return undefined;
   return loadCapacity(force);
 }
 
@@ -351,105 +351,48 @@ onBeforeMount(() => {
     <ElCard
       v-if="clusterId"
       class="storage-health-page__card">
-      <FilterForm
-        v-if="usesTimeRange"
-        class="storage-health-filter"
-        @query="searchActiveTab"
-        @reset="resetRange">
-        <ElFormItem
-          label="时间范围"
-          class="analytics-date-range query-form-field--date-range">
-          <ElDatePicker
-            v-model="dateRange"
-            type="datetimerange"
-            range-separator="至"
-            format="YYYY-MM-DD HH:mm:ss"
-            value-format="YYYY-MM-DD HH:mm:ss"
-            start-placeholder="开始日期时间"
-            end-placeholder="结束日期时间"
-            :shortcuts="shortcuts" />
-        </ElFormItem>
-        <ElFormItem
-          v-if="activeTab === 'performance'"
-          label="展示条数"
-          class="performance-limit">
-          <ElSelect v-model="performanceLimit">
-            <ElOption
-              v-for="limit in [10, 20, 50, 100]"
-              :key="limit"
-              :label="`${limit} 条`"
-              :value="limit" />
-          </ElSelect>
-        </ElFormItem>
-        <ElFormItem
-          v-if="activeTab === 'performance'"
-          label="性能指标"
-          class="performance-metrics">
-          <ElSelect
-            v-model="selectedPerformanceMetrics"
-            multiple
-            collapse-tags
-            collapse-tags-tooltip>
-            <ElOption
-              v-for="metric in performanceMetricOptions"
-              :key="metric.key"
-              :label="metric.label"
-              :value="metric.key" />
-          </ElSelect>
-        </ElFormItem>
-        <ElFormItem
-          v-if="activeTab === 'performance'"
-          label="对象"
-          class="performance-objects">
-          <ElSelect
-            v-model="selectedPerformanceObjects"
-            multiple
-            clearable
-            collapse-tags
-            collapse-tags-tooltip
-            filterable
-            placeholder="选择对象进行对比">
-            <ElOption
-              v-for="object in performanceObjectOptions"
-              :key="object.value"
-              :label="object.label"
-              :value="object.value" />
-          </ElSelect>
-        </ElFormItem>
-        <template #actions>
-          <ElDropdown @command="handleExport">
-            <ElButton type="primary">导出报告</ElButton>
-            <template #dropdown>
-              <ElDropdownMenu>
-                <template v-if="activeTab === 'capacity' || activeTab === 'performance'">
-                  <ElDropdownItem command="current:csv">当前页 CSV</ElDropdownItem>
-                  <ElDropdownItem command="current:excel">当前页 Excel</ElDropdownItem>
-                  <ElDropdownItem command="current:pdf">当前页 PDF</ElDropdownItem>
-                </template>
-                <template v-else-if="activeTab === 'faults'">
-                  <ElDropdownItem command="severity:csv">错误级别 CSV</ElDropdownItem>
-                  <ElDropdownItem command="severity:excel">错误级别 Excel</ElDropdownItem>
-                  <ElDropdownItem command="severity:pdf">错误级别 PDF</ElDropdownItem>
-                  <ElDropdownItem command="faults:csv">重复故障 CSV</ElDropdownItem>
-                  <ElDropdownItem command="faults:excel">重复故障 Excel</ElDropdownItem>
-                  <ElDropdownItem command="faults:pdf">重复故障 PDF</ElDropdownItem>
-                </template>
-                <ElDropdownItem
-                  divided
-                  command="all:csv">完整报告 CSV</ElDropdownItem>
-                <ElDropdownItem command="all:excel">完整报告 Excel</ElDropdownItem>
-                <ElDropdownItem command="all:pdf">完整报告 PDF</ElDropdownItem>
-              </ElDropdownMenu>
-            </template>
-          </ElDropdown>
-        </template>
-      </FilterForm>
       <ElTabs
         v-model="activeTab"
         class="storage-health-page__tabs">
         <ElTabPane
           label="容量趋势"
           name="capacity">
+          <FilterForm
+            v-if="activeTab === 'capacity'"
+            class="storage-health-filter"
+            @query="searchActiveTab"
+            @reset="resetRange">
+            <ElFormItem
+              label="时间范围"
+              class="analytics-date-range query-form-field--date-range">
+              <ElDatePicker
+                v-model="dateRange"
+                type="datetimerange"
+                range-separator="至"
+                format="YYYY-MM-DD HH:mm:ss"
+                value-format="YYYY-MM-DD HH:mm:ss"
+                start-placeholder="开始日期时间"
+                end-placeholder="结束日期时间"
+                :shortcuts="shortcuts" />
+            </ElFormItem>
+            <template #actions>
+              <ElDropdown @command="handleExport">
+                <ElButton type="primary">导出报告</ElButton>
+                <template #dropdown>
+                  <ElDropdownMenu>
+                    <ElDropdownItem command="current:csv">当前页 CSV</ElDropdownItem>
+                    <ElDropdownItem command="current:excel">当前页 Excel</ElDropdownItem>
+                    <ElDropdownItem command="current:pdf">当前页 PDF</ElDropdownItem>
+                    <ElDropdownItem
+                      divided
+                      command="all:csv">完整报告 CSV</ElDropdownItem>
+                    <ElDropdownItem command="all:excel">完整报告 Excel</ElDropdownItem>
+                    <ElDropdownItem command="all:pdf">完整报告 PDF</ElDropdownItem>
+                  </ElDropdownMenu>
+                </template>
+              </ElDropdown>
+            </template>
+          </FilterForm>
           <LoadingCharts
             v-if="loading.capacity"
             width="100%"
@@ -526,6 +469,86 @@ onBeforeMount(() => {
         <ElTabPane
           label="性能分析"
           name="performance">
+          <FilterForm
+            v-if="activeTab === 'performance'"
+            class="storage-health-filter"
+            @query="searchActiveTab"
+            @reset="resetRange">
+            <ElFormItem
+              label="时间范围"
+              class="analytics-date-range query-form-field--date-range">
+              <ElDatePicker
+                v-model="dateRange"
+                type="datetimerange"
+                range-separator="至"
+                format="YYYY-MM-DD HH:mm:ss"
+                value-format="YYYY-MM-DD HH:mm:ss"
+                start-placeholder="开始日期时间"
+                end-placeholder="结束日期时间"
+                :shortcuts="shortcuts" />
+            </ElFormItem>
+            <ElFormItem
+              label="展示条数"
+              class="performance-limit">
+              <ElSelect v-model="performanceLimit">
+                <ElOption
+                  v-for="limit in [10, 20, 50, 100]"
+                  :key="limit"
+                  :label="`${limit} 条`"
+                  :value="limit" />
+              </ElSelect>
+            </ElFormItem>
+            <ElFormItem
+              label="性能指标"
+              class="performance-metrics">
+              <ElSelect
+                v-model="selectedPerformanceMetrics"
+                multiple
+                collapse-tags
+                collapse-tags-tooltip>
+                <ElOption
+                  v-for="metric in performanceMetricOptions"
+                  :key="metric.key"
+                  :label="metric.label"
+                  :value="metric.key" />
+              </ElSelect>
+            </ElFormItem>
+            <ElFormItem
+              label="对象"
+              class="performance-objects">
+              <ElSelect
+                v-model="selectedPerformanceObjects"
+                multiple
+                clearable
+                collapse-tags
+                collapse-tags-tooltip
+                filterable
+                placeholder="选择对象进行对比">
+                <ElOption
+                  v-for="object in performanceObjectOptions"
+                  :key="object.value"
+                  :label="object.label"
+                  :value="object.value" />
+              </ElSelect>
+            </ElFormItem>
+            <template #actions>
+              <ElDropdown @command="handleExport">
+                <ElButton type="primary">导出报告</ElButton>
+                <template #dropdown>
+                  <ElDropdownMenu>
+                    <ElDropdownItem command="current:csv">当前页 CSV</ElDropdownItem>
+                    <ElDropdownItem command="current:excel">当前页 Excel</ElDropdownItem>
+                    <ElDropdownItem command="current:pdf">当前页 PDF</ElDropdownItem>
+                    <ElDropdownItem
+                      divided
+                      command="all:csv">完整报告 CSV</ElDropdownItem>
+                    <ElDropdownItem command="all:excel">完整报告 Excel</ElDropdownItem>
+                    <ElDropdownItem command="all:pdf">完整报告 PDF</ElDropdownItem>
+                  </ElDropdownMenu>
+                </template>
+              </ElDropdown>
+            </template>
+          </FilterForm>
           <LoadingCharts
             v-if="loading.performance"
             width="100%"
@@ -574,6 +597,45 @@ onBeforeMount(() => {
         <ElTabPane
           label="故障分析"
           name="faults">
+          <FilterForm
+            v-if="activeTab === 'faults'"
+            class="storage-health-filter"
+            @query="searchActiveTab"
+            @reset="resetRange">
+            <ElFormItem
+              label="时间范围"
+              class="analytics-date-range query-form-field--date-range">
+              <ElDatePicker
+                v-model="dateRange"
+                type="datetimerange"
+                range-separator="至"
+                format="YYYY-MM-DD HH:mm:ss"
+                value-format="YYYY-MM-DD HH:mm:ss"
+                start-placeholder="开始日期时间"
+                end-placeholder="结束日期时间"
+                :shortcuts="shortcuts" />
+            </ElFormItem>
+            <template #actions>
+              <ElDropdown @command="handleExport">
+                <ElButton type="primary">导出报告</ElButton>
+                <template #dropdown>
+                  <ElDropdownMenu>
+                    <ElDropdownItem command="severity:csv">错误级别 CSV</ElDropdownItem>
+                    <ElDropdownItem command="severity:excel">错误级别 Excel</ElDropdownItem>
+                    <ElDropdownItem command="severity:pdf">错误级别 PDF</ElDropdownItem>
+                    <ElDropdownItem command="faults:csv">重复故障 CSV</ElDropdownItem>
+                    <ElDropdownItem command="faults:excel">重复故障 Excel</ElDropdownItem>
+                    <ElDropdownItem command="faults:pdf">重复故障 PDF</ElDropdownItem>
+                    <ElDropdownItem
+                      divided
+                      command="all:csv">完整报告 CSV</ElDropdownItem>
+                    <ElDropdownItem command="all:excel">完整报告 Excel</ElDropdownItem>
+                    <ElDropdownItem command="all:pdf">完整报告 PDF</ElDropdownItem>
+                  </ElDropdownMenu>
+                </template>
+              </ElDropdown>
+            </template>
+          </FilterForm>
           <LoadingCharts
             v-if="loading.faults"
             width="100%"

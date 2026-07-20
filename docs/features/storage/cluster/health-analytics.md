@@ -4,7 +4,7 @@
 
 存储集群详情用于查看当前集群的存储分布，以及在一个时间范围内查看已用容量变化、按严重级别汇总的错误、存储空间性能指标和重复设备故障，并按需导出健康分析结果。
 
-入口只保留在“系统管理 → 存储集群”列表最后一列的“详情”按钮，不再提供独立“存储健康”或“存储一览”菜单和集群选择器。页签顺序为“容量趋势”“存储分布”“容量池”“存储空间”“Qtree（NetApp）”“性能分析”“故障分析”“关联事件”；存储分布、资源表、性能、故障和关联事件数据在相应页签首次打开时加载，普通页签往返复用已加载数据。容量、性能和故障分析共用页面时间范围；共享筛选工具栏位于页签内容区之外，不占用图表或表格的可用高度。存储分布展示当前容量树，不使用时间范围或健康报告导出，因此打开该页签时隐藏筛选工具栏，并以页签内容区全高渲染。详情页内的表格只允许纵向滚动；窄宽度隐藏次要列而不提供横向滚动。页面不重复展示集群名称、描述、API 用户名、端口和 TLS 等集群配置字段。
+入口只保留在“系统管理 → 存储集群”列表最后一列的“详情”按钮，不再提供独立“存储健康”或“存储一览”菜单和集群选择器。页签顺序为“容量趋势”“存储分布”“容量池”“存储空间”“Qtree（NetApp）”“性能分析”“故障分析”“关联事件”；存储分布、资源表、性能、故障和关联事件数据在相应页签首次打开时加载，普通页签往返复用已加载数据。容量、性能和故障分析共用页面时间范围，筛选工具栏分别位于对应页签内容区的顶部；存储分布不使用时间范围或健康报告导出，关联事件在自身页签内按状态和事件类型筛选。存储分布以页签内容区全高渲染。详情页内的表格只允许纵向滚动；窄宽度隐藏次要列而不提供横向滚动。页面不重复展示集群名称、描述、API 用户名、端口和 TLS 等集群配置字段。
 
 ## 数据来源与统计口径
 
@@ -12,12 +12,12 @@
 | --- | --- | --- |
 | 存储分布 | PostgreSQL 中当前集群的存储资源 | 按当前 `storage_cluster_id` 返回存储空间/Qtree（NetApp）容量树；不使用健康分析时间范围。 |
 | 容量变化 | QuestDB `storage_cluster_storage_usages` | 所选范围最后一个已用容量减去第一个已用容量；期初为零时变化率为 `null`。 |
-| 严重级别统计 | PostgreSQL `storage_alerts` | 合并可归属当前集群的 DiskPulse 容量告警与 NetApp/Isilon 设备事件，按 `critical`、`error`、`warning`、`info` 汇总。 |
+| 严重级别统计 | PostgreSQL `storage_alerts` | 仅统计可归属当前集群的 NetApp/Isilon 原生事件，按 `critical`、`error`、`warning`、`info` 汇总；与系统事件表保持同一来源和时间范围。 |
 | 存储空间性能 | QuestDB `storage_performance_metrics` | 按 P95 延迟降序返回最多 100 个已关联存储空间，页面可选择 10、20、50、100 条；返回 P95、平均、最大、读、写延迟，以及平均 IOPS、平均吞吐量和样本数。NetApp 使用 Volume UUID；PowerScale 使用已固定的 path workload，并映射为对应 Directory Quota quota ID。 |
 | 重复故障 | PostgreSQL `storage_alerts` | 仅统计 `source=netapp` 或 `source=isilon` 的设备事件；同一 `fingerprint` 在所选范围出现至少两次时计为重复故障。 |
 | 系统事件 | PostgreSQL `storage_alerts` | 按当前集群、时间范围、关键字和日志等级查询 NetApp/Isilon 原生事件；数据库分页默认每页 20 条，包含来源、严重级别、事件代码、事件对象、内容和发生时间。 |
 
-DiskPulse 既有容量告警使用 `source=diskpulse`，严重级别映射为 `high→critical`、`medium→warning`、`low→info`。原“告警”页面只查询 `source=diskpulse`，NetApp/Isilon 原生事件归类为“系统事件”并仅在存储健康中展示，不再与容量、周报或扩容记录混排。严重级别统计只接受 `diskpulse`、`netapp`、`isilon` 来源，重复故障和系统事件只接受 `netapp`、`isilon`；其他来源即使写入 `storage_alerts` 也不进入对应分析。无法唯一归属到存储集群的项目级容量告警保留在原告警范围内，不进入集群健康分析。设备故障指纹由厂商、事件代码、对象类型和对象 ID 组成，不使用可能包含动态内容的完整消息。
+DiskPulse 既有容量告警使用 `source=diskpulse`，严重级别映射为 `high→critical`、`medium→warning`、`low→info`。原“告警”页面只查询 `source=diskpulse`，NetApp/Isilon 原生事件归类为“系统事件”并仅在存储健康中展示，不再与容量、周报或扩容记录混排。严重级别统计、重复故障和系统事件都只接受 `netapp`、`isilon` 来源；其他来源即使写入 `storage_alerts` 也不进入故障分析。无法唯一归属到存储集群的项目级容量告警保留在原告警范围内，不进入集群健康分析。设备故障指纹由厂商、事件代码、对象类型和对象 ID 组成，不使用可能包含动态内容的完整消息。
 
 NetApp 事件来自 ONTAP EMS，性能来自 Volume `metric`。ONTAP 返回的 Volume 总、读、写延迟以微秒为单位，采集器统一除以 `1000` 转为毫秒后写入 QuestDB；`iops.total` 和 `throughput.total` 分别按 IOPS、B/s 写入统一字段。字段名必须使用 ONTAP REST 返回的单数 `metric`，请求不存在的 `metrics` 会返回 `400`。
 
@@ -90,7 +90,7 @@ section=capacity|severity|latency|faults|all
 
 ## 派生预测与关联事件
 
-集群详情新增懒加载“关联事件”页签。该页签只读取项目作用域内的派生 Incident、容量预测数和性能异常数；打开后才请求 `/v1/incidents`、`/v1/forecasts` 和 `/v1/anomalies`。点击事件可查看不可变证据引用、确定性诊断与操作时间线。
+集群详情新增懒加载“关联事件”页签。该页签只读取项目作用域内的派生 Incident、容量预测数和性能异常数；打开后才请求 `/v1/incidents`、`/v1/forecasts` 和 `/v1/anomalies`。关联事件列表可按状态和事件类型筛选。点击事件可查看不可变证据引用、确定性诊断与操作时间线。
 
 该页签不改变本页的“故障分析”与“系统事件”语义：厂商原始事件仍来自 `storage_alerts` 的 `netapp`/`isilon` 记录，既有告警页仍只显示 `source=diskpulse`。未映射的厂商对象只会在派生分析侧以集群级资产和 `asset_mapping_missing` 缺口出现，不会修改厂商原始记录。
 

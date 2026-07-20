@@ -552,9 +552,9 @@ describe('storage cluster health analytics page', () => {
   it('exports the current section or the complete report and downloads the returned blob', async () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     const wrapper = await mountPage();
-    const dropdown = wrapper.findComponent({ name: 'ElDropdown' });
+    const dropdown = () => wrapper.findComponent({ name: 'ElDropdown' });
 
-    await dropdown.vm.$emit('command', 'current:csv');
+    await dropdown().vm.$emit('command', 'current:csv');
     await flushPromises();
     expect(storageClusterApi.exportAnalytics).toHaveBeenNthCalledWith(1, 42, {
       start_time: initialRange[0],
@@ -566,7 +566,7 @@ describe('storage cluster health analytics page', () => {
     expect(clickSpy).toHaveBeenCalledTimes(1);
 
     await selectTab(wrapper, 'performance');
-    await dropdown.vm.$emit('command', 'current:pdf');
+    await dropdown().vm.$emit('command', 'current:pdf');
     await flushPromises();
     expect(storageClusterApi.exportAnalytics).toHaveBeenNthCalledWith(2, 42, {
       start_time: initialRange[0],
@@ -576,7 +576,7 @@ describe('storage cluster health analytics page', () => {
     });
 
     await selectTab(wrapper, 'faults');
-    await dropdown.vm.$emit('command', 'severity:csv');
+    await dropdown().vm.$emit('command', 'severity:csv');
     await flushPromises();
     expect(storageClusterApi.exportAnalytics).toHaveBeenNthCalledWith(3, 42, {
       start_time: initialRange[0],
@@ -585,7 +585,7 @@ describe('storage cluster health analytics page', () => {
       format: 'csv',
     });
 
-    await dropdown.vm.$emit('command', 'all:excel');
+    await dropdown().vm.$emit('command', 'all:excel');
     await flushPromises();
     expect(storageClusterApi.exportAnalytics).toHaveBeenNthCalledWith(4, 42, {
       start_time: initialRange[0],

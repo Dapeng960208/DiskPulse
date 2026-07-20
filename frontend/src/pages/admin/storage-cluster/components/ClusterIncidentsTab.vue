@@ -1,9 +1,10 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue';
-import { ElButton, ElPagination, ElTable, ElTableColumn, ElTag } from 'element-plus';
+import { onMounted, reactive, ref, watch } from 'vue';
+import { ElButton, ElFormItem, ElOption, ElPagination, ElSelect, ElTable, ElTableColumn, ElTag } from 'element-plus';
 import incidentApi from '@/api/incident-api.js';
 import IncidentDetailDrawer from '@/pages/incident/components/IncidentDetailDrawer.vue';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
+import QueryForm from '@/components/form/QueryForm.vue';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 
 const props = defineProps({
@@ -19,6 +20,7 @@ const forecastCount = ref(0);
 const anomalyCount = ref(0);
 const selectedIncident = ref(null);
 const detailVisible = ref(false);
+const filters = reactive({ status: '', category: '' });
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
 
 async function load(reset = false) {
@@ -28,6 +30,8 @@ async function load(reset = false) {
   try {
     const params = {
       storage_cluster_id: props.clusterId,
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.category ? { category: filters.category } : {}),
       page: page.value,
       size: size.value,
     };
@@ -55,12 +59,67 @@ function openDetail(incident) {
   detailVisible.value = true;
 }
 
+function queryWithFilters() {
+  load(true);
+}
+
+function resetFilters() {
+  filters.status = '';
+  filters.category = '';
+  load(true);
+}
+
 watch(() => props.clusterId, () => load(true));
 onMounted(load);
 </script>
 
 <template>
   <section class="cluster-incidents-tab">
+    <QueryForm
+      @query="queryWithFilters"
+      @reset="resetFilters">
+      <ElFormItem label="状态">
+        <ElSelect
+          v-model="filters.status"
+          clearable
+          placeholder="全部状态">
+          <ElOption
+            label="未处理"
+            value="open" />
+          <ElOption
+            label="已确认"
+            value="acknowledged" />
+          <ElOption
+            label="调查中"
+            value="investigating" />
+          <ElOption
+            label="已缓解"
+            value="mitigated" />
+          <ElOption
+            label="已解决"
+            value="resolved" />
+        </ElSelect>
+      </ElFormItem>
+      <ElFormItem label="事件类型">
+        <ElSelect
+          v-model="filters.category"
+          clearable
+          placeholder="全部类型">
+          <ElOption
+            label="容量压力"
+            value="capacity_pressure" />
+          <ElOption
+            label="设备健康风险"
+            value="device_fault" />
+          <ElOption
+            label="性能争用"
+            value="performance_contention" />
+          <ElOption
+            label="监控盲区"
+            value="telemetry_blindspot" />
+        </ElSelect>
+      </ElFormItem>
+    </QueryForm>
     <p class="cluster-incidents-tab__intro">仅显示当前存储集群关联的项目范围事件；原始告警和厂商系统事件仍位于原有页面。</p>
     <dl
       class="cluster-incidents-tab__summary"

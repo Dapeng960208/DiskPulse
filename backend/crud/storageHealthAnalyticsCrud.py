@@ -79,7 +79,7 @@ def get_alert_severities(
     rows = db.execute(
         select(StorageAlerts.source, StorageAlerts.severity).where(
             StorageAlerts.storage_cluster_id == storage_cluster_id,
-            StorageAlerts.source.in_(("diskpulse", "netapp", "isilon")),
+            StorageAlerts.source.in_(("netapp", "isilon")),
             StorageAlerts.updated_at.between(_naive(start_time), _naive(end_time)),
         )
     ).all()

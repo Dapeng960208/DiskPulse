@@ -531,11 +531,13 @@ export function createMockGateway() {
       };
     }
     if (path === '/v1/incidents') {
+      const { storage_cluster_id: storageClusterId, status, category } = options.params || {};
       const records = scoped(account, state.incidents).filter((incident) => (
-        !options.params?.storage_cluster_id
-        || incident.storage_cluster_id === Number(options.params.storage_cluster_id)
+        (!storageClusterId || incident.storage_cluster_id === Number(storageClusterId))
+        && (!status || incident.status === status)
+        && (!category || incident.category === category)
       ));
-      return page(records);
+      return page(records, options.params);
     }
     if (path === '/v1/forecasts' || path === '/v1/anomalies') {
       const forecastResources = [
