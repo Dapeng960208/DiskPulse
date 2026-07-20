@@ -124,7 +124,7 @@ def test_ai_accessible_storage_usage_endpoint_dynamically_filters_current_user_p
     assert [row["id"] for row in response.json()["content"]] == [1]
 
 
-def test_group_owner_can_adjust_only_its_group_and_its_user_directories(
+def test_project_owner_can_adjust_only_project_user_directories(
     api_client_factory,
     monkeypatch,
     session_factory,
@@ -138,9 +138,9 @@ def test_group_owner_can_adjust_only_its_group_and_its_user_directories(
     try:
         session.add_all(
             [
-                models.User(id=1, rd_username="owner", username="Owner"),
-                models.User(id=2, rd_username="other-owner", username="Other Owner"),
-                models.Project(id=1, name="project-a"),
+                models.User(id=1, rd_username="project-owner", username="Project Owner"),
+                models.User(id=2, rd_username="group-owner", username="Group Owner"),
+                models.Project(id=1, name="project-a", in_charge_user_id=1),
                 models.StorageCluster(id=1, name="cluster-a", storage_type="netapp", is_active=True),
                 models.GroupTag(id=1, name="production"),
                 models.Group(
@@ -210,6 +210,6 @@ def test_group_owner_can_adjust_only_its_group_and_its_user_directories(
     own_directory = client.patch(f"{API_PREFIX}/storage-usages/1/quota", json=payload)
     other_group = client.patch(f"{API_PREFIX}/groups/2/quota", json=payload)
 
-    assert own_group.status_code == 200
+    assert own_group.status_code == 403
     assert own_directory.status_code == 200
     assert other_group.status_code == 403
