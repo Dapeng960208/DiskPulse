@@ -1,58 +1,20 @@
-import { defineComponent, h } from 'vue';
-import { flushPromises, shallowMount } from '@vue/test-utils';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const mocks = vi.hoisted(() => ({
-  fetchStorageTreeById: vi.fn(),
-}));
-
-vi.mock('@/api/project-api.js', () => ({
-  default: {
-    fetchStorageTreeById: mocks.fetchStorageTreeById,
-  },
-}));
-
-const { default: ProjectDiskUsage } = await import('@/pages/project/components/ProjectDiskUsage.vue');
-
-const FilterForm = defineComponent({
-  name: 'FilterForm',
-  emits: ['query', 'reset'],
-  setup(_, { slots }) {
-    return () => h('form', slots.default?.());
-  },
-});
-
-let wrapper;
-
-beforeEach(() => {
-  mocks.fetchStorageTreeById.mockReset();
-  mocks.fetchStorageTreeById.mockResolvedValue({ data: [] });
-});
-
-afterEach(() => {
-  wrapper?.unmount();
-  wrapper = undefined;
-});
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
 
 describe('ProjectDiskUsage', () => {
-  it('resets the project overview to project 1 when attributeId is absent', async () => {
-    wrapper = shallowMount(ProjectDiskUsage, {
-      global: {
-        stubs: {
-          FilterForm,
-          QueryForm: FilterForm,
-        },
-      },
-    });
-    await flushPromises();
+  it('keeps the project usage realtime view while fixing its project context', () => {
+    const source = readFileSync(resolve('src/pages/project/components/ProjectDiskUsage.vue'), 'utf8');
+    const realTimePage = readFileSync(resolve('src/pages/common/RealTimePage.vue'), 'utf8');
 
-    expect(mocks.fetchStorageTreeById).toHaveBeenLastCalledWith(1, { value_type: 'limit' });
-
-    mocks.fetchStorageTreeById.mockClear();
-    wrapper.findComponent({ name: 'FilterForm' }).vm.$emit('reset');
-    await flushPromises();
-
-    expect(mocks.fetchStorageTreeById).toHaveBeenCalledOnce();
-    expect(mocks.fetchStorageTreeById).toHaveBeenLastCalledWith(1, { value_type: 'limit' });
+    expect(source).toContain("import RealTimePage from '@/pages/common/RealTimePage.vue'");
+    expect(source).toContain('api-type="project"');
+    expect(source).toContain(':show-resource-select="!attributeId"');
+    expect(source).toContain(':allowed-indicators="[\'used\']"');
+    expect(source).toContain(':fill-content="Boolean(attributeId)"');
+    expect(realTimePage).toContain('label="时间范围"');
+    expect(realTimePage).toContain('v-if="showResourceSelect && selectedSelect"');
+    expect(realTimePage).toContain('fillContent');
+    expect(realTimePage).toContain('real-time-page--fill');
   });
 });

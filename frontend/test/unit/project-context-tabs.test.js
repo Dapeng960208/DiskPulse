@@ -154,13 +154,18 @@ describe('project detail information architecture', () => {
     const page = source('src/pages/project/ProjectDetailPage.vue');
 
     expect(page).toContain('ProjectDiskUsage');
+    expect(page).toContain('ProjectStorageDistribution');
     expect(page).toContain('ProjectUsagesTab');
+    expect(page).toContain('label="项目使用实时"');
     expect(page).toContain('label="存储分布"');
     expect(page).toContain('label="项目组"');
     expect(page).toContain('label="用户目录"');
     expect(page).toContain('label="成员与权限"');
     expect(page).toContain(':attribute-id="projectId"');
     expect(page).toContain(':project-id="projectId"');
+    expect(page).toContain('class="project-detail-page__tabs"');
+    expect(page).toContain('class="project-detail-page__visual-tab"');
+    expect(page).toContain('.project-detail-page {\n  display: flex;\n  flex: 1 1 auto;\n  flex-direction: column;\n  min-height: 0;\n  height: 100%;');
   });
 
   it('loads only the selected project user directories and links to their details', () => {
@@ -184,6 +189,7 @@ describe('project detail information architecture', () => {
     const detailPage = source('src/pages/project/ProjectDetailPage.vue');
 
     expect(listPage).toContain('label="项目存储概览图"');
+    expect(detailPage).toContain('label="项目使用实时"');
     expect(detailPage).toContain('label="存储分布"');
   });
 

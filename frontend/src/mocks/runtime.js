@@ -628,7 +628,30 @@ export function createMockGateway() {
       };
     }
     const projectTree = path.match(/^\/projects\/(\d+)\/storage-tree$/);
-    if (projectTree) return { data: state.groups.filter((group) => group.project_id === Number(projectTree[1])) };
+    if (projectTree) {
+      const projectId = Number(projectTree[1]);
+      const valueType = options.params?.value_type || 'used';
+      const toTerabytes = (value) => Number(value || 0) / 1024;
+      const storageNode = (record, name, path) => ({
+        limit: toTerabytes(record.limit),
+        soft_limit: toTerabytes(record.soft_limit),
+        used: toTerabytes(record.used),
+        value: toTerabytes(record[valueType]),
+        name,
+        path,
+        used_ratio: record.use_ratio,
+        soft_used_ratio: record.soft_use_ratio,
+      });
+      const groups = state.groups
+        .filter((group) => group.project_id === projectId)
+        .map((group) => ({
+          ...storageNode(group, group.name, group.linux_path),
+          children: state.usages
+            .filter((usage) => usage.group_id === group.id)
+            .map((usage) => storageNode(usage, usage.user?.rd_username || usage.rd_username || '', usage.linux_path)),
+        }));
+      return { data: groups };
+    }
     const projectMembers = path.match(/^\/projects\/(\d+)\/members(?:\/(\d+))?$/);
     if (projectMembers) {
       const members = state.memberships.filter((member) => member.project_id === Number(projectMembers[1]));

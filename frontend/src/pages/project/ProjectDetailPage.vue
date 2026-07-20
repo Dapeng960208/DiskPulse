@@ -8,6 +8,7 @@ import { useBreadcrumbs } from '@/stores/breadcrumbs';
 const ProjectMembersTab = defineAsyncComponent(() => import('./components/ProjectMembersTab.vue'));
 const ProjectAuditTab = defineAsyncComponent(() => import('./components/ProjectAuditTab.vue'));
 const ProjectDiskUsage = defineAsyncComponent(() => import('./components/ProjectDiskUsage.vue'));
+const ProjectStorageDistribution = defineAsyncComponent(() => import('./components/ProjectStorageDistribution.vue'));
 const ProjectGroupsTab = defineAsyncComponent(() => import('./components/ProjectGroupsTab.vue'));
 const ProjectUsagesTab = defineAsyncComponent(() => import('./components/ProjectUsagesTab.vue'));
 
@@ -15,7 +16,7 @@ const route = useRoute();
 const breadcrumbs = useBreadcrumbs();
 const projectId = computed(() => Number(route.params.id));
 const project = ref(null);
-const activeTab = ref('capacity');
+const activeTab = ref('realtime');
 const canManageMembers = computed(() => project.value?.capabilities?.manage_members === true);
 const canViewAuditEvents = computed(() => project.value?.capabilities?.view_audit_events === true);
 const canManageProjectAdmins = computed(() => project.value?.capabilities?.manage_project_admins === true);
@@ -42,14 +43,22 @@ onMounted(() => {
 
 <template>
   <section class="project-detail-page">
-    <ElTabs v-model="activeTab">
+    <ElTabs
+      v-model="activeTab"
+      class="project-detail-page__tabs">
+      <ElTabPane
+        label="项目使用实时"
+        name="realtime"
+        class="project-detail-page__visual-tab"
+        lazy>
+        <ProjectDiskUsage :attribute-id="projectId" />
+      </ElTabPane>
       <ElTabPane
         label="存储分布"
-        name="capacity"
+        name="distribution"
+        class="project-detail-page__visual-tab"
         lazy>
-        <ProjectDiskUsage
-          :attribute-id="projectId"
-          :allow-project-selection="false" />
+        <ProjectStorageDistribution :project-id="projectId" />
       </ElTabPane>
       <ElTabPane
         label="项目组"
@@ -81,3 +90,37 @@ onMounted(() => {
     </ElTabs>
   </section>
 </template>
+
+<style scoped>
+.project-detail-page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.project-detail-page__tabs {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+:deep(.project-detail-page__tabs .el-tabs__content) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+:deep(.project-detail-page__tabs .project-detail-page__visual-tab) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+</style>

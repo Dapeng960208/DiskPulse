@@ -49,6 +49,18 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  showResourceSelect: {
+    type: Boolean,
+    default: true,
+  },
+  allowedIndicators: {
+    type: Array,
+    default: null,
+  },
+  fillContent: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 function normalizeResourceIds(value) {
@@ -122,7 +134,11 @@ const { queryParams, reset } = useQueryParams(() => ({
 
 const indicatorOptions = computed(() => {
   const common = { used: '实时使用量', alert_ratio: '告警口径使用率', use_ratio: '硬限额使用率' };
-  return props.apiType === 'storage-usage' ? { ...common, file_used: '实时文件数量' } : common;
+  const options = props.apiType === 'storage-usage' ? { ...common, file_used: '实时文件数量' } : common;
+  if (!props.allowedIndicators) return options;
+  return Object.fromEntries(
+    Object.entries(options).filter(([value]) => props.allowedIndicators.includes(value)),
+  );
 });
 
 const fetchData = async () => {
@@ -219,7 +235,9 @@ const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThre
 
 </script>
 <template>
-  <div class="real-time-page flex flex-col flex-1 min-h-0">
+  <div
+    class="real-time-page flex flex-col flex-1 min-h-0"
+    :class="{ 'real-time-page--fill': fillContent }">
     <section
       v-if="showHeader"
       class="real-time-page__header">
@@ -231,7 +249,7 @@ const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThre
       @query="query();alertQuery();"
       @reset="reset(); query();alertQuery();">
       <ElFormItem
-        v-if="selectedSelect"
+        v-if="showResourceSelect && selectedSelect"
         :label="props.label">
         <component
           :is="selectedSelect"
@@ -518,6 +536,28 @@ const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThre
 
   &.flex-auto {
     gap: var(--spacing-lg);
+  }
+}
+
+.real-time-page--fill {
+  height: 100%;
+  min-height: 0;
+
+  .real-time-page__workspace {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .real-time-page__chart-panel,
+  .real-time-page__alerts-panel {
+    display: flex;
+    min-height: 0;
+  }
+
+  .real-time-page__chart-panel :deep(.el-card),
+  .real-time-page__alerts-panel :deep(.el-card) {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 }
 

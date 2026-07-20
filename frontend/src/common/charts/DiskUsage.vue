@@ -125,7 +125,7 @@ async function renderChart() {
       {
         name: props.label,
         type: 'treemap',
-        visibleMin: 300,
+        visibleMin: 0,
         label: {
           show: true,
           formatter: '{b}'
