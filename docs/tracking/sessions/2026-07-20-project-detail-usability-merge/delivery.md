@@ -7,12 +7,13 @@
 
 ## 当前状态
 
-合并完成并已验证；待删除已合入的功能工作区和本地分支。
+已完成：合并提交已创建，已合入的功能工作区和本地分支均已删除。
 
 ## 验证
 
 - `cd frontend && npx vitest run test/unit/project-context-tabs.test.js test/unit/project-disk-usage.test.js test/unit/project-storage-distribution.test.js test/unit/project-members-tab.test.js test/unit/project-detail-breadcrumbs.test.js test/unit/utils/breadcrumbs.test.js test/unit/stores/breadcrumbs.test.js test/unit/chart-coverage-gaps.test.js test/unit/mock-runtime.test.js --coverage.enabled=false`：9 文件、51 项通过。
 - `git diff --check`：通过。
+- `git worktree list --porcelain`：仅保留主工作区；`codex/project-detail-usability` 已删除。
 
 ## 安全措施
 
