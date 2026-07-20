@@ -275,7 +275,7 @@ describe('storage cluster health analytics page', () => {
     expect(aggregateApi.fetchAggregateTrees).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the shared time filter inside each analysis tab content', async () => {
+  it('renders the shared time filter inside each time-based analysis tab content', async () => {
     storageClusterApi.fetchCapacityChange.mockResolvedValue({
       data: [{ updated_at: initialRange[0], used: 1 }],
       data_unit: 'TB',
@@ -313,10 +313,6 @@ describe('storage cluster health analytics page', () => {
     await selectTab(wrapper, 'faults');
 
     expect(wrapper.get('[data-tab="faults"] .storage-health-filter').exists()).toBe(true);
-
-    await selectTab(wrapper, 'incidents');
-
-    expect(wrapper.get('[data-tab="incidents"] .storage-health-filter').exists()).toBe(true);
 
     await selectTab(wrapper, 'distribution');
 

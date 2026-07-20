@@ -1,3 +1,4 @@
+import { defineComponent, h } from 'vue';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { vi } from 'vitest';
 import ClusterIncidentsTab from '@/pages/admin/storage-cluster/components/ClusterIncidentsTab.vue';
@@ -8,6 +9,23 @@ const incidentApi = vi.hoisted(() => ({
   fetchAnomalies: vi.fn(),
 }));
 vi.mock('@/api/incident-api.js', () => ({ default: incidentApi }));
+
+const QueryForm = defineComponent({
+  name: 'QueryForm',
+  emits: ['query', 'reset'],
+  setup(_, { slots }) {
+    return () => h('form', slots.default?.());
+  },
+});
+
+const Select = defineComponent({
+  name: 'ElSelect',
+  props: { modelValue: { type: String, default: '' } },
+  emits: ['update:modelValue'],
+  setup() {
+    return () => h('select');
+  },
+});
 
 describe('ClusterIncidentsTab', () => {
   beforeEach(() => {
@@ -25,6 +43,10 @@ describe('ClusterIncidentsTab', () => {
       global: {
         directives: { loading: () => {} },
         stubs: {
+          QueryForm,
+          ElFormItem: { template: '<div><slot /></div>' },
+          ElSelect: Select,
+          ElOption: { template: '<option />' },
           ElTable: { props: ['data'], template: '<div>{{ JSON.stringify(data) }}<slot /></div>' },
           ElTableColumn: { template: '<div />' },
           ElPagination: { template: '<div />' },
@@ -38,5 +60,39 @@ describe('ClusterIncidentsTab', () => {
     expect(wrapper.text()).toContain('volume-a');
     expect(wrapper.text()).toContain('容量预测');
     expect(wrapper.text()).toContain('性能异常');
+  });
+
+  it('filters associated events within the tab instead of relying on the detail-level time filter', async () => {
+    const wrapper = shallowMount(ClusterIncidentsTab, {
+      props: { clusterId: 42 },
+      global: {
+        directives: { loading: () => {} },
+        stubs: {
+          QueryForm,
+          ElFormItem: { template: '<div><slot /></div>' },
+          ElSelect: Select,
+          ElOption: { template: '<option />' },
+          ElTable: { props: ['data'], template: '<div>{{ JSON.stringify(data) }}<slot /></div>' },
+          ElTableColumn: { template: '<div />' },
+          ElPagination: { template: '<div />' },
+          ElTag: { template: '<span><slot /></span>' },
+        },
+      },
+    });
+    await flushPromises();
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' });
+    await selects[0].vm.$emit('update:modelValue', 'open');
+    await selects[1].vm.$emit('update:modelValue', 'device_fault');
+    await wrapper.findComponent({ name: 'QueryForm' }).vm.$emit('query');
+    await flushPromises();
+
+    expect(incidentApi.fetchIncidents).toHaveBeenLastCalledWith({
+      storage_cluster_id: 42,
+      status: 'open',
+      category: 'device_fault',
+      page: 1,
+      size: 20,
+    });
   });
 });
