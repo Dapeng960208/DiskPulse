@@ -19,6 +19,7 @@ from celery_tasks.tasks.redis_lock import redis_lock
 from celery.exceptions import SoftTimeLimitExceeded
 from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
 from models import Group, Project, Qtree, StorageCluster, StorageUsage, Volume
+from crud import usersCrud
 from services import telemetryObservabilityService
 from services.audit_service import AuditContext, append_audit_event
 logger = get_task_logger(__name__)
@@ -542,9 +543,13 @@ def user_storage_statistics_schedule_task():
                 .group_by(StorageUsage.user_id)
                 .order_by(StorageUsage.user_id)
             ).all()
+            usersCrud.refresh_storage_used_from_directories(db)
+            db.commit()
         except Exception:
+            if db is not None:
+                db.rollback()
             logger.exception(
-                "User storage statistics PostgreSQL query failed: "
+                "User storage statistics PostgreSQL aggregation failed: "
                 "duration_seconds=%.3f",
                 time.monotonic() - started_at,
             )

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 
-from sqlalchemy import asc, desc, func, or_
+from sqlalchemy import asc, desc, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from models import StorageUsage, User
@@ -47,6 +47,15 @@ def create_user(db: Session, user: usersSchema.UserBase | usersSchema.UserCreate
 
 def list_all_users(db: Session):
     return db.query(User).all()
+
+
+def refresh_storage_used_from_directories(db: Session) -> None:
+    directory_total = (
+        select(func.coalesce(func.sum(StorageUsage.used), 0))
+        .where(StorageUsage.user_id == User.id)
+        .scalar_subquery()
+    )
+    db.execute(update(User).values(storage_used=directory_total))
 
 
 def add_ldap_user(
