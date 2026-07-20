@@ -19,6 +19,8 @@ const { queryParams, reset } = useQueryParams(() => ({
   page: 1,
   size: 20,
   nameLike: null,
+  prop: 'storage_used',
+  order: 'descending',
 }));
 
 // 使用查询钩子
