@@ -35,7 +35,7 @@ function initialModel() {
   return {
     name: '', project_id: null, storage_cluster_id: null, group_tag_id: null,
     target_type: null, volume_id: null, qtree_id: null, linux_path: null,
-    back_path: null, enable_monitoring: true, associate_multiple_groups: false,
+    back_path: null, enable_monitoring: true, associate_multiple_groups: false, completed: false,
     in_charge_user_id: null, monitor_host_id: null, associated_mail_groups: [],
     storage_alert_rule: null, alert_cc_user_ids: [],
   };
@@ -54,20 +54,26 @@ const { formRef, mode, model, modelRules, submitting, isDirty, edit: editForm, s
     linux_path: [{ required: true, message: '关联Linux路径不能为空', trigger: 'blur' }],
   }),
   doSubmit(currentMode) {
-    const payload = { ...model.value };
-    payload.project_id = model.value.project_id;
-    payload.storage_cluster_id = model.value.storage_cluster_id;
-    payload.group_tag_id = model.value.group_tag_id;
-    delete payload.id;
-    delete payload.project;
-    delete payload.storage_cluster;
-    delete payload.group_tag;
-    delete payload.storage_target;
-    delete payload.qtree;
-    delete payload.in_charge_user;
-    if (payload.target_type === 'volume') delete payload.qtree_id;
-    if (payload.target_type === 'qtree') delete payload.volume_id;
-    delete payload.target_type;
+    const payload = {
+      name: model.value.name,
+      project_id: model.value.project_id,
+      storage_cluster_id: model.value.storage_cluster_id,
+      group_tag_id: model.value.group_tag_id,
+      volume_id: model.value.volume_id,
+      qtree_id: model.value.qtree_id,
+      linux_path: model.value.linux_path,
+      back_path: model.value.back_path,
+      enable_monitoring: model.value.enable_monitoring,
+      associate_multiple_groups: model.value.associate_multiple_groups,
+      in_charge_user_id: model.value.in_charge_user_id,
+      monitor_host_id: model.value.monitor_host_id,
+      associated_mail_groups: model.value.associated_mail_groups,
+      storage_alert_rule: model.value.storage_alert_rule,
+      alert_cc_user_ids: model.value.alert_cc_user_ids,
+      completed: model.value.completed,
+    };
+    if (model.value.target_type === 'volume') delete payload.qtree_id;
+    if (model.value.target_type === 'qtree') delete payload.volume_id;
     return currentMode === 'create' ? groupApi.create(payload) : groupApi.replace(model.value.id, payload);
   },
   onSuccess(currentMode) {
