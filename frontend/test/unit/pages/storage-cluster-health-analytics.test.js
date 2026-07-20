@@ -275,7 +275,7 @@ describe('storage cluster health analytics page', () => {
     expect(aggregateApi.fetchAggregateTrees).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the time filter inside supported tabs and gives the primary charts enough room', async () => {
+  it('keeps the shared time filter outside tab content so charts retain the content area', async () => {
     storageClusterApi.fetchCapacityChange.mockResolvedValue({
       data: [{ updated_at: initialRange[0], used: 1 }],
       data_unit: 'TB',
@@ -290,9 +290,11 @@ describe('storage cluster health analytics page', () => {
     });
     const wrapper = await mountPage();
     const tabs = wrapper.get('[data-testid="analytics-tabs"]');
-    const datePicker = tabs.findComponent({ name: 'ElDatePicker' });
+    const filter = wrapper.get('.storage-health-filter');
+    const datePicker = filter.findComponent({ name: 'ElDatePicker' });
 
-    expect(tabs.find('.storage-health-filter').exists()).toBe(true);
+    expect(tabs.find('.storage-health-filter').exists()).toBe(false);
+    expect(filter.exists()).toBe(true);
     expect(datePicker.attributes('format')).toBe('YYYY-MM-DD HH:mm:ss');
     expect(datePicker.attributes('start-placeholder')).toBe('开始日期时间');
     expect(datePicker.attributes('end-placeholder')).toBe('结束日期时间');
@@ -305,7 +307,7 @@ describe('storage cluster health analytics page', () => {
 
     await selectTab(wrapper, 'distribution');
 
-    expect(tabs.find('.storage-health-filter').exists()).toBe(false);
+    expect(wrapper.find('.storage-health-filter').exists()).toBe(false);
     expect(wrapper.findComponent({ name: 'DiskUsage' }).attributes('height')).toBe('520px');
   });
 

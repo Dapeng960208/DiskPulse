@@ -186,20 +186,21 @@ describe('router/routes and app shell', () => {
     expect(labels).not.toContain('用户目录');
   });
 
-  it('groups storage inventory below storage clusters without changing existing URLs', () => {
+  it('keeps storage clusters as the direct menu entry and hides standalone inventory routes', () => {
     const adminRoute = routes.find((route) => route.path === '/admin');
-    const storageGroup = adminRoute.children.find((route) => route.path === '' && route.meta?.title === '存储集群');
+    const storageRoute = adminRoute.children.find((route) => route.name === 'StorageClusters');
     const visibleRoutes = adminRoute.children.filter((route) => !route.meta?.isHidden);
 
-    expect(storageGroup).toEqual(expect.objectContaining({
+    expect(storageRoute).toEqual(expect.objectContaining({
+      path: 'storage-clusters',
       meta: expect.objectContaining({ title: '存储集群', icon: 'i-ri-server-line' }),
     }));
-    expect(storageGroup.component).toBeUndefined();
-    expect(storageGroup.children.map((route) => route.name)).toEqual([
-      'StorageClusters', 'Aggregates', 'Volumes', 'Qtrees',
-    ]);
+    expect(storageRoute.children).toBeUndefined();
+    expect(adminRoute.children
+      .filter((route) => ['Aggregates', 'Volumes', 'Qtrees'].includes(route.name))
+      .every((route) => route.meta.isHidden)).toBe(true);
     expect(visibleRoutes.map((route) => route.name)).toEqual([
-      undefined,
+      'StorageClusters',
       'GroupTags',
       'UsersManagement',
       'Settings',
@@ -209,6 +210,7 @@ describe('router/routes and app shell', () => {
       'AuditEvents',
     ]);
     expect(Object.fromEntries(visibleRoutes.filter((route) => route.name).map((route) => [route.name, route.meta.icon]))).toEqual({
+      StorageClusters: 'i-ri-server-line',
       GroupTags: 'i-ri-price-tag-3-line',
       UsersManagement: 'i-ri-team-line',
       Settings: 'i-ri-settings-3-line',
@@ -219,9 +221,9 @@ describe('router/routes and app shell', () => {
     });
 
     const router = createRouter({ history: createMemoryHistory(), routes });
-    expect(Object.fromEntries(storageGroup.children.map((route) => [
-      route.name,
-      router.resolve({ name: route.name }).path,
+    expect(Object.fromEntries(['StorageClusters', 'Aggregates', 'Volumes', 'Qtrees'].map((name) => [
+      name,
+      router.resolve({ name }).path,
     ]))).toEqual({
       StorageClusters: '/admin/storage-clusters',
       Aggregates: '/admin/aggregates',
@@ -250,7 +252,7 @@ describe('router/routes and app shell', () => {
     }));
   });
 
-  it('normalizes nested menu paths for the storage-cluster submenu', () => {
+  it('renders storage clusters as a direct menu item without the third-level submenu', () => {
     const router = createRouter({ history: createMemoryHistory(), routes });
     const wrapper = shallowMount(RouteMenu, {
       global: {
@@ -271,14 +273,9 @@ describe('router/routes and app shell', () => {
       .find((option) => option.label === '系统管理');
     const storageOption = adminOption.children.find((option) => option.label === '存储集群');
 
-    expect(storageOption.key).toBe('admin-storage-resources');
-    expect(storageOption.index).not.toBe(adminOption.index);
-    expect(storageOption.children.map((option) => option.path)).toEqual([
-      '/admin/storage-clusters',
-      '/admin/aggregates',
-      '/admin/volumes',
-      '/admin/qtrees',
-    ]);
-    expect(storageOption.children.every((option) => !option.path.includes('//'))).toBe(true);
+    expect(storageOption.key).toBe('StorageClusters');
+    expect(storageOption.index).toBe('/admin/storage-clusters');
+    expect(storageOption.path).toBe('/admin/storage-clusters');
+    expect(storageOption.children).toBeUndefined();
   });
 });
