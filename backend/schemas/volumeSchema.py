@@ -70,3 +70,24 @@ class VolumeMonitoring(BaseModel):
     capacity: list[list]
     capacity_unit: Literal["TB"] = "TB"
     performance: list[VolumePerformanceSeries]
+
+
+class VolumeMonitoringToolInfo(BaseModel):
+    id: int
+    name: str
+    storage_cluster_id: int | None = None
+
+
+class VolumeMonitoringToolBinding(BaseModel):
+    group_id: int
+    group_name: str
+    project_id: int
+    project_name: str
+
+
+class VolumeMonitoringToolOut(BaseModel):
+    info: VolumeMonitoringToolInfo
+    binding: VolumeMonitoringToolBinding | None = None
+    capacity: list[list]
+    capacity_unit: Literal["TB"] = "TB"
+    performance: list[VolumePerformanceSeries]

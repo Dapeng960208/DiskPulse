@@ -98,6 +98,49 @@ def read_volume_monitoring(
     return result
 
 
+@router.get(
+    "/{volume_id}/monitoring/ai",
+    response_model=volumeSchema.VolumeMonitoringToolOut,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "get_volume_performance_monitoring",
+        "ai_description": "查询存储空间性能监控指标和关联项目，不包含目录路径",
+    },
+)
+def read_volume_monitoring_for_ai(
+    volume_id: int,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+    metrics: Annotated[list[str] | None, Query(alias="metrics[]")] = None,
+    db: Session = Depends(get_db),
+) -> volumeSchema.VolumeMonitoringToolOut:
+    try:
+        result = volumeCrud.get_volume_monitoring(db, volume_id, start_time, end_time, metrics)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    if result is None:
+        raise HTTPException(status_code=404, detail="Volume not found")
+    info = result["info"]
+    binding = result.get("binding")
+    return volumeSchema.VolumeMonitoringToolOut(
+        info={
+            "id": info.id,
+            "name": info.name,
+            "storage_cluster_id": info.storage_cluster_id,
+        },
+        binding=None if binding is None else {
+            "group_id": binding["group_id"],
+            "group_name": binding["group_name"],
+            "project_id": binding["project_id"],
+            "project_name": binding["project_name"],
+        },
+        capacity=result["capacity"],
+        capacity_unit=result["capacity_unit"],
+        performance=result["performance"],
+    )
+
+
 @router.put(
     "/{volume_id}",
     response_model=volumeSchema.Volume,

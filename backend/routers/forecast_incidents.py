@@ -327,7 +327,15 @@ def list_forecasts(
     return ForecastPage(content=[ForecastOut.model_validate(row) for row in rows], total=total)
 
 
-@router.get("/anomalies", response_model=AnomalyPage)
+@router.get(
+    "/anomalies",
+    response_model=AnomalyPage,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_name": "list_performance_anomalies",
+        "ai_description": "分页查询当前用户可见的存储集群性能异常",
+    },
+)
 def list_anomalies(
     current_user: CurrentUserDep,
     db: DBDep,
@@ -355,7 +363,15 @@ def list_anomalies(
     return AnomalyPage(content=[AnomalyOut.model_validate(row) for row in rows], total=total)
 
 
-@router.get("/incidents", response_model=IncidentPage)
+@router.get(
+    "/incidents",
+    response_model=IncidentPage,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_name": "list_incidents",
+        "ai_description": "分页查询当前用户可见的故障分析事件",
+    },
+)
 def list_incidents(
     current_user: CurrentUserDep,
     db: DBDep,

@@ -191,6 +191,7 @@ function toolStatusText(status) {
   return {
     running: '调用中',
     succeeded: '完成',
+    reused: '复用已获取结果',
     failed: '失败',
     awaiting_confirmation: '等待确认',
     cancelled: '已停止',
@@ -328,6 +329,8 @@ function retry() {
 function recoveryDescription(message) {
   return message?.recovery?.reason === 'tool_iteration_limit'
     ? '本轮工具查询已达到上限，回答已基于当前可用信息生成。'
+    : message?.recovery?.reason === 'tool_call_failed'
+      ? '本轮工具调用多次失败，回答已保留当前可用信息。'
     : '本轮工具参数多次无效，回答已保留当前可用信息。';
 }
 
@@ -602,6 +605,7 @@ onMounted(loadInitial);
 .tool-trace__name { color: var(--text-primary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 600; }
 .tool-trace__status { color: var(--text-secondary); }
 .tool-trace__status.is-succeeded { color: var(--el-color-success); }
+.tool-trace__status.is-reused { color: var(--el-color-success); }
 .tool-trace__status.is-failed { color: var(--el-color-danger); }
 .tool-trace__status.is-running { color: var(--primary-color); }
 .tool-trace__elapsed, .tool-trace__truncated { color: var(--text-tertiary); }

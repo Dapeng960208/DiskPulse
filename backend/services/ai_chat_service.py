@@ -29,11 +29,14 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """你是 DiskPulse AI 助手。你只能使用已授权的只读工具查询数据。
 不得编造工具结果，不得请求或泄露密码、令牌、密钥及个人敏感信息。
+工具调用成功后应优先依据已获得的结果回答；同一工具使用相同参数成功后不得再次查询。
+工具因参数或请求失败时，可先修改参数重试；无法补齐时仍须使用已有成功或空结果回答并明确数据缺口。
 回答应简洁、准确，并在数据不足时明确说明。"""
 
 _DISPLAY_TOOL_RESULT_LIMIT_BYTES = 32 * 1024
 _FAILED_RESPONSE = "抱歉，AI 服务暂时不可用，请稍后重试。"
 _MAX_TOOL_ARGUMENT_REPAIRS = 2
+_MAX_TOOL_CALL_FAILURE_REPAIRS = 2
 _REDACTED = "[REDACTED]"
 _HIDDEN_HISTORY_CONTENT = "该历史回复关联的项目权限已失效，内容已隐藏。"
 _TRACE_SENSITIVE_KEY_PARTS = (
@@ -60,10 +63,12 @@ _TRACE_SENSITIVE_KEY_PARTS = (
 _RECOVERY_BY_REASON = {
     "tool_iteration_limit": {"reason": "tool_iteration_limit", "action": "continue", "label": "继续查询"},
     "invalid_tool_arguments": {"reason": "invalid_tool_arguments", "action": "retry", "label": "重新查询"},
+    "tool_call_failed": {"reason": "tool_call_failed", "action": "retry", "label": "重新查询"},
 }
 _DEGRADED_FALLBACKS = {
     "tool_iteration_limit": "本轮已达到工具查询上限。我已保留已完成的查询结果；如需补充信息，请授权继续查询。",
     "invalid_tool_arguments": "本轮工具参数多次无效，无法继续执行查询。我已保留当前可用信息；请重新查询。",
+    "tool_call_failed": "本轮工具调用多次失败，无法继续执行查询。我已保留当前可用信息；请重新查询。",
 }
 _SYSTEM_MANAGEMENT_PROMPT = """你当前已获得系统管理工具授权；这是上述只读工具限制的受控例外。
 仅在用户明确要求时执行系统管理 CRUD 工具；不要将其用于普通查询。
@@ -671,6 +676,22 @@ def _tool_argument_repair_instruction(error: AIClientToolArgumentsError) -> dict
     }
 
 
+def _tool_call_key(call: AIClientToolCall) -> str:
+    return f"{call.name}:{json.dumps(_json_safe(call.arguments), ensure_ascii=False, sort_keys=True, separators=(',', ':'))}"
+
+
+def _tool_failure_repair_instruction(tool_names: list[str]) -> dict:
+    names = "、".join(dict.fromkeys(name.strip()[:128] or "未知工具" for name in tool_names))
+    return {
+        "role": "system",
+        "content": (
+            f"系统校验：工具 {names} 调用失败，失败调用没有产生可用数据。"
+            "请保留并使用本回合已成功的工具结果；如需补充失败信息，先修改参数后再尝试。"
+            "不得重复调用同名同参数且已成功的工具，也不得编造失败调用的结果。"
+        ),
+    }
+
+
 def _invalid_tool_trace(
     *,
     audit: AIAuditLog,
@@ -791,6 +812,7 @@ def stream_message(
         exclude_audit_id=audit.id,
     )
     tool_trace: list[dict] = []
+    successful_tool_results: dict[str, dict] = {}
     diagnosis_payloads: list[dict] = []
     emitted_text: list[str] = []
     final_text = ""
@@ -798,6 +820,7 @@ def stream_message(
     recovery: dict | None = None
     degraded_error_message: str | None = None
     terminal = False
+    tool_failure_repairs = 0
     turn_id = audit.id
     assistant_id = assistant.id
     audit_id = audit.id
@@ -875,6 +898,7 @@ def stream_message(
                 else:
                     final_text = raw_text
                 break
+            failed_tool_names: list[str] = []
             for sequence, call in enumerate(calls, start=1):
                 audit.tool_call_count += 1
                 call_id = f"{audit.id}:{iteration}:{sequence}"
@@ -900,7 +924,9 @@ def stream_message(
                     "status": "running",
                 }
                 started_at = monotonic()
-                if ai_quota_confirmation_service.is_quota_write_tool(call.name):
+                reused_result = False
+                is_quota_write = ai_quota_confirmation_service.is_quota_write_tool(call.name)
+                if is_quota_write:
                     try:
                         confirmation_pending = ai_quota_confirmation_service.prepare_confirmation(
                             db,
@@ -914,14 +940,22 @@ def stream_message(
                     except HTTPException as error:
                         result = {"ok": False, "error": str(error.detail)}
                 else:
-                    result = execute_tool(
-                        app=app,
-                        registry=registry,
-                        tool_name=call.name,
-                        arguments=call.arguments,
-                        user_id=user_id,
-                        current_user=current_user,
-                    )
+                    cache_key = _tool_call_key(call)
+                    cached_result = successful_tool_results.get(cache_key)
+                    if cached_result is not None:
+                        result = cached_result
+                        reused_result = True
+                    else:
+                        result = execute_tool(
+                            app=app,
+                            registry=registry,
+                            tool_name=call.name,
+                            arguments=call.arguments,
+                            user_id=user_id,
+                            current_user=current_user,
+                        )
+                        if result.get("ok") is True:
+                            successful_tool_results[cache_key] = result
                 if (
                     call.name == "get_incident_diagnosis"
                     and result.get("ok") is True
@@ -931,6 +965,7 @@ def stream_message(
                 elapsed_ms = max(0, round((monotonic() - started_at) * 1000))
                 if result.get("ok") is False:
                     audit.tool_failed_count += 1
+                    failed_tool_names.append(call.name)
                 display_result, truncated = _display_tool_result(result)
                 definition = registry.get(call.name)
                 # Review fix: unknown provider tool names must complete as safe failed calls.
@@ -942,7 +977,9 @@ def stream_message(
                 trace_entry.update(
                     {
                         "status": "failed" if result.get("ok") is False else (
+                            "reused" if reused_result else (
                             "awaiting_confirmation" if confirmation_pending is not None else "succeeded"
+                            )
                         ),
                         "elapsed_ms": elapsed_ms,
                         "result": display_result,
@@ -984,6 +1021,13 @@ def stream_message(
                     )
             if confirmation_pending is not None:
                 break
+            if failed_tool_names:
+                tool_failure_repairs += 1
+                if tool_failure_repairs > _MAX_TOOL_CALL_FAILURE_REPAIRS:
+                    recovery = dict(_RECOVERY_BY_REASON["tool_call_failed"])
+                    degraded_error_message = "AI 工具调用连续失败"
+                    break
+                messages.append(_tool_failure_repair_instruction(failed_tool_names))
             yield "status", {"turn_id": turn_id, "status": "thinking"}
         else:
             recovery = dict(_RECOVERY_BY_REASON["tool_iteration_limit"])

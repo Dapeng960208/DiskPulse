@@ -326,6 +326,7 @@ def test_registered_system_management_crud_tools_are_admin_only(monkeypatch):
         "update_aggregate": ("/aggregates/{aggregate_id}", "PUT"),
         "list_volumes": ("/volumes/", "GET"),
         "get_volume": ("/volumes/{volume_id}", "GET"),
+        "get_volume_performance_monitoring": ("/volumes/{volume_id}/monitoring/ai", "GET"),
         "list_group_tags": ("/group-tags", "GET"),
         "create_group_tag": ("/group-tags", "POST"),
         "get_group_tag": ("/group-tags/{group_tag_id}", "GET"),
