@@ -33,6 +33,7 @@
 - 存储容量接口必须遵守[容量单位 API 契约](./capacity-unit-contract.md)：保留 GB 原始字段、返回字段级 `capacity` 显示单位，并为曲线返回 `data_unit`。
 - 输入校验放 Pydantic schema；跨资源、权限、数据库存在性校验放 dependency 或 service。
 - Router 只做 HTTP 参数、权限依赖和响应组装；不得定义 Pydantic `BaseModel`，不得直接导入 SQLAlchemy/model，不得执行表级查询或写入。
+- 领域写操作的权限判断只能有一个权威入口。Service 已执行资源级授权时，Router 不得再复制一套更严格或不同条件的角色预检；如需提前拒绝，只能复用同一授权函数并覆盖角色矩阵测试。
 - Service 负责领域编排、权限后置校验、跨表组合、事务边界和错误转换。
 - 表级 `select/get/list/exists/create/update/delete/add/count` 必须放到 CRUD 文件，不在 router 或 service 重写表级 SQL。
 
@@ -47,6 +48,7 @@
 - 新增行为优先 TDD：先补失败测试，再实现，再验证。
 - 关键安全路径必须直接测试：JWT、LDAP bind、机器上报 token、权限拒绝、输入校验、错误响应。
 - API 测试必须覆盖成功路径和至少一个失败路径。
+- 容量单位、响应序列化、嵌套资源、权限矩阵或 Alembic head 发生变化时，必须同步所有横切契约测试；断言应以当前 API/迁移权威契约为准，禁止保留旧单位、旧 head 数量或旧角色能力预期。
 - 整体覆盖率门槛为 Statements、Branches、Functions、Lines 均不低于 85%；核心功能目标不低于 85%。
 - 涉及数据库的验证、跨方言兼容和性能治理按[数据库规范](../database/database-development-standard.md)执行。
 - 最终说明必须如实写明已执行验证、未执行项、原因、未验证范围和风险。

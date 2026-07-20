@@ -1,19 +1,20 @@
-# 前端全量与覆盖率保留既有失败
+# 前端全量与覆盖率曾保留既有失败
 
 ## 错误内容
 
-`pnpm test` 和扩展前端测试保留既有失败：操作按钮测试桩、LDAP 旧入口断言、AI Chat 缺 active Pinia、授权 mock 缺少 `getToken`，以及对 Windows CRLF 敏感的静态断言。覆盖率命令因此可能无法输出最终汇总。
+`pnpm test` 和扩展前端测试曾保留既有失败：操作按钮测试桩、LDAP 旧入口断言、AI Chat 缺 active Pinia、授权 mock 缺少 `getToken`，以及对 Windows CRLF 敏感的静态断言。共享契约变化后没有同步测试替身，使全量测试无法稳定充当回归门禁。
 
 ## 解决方案
 
-当前功能使用聚焦测试、lint、生产构建和浏览器验收确认无新增失败；11 条基线债务由独立任务修复后重新运行全量与覆盖率门禁，不在无关功能提交中顺带改写。
+同步公共组件 stub、Pinia 插件、认证 mock、排序预期和行为断言；删除对已废弃入口及源码形态的依赖。修复后必须重新运行全量测试与覆盖率，不能只依赖聚焦测试。
 
 ## 备注
 
 - 分类：`frontend`
-- 出现次数：3
+- 出现次数：4
 - 首次出现：2026-07-20 导航信息架构会话
-- 最近出现：2026-07-20 实时页面布局复查会话
+- 最近出现：2026-07-20 近三日代码审查修复会话
 - 出现记录：`sessions/2026-07-20-navigation-information-architecture/errors.md`
 - 出现记录：`sessions/2026-07-20-project-usage-reader-default/errors.md`
 - 出现记录：`sessions/2026-07-20-realtime-layout-audit/errors.md`；`detail-capacity-prediction-navigation.test.js` 在收集阶段经由 `AppHeader.vue -> users-api.js` 报 `CrudApi` 基类为 `undefined`，与本次实时布局变更无关。
+- 出现记录：`sessions/2026-07-20-recent-code-review-remediation/errors.md`；本次统一修复过时 stub、Pinia 和认证 mock 后，全量测试恢复通过。

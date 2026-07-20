@@ -60,12 +60,17 @@
 - 通用组件放 `frontend/src/components/`，基础/数据/表单组件分别放 `basic/`、`data/`、`form/`；复用业务流程放 `services/` 或 `composables/`，不把鉴权、校验、序列化和任务状态堆进大视图。
 - Admin API 按资源域放 `frontend/src/api/admin/`，不得恢复聚合 `frontend/src/api/admin.js`；路由定义放 `frontend/src/router/routes.js`，可访问性判断复用 `frontend/src/router/support/accessibility.js`，页面保持懒加载。
 - 表单校验、payload、筛选参数、时间转换和响应归一化应就近复用已有模块；出现跨页面重复逻辑时再提取为共享工具，禁止为目录形式而创建空壳抽象。
+- 包管理器版本必须写入 `packageManager`，不得把 `pnpm`、`npm` 或 `yarn` 作为浏览器运行时依赖。依赖升级后必须核对 lockfile 的实际解析结果；安全 override 或 patch 必须同时通过聚焦测试、全量测试、构建和安全审计，不能只以安装成功作为完成依据。
 
 ## 5. 测试、验证与交付
 
 - 修复或新增行为**必须 TDD**：先补失败测试，再实现，再验证。涉及 API、Mock、权限、公共组件、路由、状态、校验或序列化时必须补单测。
 - 标题层级、表格操作、资源链接、头像/消息排版、详情抽屉、权限可见性和 Mock 字段变更，测试至少覆盖允许与拒绝权限、默认/空/失败数据、关键交互，以及一项窄屏或长文本场景。
 - 静态策略门禁持续检查：禁止标题加描述性副标题、`TableActionButton` 的尺寸/朴素样式/语义色、轻量资源链接的字重与颜色，以及关键 Mock 字段。
+- 共享组件、Pinia store、认证工具或 API 模块契约变化时，必须同步测试中的公共 stub、Pinia 插件和 mock 导出，并至少运行所有直接引用者；禁止让局部测试桩长期复制过时接口。
+- 优先断言用户行为、发出的事件、API 参数和可见结果。只有不依赖格式的静态架构规则才允许读取源码断言；禁止用脆弱正则绑定赋值语句、空白、换行或已删除的实现形态。
+- Promise 断言必须由测试 `await` 或 `return`；禁止遗漏 `await expect(...).resolves/rejects`，避免断言在用例结束后才执行。
 - 聚焦验证使用 `cd frontend && pnpm exec vitest run <file> --coverage.enabled=false`；全量测试使用 `pnpm test`；显式覆盖率验证使用 `pnpm run test:coverage`。Vitest 当前对 Statements、Branches、Functions、Lines 均要求不低于 `80%`。
+- 依赖安全门禁使用 `pnpm run audit:high`，固定访问官方 npm audit 端点；高危和严重漏洞必须为零。无法立即消除的中低风险必须在交付记录中列出依赖路径、影响面和后续风险。
 - Dialog、Select、Popover 等 portal 组件测试必须挂载到 `document.body`，并在 `afterEach` 清理 DOM 和 wrapper。临时 Node 脚本按 ESM 语义编写，不假设 `require()` 可用。
 - 提交前运行受影响的 Vitest、必要的 `pnpm run lint` / 构建检查和 `git diff --check`；最终说明必须如实列出已验证项、未验证范围、原因与风险。
