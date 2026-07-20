@@ -143,7 +143,7 @@ def test_alert_crud_converts_aware_utc_bounds_to_system_local_naive():
     ) == datetime(2026, 7, 15, 10, 0)
 
 
-def test_local_alert_window_matches_vendor_and_diskpulse_events(db_session):
+def test_error_severity_window_matches_the_vendor_system_event_scope(db_session):
     db_session.add(
         models.StorageCluster(
             id=9,
@@ -182,13 +182,10 @@ def test_local_alert_window_matches_vendor_and_diskpulse_events(db_session):
         datetime(2026, 7, 15, 3, 0, tzinfo=timezone.utc),
     )
 
-    assert {(row["source"], row["severity"]) for row in rows} == {
-        ("netapp", "error"),
-        ("diskpulse", "warning"),
-    }
+    assert {(row["source"], row["severity"]) for row in rows} == {("netapp", "error")}
 
 
-def test_error_severity_crud_allows_only_supported_sources(db_session):
+def test_error_severity_crud_allows_only_vendor_system_event_sources(db_session):
     db_session.add(
         models.StorageCluster(
             id=10,
@@ -218,7 +215,7 @@ def test_error_severity_crud_allows_only_supported_sources(db_session):
         datetime(2026, 7, 15, 11, 0),
     )
 
-    assert {row["source"] for row in rows} == {"diskpulse", "netapp", "isilon"}
+    assert {row["source"] for row in rows} == {"netapp", "isilon"}
 
 
 def test_general_alert_query_excludes_vendor_system_events(db_session):

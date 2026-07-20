@@ -275,7 +275,7 @@ describe('storage cluster health analytics page', () => {
     expect(aggregateApi.fetchAggregateTrees).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the shared time filter outside tab content so charts retain the content area', async () => {
+  it('renders the shared time filter inside each analysis tab content', async () => {
     storageClusterApi.fetchCapacityChange.mockResolvedValue({
       data: [{ updated_at: initialRange[0], used: 1 }],
       data_unit: 'TB',
@@ -290,10 +290,10 @@ describe('storage cluster health analytics page', () => {
     });
     const wrapper = await mountPage();
     const tabs = wrapper.get('[data-testid="analytics-tabs"]');
-    const filter = wrapper.get('.storage-health-filter');
+    const filter = wrapper.get('[data-tab="capacity"] .storage-health-filter');
     const datePicker = filter.findComponent({ name: 'ElDatePicker' });
 
-    expect(tabs.find('.storage-health-filter').exists()).toBe(false);
+    expect(tabs.find('.storage-health-filter').exists()).toBe(true);
     expect(filter.exists()).toBe(true);
     expect(datePicker.attributes('format')).toBe('YYYY-MM-DD HH:mm:ss');
     expect(datePicker.attributes('start-placeholder')).toBe('开始日期时间');
@@ -304,6 +304,19 @@ describe('storage cluster health analytics page', () => {
       ariaLabel: '存储集群已使用容量趋势',
       height: '520px',
     });
+
+    await selectTab(wrapper, 'performance');
+
+    expect(wrapper.get('[data-tab="performance"] .storage-health-filter').exists()).toBe(true);
+    expect(wrapper.get('[data-tab="performance"] .performance-limit').exists()).toBe(true);
+
+    await selectTab(wrapper, 'faults');
+
+    expect(wrapper.get('[data-tab="faults"] .storage-health-filter').exists()).toBe(true);
+
+    await selectTab(wrapper, 'incidents');
+
+    expect(wrapper.get('[data-tab="incidents"] .storage-health-filter').exists()).toBe(true);
 
     await selectTab(wrapper, 'distribution');
 
