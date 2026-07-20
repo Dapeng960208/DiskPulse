@@ -41,6 +41,7 @@
 
 - 模型、迁移、查询、索引、时序数据和 Redis 的权威规则见[数据库规范](../database/database-development-standard.md)；后端实现不得在 router 中绕过这些边界。
 - Router 负责 HTTP 参数、权限依赖和响应组装；Service 负责跨资源编排、事务边界和错误转换；CRUD 负责表级读取与写入。
+- 时间转换必须显式指定业务时区。DiskPulse 本地墙上时间使用 `Asia/Shanghai`；禁止用无参数 `astimezone()`、`datetime.fromtimestamp()` 或宿主机环境变量推断业务时区。Unix 时间戳先按 UTC 瞬时解释，向外部系统发送 UTC 时间时显式转换为 `Z`，并用非 UTC runner 回归测试证明结果与宿主机时区无关。
 - 真实配置、密码文件和密钥不得提交。配置、数据模型或迁移变化必须同步对应功能专题、架构说明和验证。
 
 ## 6. 测试与验证

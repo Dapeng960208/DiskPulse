@@ -60,7 +60,7 @@
 - 通用组件放 `frontend/src/components/`，基础/数据/表单组件分别放 `basic/`、`data/`、`form/`；复用业务流程放 `services/` 或 `composables/`，不把鉴权、校验、序列化和任务状态堆进大视图。
 - Admin API 按资源域放 `frontend/src/api/admin/`，不得恢复聚合 `frontend/src/api/admin.js`；路由定义放 `frontend/src/router/routes.js`，可访问性判断复用 `frontend/src/router/support/accessibility.js`，页面保持懒加载。
 - 表单校验、payload、筛选参数、时间转换和响应归一化应就近复用已有模块；出现跨页面重复逻辑时再提取为共享工具，禁止为目录形式而创建空壳抽象。
-- 包管理器版本必须写入 `packageManager`，不得把 `pnpm`、`npm` 或 `yarn` 作为浏览器运行时依赖。依赖升级后必须核对 lockfile 的实际解析结果；安全 override 或 patch 必须同时通过聚焦测试、全量测试、构建和安全审计，不能只以安装成功作为完成依据。
+- 包管理器版本必须写入 `packageManager`，不得把 `pnpm`、`npm` 或 `yarn` 作为浏览器运行时依赖。仓库只保留该包管理器的权威 lockfile；GitHub Actions、部署脚本和本地门禁必须使用同一包管理器与 frozen lockfile 安装，禁止混用过期的 `package-lock.json`、`pnpm-lock.yaml` 或对应安装命令。依赖升级后必须核对 lockfile 的实际解析结果；安全 override 或 patch 必须同时通过聚焦测试、全量测试、构建和安全审计，不能只以安装成功作为完成依据。
 
 ## 5. 测试、验证与交付
 

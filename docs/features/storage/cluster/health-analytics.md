@@ -27,14 +27,14 @@ PowerScale 事件来自 event group/list。逐存储空间性能先通过 `/plat
 
 存储集群性能分析和存储空间性能监控都按同一个 `Volume.performance_object_id` 查询。缺少稳定身份或采集记录无法关联时不做名称猜测，对应卷性能返回空数据；容量趋势仍可独立展示。部署迁移后需要先成功执行一次容量采集，现有 `Volume` 才会补齐厂商身份。
 
-OneFS event list 外层记录中的 `events[]` 按单条设备事件展开；event group 使用 `last_event`（缺失时使用 `time_noticed`）作为发生时间，并从 `causes` 取得事件代码和描述。OneFS 整数 Unix 时间戳统一换算为系统本地 naive 时间后入库。
+OneFS event list 外层记录中的 `events[]` 按单条设备事件展开；event group 使用 `last_event`（缺失时使用 `time_noticed`）作为发生时间，并从 `causes` 取得事件代码和描述。OneFS 整数 Unix 时间戳统一换算为 DiskPulse 应用时区 `Asia/Shanghai` 的 naive 墙上时间后入库，不跟随 worker 或 CI runner 的操作系统时区。
 
 “事件对象”表示厂商事件关联的节点，而不是日志正文摘要。NetApp EMS 的原始对象 ID 通常是 ONTAP 节点 UUID，看起来像哈希但实际是设备提供的稳定节点标识；页面优先从原始事件的 `node.name` 显示节点名称，名称缺失时才回退 UUID。Isilon/PowerScale 的数字来自 OneFS 事件 `devid`（或 `specifier.devid`），表示事件所属节点/设备编号，页面显示为“节点 N”。原始 ID 仍随接口返回，并在页面悬停提示中保留，便于与厂商日志核对。
 
 ## 采集与保留边界
 
 - 设备事件每分钟采集；首次回看 24 小时，之后回看最近 5 分钟，并按厂商事件 ID 去重。
-- `storage_alerts.updated_at` 沿用系统本地 naive 时间口径；厂商事件携带时区时先换算为系统本地时间再去除时区信息。NetApp 增量查询的 `since` 单独换算为 UTC `Z` 格式，不能据此把事件入库时间描述为 UTC。
+- `storage_alerts.updated_at` 沿用 DiskPulse 应用时区 `Asia/Shanghai` 的 naive 墙上时间口径；厂商事件携带时区时先显式换算到该时区再去除时区信息，不能使用无参数 `astimezone()` 或 `datetime.fromtimestamp()` 隐式继承宿主机时区。NetApp 增量查询的 `since` 单独换算为 UTC `Z` 格式，不能据此把事件入库时间描述为 UTC。
 - 性能指标每 5 分钟采集，从功能启用后开始累计，不回灌设备历史性能。
 - `storage_performance_metrics` 保留 180 天；所有分析查询和导出时间范围最多 180 天。
 - 本功能不新增 `storage_alerts` 清理任务，其既有历史数据仍按系统原有策略保留，但超过 180 天不能通过健康分析接口查询。
@@ -84,7 +84,7 @@ section=capacity|severity|latency|faults|all
 
 ## 测试与验证边界
 
-自动化验证覆盖厂商响应解析、PowerScale 资源版本、path dataset、workload 映射、延迟/IOPS/吞吐量统一映射、NetApp 延迟单位和嵌套指标转换、性能条数上限、多指标与本地多对象筛选、图表长横轴标签布局、系统本地事件时间与 UTC `since`、来源白名单、严重级别映射、事件去重、系统事件先过滤后分页、可读事件对象、统计口径、180 天参数校验、导出摘要与公式转义，以及前端搜索、翻页、空态和不支持状态。
+自动化验证覆盖厂商响应解析、PowerScale 资源版本、path dataset、workload 映射、延迟/IOPS/吞吐量统一映射、NetApp 延迟单位和嵌套指标转换、性能条数上限、多指标与本地多对象筛选、图表长横轴标签布局、`Asia/Shanghai` 事件时间与 UTC `since` 的宿主机时区无关转换、来源白名单、严重级别映射、事件去重、系统事件先过滤后分页、可读事件对象、统计口径、180 天参数校验、导出摘要与公式转义，以及前端搜索、翻页、空态和不支持状态。
 
 真实 NetApp、PowerScale、PostgreSQL、MySQL、QuestDB 和登录浏览器的冒烟仍需在部署环境执行，重点确认设备权限、实际资源版本、事件字段、对象名称、延迟单位、指标可用性、QuestDB TTL、数据库迁移和浏览器下载行为。在这些验证完成前，不能把外部系统兼容性描述为已验证。
 

@@ -79,7 +79,7 @@ sequenceDiagram
 | `throughput_total` | B/s | 总吞吐量 | 平均吞吐量 |
 | `collected_at` | 设备采集时间 | 时间范围聚合依据 | 所有性能筛选 |
 
-PowerScale 的 `latency_read`、`latency_write`、`latency_other` 是 `sum/count` 计数器：采集器先对三类计数合并计算总延迟，再从微秒转换为毫秒。`protocol_ops`（兼容旧响应 `ops`）写入 `iops_total`；`bytes_in + bytes_out` 写入 `throughput_total`。字段缺失保持 `null`，不伪造 `0`。
+PowerScale 的 `latency_read`、`latency_write`、`latency_other` 是 `sum/count` 计数器：采集器先对三类计数合并计算总延迟，再从微秒转换为毫秒。`protocol_ops`（兼容旧响应 `ops`）写入 `iops_total`；`bytes_in + bytes_out` 写入 `throughput_total`。字段缺失保持 `null`，不伪造 `0`。设备 Unix 时间戳按 UTC 瞬时解释，再显式换算为 DiskPulse 应用时区 `Asia/Shanghai` 的 naive 墙上时间，结果不能依赖宿主机时区。
 
 ### 4.2 页面分析行为
 
