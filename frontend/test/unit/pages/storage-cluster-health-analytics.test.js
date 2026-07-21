@@ -13,6 +13,7 @@ const storageClusterApi = vi.hoisted(() => ({
   fetchTopLatency: vi.fn(),
   fetchRepeatedFaults: vi.fn(),
   fetchSystemEvents: vi.fn(),
+  fetchSystemEventDetail: vi.fn(),
   exportAnalytics: vi.fn(),
 }));
 const aggregateApi = vi.hoisted(() => ({
@@ -476,6 +477,49 @@ describe('storage cluster health analytics page', () => {
     expect(wrapper.html()).toContain('label="事件对象"');
     expect(wrapper.html()).toContain('prop="object_name"');
     expect(wrapper.text()).not.toContain('扩容');
+  });
+
+  it('explains repeated event fingerprints and opens the normalized vendor log', async () => {
+    storageClusterApi.fetchRepeatedFaults.mockResolvedValue({
+      data: [{
+        source: 'netapp',
+        fingerprint: 'netapp:secd.authsys.lookup.failed:node:node-1',
+        event_code: 'secd.authsys.lookup.failed',
+        association_type: 'fault_log',
+        association_type_label: '故障日志',
+        title_zh: '认证服务查询失败',
+        description_zh: '名称服务或认证后端查询失败，需要核对网络和目录服务。',
+        sample_event_id: 91,
+        log_excerpt: 'Unable to retrieve credentials',
+        count: 3,
+      }],
+    });
+    storageClusterApi.fetchSystemEventDetail.mockResolvedValue({
+      id: 91,
+      source: 'netapp',
+      event_code: 'secd.authsys.lookup.failed',
+      title_zh: '认证服务查询失败',
+      association_type_label: '故障日志',
+      description: 'Unable to retrieve credentials for SVM_nas',
+      fingerprint: 'netapp:secd.authsys.lookup.failed:node:node-1',
+      object_name: 'node-a',
+      occurred_at: '2026-07-14 18:54:00',
+    });
+    const wrapper = await mountPage();
+
+    await selectTab(wrapper, 'faults');
+
+    expect(wrapper.text()).toContain('认证服务查询失败');
+    expect(wrapper.text()).toContain('故障日志');
+    expect(wrapper.text()).toContain('Unable to retrieve credentials');
+    expect(wrapper.text()).not.toContain('故障指纹 netapp:');
+
+    await wrapper.get('[data-testid="repeated-event-log-91"]').trigger('click');
+    await flushPromises();
+
+    expect(storageClusterApi.fetchSystemEventDetail).toHaveBeenCalledWith(42, 91);
+    expect(wrapper.text()).toContain('Unable to retrieve credentials for SVM_nas');
+    expect(wrapper.text()).toContain('原始事件日志');
   });
 
   it('searches and paginates system events with 20 rows by default', async () => {

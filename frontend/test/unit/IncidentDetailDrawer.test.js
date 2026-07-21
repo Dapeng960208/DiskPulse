@@ -239,4 +239,52 @@ describe('IncidentDetailDrawer', () => {
       expect.stringContaining('系统创建事件'),
     ]);
   });
+
+  it('shows Chinese evidence semantics and data-gap explanations without raw machine codes', async () => {
+    incidentApi.fetchIncident.mockResolvedValueOnce({
+      ...incident,
+      evidence: [{
+        id: 7,
+        source: 'vendor_event',
+        source_ref: 'storage_alert:91',
+        evidence_type: 'severe_vendor_event',
+        observed_at: '2026-07-20T07:15:00Z',
+        data_gaps: [],
+        presentation: {
+          group_key: 'vendor_event',
+          group_label: '厂商系统事件与故障日志',
+          title: '认证服务查询失败',
+          summary: 'NetApp 事件 secd.authsys.lookup.failed：名称服务或认证后端查询失败。',
+          scope_label: '节点 node-a',
+          technical_ref: 'storage_alert:91',
+          association_type: 'fault_log',
+          association_type_label: '故障日志',
+          event_code: 'secd.authsys.lookup.failed',
+          log_excerpt: 'Unable to retrieve credentials for SVM_nas',
+          detail_available: true,
+        },
+      }],
+      timeline: [],
+      diagnosis: {
+        confidence: 'medium',
+        candidates: [],
+        data_gaps: ['asset_mapping_missing'],
+        data_gap_details: [{
+          code: 'asset_mapping_missing',
+          label: '细粒度资产映射缺失',
+          description: '事件已关联到存储集群，但尚未映射到卷、Qtree 或项目。',
+          impact: '不影响查看厂商原始事件日志。',
+        }],
+      },
+    });
+    const wrapper = await mountDrawer();
+
+    expect(wrapper.text()).toContain('厂商系统事件与故障日志');
+    expect(wrapper.text()).toContain('故障日志');
+    expect(wrapper.text()).toContain('认证服务查询失败');
+    expect(wrapper.text()).toContain('Unable to retrieve credentials for SVM_nas');
+    expect(wrapper.text()).toContain('细粒度资产映射缺失');
+    expect(wrapper.text()).toContain('不影响查看厂商原始事件日志');
+    expect(wrapper.text()).not.toContain('asset_mapping_missing');
+  });
 });

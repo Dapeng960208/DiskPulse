@@ -127,3 +127,47 @@ def test_vendor_info_and_warning_events_stay_in_system_events_without_creating_i
 
     assert handled == 1
     assert [item.source_ref for item in recorded] == ["netapp:critical"]
+
+
+def test_vendor_event_asset_uses_stable_node_identity_without_a_false_mapping_gap():
+    from celery_tasks.tasks import forecast_incidents as tasks
+
+    cluster = SimpleNamespace(id=7, storage_type="netapp", name="cluster-7")
+    event = SimpleNamespace(
+        source="netapp",
+        related_type="node",
+        related_info={
+            "object_id": "node-uuid-7",
+            "raw": {"node": {"uuid": "node-uuid-7", "name": "node-a"}},
+        },
+    )
+
+    asset, quality = tasks._vendor_event_asset(cluster, event)
+
+    assert quality == "good"
+    assert asset.asset_type == "storage_node"
+    assert asset.asset_id == "node-uuid-7"
+    assert asset.storage_cluster_id == 7
+    assert asset.display_name == "node-a"
+
+
+def test_vendor_event_wall_time_is_converted_from_asia_shanghai_to_utc(monkeypatch):
+    from celery_tasks.tasks import forecast_incidents as tasks
+
+    cluster = SimpleNamespace(id=7, storage_type="netapp", name="cluster-7")
+    event = SimpleNamespace(
+        id=1,
+        source="netapp",
+        external_event_id="node-a:334142",
+        severity="critical",
+        updated_at=datetime(2026, 7, 21, 1, 3, 30),
+    )
+    session = _VendorEventSession(cluster, [event])
+    recorded = []
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: nullcontext(session))
+    monkeypatch.setattr(tasks, "_vendor_event_asset", lambda *_args: (_asset(), "good"))
+    monkeypatch.setattr(tasks, "_notifications_after_commit", lambda _notifications: None)
+    monkeypatch.setattr(tasks, "_record_correlation", lambda _db, **kwargs: recorded.append(kwargs["envelope"]))
+
+    assert tasks.process_vendor_event_evidence(storage_cluster_id=7) == 1
+    assert recorded[0].observed_at == datetime(2026, 7, 20, 17, 3, 30, tzinfo=timezone.utc)
