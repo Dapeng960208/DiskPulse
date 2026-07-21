@@ -110,6 +110,24 @@ const Table = defineComponent({
   },
 });
 
+const TableColumn = defineComponent({
+  name: 'ElTableColumn',
+  setup(_, { slots }) {
+    const row = {
+      id: 91,
+      sample_event_id: 91,
+      source: 'netapp',
+      event_code: 'secd.authsys.lookup.failed',
+      association_type: 'fault_log',
+      association_type_label: '故障日志',
+      title_zh: '认证服务查询失败',
+      object_id: 'node-a',
+      object_name: 'node-a',
+    };
+    return () => h('div', [slots.header?.(), slots.default?.({ row })]);
+  },
+});
+
 const DiskUsage = defineComponent({
   name: 'DiskUsage',
   props: { data: { type: Array, default: () => [] } },
@@ -169,6 +187,7 @@ async function mountPage() {
         ElCard: passthrough('ElCard'),
         ElDescriptions: passthrough('ElDescriptions'),
         ElDescriptionsItem: passthrough('ElDescriptionsItem'),
+        ElDialog: passthrough('ElDialog'),
         ElFormItem: passthrough('ElFormItem'),
         ElDatePicker: DatePicker,
         ElInput: Input,
@@ -176,6 +195,9 @@ async function mountPage() {
         ElOption: passthrough('ElOption', 'option'),
         ElPagination: Pagination,
         ElTable: Table,
+        ElTableColumn: TableColumn,
+        ElTag: passthrough('ElTag'),
+        TableActionButton: passthrough('TableActionButton', 'button'),
         ElTabs: Tabs,
         ElTabPane: TabPane,
         ElDropdown: Dropdown,
@@ -519,7 +541,7 @@ describe('storage cluster health analytics page', () => {
 
     expect(storageClusterApi.fetchSystemEventDetail).toHaveBeenCalledWith(42, 91);
     expect(wrapper.text()).toContain('Unable to retrieve credentials for SVM_nas');
-    expect(wrapper.text()).toContain('原始事件日志');
+    expect(wrapper.findComponent({ name: 'ElDialog' }).attributes('title')).toBe('原始事件日志');
   });
 
   it('searches and paginates system events with 20 rows by default', async () => {

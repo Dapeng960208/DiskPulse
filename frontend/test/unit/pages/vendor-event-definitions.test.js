@@ -37,12 +37,36 @@ const DataTable = defineComponent({
   },
 });
 
+const TableColumn = defineComponent({
+  name: 'ElTableColumn',
+  setup(_, { slots }) {
+    const row = {
+      id: 1,
+      storage_type: 'netapp',
+      event_code: 'secd.authsys.lookup.failed',
+      association_type: 'fault_log',
+      title_zh: '认证服务查询失败',
+      review_status: 'reviewed',
+      is_active: true,
+    };
+    return () => h('div', [slots.header?.(), slots.default?.({ row })]);
+  },
+});
+
+const QueryForm = defineComponent({
+  name: 'QueryForm',
+  emits: ['query', 'reset'],
+  setup(_, { slots }) {
+    return () => h('form', [slots.default?.(), slots.actions?.()]);
+  },
+});
+
 async function mountPage() {
   const wrapper = shallowMount(VendorEventDefinitionPage, {
     global: {
       stubs: {
         DataTable,
-        QueryForm: passthrough('QueryForm', 'form'),
+        QueryForm,
         TableActionButton: passthrough('TableActionButton', 'button'),
         ElButton: passthrough('ElButton', 'button'),
         ElDialog: passthrough('ElDialog'),
@@ -51,7 +75,7 @@ async function mountPage() {
         ElInput: passthrough('ElInput', 'input'),
         ElSelect: passthrough('ElSelect', 'select'),
         ElOption: passthrough('ElOption', 'option'),
-        ElTableColumn: passthrough('ElTableColumn'),
+        ElTableColumn: TableColumn,
         ElTag: passthrough('ElTag'),
       },
     },

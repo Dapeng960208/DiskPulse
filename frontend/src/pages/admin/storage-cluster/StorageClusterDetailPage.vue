@@ -5,6 +5,7 @@ import {
   ElDatePicker,
   ElDescriptions,
   ElDescriptionsItem,
+  ElDialog,
   ElDropdown,
   ElDropdownItem,
   ElDropdownMenu,
@@ -16,6 +17,7 @@ import {
   ElSelect,
   ElTable,
   ElTableColumn,
+  ElTag,
   ElTabPane,
   ElTabs,
 } from 'element-plus';
@@ -33,6 +35,7 @@ import { useQuery } from '@/composables/query';
 import { getDefaultTime } from '@/composables/common';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
 import { formatCapacity } from '@/utils/capacity';
+import TableActionButton from '@/components/basic/TableActionButton.vue';
 const ClusterIncidentsTab = defineAsyncComponent(() => import('./components/ClusterIncidentsTab.vue'));
 const ClusterResourceListTab = defineAsyncComponent(() => import('./components/ClusterResourceListTab.vue'));
 
@@ -50,10 +53,18 @@ const resourceTabNames = ['aggregates', 'volumes', 'qtrees'];
 const severity = ref({ counts: {}, total: 0, sources: {} });
 const faults = ref({ data: [] });
 const systemEvents = ref({ data: [] });
+const systemEventDetail = ref(null);
+const systemEventDetailVisible = ref(false);
 const systemEventFilters = reactive({ keyword: '', severity: '' });
 const systemEventPagination = reactive({ page: 1, pageSize: 20, total: 0 });
 const loaded = reactive({ capacity: false, distribution: false, performance: false, faults: false });
-const loading = reactive({ capacity: false, performance: false, faults: false, systemEvents: false });
+const loading = reactive({
+  capacity: false,
+  performance: false,
+  faults: false,
+  systemEvents: false,
+  systemEventDetail: false,
+});
 
 const shortcuts = [
   { text: '一天内', value: () => getDefaultTime(8) },
@@ -231,6 +242,25 @@ async function loadSystemEvents(resetPage = false) {
     ElMessage.error('加载系统事件失败，请稍后重试');
   } finally {
     loading.systemEvents = false;
+  }
+}
+
+async function openSystemEventDetail(row) {
+  const eventId = row?.sample_event_id || row?.id;
+  if (!clusterId.value || !eventId) return;
+  loading.systemEventDetail = true;
+  systemEventDetailVisible.value = true;
+  systemEventDetail.value = null;
+  try {
+    systemEventDetail.value = await storageClusterApi.fetchSystemEventDetail(
+      clusterId.value,
+      eventId,
+    );
+  } catch {
+    systemEventDetailVisible.value = false;
+    ElMessage.error('加载厂商事件日志失败，请稍后重试');
+  } finally {
+    loading.systemEventDetail = false;
   }
 }
 
@@ -660,8 +690,27 @@ onBeforeMount(() => {
                     label="来源"
                     prop="source" />
                   <ElTableColumn
-                    label="故障指纹"
-                    prop="fingerprint"
+                    label="事件代码与含义"
+                    min-width="260"
+                    show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <strong>{{ row.title_zh || '未收录的厂商事件代码' }}</strong>
+                      <div class="repeated-event__code">{{ row.event_code || '-' }}</div>
+                    </template>
+                  </ElTableColumn>
+                  <ElTableColumn
+                    label="关联类型"
+                    min-width="130">
+                    <template #default="{ row }">
+                      <ElTag :type="row.association_type === 'fault_log' ? 'danger' : 'warning'">
+                        {{ row.association_type_label || '未分类厂商事件' }}
+                      </ElTag>
+                    </template>
+                  </ElTableColumn>
+                  <ElTableColumn
+                    label="日志摘要"
+                    prop="log_excerpt"
+                    min-width="260"
                     show-overflow-tooltip />
                   <ElTableColumn
                     label="次数"
@@ -672,6 +721,17 @@ onBeforeMount(() => {
                   <ElTableColumn
                     label="最近发生"
                     prop="last_occurred_at" />
+                  <ElTableColumn
+                    label="操作"
+                    align="right"
+                    width="110">
+                    <template #default="{ row }">
+                      <TableActionButton
+                        :data-testid="`repeated-event-log-${row.sample_event_id}`"
+                        action="detail"
+                        @click="openSystemEventDetail(row)">查看日志</TableActionButton>
+                    </template>
+                  </ElTableColumn>
                 </ElTable>
               </div>
             </div>
@@ -720,9 +780,23 @@ onBeforeMount(() => {
                   label="级别"
                   prop="severity" />
                 <ElTableColumn
-                  label="事件代码"
-                  prop="event_code"
-                  show-overflow-tooltip />
+                  label="事件代码与含义"
+                  min-width="250"
+                  show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <strong>{{ row.title_zh || '未收录的厂商事件代码' }}</strong>
+                    <div class="repeated-event__code">{{ row.event_code || '-' }}</div>
+                  </template>
+                </ElTableColumn>
+                <ElTableColumn
+                  label="关联类型"
+                  min-width="130">
+                  <template #default="{ row }">
+                    <ElTag :type="row.association_type === 'fault_log' ? 'danger' : row.association_type === 'performance_anomaly' ? 'warning' : 'info'">
+                      {{ row.association_type_label || '未分类厂商事件' }}
+                    </ElTag>
+                  </template>
+                </ElTableColumn>
                 <ElTableColumn
                   label="事件对象"
                   prop="object_name">
@@ -739,6 +813,16 @@ onBeforeMount(() => {
                 <ElTableColumn
                   label="发生时间"
                   prop="occurred_at" />
+                <ElTableColumn
+                  label="操作"
+                  align="right"
+                  width="110">
+                  <template #default="{ row }">
+                    <TableActionButton
+                      action="detail"
+                      @click="openSystemEventDetail(row)">查看日志</TableActionButton>
+                  </template>
+                </ElTableColumn>
               </ElTable>
               <ElPagination
                 v-if="systemEventPagination.total > 0"
@@ -763,6 +847,36 @@ onBeforeMount(() => {
         </ElTabPane>
       </ElTabs>
     </ElCard>
+    <ElDialog
+      v-model="systemEventDetailVisible"
+      title="原始事件日志"
+      width="min(720px, 96vw)">
+      <div
+        v-loading="loading.systemEventDetail"
+        class="system-event-detail">
+        <ElDescriptions
+          v-if="systemEventDetail"
+          :column="2"
+          border>
+          <ElDescriptionsItem label="存储类型">{{ systemEventDetail.source || '-' }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="关联类型">{{ systemEventDetail.association_type_label || '未分类厂商事件' }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="事件代码">{{ systemEventDetail.event_code || '-' }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="中文含义">{{ systemEventDetail.title_zh || '未收录的厂商事件代码' }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="事件对象">{{ systemEventDetail.object_name || systemEventDetail.object_id || '集群' }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="发生时间">{{ systemEventDetail.occurred_at || '-' }}</ElDescriptionsItem>
+          <ElDescriptionsItem
+            label="规范化日志"
+            :span="2"><pre>{{ systemEventDetail.description || '-' }}</pre></ElDescriptionsItem>
+          <ElDescriptionsItem
+            label="中文说明"
+            :span="2">{{ systemEventDetail.description_zh || '该代码尚未维护中文说明，请结合规范化日志核查。' }}</ElDescriptionsItem>
+        </ElDescriptions>
+        <details v-if="systemEventDetail?.fingerprint">
+          <summary>技术关联信息</summary>
+          <code>{{ systemEventDetail.fingerprint }}</code>
+        </details>
+      </div>
+    </ElDialog>
   </div>
 </template>
 
@@ -779,6 +893,11 @@ onBeforeMount(() => {
   min-height: 0;
   height: 100%;
 }
+.repeated-event__code { margin-top: 2px; color: var(--text-secondary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-size-xs); }
+.system-event-detail { display: grid; gap: var(--spacing-sm); min-height: 120px; }
+.system-event-detail pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-size-sm); }
+.system-event-detail details { color: var(--text-secondary); }
+.system-event-detail code { display: block; margin-top: var(--spacing-xs); overflow-wrap: anywhere; }
 
 .storage-health-page__card :deep(.el-card__body) {
   display: flex;

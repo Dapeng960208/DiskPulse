@@ -251,6 +251,7 @@ describe('router/routes and app shell', () => {
       Settings: 'i-ri-settings-3-line',
       AICenter: 'i-ri-robot-2-line',
       ForecastGovernance: 'i-ri-line-chart-line',
+      VendorEventDefinitions: 'i-ri-links-line',
       IncidentCenter: 'i-ri-alarm-warning-line',
       AuditEvents: 'i-ri-file-search-line',
     });
