@@ -14,29 +14,31 @@
 - `capacity_forecasts` 使用有硬限额的存储集群、卷、Qtree、项目组和用户目录的 45 个 UTC 日窗口。每天保留最大已用值；有效日少于 30 或覆盖率小于 80% 时只保存 `capacity_history_insufficient` 数据缺口。满足条件后以 Theil-Sen 中位斜率和残差 P10/P50/P90 生成未来 30 天曲线及三条耗尽日期。
 - `anomaly_observations` 对 QuestDB 性能样本按 5 分钟桶计算 P95 延迟、IOPS、吞吐量；以过去 28 天同星期/小时中位数与 MAD 建模，绝对鲁棒 Z 分数至少 3.5 且连续三个相邻 5 分钟点才写入。零 MAD 只在数值不同于基线时使用有界高分，孤立尖峰或存在采样空档的三点均不写入。
 - `incident_evidence` 的唯一键是 `(source, source_ref)`，只保存引用、类型、时间、缺口和哈希。回放或重算不覆盖原始事实；同算法版本的分析结果以各自唯一键幂等。
-- 无法把厂商事件或性能对象映射到卷/Qtree/项目时，使用集群级 `AssetRef` 并记录 `asset_mapping_missing`。
+- 事件至少已归属存储集群、但节点/卷/Qtree/项目的稳定映射链路不完整时，使用当前可确认的 `AssetRef` 并记录 `asset_mapping_missing`。该代码的用户语义是“资产映射不完整”；厂商事件已有稳定节点身份时节点级归属已经完成，不记录该缺口。它不表示事件代码或厂商日志缺失，也不影响查看规范化日志和发生时间。
 
 ## 事件与诊断
 
-事件按 `storage_cluster + AssetRef + category + 30 分钟 UTC 桶` 归并；同键已解决事件在 24 小时内有新证据时由系统重开。人工状态只允许 `open → acknowledged → investigating → mitigated → resolved` 的相邻迁移。Incident 是紧急处置队列，而不是原始告警镜像：厂商系统事件和 DiskPulse 容量告警仅在 `critical` 时准入；性能异常仅在 `critical` 时准入；P90 容量耗尽日期仅在未来 7 天内准入；监控质量快照和采集失败不创建 Incident。被拦截的记录仍完整保留在告警、系统事件、健康分析、预测和采集账本中。
+事件按 `storage_cluster + AssetRef + category + 30 分钟 UTC 桶` 归并；同键已解决事件在 24 小时内有新证据时由系统重开。人工状态只允许 `open → acknowledged → investigating → mitigated → resolved` 的相邻迁移。Incident 是紧急处置队列，而不是原始告警镜像：DiskPulse 容量告警仅在 `critical` 时准入；性能异常仅在 `critical` 时准入；P90 容量耗尽日期仅在未来 7 天内准入；监控质量快照和采集失败不创建 Incident。
 
-事件列表按最近证据发现时间倒序分页；同一发现时间再按事件创建时间和 ID 稳定排序，人工编辑不会改变处置队列的事件先后。事件详情将关联证据按处置语义展示：先汇总同类依据，再逐项给出异常结论、影响范围和发现时间；证据与时间线也均按发生时间由近到远展示。`source_ref` 是不可变的内部追溯号，仅保留在可展开的“技术关联信息”中；展开后明确关联对象、证据范围、证据类型和“原始关联标识”，它不作为默认表格字段。监控质量引用 `quality:<cluster>:<stream>:<timestamp>:<reason>` 在服务端转为中文采集链路及“覆盖不足”或“采集过期”等结论，前端不解析该内部格式。时间线返回可读的动作、说明和操作人；新写入的“关联新证据”会记录对应的简短说明，历史记录无法重建细节时使用中性说明。
+厂商事件还需同时考虑事件实例严重级别和目录语义：已启用且已审核的 `fault_log` 只在实例为 `critical` 时准入内部 `device_fault`；已启用且已审核的 `system_activity`、`performance_anomaly`、`capacity_threshold` 或 `telemetry_degradation` 不得因严重级别或指纹重复进入 `device_fault`。目录缺失、待审核或停用时，`critical` 原始事件可保守进入该内部类别，但用户可见名称统一为“设备健康风险”，关联类型仍是 `unknown`，不得表述为已确认故障。被拦截的记录仍完整保留在告警、系统事件、健康分析、预测和采集账本中。历史版本曾把非 `critical` 厂商系统运行事件或性能提示派生为 `device_fault`；兼容修复会幂等关闭这些旧 Incident，但保留原始事件、证据和诊断用于审计。
+
+事件列表按最近证据发现时间倒序分页；同一发现时间再按事件创建时间和 ID 稳定排序，人工编辑不会改变处置队列的事件先后。事件详情将关联证据按处置语义展示：先汇总同类依据，再逐项给出异常结论、影响范围和发现时间；证据与时间线也均按发生时间由近到远展示。厂商证据通过[厂商事件关联目录](../event-association/overview.md)补充事件代码、关联类型、中文含义和实例严重级别；只有启用且已审核定义提供正式语义，目录缺失、停用或待审核时均明确显示“未分类厂商事件”。`source_ref` 和故障指纹都是内部追溯标识，仅保留在可展开的“技术关联信息”中，不作为用户可见结论。监控质量引用 `quality:<cluster>:<stream>:<timestamp>:<reason>` 在服务端转为中文采集链路及“覆盖不足”或“采集过期”等结论，前端不解析内部格式。时间线返回可读的动作、说明和操作人；新写入的“关联新证据”会记录对应的简短说明，历史记录无法重建细节时使用中性说明。
 
 维护窗口和事件静默只抑制派生 Incident 的创建/重开或通知：采集、原始事实和分析快照仍保留。维护窗口按项目、可选集群/资产和 UTC 起止时间匹配；`silenced_until` 到达后自动不再抑制通知。
 
-确定性 RCA 至多给出 `capacity_pressure`、`device_fault`、`performance_contention`、`telemetry_blindspot` 三项候选。各候选使用固定权重、同类最高证据、冲突扣 0.20、独立类型数/最新时间/固定优先级排序。仅当部署配置 `incident_analytics.replay_gate_verified=true` 且候选分数至少 0.8、含至少两类独立证据时才标记“高”置信度；当前该开关默认关闭。
+确定性 RCA 至多给出 `capacity_pressure`、`device_fault`、`performance_contention`、`telemetry_blindspot` 三项候选；其中内部 `device_fault` 的用户可见名称是“设备健康风险”。各候选使用固定权重、同类最高证据、冲突扣 0.20、独立类型数/最新时间/固定优先级排序。仅当部署配置 `incident_analytics.replay_gate_verified=true` 且候选分数至少 0.8、含至少两类独立证据时才标记“高”置信度；当前该开关默认关闭。
 
 ## API、权限与审计
 
-接口均位于 `/storage-pulse/api/v1`：
+接口使用完整路径：
 
-- `GET /forecasts`、`GET /anomalies`、`GET /incidents`
-- `GET/PATCH /incidents/{id}`、`GET /incidents/{id}/diagnosis`
-- `POST /incidents/{id}/comments`、`POST /maintenance-windows`
+- `GET /storage-pulse/api/v1/forecasts`、`GET /storage-pulse/api/v1/anomalies`、`GET /storage-pulse/api/v1/incidents`
+- `GET /storage-pulse/api/v1/incidents/{id}`、`PATCH /storage-pulse/api/v1/incidents/{id}`、`GET /storage-pulse/api/v1/incidents/{id}/diagnosis`
+- `POST /storage-pulse/api/v1/incidents/{id}/comments`、`POST /storage-pulse/api/v1/maintenance-windows`
 
 列表先进行项目作用域过滤再数据库分页，`size <= 100`。`reader` 只读本项目事件、诊断和证据摘要；`editor` 可认领、相邻迁移、静默和评论；`project_admin` 可创建本项目维护窗口；无作用域事件只允许 `super_admin` 读取或操作。所有写操作均从 Incident 或维护窗口反查项目并写入统一 `AuditEvent`。
 
-诊断工具只暴露安全摘要：候选、固定分数/置信度、证据 ID 与数据缺口。聊天服务把模型输出限制为这些字段的精确 JSON 回显，并始终由服务端重新渲染；未知证据、候选、分数、置信度或数据缺口会回退到确定性模板。原始路径、作业环境、日志、设备凭据和厂商载荷不会进入该工具。
+诊断工具只暴露安全摘要：候选、固定分数/置信度、证据 ID、中文数据缺口详情，以及厂商事件的事件代码、实例严重级别和安全关联语义。关联语义只来自启用且已审核目录；其他情况只返回 `unknown` 和“未分类厂商事件”。聊天服务把模型输出限制为这些确定性字段的精确 JSON 回显，并始终由服务端重新渲染；未知证据、候选、分数、置信度或数据缺口会回退到确定性模板。原始路径、作业环境、完整日志、设备凭据、故障指纹和厂商载荷不会进入该工具。
 
 ## 任务、通知与作业关联
 

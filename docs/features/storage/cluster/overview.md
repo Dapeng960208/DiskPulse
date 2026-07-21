@@ -40,7 +40,8 @@ PowerScale 集群可选择不缓存、本地文件或 Redis Session 缓存。数
 | [资源映射](./resource-mapping.md) | NetApp/PowerScale 统一术语、采集映射和项目组绑定。 |
 | [厂商契约](./vendor-api-contracts.md) | 设备接口、字段映射和 DiskPulse 分析 API。 |
 | [性能与事件](./performance-event-collection.md) | 性能与厂商事件采集的数据流。 |
-| [健康分析](./health-analytics.md) | 容量变化、性能、故障和导出。 |
+| [健康分析](./health-analytics.md) | 容量变化、性能、厂商事件语义、故障日志和导出。 |
+| [厂商事件关联](../event-association/overview.md) | NetApp/PowerScale 事件代码、中文含义、关联类型和管理入口。 |
 | [性能与事件排障](../../../guides/storage/performance-event-troubleshooting.md) | 部署前检查、排障和真机验收。 |
 
 字段、迁移和版本链以当前代码和迁移目录为准；不得手工伪造数据库版本或依赖历史 revision 编号。

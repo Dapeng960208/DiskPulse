@@ -23,6 +23,8 @@
 
 涉及存储容量 API、容量树、容量趋势、预测或其前端展示时，必须额外阅读[容量单位 API 契约](../backend/capacity-unit-contract.md)。
 
+涉及 NetApp/PowerScale 厂商事件代码、故障指纹、重复故障或 Incident 厂商证据时，必须额外阅读[厂商事件关联目录](../../features/storage/event-association/overview.md)和[存储集群健康分析](../../features/storage/cluster/health-analytics.md)。
+
 ## AI 功能的强制组合
 
 AI 功能先定位到 `docs/features/ai/<功能>/`，再按改动层选择规范：
