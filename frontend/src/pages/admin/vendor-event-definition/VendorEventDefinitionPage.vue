@@ -80,9 +80,18 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    const result = await vendorEventDefinitionApi.fetch(requestParams());
-    rows.value = result?.content || [];
-    total.value = Number(result?.total) || 0;
+    let result = await vendorEventDefinitionApi.fetch(requestParams());
+    let content = result?.content || [];
+    let totalCount = Number(result?.total) || 0;
+    const lastPage = Math.max(1, Math.ceil(totalCount / queryParams.size));
+    if (!content.length && totalCount > 0 && queryParams.page > lastPage) {
+      queryParams.page = lastPage;
+      result = await vendorEventDefinitionApi.fetch(requestParams());
+      content = result?.content || [];
+      totalCount = Number(result?.total) || 0;
+    }
+    rows.value = content;
+    total.value = totalCount;
   } catch {
     rows.value = [];
     total.value = 0;
@@ -194,6 +203,10 @@ async function save() {
     ElMessage.error('请填写事件代码、中文标题和中文含义');
     return;
   }
+  if (/[\s\u0000-\u001f\u007f]/.test(payload.event_code)) {
+    ElMessage.error('事件代码不能包含空白字符或控制字符');
+    return;
+  }
   const reviewError = reviewedDefinitionError(payload);
   if (reviewError) {
     ElMessage.error(reviewError);
@@ -294,6 +307,7 @@ onMounted(load);
         <ElInput
           v-model="queryParams.keyword"
           clearable
+          maxlength="100"
           placeholder="搜索事件代码、标题或含义" />
       </ElFormItem>
       <ElFormItem label="审核状态">

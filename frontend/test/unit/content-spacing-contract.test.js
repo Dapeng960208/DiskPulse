@@ -61,6 +61,7 @@ const expectedInUsePageComponents = [
   '@/pages/admin/storage-cluster/StorageClusterDetailPage.vue',
   '@/pages/admin/storage-cluster/StorageClusterListPage.vue',
   '@/pages/admin/user/UserListPage.vue',
+  '@/pages/admin/vendor-event-definition/VendorEventDefinitionPage.vue',
   '@/pages/admin/volume/VolumeDetailPage.vue',
   '@/pages/admin/volume/VolumeListPage.vue',
   '@/pages/ai/AiChatPage.vue',
@@ -143,7 +144,7 @@ describe('shared page layout spacing contract', () => {
 });
 
 describe('in-use routed page matrix', () => {
-  it('covers exactly the 29 approved page components and excludes inactive shells', () => {
+  it('covers exactly the 30 approved page components and excludes inactive shells', () => {
     const routesSource = readFrontendSource('src/router/routes.js');
     const routedComponents = [...routesSource.matchAll(
       /component:\s*\(\)\s*=>\s*import\(['"](@\/pages\/[^'"]+\.vue)['"]\)/g,
@@ -152,7 +153,7 @@ describe('in-use routed page matrix', () => {
       .filter((component) => !excludedPageComponents.includes(component))
       .sort();
 
-    expect(inUseComponents).toHaveLength(29);
+    expect(inUseComponents).toHaveLength(30);
     expect(inUseComponents).toEqual(expectedInUsePageComponents);
     expect(routedComponents.filter((component) => excludedPageComponents.includes(component)).sort())
       .toEqual([...excludedPageComponents].sort());

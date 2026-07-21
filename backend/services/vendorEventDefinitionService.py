@@ -783,11 +783,21 @@ def discover(
             if definition is not None:
                 existing += 1
                 continue
-            vendorEventDefinitionCrud.create_definition(
-                db,
-                **_placeholder_values(storage_type, event_code),
-            )
-            created += 1
+            if len(event_code) > 255:
+                # Historical alerts are uncontrolled input; a single oversized
+                # code must not abort the whole discover run.
+                continue
+            try:
+                with db.begin_nested():
+                    vendorEventDefinitionCrud.create_definition(
+                        db,
+                        **_placeholder_values(storage_type, event_code),
+                    )
+                created += 1
+            except IntegrityError:
+                # A concurrent discover or admin create inserted the same
+                # (storage_type, event_code) after our existence snapshot.
+                existing += 1
         reconciled_incidents = _reconcile_legacy_incidents(db)
         result = {
             "created": created,

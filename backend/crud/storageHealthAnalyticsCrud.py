@@ -271,13 +271,22 @@ def get_vendor_alerts_for_evidence_refs(
     alerts = db.scalars(select(StorageAlerts).where(and_(*filters)))
 
     result: dict[str, StorageAlerts] = {}
+    ambiguous_legacy_refs: set[str] = set()
     for alert in alerts:
         direct_ref = direct_refs.get(alert.id)
         if direct_ref is not None:
             result[direct_ref] = alert
         legacy_ref = legacy_refs.get((alert.source, alert.external_event_id))
         if legacy_ref is not None:
-            result[legacy_ref] = alert
+            if legacy_ref in result:
+                # Legacy refs are only unique per cluster; without a cluster
+                # filter two clusters can share one ref. Rendering either
+                # cluster's log excerpt would be wrong, so drop the mapping.
+                ambiguous_legacy_refs.add(legacy_ref)
+            else:
+                result[legacy_ref] = alert
+    for legacy_ref in ambiguous_legacy_refs:
+        result.pop(legacy_ref, None)
     return result
 
 

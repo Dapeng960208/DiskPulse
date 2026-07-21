@@ -614,6 +614,36 @@ def test_single_system_event_detail_returns_friendly_not_found_error(analytics_c
     assert response.json()["detail"] == "厂商系统事件不存在"
 
 
+def test_single_system_event_detail_hides_events_from_other_clusters(
+    analytics_client, db_session
+):
+    db_session.add(
+        models.StorageCluster(
+            id=2,
+            name="cluster-b",
+            storage_type="netapp",
+            storage_host="storage-b.local",
+            is_active=True,
+        )
+    )
+    _add_vendor_alert(
+        db_session,
+        alert_id=502,
+        event_code="vendor.other.cluster",
+        fingerprint="netapp:vendor.other.cluster:node:node-z",
+        severity="error",
+        description="Belongs to cluster 1",
+    )
+    db_session.commit()
+
+    response = analytics_client.get(
+        "/storage-pulse/api/storage-clusters/2/analytics/system-events/502"
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "厂商系统事件不存在"
+
+
 def test_repeated_faults_exclude_repeated_informational_system_activity(db_session):
     db_session.add(models.StorageCluster(id=1, name="cluster-a", storage_type="netapp"))
     db_session.add_all(

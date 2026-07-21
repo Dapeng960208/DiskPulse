@@ -491,8 +491,10 @@ const alerts = incidents.map((incident, index) => ({
       title_zh: 'UNIX 用户凭据查询失败',
       description_zh: '访问请求中的 UID 无法通过名称服务解析，应检查 NIS、LDAP 或本地名称服务。',
       review_status: 'reviewed',
+      official_reference_url: 'https://docs.netapp.com/us-en/ontap-ems/secd-authsys-events.html',
       object_id: 'node-a',
       object_name: 'node-a',
+      object_type: 'node',
       description: 'secd.authsys.lookup.failed: Unable to retrieve credentials for UID 1042 from configured name services.',
       occurred_at: '2026-07-21 09:06:21',
     },
@@ -508,8 +510,10 @@ const alerts = incidents.map((incident, index) => ({
       title_zh: 'NFS 请求并发超过连接阈值',
       description_zh: '单个连接的并发在途请求超过允许值，客户端性能可能下降。',
       review_status: 'reviewed',
+      official_reference_url: 'https://docs.netapp.com/us-en/ontap-ems/nblade-execsoverlimit-events.html',
       object_id: 'node-a',
       object_name: 'node-a',
+      object_type: 'node',
       description: 'nblade.execsOverLimit: In-flight NFS requests exceeded the connection limit.',
       occurred_at: '2026-07-21 08:58:10',
     },
@@ -525,8 +529,10 @@ const alerts = incidents.map((incident, index) => ({
       title_zh: '未收录的厂商事件代码',
       description_zh: '尚未在事件代码目录中确认该厂商事件的中文含义。',
       review_status: 'pending',
+      official_reference_url: null,
       object_id: 'node-b',
       object_name: 'node-b',
+      object_type: 'node',
       description: 'UNREVIEWED_VENDOR_CODE: Normalized vendor event awaiting catalog review.',
       occurred_at: '2026-07-21 08:50:00',
     },
@@ -542,8 +548,10 @@ const alerts = incidents.map((incident, index) => ({
       title_zh: 'SmartQuotas 通知发送失败',
       description_zh: '系统未能向相关用户发送配额通知；不代表配额本身未生效。',
       review_status: 'reviewed',
+      official_reference_url: 'https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/appendix-b-full-list-of-srs-brevity/',
       object_id: 'cluster-3',
       object_name: 'PowerScale-研发',
+      object_type: 'cluster',
       description: '500010002: SmartQuotas notification delivery failed for quota domain demo.',
       occurred_at: '2026-07-21 08:42:00',
     },
@@ -1012,7 +1020,8 @@ export function createMockGateway() {
         && event.id === Number(systemEventDetail[2])
       ));
       if (!item) throw error(404, '厂商系统事件不存在');
-      return { ...item };
+      const { storage_cluster_id: _clusterId, ...systemEventOut } = item;
+      return systemEventOut;
     }
     const clusterAnalytics = path.match(/^\/storage-clusters\/(\d+)\/analytics\/(capacity-change|error-severity|top-latency|repeated-faults|system-events|export)$/);
     if (clusterAnalytics) {
@@ -1044,7 +1053,15 @@ export function createMockGateway() {
               && event.association_type === 'fault_log'
             ))
             .map((event) => ({
-              ...event,
+              event_code: event.event_code,
+              association_type: event.association_type,
+              association_type_label: event.association_type_label,
+              title_zh: event.title_zh,
+              description_zh: event.description_zh,
+              official_reference_url: event.official_reference_url || null,
+              review_status: event.review_status,
+              source: event.source,
+              fingerprint: event.fingerprint,
               sample_event_id: event.id,
               count: 3,
               log_excerpt: event.description,
@@ -1078,7 +1095,9 @@ export function createMockGateway() {
           page: pageNumber,
           page_size: pageSize,
           total: records.length,
-          data: records.slice(offset, offset + pageSize),
+          data: records
+            .slice(offset, offset + pageSize)
+            .map(({ storage_cluster_id: _clusterId, ...systemEventOut }) => systemEventOut),
         };
       }
       if (endpoint === 'export' && options.responseType === 'blob') return new Blob(['DiskPulse mock analytics export']);

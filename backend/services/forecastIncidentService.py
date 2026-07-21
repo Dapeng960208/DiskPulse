@@ -527,6 +527,12 @@ _DATA_GAP_DETAILS = {
         ),
         "impact": "不影响查看已规范化的厂商事件日志正文。",
     },
+    "conflicting_evidence": {
+        "code": "conflicting_evidence",
+        "label": "证据相互冲突",
+        "description": "该诊断分类下存在相互矛盾的证据，置信度评分已相应下调。",
+        "impact": "请人工比对相关证据后再确认根因分类。",
+    },
 }
 _TIMELINE_ACTION_LABELS = {
     "created": "系统创建事件",
@@ -579,6 +585,20 @@ def data_gap_details(codes: list[str] | None) -> list[dict[str, str]]:
             }
         )
     return result
+
+
+def diagnosis_data_gap_details(diagnosis) -> list[dict[str, str]]:
+    """Resolve gap details for a diagnosis, including candidate-level gap codes.
+
+    Candidates can carry gap codes (e.g. ``conflicting_evidence``) that never
+    appear in the diagnosis-level ``data_gaps`` list; including them here lets
+    clients resolve every candidate gap code against one detail list.
+    """
+    codes = list(diagnosis.data_gaps or [])
+    for candidate in diagnosis.candidates or []:
+        if isinstance(candidate, dict):
+            codes.extend(candidate.get("data_gaps") or [])
+    return data_gap_details(codes)
 
 
 def _definition_field(definition, name: str):

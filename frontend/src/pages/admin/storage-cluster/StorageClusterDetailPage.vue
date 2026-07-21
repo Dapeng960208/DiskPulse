@@ -992,9 +992,9 @@ onBeforeMount(() => {
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
   min-width: 0;
   width: 100%;
-  height: 100%;
 }
 
 .storage-health-filter {

@@ -131,7 +131,7 @@ def test_incident_and_ai_diagnosis_expose_chinese_gap_and_safe_vendor_evidence_s
                         "category": "device_fault",
                         "score": 0.8,
                         "evidence_refs": ["netapp:event-900"],
-                        "data_gaps": ["asset_mapping_missing"],
+                        "data_gaps": ["asset_mapping_missing", "conflicting_evidence"],
                     }
                 ],
                 confidence="medium",
@@ -171,13 +171,21 @@ def test_incident_and_ai_diagnosis_expose_chinese_gap_and_safe_vendor_evidence_s
         "title_zh": "磁盘离线",
         "severity": "critical",
     }
-    assert detail["diagnosis"]["data_gap_details"] == [gap]
+    assert detail["diagnosis"]["data_gap_details"] == [
+        gap,
+        {
+            "code": "conflicting_evidence",
+            "label": "证据相互冲突",
+            "description": "该诊断分类下存在相互矛盾的证据，置信度评分已相应下调。",
+            "impact": "请人工比对相关证据后再确认根因分类。",
+        },
+    ]
     assert detail["diagnosis"]["evidence_summaries"] == [evidence_summary]
     presentation = detail["evidence"][0]["presentation"]
     assert presentation["group_label"] == "厂商系统事件"
     assert presentation["association_type_label"] == "故障日志"
     assert presentation["log_excerpt"] == "normalized log event-900"
-    assert tool["data_gap_details"] == [gap]
+    assert tool["data_gap_details"] == detail["diagnosis"]["data_gap_details"]
     assert tool["evidence_summaries"] == [evidence_summary]
     serialized = json.dumps({"detail": detail, "tool": tool}, ensure_ascii=False)
     assert "raw-secret-900" not in serialized
@@ -425,3 +433,39 @@ def test_legacy_noncritical_vendor_fault_reconciliation_is_dry_run_safe_and_idem
     assert db_session.query(models.IncidentTimeline).filter_by(
         incident_id=1, event_type="reconciled"
     ).count() == 1
+
+
+def test_legacy_evidence_ref_mapping_drops_cross_cluster_ambiguity(db_session):
+    crud = _contract_module("crud.storageHealthAnalyticsCrud")
+    db_session.add_all(
+        [
+            models.StorageCluster(id=7, name="cluster-7", storage_type="netapp"),
+            models.StorageCluster(id=8, name="cluster-8", storage_type="netapp"),
+            _alert(
+                alert_id=920,
+                external_event_id="shared-ref",
+                severity="critical",
+                event_code="disk.offline",
+            ),
+        ]
+    )
+    other_cluster_alert = _alert(
+        alert_id=921,
+        external_event_id="shared-ref",
+        severity="warning",
+        event_code="disk.offline",
+    )
+    other_cluster_alert.storage_cluster_id = 8
+    db_session.add(other_cluster_alert)
+    db_session.commit()
+
+    scoped = crud.get_vendor_alerts_for_evidence_refs(
+        db_session, ["netapp:shared-ref"], 7
+    )
+    assert scoped["netapp:shared-ref"].id == 920
+
+    unscoped = crud.get_vendor_alerts_for_evidence_refs(
+        db_session, ["netapp:shared-ref", "storage_alert:920"], None
+    )
+    assert "netapp:shared-ref" not in unscoped
+    assert unscoped["storage_alert:920"].id == 920

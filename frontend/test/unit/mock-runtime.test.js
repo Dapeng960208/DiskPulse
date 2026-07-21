@@ -118,6 +118,7 @@ describe('frontend mock runtime', () => {
       '/group-tags',
       '/users',
       '/storage-back-up-records',
+      '/admin/vendor-event-definitions',
     ];
 
     for (const path of systemPaths) {

@@ -6,6 +6,7 @@ import pytest
 from appConfig import base_config
 import models
 from routers import vendor_event_definitions
+from services import vendorEventDefinitionService
 from utils.security import issue_token
 
 
@@ -68,6 +69,33 @@ def test_vendor_event_definition_admin_api_rejects_non_admin_users(
 
     assert response.status_code == 403
     assert response.json()["detail"] == "super admin permission required"
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "json_body"),
+    [
+        ("get", BASE_PATH, None),
+        ("post", BASE_PATH, _payload()),
+        ("patch", f"{BASE_PATH}/1", {"title_zh": "更新标题"}),
+        ("delete", f"{BASE_PATH}/1", None),
+        ("post", f"{BASE_PATH}/discover", None),
+    ],
+    ids=["list", "create", "update", "delete", "discover"],
+)
+def test_vendor_event_definition_admin_api_rejects_unauthenticated_requests(
+    db_session,
+    api_client_factory,
+    method,
+    path,
+    json_body,
+):
+    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("super_admin_usernames", ["admin"])
+    client = api_client_factory([vendor_event_definitions.router])
+
+    response = client.request(method, path, json=json_body)
+
+    assert response.status_code == 401
 
 
 def test_super_admin_can_filter_and_complete_vendor_event_definition_crud_with_safe_audit(
@@ -182,10 +210,52 @@ def test_super_admin_can_filter_and_complete_vendor_event_definition_crud_with_s
     assert "description_zh" not in audit.after_summary
     assert "official_reference_url" not in audit.after_summary
 
+    update_audit = (
+        db_session.query(models.AuditEvent)
+        .filter(
+            models.AuditEvent.action == "vendor_event_definition.update",
+            models.AuditEvent.outcome == "success",
+        )
+        .one()
+    )
+    assert update_audit.actor_user_id == 1
+    assert update_audit.resource_id == definition_id
+    assert update_audit.before_summary["association_type"] == "fault_log"
+    assert update_audit.after_summary["association_type"] == "performance_anomaly"
+    assert update_audit.after_summary["title_zh"] == "磁盘性能异常"
+
+    update_failures = (
+        db_session.query(models.AuditEvent)
+        .filter(
+            models.AuditEvent.action == "vendor_event_definition.update",
+            models.AuditEvent.outcome == "failure",
+        )
+        .all()
+    )
+    assert len(update_failures) == 2
+    assert {failure.reason_code for failure in update_failures} == {
+        "vendor_event_definition_validation_failed"
+    }
+    assert all(failure.resource_id == definition_id for failure in update_failures)
+
     deleted = client.delete(f"{BASE_PATH}/{definition_id}")
     assert deleted.status_code == 204
     assert deleted.content == b""
     assert client.get(f"{BASE_PATH}/{definition_id}").status_code == 404
+
+    db_session.expire_all()
+    delete_audit = (
+        db_session.query(models.AuditEvent)
+        .filter(
+            models.AuditEvent.action == "vendor_event_definition.delete",
+            models.AuditEvent.outcome == "success",
+        )
+        .one()
+    )
+    assert delete_audit.actor_user_id == 1
+    assert delete_audit.resource_id == definition_id
+    assert delete_audit.before_summary["event_code"] == "disk.offline"
+    assert delete_audit.after_summary is None
 
 
 def test_discover_creates_safe_unknown_pending_definition_for_observed_code(
@@ -213,6 +283,21 @@ def test_discover_creates_safe_unknown_pending_definition_for_observed_code(
             },
         )
     )
+    db_session.add(
+        models.StorageAlerts(
+            id=902,
+            storage_cluster_id=7,
+            source="isilon",
+            external_event_id="observed-902",
+            fingerprint="isilon:oversized:node:7",
+            severity="warning",
+            alert_level="warning",
+            alert_type="vendor_event",
+            description="Oversized code must not abort discover",
+            related_type="node",
+            related_info={"event_code": "X" * 300, "object_id": "7"},
+        )
+    )
     db_session.commit()
     client = _client(api_client_factory, user_id=1)
 
@@ -224,9 +309,20 @@ def test_discover_creates_safe_unknown_pending_definition_for_observed_code(
         "existing",
         "reconciled_incidents",
     }
-    assert discovered.json()["created"] >= 1
-    assert discovered.json()["existing"] >= 0
+    common_seed_count = len(vendorEventDefinitionService.COMMON_DEFINITIONS)
+    assert discovered.json()["created"] == common_seed_count + 1
+    assert discovered.json()["existing"] == 0
     assert discovered.json()["reconciled_incidents"] == 0
+    assert (
+        db_session.query(models.VendorEventDefinition)
+        .filter_by(storage_type="isilon", event_code="X" * 300)
+        .count()
+    ) == 0
+
+    repeated = client.post(f"{BASE_PATH}/discover")
+    assert repeated.status_code == 200
+    assert repeated.json()["created"] == 0
+    assert repeated.json()["existing"] == 1
 
     db_session.expire_all()
     definition = (
@@ -250,6 +346,54 @@ def test_discover_creates_safe_unknown_pending_definition_for_observed_code(
     assert db_session.get(models.StorageAlerts, 901).related_info["raw"]["secret"] == (
         "must-not-leak"
     )
+
+    discover_audits = (
+        db_session.query(models.AuditEvent)
+        .filter(
+            models.AuditEvent.action == "vendor_event_definition.discover",
+            models.AuditEvent.outcome == "success",
+        )
+        .all()
+    )
+    assert len(discover_audits) == 2
+    assert all(audit.actor_user_id == 1 for audit in discover_audits)
+    summaries = [audit.after_summary for audit in discover_audits]
+    assert {
+        "created": common_seed_count + 1,
+        "existing": 0,
+        "reconciled_incidents": 0,
+    } in summaries
+    assert {"created": 0, "existing": 1, "reconciled_incidents": 0} in summaries
+
+
+def test_discover_upgrades_generated_placeholder_when_common_seed_matches(
+    db_session,
+    api_client_factory,
+):
+    _user(db_session, user_id=1, username="admin")
+    seed = dict(vendorEventDefinitionService.COMMON_DEFINITIONS[0])
+    placeholder = models.VendorEventDefinition(
+        storage_type=seed["storage_type"],
+        event_code=seed["event_code"],
+        association_type="unknown",
+        title_zh=vendorEventDefinitionService.UNKNOWN_TITLE_ZH,
+        description_zh=vendorEventDefinitionService.UNKNOWN_DESCRIPTION_ZH,
+        review_status="pending",
+    )
+    db_session.add(placeholder)
+    db_session.commit()
+    placeholder_id = placeholder.id
+    client = _client(api_client_factory, user_id=1)
+
+    discovered = client.post(f"{BASE_PATH}/discover")
+
+    assert discovered.status_code == 200
+    db_session.expire_all()
+    upgraded = db_session.get(models.VendorEventDefinition, placeholder_id)
+    assert upgraded.association_type == seed["association_type"]
+    assert upgraded.title_zh == seed["title_zh"]
+    assert upgraded.review_status == seed["review_status"]
+    assert upgraded.official_reference_url == seed["official_reference_url"]
 
 
 def test_pending_definition_with_http_reference_cannot_be_promoted_to_reviewed(

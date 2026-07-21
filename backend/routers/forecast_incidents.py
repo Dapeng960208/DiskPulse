@@ -275,8 +275,8 @@ def _incident_detail(db: Session, current_user, incident_id: int) -> IncidentDet
                 **DiagnosisOut.model_validate(diagnosis).model_dump(
                     exclude={"data_gap_details", "evidence_summaries"}
                 ),
-                data_gap_details=forecastIncidentService.data_gap_details(
-                    diagnosis.data_gaps
+                data_gap_details=forecastIncidentService.diagnosis_data_gap_details(
+                    diagnosis
                 ),
                 evidence_summaries=forecastIncidentService.diagnosis_evidence_summaries(
                     db,
@@ -458,7 +458,7 @@ def get_incident_diagnosis(incident_id: int, current_user: CurrentUserDep, db: D
         confidence=diagnosis.confidence,
         evidence_ids=diagnosis.evidence_ids,
         data_gaps=diagnosis.data_gaps,
-        data_gap_details=forecastIncidentService.data_gap_details(diagnosis.data_gaps),
+        data_gap_details=forecastIncidentService.diagnosis_data_gap_details(diagnosis),
         evidence_summaries=forecastIncidentService.diagnosis_evidence_summaries(
             db, incident.id, diagnosis.evidence_ids
         ),
