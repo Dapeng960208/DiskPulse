@@ -258,15 +258,46 @@ def _incident_detail(db: Session, current_user, incident_id: int) -> IncidentDet
     incident, evidence, timeline, diagnosis = forecastIncidentService.incident_detail(
         db, current_user=current_user, incident_id=incident_id
     )
+    vendor_context = forecastIncidentService.build_vendor_evidence_context(
+        db,
+        evidence,
+        storage_cluster_id=incident.storage_cluster_id,
+    )
     return IncidentDetailOut(
         **_incident_out(db, current_user, incident).model_dump(),
-        evidence=[_incident_evidence_out(item) for item in evidence],
+        evidence=[
+            _incident_evidence_out(db, item, vendor_context=vendor_context)
+            for item in evidence
+        ],
         timeline=[_incident_timeline_out(db, item) for item in timeline],
-        diagnosis=DiagnosisOut.model_validate(diagnosis) if diagnosis is not None else None,
+        diagnosis=(
+            DiagnosisOut(
+                **DiagnosisOut.model_validate(diagnosis).model_dump(
+                    exclude={"data_gap_details", "evidence_summaries"}
+                ),
+                data_gap_details=forecastIncidentService.data_gap_details(
+                    diagnosis.data_gaps
+                ),
+                evidence_summaries=forecastIncidentService.diagnosis_evidence_summaries(
+                    db,
+                    incident.id,
+                    diagnosis.evidence_ids,
+                    evidence_items=evidence,
+                    vendor_context=vendor_context,
+                ),
+            )
+            if diagnosis is not None
+            else None
+        ),
     )
 
 
-def _incident_evidence_out(evidence) -> IncidentEvidenceOut:
+def _incident_evidence_out(
+    db: Session,
+    evidence,
+    *,
+    vendor_context: forecastIncidentService.VendorEvidenceContextMap | None = None,
+) -> IncidentEvidenceOut:
     return IncidentEvidenceOut(
         id=evidence.id,
         source=evidence.source,
@@ -274,8 +305,18 @@ def _incident_evidence_out(evidence) -> IncidentEvidenceOut:
         evidence_type=evidence.evidence_type,
         observed_at=evidence.observed_at,
         data_gaps=list(evidence.data_gaps or []),
+        data_gap_details=forecastIncidentService.data_gap_details(evidence.data_gaps),
+        evidence_summary=forecastIncidentService.vendor_evidence_summary(
+            db,
+            evidence,
+            vendor_context=vendor_context,
+        ),
         presentation=IncidentEvidencePresentationOut(
-            **forecastIncidentService.build_evidence_presentation(evidence)
+            **forecastIncidentService.build_evidence_presentation(
+                evidence,
+                db=db,
+                vendor_context=vendor_context,
+            )
         ),
     )
 
@@ -417,6 +458,10 @@ def get_incident_diagnosis(incident_id: int, current_user: CurrentUserDep, db: D
         confidence=diagnosis.confidence,
         evidence_ids=diagnosis.evidence_ids,
         data_gaps=diagnosis.data_gaps,
+        data_gap_details=forecastIncidentService.data_gap_details(diagnosis.data_gaps),
+        evidence_summaries=forecastIncidentService.diagnosis_evidence_summaries(
+            db, incident.id, diagnosis.evidence_ids
+        ),
     )
 
 

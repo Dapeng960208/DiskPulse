@@ -271,9 +271,9 @@ describe('IncidentDetailDrawer', () => {
         data_gaps: ['asset_mapping_missing'],
         data_gap_details: [{
           code: 'asset_mapping_missing',
-          label: '细粒度资产映射缺失',
-          description: '事件已关联到存储集群，但尚未映射到卷、Qtree 或项目。',
-          impact: '不影响查看厂商原始事件日志。',
+          label: '资产映射不完整',
+          description: '事件至少已归属存储集群，但节点、卷、Qtree 或项目的稳定映射链路不完整；已识别稳定节点身份的厂商事件不会产生此缺口。',
+          impact: '不影响查看已规范化的厂商事件日志正文。',
         }],
       },
     });
@@ -283,8 +283,8 @@ describe('IncidentDetailDrawer', () => {
     expect(wrapper.text()).toContain('故障日志');
     expect(wrapper.text()).toContain('认证服务查询失败');
     expect(wrapper.text()).toContain('Unable to retrieve credentials for SVM_nas');
-    expect(wrapper.text()).toContain('细粒度资产映射缺失');
-    expect(wrapper.text()).toContain('不影响查看厂商原始事件日志');
+    expect(wrapper.text()).toContain('资产映射不完整');
+    expect(wrapper.text()).toContain('不影响查看已规范化的厂商事件日志正文');
     expect(wrapper.text()).not.toContain('asset_mapping_missing');
   });
 });

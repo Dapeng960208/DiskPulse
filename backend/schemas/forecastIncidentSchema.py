@@ -84,6 +84,8 @@ class IncidentEvidenceOut(BaseModel):
     evidence_type: str
     observed_at: datetime
     data_gaps: list[str]
+    data_gap_details: list["DataGapDetailOut"] = Field(default_factory=list)
+    evidence_summary: "VendorEvidenceSummaryOut | None" = None
     presentation: "IncidentEvidencePresentationOut"
 
 
@@ -94,6 +96,27 @@ class IncidentEvidencePresentationOut(BaseModel):
     summary: str
     scope_label: str
     technical_ref: str
+    association_type: str | None = None
+    association_type_label: str | None = None
+    event_code: str | None = None
+    log_excerpt: str | None = None
+    detail_available: bool = False
+
+
+class DataGapDetailOut(BaseModel):
+    code: str
+    label: str
+    description: str
+    impact: str
+
+
+class VendorEvidenceSummaryOut(BaseModel):
+    source_ref: str
+    event_code: str
+    association_type: str
+    association_type_label: str
+    title_zh: str
+    severity: str
 
 
 class IncidentTimelineOut(BaseModel):
@@ -124,6 +147,8 @@ class DiagnosisOut(BaseModel):
     confidence: str
     evidence_ids: list[str]
     data_gaps: list[str]
+    data_gap_details: list[DataGapDetailOut] = Field(default_factory=list)
+    evidence_summaries: list[VendorEvidenceSummaryOut] = Field(default_factory=list)
     created_at: datetime
 
 
@@ -138,6 +163,8 @@ class DiagnosisToolOut(BaseModel):
     confidence: str
     evidence_ids: list[str]
     data_gaps: list[str]
+    data_gap_details: list[DataGapDetailOut] = Field(default_factory=list)
+    evidence_summaries: list[VendorEvidenceSummaryOut] = Field(default_factory=list)
 
 
 class IncidentDetailOut(IncidentOut):

@@ -36,6 +36,15 @@ const SYSTEM_RESOURCE_PREFIXES = [
   '/storage-back-up-records',
 ];
 
+const VENDOR_ASSOCIATION_LABELS = {
+  fault_log: '故障日志',
+  performance_anomaly: '性能异常',
+  capacity_threshold: '容量/配额阈值',
+  system_activity: '系统运行事件',
+  telemetry_degradation: '监控能力下降',
+  unknown: '未分类厂商事件',
+};
+
 const seed = () => {
   const projects = ['芯片设计平台', '企业基础设施', '智能制造平台', '云原生服务', '数据分析中心']
     .map((name, index) => ({ id: index + 1, name, description: `虚构演示项目：${name}` }));
@@ -384,6 +393,161 @@ const alerts = incidents.map((incident, index) => ({
       created_at: `2026-07-18 0${9 + messageIndex}:00:00`,
     })),
   }));
+  const vendorEventDefinitions = [
+    {
+      id: 1,
+      storage_type: 'netapp',
+      event_code: 'secd.authsys.lookup.failed',
+      association_type: 'fault_log',
+      title_zh: 'UNIX 用户凭据查询失败',
+      description_zh: '访问请求中的 UID 无法通过名称服务解析，应检查 NIS、LDAP 或本地名称服务。',
+      official_reference_url: 'https://docs.netapp.com/us-en/ontap-ems/secd-authsys-events.html',
+      default_severity: 'error',
+      version_scope: 'ONTAP 9.11.1–9.18.1',
+      review_status: 'reviewed',
+      is_active: true,
+    },
+    {
+      id: 2,
+      storage_type: 'netapp',
+      event_code: 'nblade.execsOverLimit',
+      association_type: 'performance_anomaly',
+      title_zh: 'NFS 请求并发超过连接阈值',
+      description_zh: '单个连接的并发在途请求超过允许值，客户端性能可能下降。',
+      official_reference_url: 'https://docs.netapp.com/us-en/ontap-ems/nblade-execsoverlimit-events.html',
+      default_severity: null,
+      version_scope: 'ONTAP 9.10.1–9.18.1',
+      review_status: 'reviewed',
+      is_active: true,
+    },
+    {
+      id: 3,
+      storage_type: 'netapp',
+      event_code: 'wafl.vol.blks_used.done',
+      association_type: 'system_activity',
+      title_zh: '已用块计算完成',
+      description_zh: '卷或聚合的已用块扫描计算已结束，不表示故障。',
+      official_reference_url: 'https://docs.netapp.com/us-en/ontap-ems-9181/wafl-vol-events.html',
+      default_severity: 'info',
+      version_scope: 'ONTAP 9.14.1、9.18.1',
+      review_status: 'reviewed',
+      is_active: true,
+    },
+    {
+      id: 4,
+      storage_type: 'isilon',
+      event_code: '500010002',
+      association_type: 'fault_log',
+      title_zh: 'SmartQuotas 通知发送失败',
+      description_zh: '系统未能向相关用户发送配额通知；不代表配额本身未生效。',
+      official_reference_url: 'https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/appendix-b-full-list-of-srs-brevity/',
+      default_severity: null,
+      version_scope: 'Dell PowerScale 官方事件列表；部署时按目标 OneFS 版本复核',
+      review_status: 'reviewed',
+      is_active: true,
+    },
+    {
+      id: 5,
+      storage_type: 'isilon',
+      event_code: '500010001',
+      association_type: 'capacity_threshold',
+      title_zh: 'SmartQuotas 配额阈值触发',
+      description_zh: 'SmartQuotas 域达到软限制、硬限制或宽限期相关阈值。',
+      official_reference_url: 'https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/appendix-b-full-list-of-srs-brevity/',
+      default_severity: null,
+      version_scope: 'Dell PowerScale 官方事件列表；部署时按目标 OneFS 版本复核',
+      review_status: 'reviewed',
+      is_active: true,
+    },
+    {
+      id: 6,
+      storage_type: 'isilon',
+      event_code: 'SW_JOBENG_JOB_STATE',
+      association_type: 'system_activity',
+      title_zh: '作业状态变化（候选）',
+      description_zh: '该符号代码仍需由目标阵列运行时事件目录复核。',
+      official_reference_url: null,
+      default_severity: null,
+      version_scope: '目标 OneFS 运行时事件目录',
+      review_status: 'pending',
+      is_active: true,
+    },
+  ].map((item) => ({
+    ...item,
+    association_type_label: VENDOR_ASSOCIATION_LABELS[item.association_type],
+    created_at: '2026-07-21T08:00:00Z',
+    updated_at: '2026-07-21T08:00:00Z',
+  }));
+  const vendorSystemEvents = [
+    {
+      id: 901,
+      storage_cluster_id: 1,
+      source: 'netapp',
+      severity: 'critical',
+      event_code: 'secd.authsys.lookup.failed',
+      fingerprint: 'netapp:secd.authsys.lookup.failed:node:node-a',
+      association_type: 'fault_log',
+      association_type_label: '故障日志',
+      title_zh: 'UNIX 用户凭据查询失败',
+      description_zh: '访问请求中的 UID 无法通过名称服务解析，应检查 NIS、LDAP 或本地名称服务。',
+      review_status: 'reviewed',
+      object_id: 'node-a',
+      object_name: 'node-a',
+      description: 'secd.authsys.lookup.failed: Unable to retrieve credentials for UID 1042 from configured name services.',
+      occurred_at: '2026-07-21 09:06:21',
+    },
+    {
+      id: 902,
+      storage_cluster_id: 1,
+      source: 'netapp',
+      severity: 'warning',
+      event_code: 'nblade.execsOverLimit',
+      fingerprint: 'netapp:nblade.execsOverLimit:node:node-a',
+      association_type: 'performance_anomaly',
+      association_type_label: '性能异常',
+      title_zh: 'NFS 请求并发超过连接阈值',
+      description_zh: '单个连接的并发在途请求超过允许值，客户端性能可能下降。',
+      review_status: 'reviewed',
+      object_id: 'node-a',
+      object_name: 'node-a',
+      description: 'nblade.execsOverLimit: In-flight NFS requests exceeded the connection limit.',
+      occurred_at: '2026-07-21 08:58:10',
+    },
+    {
+      id: 903,
+      storage_cluster_id: 1,
+      source: 'netapp',
+      severity: 'warning',
+      event_code: 'UNREVIEWED_VENDOR_CODE',
+      fingerprint: 'netapp:UNREVIEWED_VENDOR_CODE:node:node-b',
+      association_type: 'unknown',
+      association_type_label: '未分类厂商事件',
+      title_zh: '未收录的厂商事件代码',
+      description_zh: '尚未在事件代码目录中确认该厂商事件的中文含义。',
+      review_status: 'pending',
+      object_id: 'node-b',
+      object_name: 'node-b',
+      description: 'UNREVIEWED_VENDOR_CODE: Normalized vendor event awaiting catalog review.',
+      occurred_at: '2026-07-21 08:50:00',
+    },
+    {
+      id: 904,
+      storage_cluster_id: 3,
+      source: 'isilon',
+      severity: 'error',
+      event_code: '500010002',
+      fingerprint: 'isilon:500010002:cluster:3',
+      association_type: 'fault_log',
+      association_type_label: '故障日志',
+      title_zh: 'SmartQuotas 通知发送失败',
+      description_zh: '系统未能向相关用户发送配额通知；不代表配额本身未生效。',
+      review_status: 'reviewed',
+      object_id: 'cluster-3',
+      object_name: 'PowerScale-研发',
+      description: '500010002: SmartQuotas notification delivery failed for quota domain demo.',
+      occurred_at: '2026-07-21 08:42:00',
+    },
+  ];
 
   return {
     projects,
@@ -406,6 +570,8 @@ const alerts = incidents.map((incident, index) => ({
     ],
     capacityPredictionCandidates,
     conversations,
+    vendorEventDefinitions,
+    vendorSystemEvents,
     backups: usages.map((usage, index) => ({
       id: index + 1,
       user: usage.user,
@@ -447,6 +613,38 @@ const alerts = incidents.map((incident, index) => ({
 };
 
 function error(status, message = '没有权限') { const value = new Error(message); value.status = status; value.response = { status, data: { message } }; return value; }
+const MOCK_OFFICIAL_REFERENCE_DOMAINS_BY_STORAGE_TYPE = {
+  netapp: ['netapp.com'],
+  isilon: ['dell.com', 'delltechnologies.com'],
+};
+function isValidMockOfficialReferenceUrl(value, storageType) {
+  if (typeof value !== 'string' || !value || /\s/.test(value)) return false;
+  try {
+    const reference = new URL(value);
+    const authority = value.match(/^https:\/\/([^/?#]+)/i)?.[1] || '';
+    const hostname = reference.hostname.toLowerCase();
+    return reference.protocol === 'https:'
+      && (MOCK_OFFICIAL_REFERENCE_DOMAINS_BY_STORAGE_TYPE[storageType] || []).some(
+        (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+      )
+      && !reference.username
+      && !reference.password
+      && !authority.includes(':')
+      && !value.includes('@');
+  } catch {
+    return false;
+  }
+}
+function validateMockVendorDefinition(item) {
+  const reference = item?.official_reference_url;
+  if (reference && !isValidMockOfficialReferenceUrl(reference, item.storage_type)) {
+    throw error(422, '官方参考地址必须与存储类型匹配，使用 NetApp 或 Dell 官方 HTTPS 地址，且不能包含空格、认证信息、端口或 @ 字符');
+  }
+  if (item?.review_status !== 'reviewed') return;
+  if (item.association_type === 'unknown' || !reference || !item.version_scope) {
+    throw error(422, '已审核定义缺少明确分类、官方 HTTPS 参考地址或版本范围');
+  }
+}
 function normalizePath(path) { const value = String(path || '').replace(/^https?:\/\/[^/]+/, '').replace(/^\/storage-pulse\/api/, '').split('?')[0].replace(/\/{2,}/g, '/'); return value.length > 1 ? value.replace(/\/$/, '') : value; }
 function page(content, pagination) {
   const total = content.length;
@@ -534,6 +732,83 @@ export function createMockGateway() {
     // before list/detail/write dispatch, while preserving personal auth paths.
     if (systemResource && account.role !== 'superadmin') throw error(403);
     if (path.startsWith('/admin') && account.role !== 'superadmin') throw error(403);
+    if (path === '/admin/vendor-event-definitions/discover' && verb === 'post') {
+      const eventCode = 'UNREVIEWED_VENDOR_CODE';
+      const existing = state.vendorEventDefinitions.some((item) => item.event_code === eventCode);
+      if (!existing) {
+        const id = Math.max(0, ...state.vendorEventDefinitions.map((item) => item.id)) + 1;
+        state.vendorEventDefinitions.push({
+          id,
+          storage_type: 'netapp',
+          event_code: eventCode,
+          association_type: 'unknown',
+          association_type_label: VENDOR_ASSOCIATION_LABELS.unknown,
+          title_zh: '未收录的厂商事件代码',
+          description_zh: '尚未在事件代码目录中确认该厂商事件的中文含义。',
+          official_reference_url: null,
+          default_severity: null,
+          version_scope: null,
+          review_status: 'pending',
+          is_active: true,
+          created_at: '2026-07-21T09:00:00Z',
+          updated_at: '2026-07-21T09:00:00Z',
+        });
+      }
+      return {
+        created: existing ? 0 : 1,
+        existing: state.vendorEventDefinitions.length - (existing ? 0 : 1),
+        reconciled_incidents: 1,
+      };
+    }
+    if (path === '/admin/vendor-event-definitions') {
+      if (verb === 'post') {
+        if (state.vendorEventDefinitions.some((item) => (
+          item.storage_type === body?.storage_type && item.event_code === body?.event_code
+        ))) throw error(409, '该存储类型和事件代码已存在');
+        validateMockVendorDefinition(body);
+        const now = '2026-07-21T09:00:00Z';
+        const item = {
+          ...(body || {}),
+          id: Math.max(0, ...state.vendorEventDefinitions.map((record) => record.id)) + 1,
+          association_type_label: VENDOR_ASSOCIATION_LABELS[body?.association_type]
+            || VENDOR_ASSOCIATION_LABELS.unknown,
+          created_at: now,
+          updated_at: now,
+        };
+        state.vendorEventDefinitions.push(item);
+        return item;
+      }
+      const filters = options.params || {};
+      const keyword = String(filters.keyword || '').toLowerCase();
+      const records = state.vendorEventDefinitions.filter((item) => {
+        if (filters.storage_type && item.storage_type !== filters.storage_type) return false;
+        if (filters.association_type && item.association_type !== filters.association_type) return false;
+        if (filters.review_status && item.review_status !== filters.review_status) return false;
+        if (keyword && !`${item.event_code} ${item.title_zh} ${item.description_zh}`.toLowerCase().includes(keyword)) return false;
+        return true;
+      });
+      return page(records, filters);
+    }
+    const vendorDefinition = path.match(/^\/admin\/vendor-event-definitions\/(\d+)$/);
+    if (vendorDefinition) {
+      const item = state.vendorEventDefinitions.find(
+        (record) => record.id === Number(vendorDefinition[1]),
+      );
+      if (!item) throw error(404, '厂商事件代码定义不存在');
+      if (verb === 'delete') {
+        state.vendorEventDefinitions.splice(state.vendorEventDefinitions.indexOf(item), 1);
+        return {};
+      }
+      if (verb === 'patch') {
+        validateMockVendorDefinition({ ...item, ...(body || {}) });
+        Object.assign(item, body || {}, {
+          association_type_label: VENDOR_ASSOCIATION_LABELS[body?.association_type || item.association_type]
+            || VENDOR_ASSOCIATION_LABELS.unknown,
+          updated_at: '2026-07-21T09:00:00Z',
+        });
+      }
+      return item;
+    }
     if (path === '/dashboard/summary') return {
       summary: withCapacity({ used_gb: 3210, limit_gb: 5200, available_gb: 1990, alert_count: state.alerts.length }),
       scope: { project_name: account.role === 'superadmin' ? '全局' : '芯片设计平台' },
@@ -730,6 +1005,15 @@ export function createMockGateway() {
     if (path === '/aggregates/storage-trees') return { data: state.volumes, data_unit: 'TB' };
     const aggregateTree = path.match(/^\/aggregates\/(\d+)\/storage-tree$/);
     if (aggregateTree) return { data: state.volumes.filter((volume) => volume.aggregate_id === Number(aggregateTree[1])), data_unit: 'TB' };
+    const systemEventDetail = path.match(/^\/storage-clusters\/(\d+)\/analytics\/system-events\/(\d+)$/);
+    if (systemEventDetail) {
+      const item = state.vendorSystemEvents.find((event) => (
+        event.storage_cluster_id === Number(systemEventDetail[1])
+        && event.id === Number(systemEventDetail[2])
+      ));
+      if (!item) throw error(404, '厂商系统事件不存在');
+      return { ...item };
+    }
     const clusterAnalytics = path.match(/^\/storage-clusters\/(\d+)\/analytics\/(capacity-change|error-severity|top-latency|repeated-faults|system-events|export)$/);
     if (clusterAnalytics) {
       const [, clusterId, endpoint] = clusterAnalytics;
@@ -751,8 +1035,52 @@ export function createMockGateway() {
       }
       if (endpoint === 'error-severity') return { total: 5, counts: { critical: 1, error: 1, warning: 2, info: 1 }, sources: { netapp: 5 } };
       if (endpoint === 'top-latency') return { supported: true, data: resources.map((resource, index) => ({ object_id: resource.id, object_name: resource.name, p95_latency: 4 + index, avg_latency: 2 + index, max_latency: 8 + index, avg_read_latency: 1.5 + index, avg_write_latency: 2.5 + index, avg_iops: 800 + index * 120, avg_throughput: 1024 * 1024 * (index + 1) })) };
-      if (endpoint === 'repeated-faults') return { data: state.incidents.map((incident) => ({ ...incident, count: 2 })) };
-      if (endpoint === 'system-events') return { page: 1, page_size: 20, total: 5, data: state.incidents.map((incident, index) => ({ source: 'NetApp', severity: index === 1 ? 'critical' : 'warning', event_code: `MOCK-${index + 1}`, object_id: `volume-${index + 1}`, object_name: `vol_demo_${index + 1}`, description: `${incident.display_name}演示系统事件`, occurred_at: incident.last_evidence_at })) };
+      if (endpoint === 'repeated-faults') {
+        return {
+          data: state.vendorSystemEvents
+            .filter((event) => (
+              event.storage_cluster_id === Number(clusterId)
+              && event.review_status === 'reviewed'
+              && event.association_type === 'fault_log'
+            ))
+            .map((event) => ({
+              ...event,
+              sample_event_id: event.id,
+              count: 3,
+              log_excerpt: event.description,
+              first_occurred_at: '2026-07-21 08:06:21',
+              last_occurred_at: event.occurred_at,
+            })),
+        };
+      }
+      if (endpoint === 'system-events') {
+        const filters = options.params || {};
+        const pageNumber = Math.max(1, Number(filters.page) || 1);
+        const pageSize = Math.max(1, Number(filters.page_size) || 20);
+        const keyword = String(filters.keyword || '').trim().toLowerCase();
+        const records = state.vendorSystemEvents.filter((event) => {
+          if (event.storage_cluster_id !== Number(clusterId)) return false;
+          if (filters.fingerprint && event.fingerprint !== filters.fingerprint) return false;
+          if (filters.event_code && !event.event_code.includes(filters.event_code)) return false;
+          if (filters.severity && event.severity !== filters.severity) return false;
+          if (keyword && ![
+            event.event_code,
+            event.object_id,
+            event.object_name,
+            event.description,
+            event.title_zh,
+            event.description_zh,
+          ].filter(Boolean).join(' ').toLowerCase().includes(keyword)) return false;
+          return true;
+        });
+        const offset = (pageNumber - 1) * pageSize;
+        return {
+          page: pageNumber,
+          page_size: pageSize,
+          total: records.length,
+          data: records.slice(offset, offset + pageSize),
+        };
+      }
       if (endpoint === 'export' && options.responseType === 'blob') return new Blob(['DiskPulse mock analytics export']);
     }
     const projectMatch = path.match(/^\/projects\/(\d+)$/);

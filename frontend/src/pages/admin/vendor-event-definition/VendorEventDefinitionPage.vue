@@ -14,7 +14,7 @@ import {
   ElTableColumn,
   ElTag,
 } from 'element-plus';
-import vendorEventDefinitionApi from '@/api/vendor-event-definition-api.js';
+import vendorEventDefinitionApi from '@/api/admin/vendor-event-definition-api.js';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
 import DataTable from '@/components/data/DataTable.vue';
 import QueryForm from '@/components/form/QueryForm.vue';
@@ -31,6 +31,10 @@ const associationLabels = Object.fromEntries(associationTypes.map((item) => [ite
 const storageTypeLabels = { netapp: 'NetApp ONTAP', isilon: 'Dell PowerScale（Isilon）' };
 const severityLabels = { critical: '严重', error: '错误', warning: '警告', info: '信息' };
 const reviewLabels = { reviewed: '已审核', pending: '待审核' };
+const officialReferenceDomainsByStorageType = {
+  netapp: ['netapp.com'],
+  isilon: ['dell.com', 'delltechnologies.com'],
+};
 
 const rows = ref([]);
 const total = ref(0);
@@ -138,7 +142,7 @@ function formPayload() {
     association_type: form.association_type,
     title_zh: form.title_zh.trim(),
     description_zh: form.description_zh.trim(),
-    official_reference_url: form.official_reference_url.trim() || null,
+    official_reference_url: form.official_reference_url || null,
     default_severity: form.default_severity || null,
     version_scope: form.version_scope.trim() || null,
     review_status: form.review_status,
@@ -146,10 +150,53 @@ function formPayload() {
   };
 }
 
+function isValidOfficialReferenceUrl(value, storageType) {
+  if (typeof value !== 'string' || !value || /\s/.test(value)) return false;
+  try {
+    const url = new URL(value);
+    const authority = value.match(/^https:\/\/([^/?#]+)/i)?.[1] || '';
+    const hostname = url.hostname.toLowerCase();
+    const isOfficialDomain = (officialReferenceDomainsByStorageType[storageType] || []).some(
+      (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+    );
+    return url.protocol === 'https:'
+      && isOfficialDomain
+      && !url.username
+      && !url.password
+      && !authority.includes(':')
+      && !value.includes('@');
+  } catch {
+    return false;
+  }
+}
+
+function reviewedDefinitionError(payload) {
+  if (payload.official_reference_url && !isValidOfficialReferenceUrl(
+    payload.official_reference_url,
+    payload.storage_type,
+  )) {
+    return payload.review_status === 'reviewed'
+      ? '已审核定义必须填写有效的官方 HTTPS 参考地址'
+      : '官方参考地址必须与存储类型匹配，使用 NetApp 或 Dell 官方 HTTPS 地址，且不能包含空格、认证信息、端口或 @ 字符';
+  }
+  if (payload.review_status !== 'reviewed') return '';
+  if (payload.association_type === 'unknown') return '已审核定义必须选择明确的关联类型';
+  if (!isValidOfficialReferenceUrl(payload.official_reference_url, payload.storage_type)) {
+    return '已审核定义必须填写有效的官方 HTTPS 参考地址';
+  }
+  if (!payload.version_scope) return '已审核定义必须填写适用版本';
+  return '';
+}
+
 async function save() {
   const payload = formPayload();
   if (!payload.event_code || !payload.title_zh || !payload.description_zh) {
     ElMessage.error('请填写事件代码、中文标题和中文含义');
+    return;
+  }
+  const reviewError = reviewedDefinitionError(payload);
+  if (reviewError) {
+    ElMessage.error(reviewError);
     return;
   }
   saving.value = true;
@@ -384,7 +431,8 @@ onMounted(load);
                 v-for="item in associationTypes"
                 :key="item.value"
                 :label="item.label"
-                :value="item.value" />
+                :value="item.value"
+                :disabled="form.review_status === 'reviewed' && item.value === 'unknown'" />
             </ElSelect>
           </ElFormItem>
           <ElFormItem label="默认等级">
@@ -436,13 +484,17 @@ onMounted(load);
             maxlength="2000"
             show-word-limit />
         </ElFormItem>
-        <ElFormItem label="官方参考地址">
+        <ElFormItem
+          label="官方参考地址"
+          :required="form.review_status === 'reviewed'">
           <ElInput
             v-model="form.official_reference_url"
             maxlength="1000"
             placeholder="厂商官方文档 HTTPS 地址" />
         </ElFormItem>
-        <ElFormItem label="适用版本">
+        <ElFormItem
+          label="适用版本"
+          :required="form.review_status === 'reviewed'">
           <ElInput
             v-model="form.version_scope"
             maxlength="255"

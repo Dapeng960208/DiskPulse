@@ -384,6 +384,197 @@ describe('frontend mock runtime', () => {
     expect(response.data.content).toHaveLength(5);
   });
 
+  it('supports the vendor event definition admin lifecycle with reviewed evidence', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    const listed = await gateway.request(
+      'get',
+      '/admin/vendor-event-definitions',
+      undefined,
+      superadmin.token,
+      { params: { page: 1, size: 20, review_status: 'reviewed' } },
+    );
+    expect(listed.content[0]).toMatchObject({
+      event_code: expect.any(String),
+      association_type: expect.not.stringMatching(/^unknown$/),
+      official_reference_url: expect.stringMatching(/^https:\/\//),
+      version_scope: expect.any(String),
+      review_status: 'reviewed',
+    });
+
+    const created = await gateway.request(
+      'post',
+      '/admin/vendor-event-definitions',
+      {
+        storage_type: 'netapp',
+        event_code: 'mock.test.event',
+        association_type: 'unknown',
+        title_zh: '待审核演示事件',
+        description_zh: '仅用于前端演示。',
+        official_reference_url: null,
+        default_severity: null,
+        version_scope: null,
+        review_status: 'pending',
+        is_active: true,
+      },
+      superadmin.token,
+    );
+    expect(created).toMatchObject({ event_code: 'mock.test.event', review_status: 'pending' });
+
+    await expect(gateway.request(
+      'patch',
+      `/admin/vendor-event-definitions/${created.id}`,
+      {
+        association_type: 'fault_log',
+        official_reference_url: 'http://docs.example.test/event',
+        version_scope: 'ONTAP test fixture',
+        review_status: 'reviewed',
+      },
+      superadmin.token,
+    )).rejects.toMatchObject({ status: 422 });
+
+    const updated = await gateway.request(
+      'patch',
+      `/admin/vendor-event-definitions/${created.id}`,
+      { title_zh: '已更新的待审核演示事件' },
+      superadmin.token,
+    );
+    expect(updated.title_zh).toBe('已更新的待审核演示事件');
+
+    await gateway.request(
+      'delete',
+      `/admin/vendor-event-definitions/${created.id}`,
+      undefined,
+      superadmin.token,
+    );
+    const afterDelete = await gateway.request(
+      'get',
+      '/admin/vendor-event-definitions',
+      undefined,
+      superadmin.token,
+      { params: { keyword: 'mock.test.event' } },
+    );
+    expect(afterDelete.total).toBe(0);
+  });
+
+  it.each([
+    'http://docs.netapp.com/us-en/ontap-ems/events.html',
+    'https://docs.example.com/vendor-events',
+    'https://evilnetapp.com/vendor-events',
+    'https://operator@docs.netapp.com/us-en/ontap-ems/events.html',
+    'https://docs.netapp.com:443/us-en/ontap-ems/events.html',
+    'https://docs.netapp.com./us-en/ontap-ems/events.html',
+    'https://docs.netapp.com/us-en/ontap-ems/events@v1.html',
+    'https://www.dell.com/support/manuals/en-us/powerscale-onefs/events',
+    ' https://docs.netapp.com/us-en/ontap-ems/events.html',
+  ])('rejects an unsafe non-empty official URL for a pending mock definition: %s', async (officialReferenceUrl) => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    await expect(gateway.request(
+      'post',
+      '/admin/vendor-event-definitions',
+      {
+        storage_type: 'netapp',
+        event_code: 'mock.pending.reference',
+        association_type: 'unknown',
+        title_zh: '待审核参考地址',
+        description_zh: '验证待审核定义也不能保存非官方或不安全链接。',
+        official_reference_url: officialReferenceUrl,
+        default_severity: null,
+        version_scope: null,
+        review_status: 'pending',
+        is_active: true,
+      },
+      superadmin.token,
+    )).rejects.toMatchObject({ status: 422 });
+  });
+
+  it.each([
+    'https://www.dell.com/support/manuals/en-us/powerscale-onefs/events',
+    'https://infohub.delltechnologies.com/en-us/l/powerscale-onefs/events/',
+  ])('accepts an official vendor subdomain in mock definitions: %s', async (officialReferenceUrl) => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    await expect(gateway.request(
+      'post',
+      '/admin/vendor-event-definitions',
+      {
+        storage_type: 'isilon',
+        event_code: 'mock.dell.reference',
+        association_type: 'unknown',
+        title_zh: 'Dell 官方参考地址',
+        description_zh: '验证 Dell 官方子域名可以保存。',
+        official_reference_url: officialReferenceUrl,
+        default_severity: null,
+        version_scope: null,
+        review_status: 'pending',
+        is_active: true,
+      },
+      superadmin.token,
+    )).resolves.toMatchObject({ event_code: 'mock.dell.reference' });
+  });
+
+  it('returns classified system events and a clickable normalized log detail', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    const events = await gateway.request(
+      'get',
+      '/storage-clusters/1/analytics/system-events',
+      undefined,
+      superadmin.token,
+      { params: { page: 1, page_size: 20 } },
+    );
+    expect(events.data[0]).toMatchObject({
+      id: expect.any(Number),
+      event_code: expect.any(String),
+      association_type: 'fault_log',
+      association_type_label: '故障日志',
+      title_zh: expect.any(String),
+      review_status: 'reviewed',
+      fingerprint: expect.any(String),
+      description: expect.any(String),
+    });
+
+    const detail = await gateway.request(
+      'get',
+      `/storage-clusters/1/analytics/system-events/${events.data[0].id}`,
+      undefined,
+      superadmin.token,
+    );
+    expect(detail.description).toContain('secd.authsys.lookup.failed');
+    expect(detail).not.toHaveProperty('related_info');
+    expect(JSON.stringify(detail)).not.toContain('raw');
+  });
+
+  it('filters mock system events by keyword and returns repeated-fault occurrence windows', async () => {
+    const gateway = createMockGateway();
+    const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+
+    const filtered = await gateway.request(
+      'get',
+      '/storage-clusters/1/analytics/system-events',
+      undefined,
+      superadmin.token,
+      { params: { keyword: 'EXECSOVERLIMIT', page: 1, page_size: 20 } },
+    );
+    expect(filtered).toMatchObject({ total: 1, data: [{ id: 902 }] });
+
+    const repeated = await gateway.request(
+      'get',
+      '/storage-clusters/1/analytics/repeated-faults',
+      undefined,
+      superadmin.token,
+    );
+    expect(repeated.data[0]).toMatchObject({
+      first_occurred_at: expect.any(String),
+      last_occurred_at: expect.any(String),
+    });
+  });
+
   it('supplies every usage-list display field and flat quota thresholds', async () => {
     const gateway = createMockGateway();
     const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);

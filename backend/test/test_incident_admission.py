@@ -2,6 +2,7 @@
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 
 UTC_NOW = datetime(2026, 7, 20, 6, 0, tzinfo=timezone.utc)
@@ -43,6 +44,24 @@ def test_incident_admission_keeps_only_urgent_cluster_evidence():
         category="device_fault",
         now=UTC_NOW,
     ) is True
+    assert analytics.should_admit_incident(
+        _envelope(
+            source="vendor_event",
+            severity="critical",
+            value={"severity": "critical", "association_type": "fault_log"},
+        ),
+        category="device_fault",
+        now=UTC_NOW,
+    ) is True
+    assert analytics.should_admit_incident(
+        _envelope(
+            source="vendor_event",
+            severity="critical",
+            value={"severity": "critical", "association_type": "system_activity"},
+        ),
+        category="device_fault",
+        now=UTC_NOW,
+    ) is False
     assert analytics.should_admit_incident(
         _envelope(source="vendor_event", severity="warning"),
         category="device_fault",
@@ -110,23 +129,142 @@ class _VendorEventSession:
 
 def test_vendor_info_and_warning_events_stay_in_system_events_without_creating_incidents(monkeypatch):
     from celery_tasks.tasks import forecast_incidents as tasks
+    from crud import forecastIncidentCrud, vendorEventDefinitionCrud
+    from services import vendorEventDefinitionService
 
     cluster = SimpleNamespace(id=7, storage_type="netapp", name="cluster-7")
     events = [
-        SimpleNamespace(id=1, source="netapp", external_event_id="critical", severity="critical", updated_at=UTC_NOW),
-        SimpleNamespace(id=2, source="netapp", external_event_id="warning", severity="warning", updated_at=UTC_NOW),
-        SimpleNamespace(id=3, source="netapp", external_event_id="info", severity="info", updated_at=UTC_NOW),
+        SimpleNamespace(id=1, source="netapp", external_event_id="critical", severity="critical", related_info={"event_code": "disk.offline"}, updated_at=UTC_NOW),
+        SimpleNamespace(id=2, source="netapp", external_event_id="warning", severity="warning", related_info={"event_code": "disk.offline"}, updated_at=UTC_NOW),
+        SimpleNamespace(id=3, source="netapp", external_event_id="info", severity="info", related_info={"event_code": "disk.offline"}, updated_at=UTC_NOW),
+        SimpleNamespace(id=4, source="netapp", external_event_id="activity", severity="critical", related_info={"event_code": "system.activity"}, updated_at=UTC_NOW),
+        SimpleNamespace(id=5, source="netapp", external_event_id="pending", severity="critical", related_info={"event_code": "pending.fault"}, updated_at=UTC_NOW),
+        SimpleNamespace(id=6, source="netapp", external_event_id="disabled", severity="critical", related_info={"event_code": "disabled.activity"}, updated_at=UTC_NOW),
     ]
     session = _VendorEventSession(cluster, events)
     recorded = []
     monkeypatch.setattr(tasks, "SessionLocal", lambda: nullcontext(session))
     monkeypatch.setattr(tasks, "_notifications_after_commit", lambda _notifications: None)
     monkeypatch.setattr(tasks, "_record_correlation", lambda _db, **kwargs: recorded.append(kwargs["envelope"]))
+    monkeypatch.setattr(
+        forecastIncidentCrud,
+        "list_existing_incident_evidence_source_refs",
+        lambda *_args, **_kwargs: set(),
+        raising=False,
+    )
+    definition_loader = Mock(
+        return_value={
+            ("netapp", "disk.offline"): SimpleNamespace(
+                is_active=True,
+                review_status="reviewed",
+                association_type="fault_log",
+            ),
+            ("netapp", "system.activity"): SimpleNamespace(
+                is_active=True,
+                review_status="reviewed",
+                association_type="system_activity",
+            ),
+            ("netapp", "pending.fault"): SimpleNamespace(
+                is_active=True,
+                review_status="pending",
+                association_type="fault_log",
+            ),
+            ("netapp", "disabled.activity"): SimpleNamespace(
+                is_active=False,
+                review_status="reviewed",
+                association_type="system_activity",
+            ),
+        }
+    )
+    monkeypatch.setattr(
+        vendorEventDefinitionCrud,
+        "get_definition_map",
+        definition_loader,
+        raising=False,
+    )
+    resolver = Mock(
+        side_effect=lambda _db, _storage_type, event_code: {
+            "association_type": (
+                "system_activity" if event_code == "system.activity" else "fault_log"
+            )
+        }
+    )
+    monkeypatch.setattr(
+        vendorEventDefinitionService,
+        "resolve_definition",
+        resolver,
+    )
 
     handled = tasks.process_vendor_event_evidence(storage_cluster_id=7)
 
-    assert handled == 1
-    assert [item.source_ref for item in recorded] == ["netapp:critical"]
+    assert handled == 3
+    assert [item.source_ref for item in recorded] == [
+        "storage_alert:1",
+        "storage_alert:5",
+        "storage_alert:6",
+    ]
+    assert [item.value["association_type"] for item in recorded] == [
+        "fault_log",
+        "unknown",
+        "unknown",
+    ]
+    assert definition_loader.call_count == 1
+    assert resolver.call_count == 0
+
+
+def test_vendor_event_upgrade_replay_skips_existing_legacy_evidence_reference(
+    monkeypatch,
+):
+    from celery_tasks.tasks import forecast_incidents as tasks
+    from crud import forecastIncidentCrud, vendorEventDefinitionCrud
+
+    cluster = SimpleNamespace(id=7, storage_type="netapp", name="cluster-7")
+    event = SimpleNamespace(
+        id=9,
+        source="netapp",
+        external_event_id="legacy-external-9",
+        severity="critical",
+        related_info={"event_code": "disk.offline"},
+        updated_at=UTC_NOW,
+    )
+    session = _VendorEventSession(cluster, [event])
+    recorded = []
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: nullcontext(session))
+    monkeypatch.setattr(tasks, "_notifications_after_commit", lambda _notifications: None)
+    monkeypatch.setattr(
+        tasks,
+        "_record_correlation",
+        lambda _db, **kwargs: recorded.append(kwargs["envelope"]),
+    )
+    monkeypatch.setattr(
+        vendorEventDefinitionCrud,
+        "get_definition_map",
+        lambda *_args, **_kwargs: {
+            ("netapp", "disk.offline"): SimpleNamespace(
+                is_active=True,
+                review_status="reviewed",
+                association_type="fault_log",
+            )
+        },
+    )
+    existing_loader = Mock(return_value={"netapp:legacy-external-9"})
+    monkeypatch.setattr(
+        forecastIncidentCrud,
+        "list_existing_incident_evidence_source_refs",
+        existing_loader,
+        raising=False,
+    )
+
+    handled = tasks.process_vendor_event_evidence(storage_cluster_id=7)
+
+    assert handled == 0
+    assert recorded == []
+    existing_loader.assert_called_once()
+    requested_refs = existing_loader.call_args.kwargs["source_refs"]
+    assert set(requested_refs) == {
+        "storage_alert:9",
+        "netapp:legacy-external-9",
+    }
 
 
 def test_vendor_event_asset_uses_stable_node_identity_without_a_false_mapping_gap():
@@ -153,6 +291,7 @@ def test_vendor_event_asset_uses_stable_node_identity_without_a_false_mapping_ga
 
 def test_vendor_event_wall_time_is_converted_from_asia_shanghai_to_utc(monkeypatch):
     from celery_tasks.tasks import forecast_incidents as tasks
+    from crud import forecastIncidentCrud
 
     cluster = SimpleNamespace(id=7, storage_type="netapp", name="cluster-7")
     event = SimpleNamespace(
@@ -168,6 +307,12 @@ def test_vendor_event_wall_time_is_converted_from_asia_shanghai_to_utc(monkeypat
     monkeypatch.setattr(tasks, "_vendor_event_asset", lambda *_args: (_asset(), "good"))
     monkeypatch.setattr(tasks, "_notifications_after_commit", lambda _notifications: None)
     monkeypatch.setattr(tasks, "_record_correlation", lambda _db, **kwargs: recorded.append(kwargs["envelope"]))
+    monkeypatch.setattr(
+        forecastIncidentCrud,
+        "list_existing_incident_evidence_source_refs",
+        lambda *_args, **_kwargs: set(),
+        raising=False,
+    )
 
     assert tasks.process_vendor_event_evidence(storage_cluster_id=7) == 1
     assert recorded[0].observed_at == datetime(2026, 7, 20, 17, 3, 30, tzinfo=timezone.utc)

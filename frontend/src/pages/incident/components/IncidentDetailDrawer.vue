@@ -67,7 +67,7 @@ const categoryLabels = {
 };
 const categoryDescriptions = {
   capacity_pressure: '容量预测显示可能耗尽，或当前资源的有效告警规则达到阈值。默认按硬限额 80%/90%/95%；用户目录优先采用项目组规则，其次项目规则，最后系统规则。',
-  device_fault: 'NetApp EMS 或 PowerScale（Isilon）厂商系统事件达到严重级别、同一故障指纹反复出现，或同一时段采集异常时创建。它表示待核查的设备健康风险，不等同于已确认硬件损坏。',
+  device_fault: 'NetApp EMS 或 PowerScale（Isilon）厂商系统事件达到严重级别时进入处置队列。关联类型会进一步说明它属于故障日志、性能异常、容量阈值或系统运行事件；故障指纹只用于重复归组，不能单独作为故障结论。',
   performance_contention: '同一指标连续三个相邻 5 分钟桶偏离 28 天同星期同小时基线，且鲁棒 Z 分数绝对值均不低于 3.5。',
   telemetry_blindspot: '监控盲区：容量、厂商事件或性能监控采集过期、采集失败或覆盖率不足，当前数据不足以可靠判断资产状态。',
 };

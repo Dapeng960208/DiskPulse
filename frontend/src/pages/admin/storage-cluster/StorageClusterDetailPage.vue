@@ -127,6 +127,41 @@ const performanceCharts = computed(() => selectedPerformanceMetricOptions.value.
 })));
 const faultData = computed(() => faults.value?.data || []);
 const systemEventData = computed(() => systemEvents.value?.data || []);
+
+function hasReviewedVendorSemantics(event) {
+  return event?.review_status === 'reviewed'
+    && Boolean(event?.association_type)
+    && event.association_type !== 'unknown';
+}
+
+function vendorEventTitle(event) {
+  if (!hasReviewedVendorSemantics(event)) return '待审核 · 未分类厂商事件';
+  return event.title_zh || '未收录的厂商事件代码';
+}
+
+function vendorEventAssociationLabel(event) {
+  if (!hasReviewedVendorSemantics(event)) return '未分类厂商事件';
+  return event.association_type_label || '未分类厂商事件';
+}
+
+function vendorEventAssociationTagType(event) {
+  if (!hasReviewedVendorSemantics(event)) return 'info';
+  if (event.association_type === 'fault_log') return 'danger';
+  if (event.association_type === 'performance_anomaly') return 'warning';
+  return 'info';
+}
+
+function vendorEventReviewLabel(event) {
+  return hasReviewedVendorSemantics(event) ? '已审核' : '待审核';
+}
+
+function vendorEventDescription(event) {
+  if (!hasReviewedVendorSemantics(event)) {
+    return '该事件代码尚未完成审核，不能根据候选定义推断系统问题；请结合规范化日志和厂商文档核查。';
+  }
+  return event.description_zh || '该代码尚未维护中文说明，请结合规范化日志核查。';
+}
+
 const severityChartData = computed(() => [
   ['严重', Number(severity.value?.counts?.critical) || 0],
   ['错误', Number(severity.value?.counts?.error) || 0],
@@ -688,6 +723,8 @@ onBeforeMount(() => {
                   empty-text="暂无重复故障">
                   <ElTableColumn
                     label="来源"
+                    class-name="mobile-hidden tablet-hidden"
+                    label-class-name="mobile-hidden tablet-hidden"
                     prop="source" />
                   <ElTableColumn
                     label="事件代码与含义"
@@ -709,6 +746,8 @@ onBeforeMount(() => {
                   </ElTableColumn>
                   <ElTableColumn
                     label="日志摘要"
+                    class-name="mobile-hidden tablet-hidden"
+                    label-class-name="mobile-hidden tablet-hidden"
                     prop="log_excerpt"
                     min-width="260"
                     show-overflow-tooltip />
@@ -717,6 +756,8 @@ onBeforeMount(() => {
                     prop="count" />
                   <ElTableColumn
                     label="首次发生"
+                    class-name="mobile-hidden tablet-hidden"
+                    label-class-name="mobile-hidden tablet-hidden"
                     prop="first_occurred_at" />
                   <ElTableColumn
                     label="最近发生"
@@ -724,12 +765,15 @@ onBeforeMount(() => {
                   <ElTableColumn
                     label="操作"
                     align="right"
+                    fixed="right"
                     width="110">
                     <template #default="{ row }">
-                      <TableActionButton
-                        :data-testid="`repeated-event-log-${row.sample_event_id}`"
-                        action="detail"
-                        @click="openSystemEventDetail(row)">查看日志</TableActionButton>
+                      <div class="list-row-actions">
+                        <TableActionButton
+                          :data-testid="`repeated-event-log-${row.sample_event_id}`"
+                          action="detail"
+                          @click="openSystemEventDetail(row)">查看日志</TableActionButton>
+                      </div>
                     </template>
                   </ElTableColumn>
                 </ElTable>
@@ -775,6 +819,8 @@ onBeforeMount(() => {
                 empty-text="暂无系统事件">
                 <ElTableColumn
                   label="来源"
+                  class-name="mobile-hidden tablet-hidden"
+                  label-class-name="mobile-hidden tablet-hidden"
                   prop="source" />
                 <ElTableColumn
                   label="级别"
@@ -784,21 +830,28 @@ onBeforeMount(() => {
                   min-width="250"
                   show-overflow-tooltip>
                   <template #default="{ row }">
-                    <strong>{{ row.title_zh || '未收录的厂商事件代码' }}</strong>
+                    <strong>{{ vendorEventTitle(row) }}</strong>
                     <div class="repeated-event__code">{{ row.event_code || '-' }}</div>
                   </template>
                 </ElTableColumn>
                 <ElTableColumn
                   label="关联类型"
-                  min-width="130">
+                  min-width="170">
                   <template #default="{ row }">
-                    <ElTag :type="row.association_type === 'fault_log' ? 'danger' : row.association_type === 'performance_anomaly' ? 'warning' : 'info'">
-                      {{ row.association_type_label || '未分类厂商事件' }}
-                    </ElTag>
+                    <div class="system-event-semantic-tags">
+                      <ElTag :type="vendorEventAssociationTagType(row)">
+                        {{ vendorEventAssociationLabel(row) }}
+                      </ElTag>
+                      <ElTag :type="hasReviewedVendorSemantics(row) ? 'success' : 'warning'">
+                        {{ vendorEventReviewLabel(row) }}
+                      </ElTag>
+                    </div>
                   </template>
                 </ElTableColumn>
                 <ElTableColumn
                   label="事件对象"
+                  class-name="mobile-hidden tablet-hidden"
+                  label-class-name="mobile-hidden tablet-hidden"
                   prop="object_name">
                   <template #default="{ row }">
                     <span :title="row.object_id && row.object_id !== row.object_name ? `原始标识：${row.object_id}` : undefined">
@@ -808,6 +861,8 @@ onBeforeMount(() => {
                 </ElTableColumn>
                 <ElTableColumn
                   label="内容"
+                  class-name="mobile-hidden tablet-hidden"
+                  label-class-name="mobile-hidden tablet-hidden"
                   prop="description"
                   show-overflow-tooltip />
                 <ElTableColumn
@@ -816,11 +871,14 @@ onBeforeMount(() => {
                 <ElTableColumn
                   label="操作"
                   align="right"
+                  fixed="right"
                   width="110">
                   <template #default="{ row }">
-                    <TableActionButton
-                      action="detail"
-                      @click="openSystemEventDetail(row)">查看日志</TableActionButton>
+                    <div class="list-row-actions">
+                      <TableActionButton
+                        action="detail"
+                        @click="openSystemEventDetail(row)">查看日志</TableActionButton>
+                    </div>
                   </template>
                 </ElTableColumn>
               </ElTable>
@@ -849,7 +907,7 @@ onBeforeMount(() => {
     </ElCard>
     <ElDialog
       v-model="systemEventDetailVisible"
-      title="原始事件日志"
+      title="事件日志详情"
       width="min(720px, 96vw)">
       <div
         v-loading="loading.systemEventDetail"
@@ -859,9 +917,10 @@ onBeforeMount(() => {
           :column="2"
           border>
           <ElDescriptionsItem label="存储类型">{{ systemEventDetail.source || '-' }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="关联类型">{{ systemEventDetail.association_type_label || '未分类厂商事件' }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="关联类型">{{ vendorEventAssociationLabel(systemEventDetail) }}</ElDescriptionsItem>
           <ElDescriptionsItem label="事件代码">{{ systemEventDetail.event_code || '-' }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="中文含义">{{ systemEventDetail.title_zh || '未收录的厂商事件代码' }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="审核状态">{{ vendorEventReviewLabel(systemEventDetail) }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="中文含义">{{ vendorEventTitle(systemEventDetail) }}</ElDescriptionsItem>
           <ElDescriptionsItem label="事件对象">{{ systemEventDetail.object_name || systemEventDetail.object_id || '集群' }}</ElDescriptionsItem>
           <ElDescriptionsItem label="发生时间">{{ systemEventDetail.occurred_at || '-' }}</ElDescriptionsItem>
           <ElDescriptionsItem
@@ -869,7 +928,7 @@ onBeforeMount(() => {
             :span="2"><pre>{{ systemEventDetail.description || '-' }}</pre></ElDescriptionsItem>
           <ElDescriptionsItem
             label="中文说明"
-            :span="2">{{ systemEventDetail.description_zh || '该代码尚未维护中文说明，请结合规范化日志核查。' }}</ElDescriptionsItem>
+            :span="2">{{ vendorEventDescription(systemEventDetail) }}</ElDescriptionsItem>
         </ElDescriptions>
         <details v-if="systemEventDetail?.fingerprint">
           <summary>技术关联信息</summary>
@@ -894,6 +953,7 @@ onBeforeMount(() => {
   height: 100%;
 }
 .repeated-event__code { margin-top: 2px; color: var(--text-secondary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-size-xs); }
+.system-event-semantic-tags { display: flex; flex-wrap: wrap; gap: var(--spacing-xs); }
 .system-event-detail { display: grid; gap: var(--spacing-sm); min-height: 120px; }
 .system-event-detail pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-size-sm); }
 .system-event-detail details { color: var(--text-secondary); }
@@ -932,6 +992,8 @@ onBeforeMount(() => {
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
   height: 100%;
 }
 

@@ -1,4 +1,4 @@
-import CrudApi from './support/crud-api';
+import CrudApi from '../support/crud-api';
 
 class VendorEventDefinitionApi extends CrudApi {
   discover() {

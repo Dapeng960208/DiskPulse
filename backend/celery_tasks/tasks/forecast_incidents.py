@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Iterable
+from zoneinfo import ZoneInfo
 
 import numpy as np
 from celery.utils.log import get_task_logger
@@ -34,8 +35,12 @@ from models import (
     Volume,
     Qtree,
 )
-from services import capacityPredictionGovernanceService, forecastIncidentService, incidentNotificationService
-from crud import capacityPredictionCrud
+from services import (
+    capacityPredictionGovernanceService,
+    forecastIncidentService,
+    incidentNotificationService,
+)
+from crud import capacityPredictionCrud, vendorEventDefinitionCrud
 from services.forecastIncidentService import AssetRef, TelemetryEnvelope
 
 
@@ -64,6 +69,13 @@ _CAPACITY_TABLES = {
 def _utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _vendor_event_utc(value: datetime) -> datetime:
+    """StorageAlerts timestamps are persisted as Asia/Shanghai wall time when naive."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
     return value.astimezone(timezone.utc)
 
 
@@ -781,9 +793,64 @@ def run_performance_anomalies(*, now: datetime | None = None) -> int:
                 _notifications_after_commit(notifications)
 
 
-def _vendor_event_asset(cluster: StorageCluster) -> tuple[AssetRef, str]:
-    # Current vendor event collectors expose node/object identifiers only; safely fall back to cluster scope.
+def _vendor_event_asset(
+    cluster: StorageCluster, event: StorageAlerts
+) -> tuple[AssetRef, str]:
+    related_info_value = getattr(event, "related_info", None)
+    related_info = related_info_value if isinstance(related_info_value, dict) else {}
+    object_id = related_info.get("object_id")
+    related_type = str(getattr(event, "related_type", None) or "").lower()
+    if object_id and str(object_id).lower() != "cluster" and related_type in {
+        "node",
+        "storage_node",
+    }:
+        raw = related_info.get("raw")
+        raw = raw if isinstance(raw, dict) else {}
+        node = raw.get("node") if isinstance(raw.get("node"), dict) else {}
+        return (
+            AssetRef(
+                asset_type="storage_node",
+                asset_id=str(object_id),
+                storage_cluster_id=cluster.id,
+                project_id=None,
+                vendor=cluster.storage_type,
+                display_name=str(node.get("name") or object_id),
+            ),
+            "good",
+        )
+    if object_id and str(object_id).lower() == "cluster":
+        return _cluster_asset(cluster), "good"
     return _cluster_asset(cluster), "data_gap:asset_mapping_missing"
+
+
+def _vendor_event_definition_key(
+    cluster: StorageCluster,
+    event: StorageAlerts,
+) -> tuple[str, str] | None:
+    storage_type = str(event.source or cluster.storage_type or "").strip().lower()
+    related_info_value = getattr(event, "related_info", None)
+    related_info = related_info_value if isinstance(related_info_value, dict) else {}
+    event_code_value = related_info.get("event_code")
+    event_code = (
+        event_code_value.strip() if isinstance(event_code_value, str) else ""
+    )
+    if storage_type not in {"netapp", "isilon"} or not event_code:
+        return None
+    return storage_type, event_code
+
+
+def _vendor_event_association_type(
+    definition_map: dict,
+    key: tuple[str, str] | None,
+) -> str:
+    definition = definition_map.get(key) if key is not None else None
+    if (
+        definition is None
+        or not definition.is_active
+        or definition.review_status != "reviewed"
+    ):
+        return "unknown"
+    return str(definition.association_type)
 
 
 def _diskpulse_alert_asset(db, event: StorageAlerts) -> tuple[AssetRef, str]:
@@ -889,23 +956,60 @@ def process_vendor_event_evidence(*, storage_cluster_id: int, source: str | None
                 return 0
             statement = select(StorageAlerts).where(
                 StorageAlerts.storage_cluster_id == storage_cluster_id,
-                StorageAlerts.source != "diskpulse",
+                StorageAlerts.source.in_(("netapp", "isilon")),
             )
             if source is not None:
                 statement = statement.where(StorageAlerts.source == source)
             events = db.execute(statement.order_by(StorageAlerts.updated_at.desc()).limit(500)).scalars().all()
-            asset, quality = _vendor_event_asset(cluster)
+            source_refs_by_event = {
+                event.id: (
+                    f"storage_alert:{event.id}",
+                    f"{event.source}:{event.external_event_id or event.id}",
+                )
+                for event in events
+            }
+            existing_source_refs = (
+                forecastIncidentCrud.list_existing_incident_evidence_source_refs(
+                    db,
+                    source="vendor_event",
+                    source_refs=(
+                        source_ref
+                        for refs in source_refs_by_event.values()
+                        for source_ref in refs
+                    ),
+                )
+            )
+            definition_keys = {
+                key
+                for event in events
+                if (key := _vendor_event_definition_key(cluster, event)) is not None
+            }
+            definition_map = vendorEventDefinitionCrud.get_definition_map(
+                db,
+                definition_keys,
+            )
             handled = 0
             for event in events:
-                external_ref = event.external_event_id or str(event.id)
+                current_ref, legacy_ref = source_refs_by_event[event.id]
+                if current_ref in existing_source_refs or legacy_ref in existing_source_refs:
+                    continue
+                asset, quality = _vendor_event_asset(cluster, event)
+                definition_key = _vendor_event_definition_key(cluster, event)
+                association_type = _vendor_event_association_type(
+                    definition_map,
+                    definition_key,
+                )
                 envelope = TelemetryEnvelope(
                     asset_ref=asset,
                     source="vendor_event",
-                    source_ref=f"{event.source}:{external_ref}",
-                    observed_at=_utc(event.updated_at),
+                    source_ref=current_ref,
+                    observed_at=_vendor_event_utc(event.updated_at),
                     collected_at=datetime.now(timezone.utc),
                     metric_or_event="severe_vendor_event" if event.severity == "critical" else "vendor_event",
-                    value={"severity": event.severity},
+                    value={
+                        "severity": event.severity,
+                        "association_type": association_type,
+                    },
                     quality=quality,
                 )
                 if not forecastIncidentService.should_admit_incident(

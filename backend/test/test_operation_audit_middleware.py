@@ -135,6 +135,7 @@ def test_http_authentication_and_authorization_denials_append_safe_result_events
         ("PATCH", "/v1/admin/capacity-prediction-settings"),
         ("POST", "/v1/admin/capacity-prediction-candidates"),
         ("POST", "/v1/admin/capacity-prediction-candidates/11/activate"),
+        ("PATCH", "/admin/vendor-event-definitions/11"),
     ],
 )
 def test_routes_with_specialized_lifecycle_audits_are_not_duplicated(

@@ -3,6 +3,7 @@ import { flushPromises, shallowMount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { vi } from 'vitest';
 import StorageClusterDetailPage from '@/pages/admin/storage-cluster/StorageClusterDetailPage.vue';
+import storageClusterDetailSource from '@/pages/admin/storage-cluster/StorageClusterDetailPage.vue?raw';
 
 const initialRange = ['2026-07-01 00:00:00', '2026-07-02 00:00:00'];
 const storageClusterApi = vi.hoisted(() => ({
@@ -110,21 +111,12 @@ const Table = defineComponent({
   },
 });
 
+let tableRow;
+
 const TableColumn = defineComponent({
   name: 'ElTableColumn',
   setup(_, { slots }) {
-    const row = {
-      id: 91,
-      sample_event_id: 91,
-      source: 'netapp',
-      event_code: 'secd.authsys.lookup.failed',
-      association_type: 'fault_log',
-      association_type_label: '故障日志',
-      title_zh: '认证服务查询失败',
-      object_id: 'node-a',
-      object_name: 'node-a',
-    };
-    return () => h('div', [slots.header?.(), slots.default?.({ row })]);
+    return () => h('div', [slots.header?.(), slots.default?.({ row: tableRow })]);
   },
 });
 
@@ -229,6 +221,20 @@ async function selectTab(wrapper, name) {
 
 describe('storage cluster health analytics page', () => {
   beforeEach(() => {
+    tableRow = {
+      id: 91,
+      sample_event_id: 91,
+      source: 'netapp',
+      event_code: 'secd.authsys.lookup.failed',
+      association_type: 'fault_log',
+      association_type_label: '故障日志',
+      title_zh: '认证服务查询失败',
+      description_zh: '名称服务或认证后端查询失败。',
+      review_status: 'reviewed',
+      object_id: 'node-a',
+      object_name: 'node-a',
+      description: 'Unable to retrieve credentials',
+    };
     route.name = 'StorageClusterDetail';
     route.params = { id: '42' };
     storageClusterApi.fetchById.mockResolvedValue({ id: 42, name: 'cluster-a', storage_type: 'netapp' });
@@ -541,7 +547,94 @@ describe('storage cluster health analytics page', () => {
 
     expect(storageClusterApi.fetchSystemEventDetail).toHaveBeenCalledWith(42, 91);
     expect(wrapper.text()).toContain('Unable to retrieve credentials for SVM_nas');
-    expect(wrapper.findComponent({ name: 'ElDialog' }).attributes('title')).toBe('原始事件日志');
+    expect(wrapper.findComponent({ name: 'ElDialog' }).attributes('title')).toBe('事件日志详情');
+  });
+
+  it('keeps event log actions reachable and hides low-frequency columns on narrow screens', async () => {
+    storageClusterApi.fetchErrorSeverity.mockResolvedValue({ total: 1, counts: { error: 1 } });
+    storageClusterApi.fetchRepeatedFaults.mockResolvedValue({
+      data: [{
+        ...tableRow,
+        count: 3,
+        log_excerpt: 'Unable to retrieve credentials',
+        first_occurred_at: '2026-07-21 08:06:21',
+        last_occurred_at: '2026-07-21 09:06:21',
+      }],
+    });
+    storageClusterApi.fetchSystemEvents.mockResolvedValue({
+      total: 1,
+      page: 1,
+      page_size: 20,
+      data: [tableRow],
+    });
+    const wrapper = await mountPage();
+
+    await selectTab(wrapper, 'faults');
+
+    const assertCompactColumn = (columns, label) => {
+      const column = columns.find((candidate) => candidate.attributes('label') === label);
+      expect(column, `${label} column`).toBeDefined();
+      expect(column.attributes('class-name')).toContain('mobile-hidden');
+      expect(column.attributes('class-name')).toContain('tablet-hidden');
+      expect(column.attributes('label-class-name')).toContain('mobile-hidden');
+      expect(column.attributes('label-class-name')).toContain('tablet-hidden');
+    };
+
+    const repeatedSection = wrapper.get('.fault-grid');
+    const repeatedColumns = repeatedSection.findAllComponents({ name: 'ElTableColumn' });
+    ['来源', '日志摘要', '首次发生'].forEach((label) => assertCompactColumn(repeatedColumns, label));
+    const repeatedAction = repeatedColumns.find((column) => column.attributes('label') === '操作');
+    expect(repeatedAction.attributes('fixed')).toBe('right');
+    expect(repeatedAction.find('.list-row-actions').exists()).toBe(true);
+
+    const systemEventSection = wrapper.get('.system-events');
+    const systemEventColumns = systemEventSection.findAllComponents({ name: 'ElTableColumn' });
+    ['来源', '事件对象', '内容'].forEach((label) => assertCompactColumn(systemEventColumns, label));
+    const systemEventAction = systemEventColumns.find((column) => column.attributes('label') === '操作');
+    expect(systemEventAction.attributes('fixed')).toBe('right');
+    expect(systemEventAction.find('.list-row-actions').exists()).toBe(true);
+  });
+
+  it('keeps pending or unknown vendor semantics visibly unclassified in the list and detail', async () => {
+    tableRow = {
+      ...tableRow,
+      association_type: 'unknown',
+      association_type_label: '候选故障日志',
+      title_zh: '候选磁盘故障',
+      description_zh: '候选说明不应作为正式故障结论。',
+      review_status: 'pending',
+    };
+    storageClusterApi.fetchSystemEvents.mockResolvedValue({
+      total: 1,
+      page: 1,
+      page_size: 20,
+      data: [tableRow],
+    });
+    storageClusterApi.fetchSystemEventDetail.mockResolvedValue({
+      ...tableRow,
+      description: 'disk bay 4 reported an unclassified vendor event',
+      fingerprint: 'netapp:test.vendor.event:disk:4',
+      occurred_at: '2026-07-21 09:06:21',
+    });
+    const wrapper = await mountPage();
+
+    await selectTab(wrapper, 'faults');
+
+    const eventSection = wrapper.get('.system-events');
+    expect(eventSection.find('strong').text()).toBe('待审核 · 未分类厂商事件');
+    expect(eventSection.findAllComponents({ name: 'ElTag' }).map((tag) => tag.text()))
+      .toEqual(expect.arrayContaining(['未分类厂商事件', '待审核']));
+
+    await eventSection.findComponent({ name: 'TableActionButton' }).trigger('click');
+    await flushPromises();
+
+    const detail = wrapper.get('.system-event-detail');
+    expect(detail.text()).toContain('待审核');
+    expect(detail.text()).toContain('未分类厂商事件');
+    expect(detail.text()).toContain('该事件代码尚未完成审核');
+    expect(detail.text()).toContain('disk bay 4 reported an unclassified vendor event');
+    expect(detail.text()).not.toContain('候选磁盘故障');
+    expect(detail.text()).not.toContain('候选说明不应作为正式故障结论');
   });
 
   it('searches and paginates system events with 20 rows by default', async () => {
@@ -669,5 +762,11 @@ describe('storage cluster health analytics page', () => {
     expect(wrapper.findComponent({ name: 'StorageClusterSelect' }).exists()).toBe(false);
     expect(wrapper.findComponent({ name: 'ElDescriptions' }).exists()).toBe(false);
     expect(storageClusterApi.fetchById).toHaveBeenCalledWith(42);
+  });
+
+  it('allows tab panes to shrink so fixed log actions remain reachable on narrow screens', () => {
+    expect(storageClusterDetailSource).toMatch(
+      /\.storage-health-page__tabs :deep\(\.el-tab-pane\)\s*\{[^}]*min-width:\s*0;/s,
+    );
   });
 });
