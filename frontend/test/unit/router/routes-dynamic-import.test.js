@@ -52,6 +52,7 @@ vi.mock('@/pages/admin/volume/VolumeDetailPage.vue', () => ({ default: createRou
 vi.mock('@/pages/admin/qtree/QtreeListPage.vue', () => ({ default: createRoutePageStub('QtreeListPage') }));
 vi.mock('@/pages/admin/qtree/QtreeDetailPage.vue', () => ({ default: createRoutePageStub('QtreeDetailPage') }));
 vi.mock('@/pages/admin/user/UserListPage.vue', () => ({ default: createRoutePageStub('UserListPage') }));
+vi.mock('@/pages/admin/vendor-event-definition/VendorEventDefinitionPage.vue', () => ({ default: createRoutePageStub('VendorEventDefinitionPage') }));
 vi.mock('@/pages/admin/backup/BackUpListPage.vue', () => ({ default: createRoutePageStub('BackUpListPage') }));
 vi.mock('@/pages/admin/settings/SettingsPage.vue', () => ({ default: createRoutePageStub('SettingsPage') }));
 vi.mock('@/pages/admin/ai/AiCenterPage.vue', () => ({ default: createRoutePageStub('AiCenterPage') }));
@@ -82,7 +83,7 @@ describe('router lazy route components', () => {
   it('invokes every lazy route component loader', async () => {
     const lazyComponents = collectLazyComponents(routes);
 
-    expect(lazyComponents).toHaveLength(33);
+    expect(lazyComponents).toHaveLength(34);
 
     await Promise.all(lazyComponents.map((loadComponent) => loadComponent().catch(() => null)));
   });

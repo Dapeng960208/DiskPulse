@@ -7,15 +7,27 @@ import hashlib
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import Any, Iterable, Literal
 
 import numpy as np
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from crud import forecastIncidentCrud
-from models import Diagnosis, Incident, IncidentEvidence, IncidentTimeline, MaintenanceWindow, User
-from services import audit_service, project_access_service
+from crud import (
+    forecastIncidentCrud,
+    storageHealthAnalyticsCrud,
+    vendorEventDefinitionCrud,
+)
+from models import (
+    Diagnosis,
+    Incident,
+    IncidentEvidence,
+    IncidentTimeline,
+    MaintenanceWindow,
+    StorageAlerts,
+    User,
+)
+from services import audit_service, project_access_service, vendorEventDefinitionService
 from utils.auth_service import is_super_admin
 
 
@@ -69,7 +81,14 @@ def _utc(value: datetime) -> datetime:
 class AssetRef(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    asset_type: Literal["storage_cluster", "volume", "qtree", "group", "storage_usage"]
+    asset_type: Literal[
+        "storage_cluster",
+        "storage_node",
+        "volume",
+        "qtree",
+        "group",
+        "storage_usage",
+    ]
     asset_id: str
     storage_cluster_id: int
     project_id: int | None = None
@@ -458,7 +477,16 @@ def should_admit_incident(
     """Keep the Incident queue to urgent cluster actions; raw signals stay queryable elsewhere."""
     severity = _severity(envelope)
     if category == "device_fault":
-        return envelope.source == "vendor_event" and severity == "critical"
+        association_type = (
+            envelope.value.get("association_type", "unknown")
+            if isinstance(envelope.value, dict)
+            else "unknown"
+        )
+        return (
+            envelope.source == "vendor_event"
+            and severity == "critical"
+            and association_type in {"fault_log", "unknown", None}
+        )
     if category == "performance_contention":
         return envelope.source == "anomaly_observation" and severity == "critical"
     if category == "telemetry_blindspot":
@@ -489,6 +517,23 @@ _EVIDENCE_PRESENTATIONS = {
     "repeated_fault": ("重复故障事件", "同一故障指纹在短时间内重复出现。"),
     "collection_error": ("采集异常", "监控采集任务未能成功完成。"),
 }
+_DATA_GAP_DETAILS = {
+    "asset_mapping_missing": {
+        "code": "asset_mapping_missing",
+        "label": "资产映射不完整",
+        "description": (
+            "事件至少已归属存储集群，但节点、卷、Qtree 或项目的稳定映射链路不完整；"
+            "已识别稳定节点身份的厂商事件不会产生此缺口。"
+        ),
+        "impact": "不影响查看已规范化的厂商事件日志正文。",
+    },
+    "conflicting_evidence": {
+        "code": "conflicting_evidence",
+        "label": "证据相互冲突",
+        "description": "该诊断分类下存在相互矛盾的证据，置信度评分已相应下调。",
+        "impact": "请人工比对相关证据后再确认根因分类。",
+    },
+}
 _TIMELINE_ACTION_LABELS = {
     "created": "系统创建事件",
     "opened": "系统创建事件",
@@ -501,6 +546,7 @@ _TIMELINE_ACTION_LABELS = {
     "silenced": "静默事件通知",
     "unsilenced": "恢复事件通知",
     "commented": "添加评论",
+    "reconciled": "系统复核历史事件",
 }
 
 
@@ -523,11 +569,252 @@ def _format_reference_time(value: str | None) -> str | None:
         return None
 
 
-def build_evidence_presentation(evidence) -> dict[str, str]:
+def data_gap_details(codes: list[str] | None) -> list[dict[str, str]]:
+    result = []
+    for code in dict.fromkeys(codes or []):
+        detail = _DATA_GAP_DETAILS.get(code)
+        if detail is not None:
+            result.append(dict(detail))
+            continue
+        result.append(
+            {
+                "code": str(code),
+                "label": "待补充的证据信息",
+                "description": "当前证据中存在尚未完整解释的信息缺口。",
+                "impact": "请结合关联证据和厂商事件日志继续核查。",
+            }
+        )
+    return result
+
+
+def diagnosis_data_gap_details(diagnosis) -> list[dict[str, str]]:
+    """Resolve gap details for a diagnosis, including candidate-level gap codes.
+
+    Candidates can carry gap codes (e.g. ``conflicting_evidence``) that never
+    appear in the diagnosis-level ``data_gaps`` list; including them here lets
+    clients resolve every candidate gap code against one detail list.
+    """
+    codes = list(diagnosis.data_gaps or [])
+    for candidate in diagnosis.candidates or []:
+        if isinstance(candidate, dict):
+            codes.extend(candidate.get("data_gaps") or [])
+    return data_gap_details(codes)
+
+
+def _definition_field(definition, name: str):
+    if isinstance(definition, dict):
+        return definition.get(name)
+    return getattr(definition, name, None)
+
+
+@dataclass(frozen=True)
+class VendorEvidenceContext:
+    alert: StorageAlerts
+    event_code: str
+    definition: dict[str, Any]
+
+
+VendorEvidenceContextMap = dict[str, VendorEvidenceContext]
+
+
+def _safe_vendor_definition(definition, *, storage_type: str, event_code: str) -> dict[str, Any]:
+    if (
+        definition is not None
+        and definition.is_active
+        and definition.review_status == "reviewed"
+    ):
+        return vendorEventDefinitionService.serialize_definition(definition)
+    return {
+        "storage_type": storage_type,
+        "event_code": event_code,
+        "association_type": "unknown",
+        "association_type_label": vendorEventDefinitionService.association_type_label(
+            "unknown"
+        ),
+        "title_zh": vendorEventDefinitionService.UNKNOWN_TITLE_ZH,
+        "description_zh": vendorEventDefinitionService.UNKNOWN_DESCRIPTION_ZH,
+    }
+
+
+def build_vendor_evidence_context(
+    db,
+    evidence_items: Iterable[IncidentEvidence],
+    *,
+    storage_cluster_id: int | None,
+) -> VendorEvidenceContextMap:
+    evidence_rows = list(evidence_items)
+    source_refs = [str(evidence.source_ref or "") for evidence in evidence_rows]
+    alerts = storageHealthAnalyticsCrud.get_vendor_alerts_for_evidence_refs(
+        db,
+        source_refs,
+        storage_cluster_id,
+    )
+    event_codes: dict[str, str] = {}
+    definition_keys: set[tuple[str, str]] = set()
+    for source_ref, alert in alerts.items():
+        related_info = alert.related_info if isinstance(alert.related_info, dict) else {}
+        event_code = str(related_info.get("event_code") or "").strip()
+        if not event_code:
+            continue
+        event_codes[source_ref] = event_code
+        definition_keys.add((alert.source, event_code))
+    definitions = vendorEventDefinitionCrud.get_definition_map(db, definition_keys)
+    return {
+        source_ref: VendorEvidenceContext(
+            alert=alert,
+            event_code=event_codes[source_ref],
+            definition=_safe_vendor_definition(
+                definitions.get((alert.source, event_codes[source_ref])),
+                storage_type=alert.source,
+                event_code=event_codes[source_ref],
+            ),
+        )
+        for source_ref, alert in alerts.items()
+        if source_ref in event_codes
+    }
+
+
+def vendor_alert_for_evidence(db, evidence) -> StorageAlerts | None:
+    source_ref = str(evidence.source_ref or "")
+    incident = (
+        forecastIncidentCrud.get_incident(db, evidence.incident_id)
+        if evidence.incident_id
+        else None
+    )
+    alerts = storageHealthAnalyticsCrud.get_vendor_alerts_for_evidence_refs(
+        db,
+        [source_ref],
+        incident.storage_cluster_id if incident is not None else None,
+    )
+    return alerts.get(source_ref)
+
+
+def _vendor_context_for_evidence(
+    db,
+    evidence,
+    vendor_context: VendorEvidenceContextMap | None,
+) -> VendorEvidenceContext | None:
+    source_ref = str(evidence.source_ref or "")
+    if vendor_context is not None:
+        return vendor_context.get(source_ref)
+    if db is None:
+        return None
+    alert = vendor_alert_for_evidence(db, evidence)
+    if alert is None:
+        return None
+    related_info = alert.related_info if isinstance(alert.related_info, dict) else {}
+    event_code = str(related_info.get("event_code") or "").strip()
+    if not event_code:
+        return None
+    return VendorEvidenceContext(
+        alert=alert,
+        event_code=event_code,
+        definition=vendorEventDefinitionService.resolve_definition(
+            db, alert.source, event_code
+        ),
+    )
+
+
+def _vendor_summary_from_context(
+    evidence,
+    context: VendorEvidenceContext | None,
+) -> dict[str, str] | None:
+    if context is None:
+        return None
+    definition = context.definition
+    return {
+        "source_ref": str(evidence.source_ref),
+        "event_code": context.event_code,
+        "association_type": str(_definition_field(definition, "association_type")),
+        "association_type_label": str(
+            _definition_field(definition, "association_type_label")
+        ),
+        "title_zh": str(_definition_field(definition, "title_zh")),
+        "severity": str(context.alert.severity or "info"),
+    }
+
+
+def vendor_evidence_summary(
+    db,
+    evidence,
+    *,
+    vendor_context: VendorEvidenceContextMap | None = None,
+) -> dict[str, str] | None:
+    return _vendor_summary_from_context(
+        evidence,
+        _vendor_context_for_evidence(db, evidence, vendor_context),
+    )
+
+
+def diagnosis_evidence_summaries(
+    db,
+    incident_id: int,
+    evidence_ids: list[str] | None,
+    *,
+    evidence_items: Iterable[IncidentEvidence] | None = None,
+    vendor_context: VendorEvidenceContextMap | None = None,
+) -> list[dict[str, str]]:
+    allowed = set(evidence_ids or [])
+    summaries = []
+    evidence_rows = (
+        list(evidence_items)
+        if evidence_items is not None
+        else forecastIncidentCrud.list_incident_evidence(db, incident_id)
+    )
+    if vendor_context is None:
+        incident = forecastIncidentCrud.get_incident(db, incident_id)
+        vendor_context = build_vendor_evidence_context(
+            db,
+            evidence_rows,
+            storage_cluster_id=(
+                incident.storage_cluster_id if incident is not None else None
+            ),
+        )
+    for evidence in evidence_rows:
+        if allowed and evidence.source_ref not in allowed:
+            continue
+        summary = vendor_evidence_summary(
+            db,
+            evidence,
+            vendor_context=vendor_context,
+        )
+        if summary is not None:
+            summaries.append(summary)
+    return summaries
+
+
+def build_evidence_presentation(
+    evidence,
+    *,
+    db=None,
+    vendor_context: VendorEvidenceContextMap | None = None,
+) -> dict[str, Any]:
     """Return a safe, user-readable view without changing the immutable evidence fact."""
     source = str(evidence.source or "")
     source_ref = str(evidence.source_ref or "")
     evidence_type = str(evidence.evidence_type or "")
+    context = _vendor_context_for_evidence(db, evidence, vendor_context)
+    vendor_summary = _vendor_summary_from_context(evidence, context)
+    if vendor_summary is not None:
+        alert = context.alert
+        source_label = "NetApp" if alert.source == "netapp" else "PowerScale"
+        object_id = "集群"
+        if isinstance(alert.related_info, dict):
+            object_id = str(alert.related_info.get("object_id") or object_id)
+        description_zh = str(_definition_field(context.definition, "description_zh"))
+        return {
+            "group_key": "vendor_event",
+            "group_label": "厂商系统事件",
+            "title": vendor_summary["title_zh"],
+            "summary": f"{source_label} 事件 {vendor_summary['event_code']}：{description_zh}",
+            "scope_label": f"节点 {object_id}" if object_id != "集群" else object_id,
+            "technical_ref": source_ref,
+            "association_type": vendor_summary["association_type"],
+            "association_type_label": vendor_summary["association_type_label"],
+            "event_code": vendor_summary["event_code"],
+            "log_excerpt": alert.description,
+            "detail_available": True,
+        }
     stream, referenced_at, reference_reason = _telemetry_quality_reference(source_ref)
     if source == "telemetry_quality" or stream is not None:
         scope_label = _TELEMETRY_STREAM_LABELS.get(stream or "", "监控采集")
@@ -596,6 +883,7 @@ def build_timeline_presentation(timeline, *, actor_label: str | None) -> dict[st
         "silenced": "后续事件通知已静默。",
         "unsilenced": "后续事件通知已恢复。",
         "commented": "已记录处理评论。",
+        "reconciled": "系统根据保留的厂商证据复核并关闭了历史误分类事件。",
     }.get(event_type, "系统记录了一次事件更新。")
     return {
         "action_label": _TIMELINE_ACTION_LABELS.get(event_type, "事件更新"),

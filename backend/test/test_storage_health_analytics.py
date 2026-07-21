@@ -361,6 +361,7 @@ def test_system_event_service_returns_pagination_metadata():
         END,
         keyword="quota",
         severity="warning",
+        include_identity=True,
         page=2,
         page_size=20,
     )

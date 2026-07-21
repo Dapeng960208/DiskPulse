@@ -45,6 +45,7 @@ def _has_specialized_lifecycle_audit(path: str) -> bool:
         or normalised == "/ai"
         or normalised.startswith("/ai/")
         or normalised.startswith("/admin/ai")
+        or normalised.startswith("/admin/vendor-event-definitions")
     )
 
 

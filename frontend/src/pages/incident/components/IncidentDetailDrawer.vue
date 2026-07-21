@@ -67,7 +67,7 @@ const categoryLabels = {
 };
 const categoryDescriptions = {
   capacity_pressure: '容量预测显示可能耗尽，或当前资源的有效告警规则达到阈值。默认按硬限额 80%/90%/95%；用户目录优先采用项目组规则，其次项目规则，最后系统规则。',
-  device_fault: 'NetApp EMS 或 PowerScale（Isilon）厂商系统事件达到严重级别、同一故障指纹反复出现，或同一时段采集异常时创建。它表示待核查的设备健康风险，不等同于已确认硬件损坏。',
+  device_fault: 'NetApp EMS 或 PowerScale（Isilon）厂商系统事件达到严重级别时进入处置队列。关联类型会进一步说明它属于故障日志、性能异常、容量阈值或系统运行事件；故障指纹只用于重复归组，不能单独作为故障结论。',
   performance_contention: '同一指标连续三个相邻 5 分钟桶偏离 28 天同星期同小时基线，且鲁棒 Z 分数绝对值均不低于 3.5。',
   telemetry_blindspot: '监控盲区：容量、厂商事件或性能监控采集过期、采集失败或覆盖率不足，当前数据不足以可靠判断资产状态。',
 };
@@ -85,8 +85,11 @@ const confidenceDescriptions = {
 };
 const evidenceSourceLabels = {
   forecast: '容量预测',
+  capacity_forecast: '容量预测',
   storage_alert: 'DiskPulse 存储告警',
+  diskpulse_alert: 'DiskPulse 存储告警',
   vendor_event: '厂商系统事件',
+  anomaly_observation: '性能异常',
   telemetry: '监控采集',
   telemetry_quality: '监控数据质量',
 };
@@ -95,7 +98,10 @@ const evidenceTypeLabels = {
   hard_limit_alert: '硬限额告警',
   soft_limit_alert: '软限额告警',
   severe_vendor_event: '厂商严重系统事件',
+  vendor_event: '厂商系统事件',
+  continuous_performance_anomaly: '持续性能异常',
   repeated_fault: '重复故障事件',
+  collection_failure: '采集异常',
   collection_error: '采集异常',
   telemetry_stale: '采集已过期',
   coverage_insufficient: '覆盖不足',
@@ -142,6 +148,27 @@ function evidencePresentation(evidence) {
     scope_label: sourceLabel,
     technical_ref: evidence.source_ref || '-',
   };
+}
+
+function evidenceAssociationLabel(evidence) {
+  return evidence.presentation?.association_type_label
+    || evidence.evidence_summary?.association_type_label
+    || null;
+}
+
+function evidenceLogExcerpt(evidence) {
+  return evidence.presentation?.log_excerpt || null;
+}
+
+function diagnosisGapDetails(codes = []) {
+  const details = current.value.diagnosis?.data_gap_details || [];
+  const byCode = new Map(details.map((item) => [item.code, item]));
+  return codes.map((code) => byCode.get(code) || {
+    code,
+    label: '待补充关联信息',
+    description: '该关联信息尚不完整，请结合证据详情核查。',
+    impact: '不会阻止查看已经保存的证据。',
+  });
 }
 
 function sortNewestFirst(items, timestampKey) {
@@ -326,8 +353,19 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
               v-for="candidate in current.diagnosis.candidates || []"
               :key="candidate.category">
               建议优先核查{{ categoryLabels[candidate.category] || candidate.category }}（证据匹配分 {{ candidate.score }}）
-              <span>；依据 {{ (candidate.evidence_refs || []).join('、') || '无' }}</span>
-              <span v-if="candidate.data_gaps?.length">；待补充 {{ candidate.data_gaps.join('、') }}</span>
+              <span>；依据 {{ (candidate.evidence_refs || []).length }} 项关联证据</span>
+              <span v-if="candidate.data_gaps?.length">；待补充 {{ diagnosisGapDetails(candidate.data_gaps).map((item) => item.label).join('、') }}</span>
+            </li>
+          </ul>
+          <ul
+            v-if="current.diagnosis.data_gap_details?.length"
+            class="incident-detail__gap-list">
+            <li
+              v-for="gap in current.diagnosis.data_gap_details"
+              :key="gap.code">
+              <strong>{{ gap.label }}</strong>
+              <span>{{ gap.description }}</span>
+              <span>{{ gap.impact }}</span>
             </li>
           </ul>
         </template>
@@ -366,11 +404,28 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
               :key="evidence.id"
               class="incident-detail__evidence-item">
               <h5>{{ evidence.presentation.title }}</h5>
+              <ElTag
+                v-if="evidenceAssociationLabel(evidence)"
+                class="incident-detail__association-tag"
+                :type="evidence.presentation?.association_type === 'fault_log' || evidence.evidence_summary?.association_type === 'fault_log' ? 'danger' : 'info'"
+                size="small">{{ evidenceAssociationLabel(evidence) }}</ElTag>
               <dl>
                 <div><dt>异常说明</dt><dd>{{ evidence.presentation.summary }}</dd></div>
                 <div><dt>影响范围</dt><dd>{{ current.display_name || '当前对象' }} · {{ evidence.presentation.scope_label }}</dd></div>
                 <div><dt>发现时间</dt><dd>{{ formatLocalDateTime(evidence.observed_at) }}</dd></div>
+                <div v-if="evidenceLogExcerpt(evidence)"><dt>日志报错</dt><dd><pre>{{ evidenceLogExcerpt(evidence) }}</pre></dd></div>
               </dl>
+              <ul
+                v-if="evidence.data_gap_details?.length"
+                class="incident-detail__gap-list">
+                <li
+                  v-for="gap in evidence.data_gap_details"
+                  :key="gap.code">
+                  <strong>{{ gap.label }}</strong>
+                  <span>{{ gap.description }}</span>
+                  <span>{{ gap.impact }}</span>
+                </li>
+              </ul>
               <details>
                 <summary>技术关联信息</summary>
                 <dl class="incident-detail__technical-info">
@@ -455,16 +510,21 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
 .incident-detail__section p { margin: 0; color: var(--text-secondary); }
 .incident-detail__candidate-list { margin: 0; padding-left: 20px; color: var(--text-primary); }
 .incident-detail__candidate-list span { color: var(--text-secondary); }
+.incident-detail__gap-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.incident-detail__gap-list li { display: grid; gap: 2px; padding: 8px; border-left: 3px solid var(--warning-color); background: var(--bg-secondary); }
+.incident-detail__gap-list span { color: var(--text-secondary); font-size: var(--font-size-sm); }
 .incident-detail__evidence-overview { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .incident-detail__evidence-overview li { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-secondary); font-size: var(--font-size-sm); }
 .incident-detail__evidence-groups { display: grid; gap: var(--spacing-sm); margin: 0; padding: 0; list-style: none; }
 .incident-detail__evidence-groups > li { display: grid; gap: 8px; }
 .incident-detail__evidence-groups h4, .incident-detail__evidence-item h5 { margin: 0; color: var(--text-primary); font-size: var(--font-size-sm); }
 .incident-detail__evidence-item { display: grid; gap: 8px; padding: var(--spacing-sm); border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-secondary); }
+.incident-detail__association-tag { justify-self: start; }
 .incident-detail__evidence-item dl { display: grid; gap: 6px; margin: 0; }
 .incident-detail__evidence-item dl div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; }
 .incident-detail__evidence-item dt { color: var(--text-secondary); font-size: var(--font-size-sm); }
 .incident-detail__evidence-item dd { margin: 0; color: var(--text-primary); font-size: var(--font-size-sm); word-break: break-word; }
+.incident-detail__evidence-item pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .incident-detail__evidence-item details { color: var(--text-secondary); font-size: var(--font-size-sm); }
 .incident-detail__technical-info { display: grid; gap: 6px; margin: 8px 0 0; }
 .incident-detail__technical-info div { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; }

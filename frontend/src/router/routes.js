@@ -324,6 +324,16 @@ export default [
         },
       },
       {
+        path: 'vendor-event-definitions',
+        name: 'VendorEventDefinitions',
+        component: () => import('@/pages/admin/vendor-event-definition/VendorEventDefinitionPage.vue'),
+        meta: {
+          title: '事件关联信息',
+          icon: 'i-ri-links-line',
+          isAccessible: () => hasRole('superadmin') ? 200 : 403,
+        },
+      },
+      {
         path: 'incidents',
         name: 'IncidentCenter',
         component: () => import('@/pages/incident/IncidentCenterPage.vue'),

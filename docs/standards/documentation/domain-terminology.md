@@ -25,6 +25,11 @@
 | 项目组标签 | 只包含名称、由项目组引用的全局分类标签；不绑定项目或存储集群。 | `GroupTag` / `group_tag_id` |
 | 用户目录 | 分配给单个用户的目录和配额记录。 | `StorageUsage` |
 | 大文件 | 满足阈值条件、需要清理或告警的文件记录。 | `LargeFiles` |
+| 厂商系统事件 | NetApp ONTAP EMS 或 Dell PowerScale（Isilon）设备产生并保存到原始事件表的日志事实，不等同于 DiskPulse 容量告警或派生 Incident。 | `StorageAlerts.source=netapp/isilon` |
+| 厂商事件关联目录 | 按存储类型和事件代码维护中文含义、关联类型、官网依据与审核状态。只有已启用且已审核定义影响业务；已审核定义必须为非 `unknown` 类型，并有 HTTPS 官方链接和版本范围。待审核项只在管理目录中保留，不形成正式语义或重复故障。 | `VendorEventDefinition` |
+| 故障指纹 | 由厂商、事件代码、对象类型和稳定对象 ID 组成的重复归组键，只用于技术追溯，不能单独作为故障结论。 | `StorageAlerts.fingerprint` |
+| 设备健康风险 | Incident 内部 `device_fault` 类别的用户可见名称。已审核的 `fault_log` 与未分类 `critical` 事件都可进入，但后者必须继续标识为未分类，不代表已确认设备故障。 | `Incident.category=device_fault` |
+| 资产映射不完整 | 事件至少已归属存储集群，但节点、卷、Qtree 或项目的稳定映射链路不完整；已有稳定节点身份的厂商事件不记录该缺口。它不表示事件代码或厂商日志缺失。 | `asset_mapping_missing` |
 
 ## 容量指标
 

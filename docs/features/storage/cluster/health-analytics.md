@@ -14,10 +14,12 @@
 | 容量变化 | QuestDB `storage_cluster_storage_usages` | 所选范围最后一个已用容量减去第一个已用容量；期初为零时变化率为 `null`。 |
 | 严重级别统计 | PostgreSQL `storage_alerts` | 仅统计可归属当前集群的 NetApp/Isilon 原生事件，按 `critical`、`error`、`warning`、`info` 汇总；与系统事件表保持同一来源和时间范围。 |
 | 存储空间性能 | QuestDB `storage_performance_metrics` | 按 P95 延迟降序返回最多 100 个已关联存储空间，页面可选择 10、20、50、100 条；返回 P95、平均、最大、读、写延迟，以及平均 IOPS、平均吞吐量和样本数。NetApp 使用 Volume UUID；PowerScale 使用已固定的 path workload，并映射为对应 Directory Quota quota ID。 |
-| 重复故障 | PostgreSQL `storage_alerts` | 仅统计 `source=netapp` 或 `source=isilon` 的设备事件；同一 `fingerprint` 在所选范围出现至少两次时计为重复故障。 |
-| 系统事件 | PostgreSQL `storage_alerts` | 按当前集群、时间范围、关键字和日志等级查询 NetApp/Isilon 原生事件；数据库分页默认每页 20 条，包含来源、严重级别、事件代码、事件对象、内容和发生时间。 |
+| 重复故障 | PostgreSQL `storage_alerts` + `vendor_event_definitions` | 仅统计 `source=netapp` 或 `source=isilon`、目录定义已启用且已审核、关联类型为 `fault_log` 的设备事件；同一 `fingerprint` 在所选范围出现至少两次时计为重复故障。返回事件代码、中文含义、日志摘要和可打开的示例事件 ID，不把指纹本身当作故障结论。 |
+| 系统事件 | PostgreSQL `storage_alerts` + `vendor_event_definitions` | 按当前集群、时间范围、关键字和日志等级查询 NetApp/Isilon 原生事件；数据库分页默认每页 20 条，并关联事件类型、中文标题和说明。目录缺失、停用或待审核时统一显示“未分类厂商事件”；待审核候选内容只留在管理目录。 |
 
-DiskPulse 既有容量告警使用 `source=diskpulse`，严重级别映射为 `high→critical`、`medium→warning`、`low→info`。原“告警”页面只查询 `source=diskpulse`，NetApp/Isilon 原生事件归类为“系统事件”并仅在存储健康中展示，不再与容量、周报或扩容记录混排。严重级别统计、重复故障和系统事件都只接受 `netapp`、`isilon` 来源；其他来源即使写入 `storage_alerts` 也不进入故障分析。无法唯一归属到存储集群的项目级容量告警保留在原告警范围内，不进入集群健康分析。设备故障指纹由厂商、事件代码、对象类型和对象 ID 组成，不使用可能包含动态内容的完整消息。
+DiskPulse 既有容量告警使用 `source=diskpulse`，严重级别映射为 `high→critical`、`medium→warning`、`low→info`。原“告警”页面只查询 `source=diskpulse`，NetApp/Isilon 原生事件归类为“系统事件”并仅在存储健康中展示，不再与容量、周报或扩容记录混排。严重级别统计、重复故障和系统事件都只接受 `netapp`、`isilon` 来源；其他来源即使写入 `storage_alerts` 也不进入故障分析。无法唯一归属到存储集群的项目级容量告警保留在原告警范围内，不进入集群健康分析。
+
+设备事件指纹由厂商、事件代码、对象类型和对象 ID 组成，不使用可能包含动态内容的完整消息。指纹只是稳定的重复归组键，不能单独推断系统问题。页面仅使用[厂商事件关联目录](../event-association/overview.md)中已启用且已审核的“事件代码 + 中文含义 + 关联类型 + 日志摘要”作为正式信息；其他定义按未分类处理。管理员点击重复故障或系统事件后读取具体事件详情，查看规范化日志正文、对象和发生时间。原始厂商载荷不由详情接口返回。
 
 NetApp 事件来自 ONTAP EMS，性能来自 Volume `metric`。ONTAP 返回的 Volume 总、读、写延迟以微秒为单位，采集器统一除以 `1000` 转为毫秒后写入 QuestDB；`iops.total` 和 `throughput.total` 分别按 IOPS、B/s 写入统一字段。字段名必须使用 ONTAP REST 返回的单数 `metric`，请求不存在的 `metrics` 会返回 `400`。
 
@@ -29,12 +31,12 @@ PowerScale 事件来自 event group/list。逐存储空间性能先通过 `/plat
 
 OneFS event list 外层记录中的 `events[]` 按单条设备事件展开；event group 使用 `last_event`（缺失时使用 `time_noticed`）作为发生时间，并从 `causes` 取得事件代码和描述。OneFS 整数 Unix 时间戳统一换算为 DiskPulse 应用时区 `Asia/Shanghai` 的 naive 墙上时间后入库，不跟随 worker 或 CI runner 的操作系统时区。
 
-“事件对象”表示厂商事件关联的节点，而不是日志正文摘要。NetApp EMS 的原始对象 ID 通常是 ONTAP 节点 UUID，看起来像哈希但实际是设备提供的稳定节点标识；页面优先从原始事件的 `node.name` 显示节点名称，名称缺失时才回退 UUID。Isilon/PowerScale 的数字来自 OneFS 事件 `devid`（或 `specifier.devid`），表示事件所属节点/设备编号，页面显示为“节点 N”。原始 ID 仍随接口返回，并在页面悬停提示中保留，便于与厂商日志核对。
+“事件对象”表示厂商事件关联的节点，而不是日志正文摘要。NetApp EMS 的原始对象 ID 通常是 ONTAP 节点 UUID，看起来像哈希但实际是设备提供的稳定节点标识；页面优先从原始事件的 `node.name` 显示节点名称，名称缺失时才回退 UUID。Isilon/PowerScale 的数字来自 OneFS 事件 `devid`（或 `specifier.devid`），表示事件所属节点/设备编号，页面显示为“节点 N”。原始 ID 仅在有明确排障用途的技术信息中保留，便于与厂商日志核对。
 
 ## 采集与保留边界
 
 - 设备事件每分钟采集；首次回看 24 小时，之后回看最近 5 分钟，并按厂商事件 ID 去重。
-- `storage_alerts.updated_at` 沿用 DiskPulse 应用时区 `Asia/Shanghai` 的 naive 墙上时间口径；厂商事件携带时区时先显式换算到该时区再去除时区信息，不能使用无参数 `astimezone()` 或 `datetime.fromtimestamp()` 隐式继承宿主机时区。NetApp 增量查询的 `since` 单独换算为 UTC `Z` 格式，不能据此把事件入库时间描述为 UTC。
+- `storage_alerts.updated_at` 沿用 DiskPulse 应用时区 `Asia/Shanghai` 的 naive 墙上时间口径；厂商事件携带时区时先显式换算到该时区再去除时区信息，不能使用无参数 `astimezone()` 或 `datetime.fromtimestamp()` 隐式继承宿主机时区。派生 Incident 前必须把该墙上时间按 `Asia/Shanghai` 解释并转换为 UTC，不能直接附加 UTC 时区，否则事件中心会多显示 8 小时。NetApp 增量查询的 `since` 单独换算为 UTC `Z` 格式，不能据此把事件入库时间描述为 UTC。
 - 性能指标每 5 分钟采集，从功能启用后开始累计，不回灌设备历史性能。
 - `storage_performance_metrics` 保留 180 天；所有分析查询和导出时间范围最多 180 天。
 - 本功能不新增 `storage_alerts` 清理任务，其既有历史数据仍按系统原有策略保留，但超过 180 天不能通过健康分析接口查询。
@@ -42,19 +44,20 @@ OneFS event list 外层记录中的 `events[]` 按单条设备事件展开；eve
 
 ## API
 
-接口统一挂载在 `/storage-pulse/api`，并要求有效的 `Authorization: Bearer <token>`。本功能沿用存储集群详情的登录用户访问边界，不新增权限或角色。
+下列完整接口路径均要求有效的 `Authorization: Bearer <token>`。本功能沿用存储集群详情的登录用户访问边界，不新增权限或角色。
 
 | 能力 | 路径 |
 | --- | --- |
-| 存储分布 | `GET /aggregates/storage-trees/?storage_cluster_id={storage_cluster_id}` |
-| 容量变化 | `GET /storage-clusters/{storage_cluster_id}/analytics/capacity-change` |
-| 严重级别统计 | `GET /storage-clusters/{storage_cluster_id}/analytics/error-severity` |
-| 存储空间性能 | `GET /storage-clusters/{storage_cluster_id}/analytics/top-latency` |
-| 重复故障 | `GET /storage-clusters/{storage_cluster_id}/analytics/repeated-faults` |
-| 系统事件 | `GET /storage-clusters/{storage_cluster_id}/analytics/system-events` |
-| 导出 | `GET /storage-clusters/{storage_cluster_id}/analytics/export` |
+| 存储分布 | `GET /storage-pulse/api/aggregates/storage-trees/?storage_cluster_id={storage_cluster_id}` |
+| 容量变化 | `GET /storage-pulse/api/storage-clusters/{storage_cluster_id}/analytics/capacity-change` |
+| 严重级别统计 | `GET /storage-pulse/api/storage-clusters/{storage_cluster_id}/analytics/error-severity` |
+| 存储空间性能 | `GET /storage-pulse/api/storage-clusters/{storage_cluster_id}/analytics/top-latency` |
+| 重复故障 | `GET /storage-pulse/api/storage-clusters/{storage_cluster_id}/analytics/repeated-faults` |
+| 系统事件 | `GET /storage-pulse/api/storage-clusters/{storage_cluster_id}/analytics/system-events` |
+| 系统事件详情 | `GET /storage-pulse/api/storage-clusters/{storage_cluster_id}/analytics/system-events/{event_id}` |
+| 导出 | `GET /storage-pulse/api/storage-clusters/{storage_cluster_id}/analytics/export` |
 
-除存储分布外，所有健康分析接口要求 `start_time` 和 `end_time`，开始时间必须早于结束时间，范围不得超过 180 天。性能接口支持对象类型和 `limit` 参数，数量默认 10、最多 100；页面提供 10、20、50、100 四档，并可多选 P95、平均、最大、读、写延迟、IOPS 和吞吐量，默认只选 P95。页面还提供“对象”多选，用于在当前已返回的 Top-N 存储空间内本地对比；未选对象时显示全部返回结果，选择对象后图表与表格同步收窄，不增加接口参数或跨 Top-N 查询。性能图对长对象名截断横轴标签并保留悬停提示，图表标题与标签区域保留独立空间。系统事件接口支持 `keyword`（事件代码、对象标识/名称或内容）、`severity=critical|error|warning|info`、`page` 和 `page_size`；默认 `page=1&page_size=20`，单页最多 100 条，返回 `data`、`total`、`page`、`page_size`。过滤条件在数据库分页和 `total` 统计前生效。无数据时返回空集合和可空汇总值，不把无数据表示成故障。
+除存储分布外，所有健康分析列表接口要求 `start_time` 和 `end_time`，开始时间必须早于结束时间，范围不得超过 180 天。性能接口支持对象类型和 `limit` 参数，数量默认 10、最多 100；页面提供 10、20、50、100 四档，并可多选 P95、平均、最大、读、写延迟、IOPS 和吞吐量，默认只选 P95。页面还提供“对象”多选，用于在当前已返回的 Top-N 存储空间内本地对比；未选对象时显示全部返回结果，选择对象后图表与表格同步收窄，不增加接口参数或跨 Top-N 查询。性能图对长对象名截断横轴标签并保留悬停提示，图表标题与标签区域保留独立空间。系统事件接口支持 `keyword`（事件代码、对象标识/名称或内容）、`severity=critical|error|warning|info`、`page` 和 `page_size`；默认 `page=1&page_size=20`，单页最多 100 条，返回 `data`、`total`、`page`、`page_size`。过滤条件在数据库分页和 `total` 统计前生效。事件详情接口同时校验事件属于路径中的集群，并只返回规范化日志和关联目录的安全字段。无数据时返回空集合和可空汇总值，不把无数据表示成故障。
 
 容量变化接口遵守[容量单位 API 契约](../../../standards/backend/capacity-unit-contract.md)中的存储集群健康分析单位规则。
 
@@ -84,15 +87,15 @@ section=capacity|severity|latency|faults|all
 
 ## 测试与验证边界
 
-自动化验证覆盖厂商响应解析、PowerScale 资源版本、path dataset、workload 映射、延迟/IOPS/吞吐量统一映射、NetApp 延迟单位和嵌套指标转换、性能条数上限、多指标与本地多对象筛选、图表长横轴标签布局、`Asia/Shanghai` 事件时间与 UTC `since` 的宿主机时区无关转换、来源白名单、严重级别映射、事件去重、系统事件先过滤后分页、可读事件对象、统计口径、180 天参数校验、导出摘要与公式转义，以及前端搜索、翻页、空态和不支持状态。
+自动化验证覆盖厂商响应解析、PowerScale 资源版本、path dataset、workload 映射、延迟/IOPS/吞吐量统一映射、NetApp 延迟单位和嵌套指标转换、性能条数上限、多指标与本地多对象筛选、图表长横轴标签布局、`Asia/Shanghai` 事件时间与 UTC `since` 的宿主机时区无关转换、派生 Incident 的 UTC 转换、来源白名单、严重级别映射、事件去重、只有已启用且已审核目录影响业务、未知/待审核代码回退、重复故障分类过滤、系统事件先过滤后分页、事件详情、可读事件对象、统计口径、180 天参数校验、导出摘要与公式转义，以及前端搜索、翻页、空态和不支持状态。
 
 真实 NetApp、PowerScale、PostgreSQL、MySQL、QuestDB 和登录浏览器的冒烟仍需在部署环境执行，重点确认设备权限、实际资源版本、事件字段、对象名称、延迟单位、指标可用性、QuestDB TTL、数据库迁移和浏览器下载行为。在这些验证完成前，不能把外部系统兼容性描述为已验证。
 
 ## 派生预测与关联事件
 
-集群详情新增懒加载“关联事件”页签。该页签只读取项目作用域内的派生 Incident、容量预测数和性能异常数；打开后才请求 `/v1/incidents`、`/v1/forecasts` 和 `/v1/anomalies`。关联事件列表可按状态和事件类型筛选。点击事件可查看不可变证据引用、确定性诊断与操作时间线。
+集群详情新增懒加载“关联事件”页签。该页签只读取项目作用域内的派生 Incident、容量预测数和性能异常数；打开后才请求 `GET /storage-pulse/api/v1/incidents`、`GET /storage-pulse/api/v1/forecasts` 和 `GET /storage-pulse/api/v1/anomalies`。关联事件列表可按状态和事件类型筛选。点击事件可查看不可变证据引用、确定性诊断与操作时间线。
 
-该页签不改变本页的“故障分析”与“系统事件”语义：厂商原始事件仍来自 `storage_alerts` 的 `netapp`/`isilon` 记录，既有告警页仍只显示 `source=diskpulse`。未映射的厂商对象只会在派生分析侧以集群级资产和 `asset_mapping_missing` 缺口出现，不会修改厂商原始记录。
+该页签不改变本页的“故障分析”与“系统事件”语义：厂商原始事件仍来自 `storage_alerts` 的 `netapp`/`isilon` 记录，既有告警页仍只显示 `source=diskpulse`。派生分析侧的 `asset_mapping_missing` 显示为“资产映射不完整”，表示事件至少已归属集群，但节点/卷/Qtree/项目的稳定映射链路不完整；已有稳定节点身份的厂商事件不产生该缺口。它不会修改或隐藏厂商原始记录，也不表示事件代码或日志缺失。
 
 ## Dell 官方参考
 

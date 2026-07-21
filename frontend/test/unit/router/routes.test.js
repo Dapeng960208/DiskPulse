@@ -55,6 +55,7 @@ describe('router/routes and app shell', () => {
         'Settings',
         'AICenter',
         'ForecastGovernance',
+        'VendorEventDefinitions',
         'AIAuditDetail',
       ]),
     );
@@ -126,6 +127,25 @@ describe('router/routes and app shell', () => {
     hasRole.mockReturnValueOnce(false).mockReturnValueOnce(true);
     expect(incidentRoute.meta.isAccessible()).toBe(403);
     expect(incidentRoute.meta.isAccessible()).toBe(200);
+    expect(hasRole).toHaveBeenLastCalledWith('superadmin');
+  });
+
+  it('places vendor event associations under System Management for super administrators only', () => {
+    const adminRoute = routes.find((route) => route.path === '/admin');
+    const associationRoute = adminRoute.children
+      .find((route) => route.name === 'VendorEventDefinitions');
+
+    expect(associationRoute).toEqual(expect.objectContaining({
+      path: 'vendor-event-definitions',
+      meta: expect.objectContaining({
+        title: '事件关联信息',
+        icon: 'i-ri-links-line',
+      }),
+    }));
+
+    hasRole.mockReturnValueOnce(false).mockReturnValueOnce(true);
+    expect(associationRoute.meta.isAccessible()).toBe(403);
+    expect(associationRoute.meta.isAccessible()).toBe(200);
     expect(hasRole).toHaveBeenLastCalledWith('superadmin');
   });
 
@@ -220,6 +240,7 @@ describe('router/routes and app shell', () => {
       'Settings',
       'AICenter',
       'ForecastGovernance',
+      'VendorEventDefinitions',
       'IncidentCenter',
       'AuditEvents',
     ]);
@@ -230,6 +251,7 @@ describe('router/routes and app shell', () => {
       Settings: 'i-ri-settings-3-line',
       AICenter: 'i-ri-robot-2-line',
       ForecastGovernance: 'i-ri-line-chart-line',
+      VendorEventDefinitions: 'i-ri-links-line',
       IncidentCenter: 'i-ri-alarm-warning-line',
       AuditEvents: 'i-ri-file-search-line',
     });

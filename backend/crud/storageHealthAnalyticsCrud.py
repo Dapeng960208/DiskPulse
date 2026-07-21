@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 
-from sqlalchemy import String, cast, func, or_, select, text
+from sqlalchemy import String, and_, cast, func, or_, select, text, tuple_
 from sqlalchemy.orm import Session
 
 from crud.configCrud import get_storage_config
@@ -94,6 +95,8 @@ def get_system_event_rows(
     end_time: datetime,
     keyword: str | None = None,
     severity: str | None = None,
+    fingerprint: str | None = None,
+    include_identity: bool = False,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[int, list[dict]]:
@@ -104,6 +107,8 @@ def get_system_event_rows(
     ]
     if severity:
         filters.append(StorageAlerts.severity == severity)
+    if fingerprint:
+        filters.append(StorageAlerts.fingerprint == fingerprint)
     if keyword:
         pattern = f"%{keyword.strip()}%"
         filters.append(
@@ -120,7 +125,10 @@ def get_system_event_rows(
     ) or 0
     rows = db.execute(
         select(
+            StorageAlerts.id,
             StorageAlerts.source,
+            StorageAlerts.external_event_id,
+            StorageAlerts.fingerprint,
             StorageAlerts.severity,
             StorageAlerts.description,
             StorageAlerts.related_type,
@@ -132,32 +140,217 @@ def get_system_event_rows(
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()
-    result = []
-    for row in rows:
-        related_info = row.related_info or {}
-        object_id = str(related_info.get("object_id") or "cluster")
-        raw = related_info.get("raw")
-        raw = raw if isinstance(raw, dict) else {}
-        node = raw.get("node") if isinstance(raw.get("node"), dict) else {}
-        if row.source == "netapp":
-            object_name = node.get("name") or object_id
-        elif object_id == "cluster":
-            object_name = "集群"
-        else:
-            object_name = f"节点 {object_id}"
-        result.append(
+    return int(total), [
+        _system_event_row(row, include_identity=include_identity) for row in rows
+    ]
+
+
+def _system_event_row(row, *, include_identity: bool = True) -> dict:
+    related_info = row.related_info if isinstance(row.related_info, dict) else {}
+    object_id = str(related_info.get("object_id") or "cluster")
+    raw = related_info.get("raw")
+    raw = raw if isinstance(raw, dict) else {}
+    node = raw.get("node") if isinstance(raw.get("node"), dict) else {}
+    if row.source == "netapp":
+        object_name = node.get("name") or object_id
+    elif object_id == "cluster":
+        object_name = "集群"
+    else:
+        object_name = f"节点 {object_id}"
+    result = {
+        "source": row.source,
+        "severity": row.severity,
+        "event_code": related_info.get("event_code"),
+        "object_id": object_id,
+        "object_name": object_name,
+        "object_type": row.related_type or "node",
+        "description": row.description,
+        "occurred_at": row.updated_at,
+    }
+    if include_identity:
+        result.update(
             {
-                "source": row.source,
-                "severity": row.severity,
-                "event_code": related_info.get("event_code"),
-                "object_id": object_id,
-                "object_name": object_name,
-                "object_type": row.related_type or "node",
-                "description": row.description,
-                "occurred_at": row.updated_at,
+                "id": row.id,
+                "external_event_id": row.external_event_id,
+                "fingerprint": row.fingerprint,
             }
         )
-    return int(total), result
+    return result
+
+
+def get_system_event_by_id(
+    db: Session, storage_cluster_id: int, event_id: int
+) -> dict | None:
+    row = db.execute(
+        select(
+            StorageAlerts.id,
+            StorageAlerts.source,
+            StorageAlerts.external_event_id,
+            StorageAlerts.fingerprint,
+            StorageAlerts.severity,
+            StorageAlerts.description,
+            StorageAlerts.related_type,
+            StorageAlerts.related_info,
+            StorageAlerts.updated_at,
+        ).where(
+            StorageAlerts.id == event_id,
+            StorageAlerts.storage_cluster_id == storage_cluster_id,
+            StorageAlerts.source.in_(("netapp", "isilon")),
+        )
+    ).one_or_none()
+    return None if row is None else _system_event_row(row)
+
+
+def get_system_events_by_ids(
+    db: Session,
+    storage_cluster_id: int,
+    event_ids: Iterable[int],
+) -> dict[int, dict]:
+    normalized_ids = sorted({int(event_id) for event_id in event_ids})
+    if not normalized_ids:
+        return {}
+    rows = db.execute(
+        select(
+            StorageAlerts.id,
+            StorageAlerts.source,
+            StorageAlerts.external_event_id,
+            StorageAlerts.fingerprint,
+            StorageAlerts.severity,
+            StorageAlerts.description,
+            StorageAlerts.related_type,
+            StorageAlerts.related_info,
+            StorageAlerts.updated_at,
+        ).where(
+            StorageAlerts.id.in_(normalized_ids),
+            StorageAlerts.storage_cluster_id == storage_cluster_id,
+            StorageAlerts.source.in_(("netapp", "isilon")),
+        )
+    ).all()
+    return {int(row.id): _system_event_row(row) for row in rows}
+
+
+def get_vendor_alerts_for_evidence_refs(
+    db: Session,
+    refs: Iterable[str],
+    storage_cluster_id: int | None,
+) -> dict[str, StorageAlerts]:
+    direct_refs: dict[int, str] = {}
+    legacy_refs: dict[tuple[str, str], str] = {}
+    for value in refs:
+        source_ref = str(value or "")
+        if source_ref.startswith("storage_alert:"):
+            try:
+                alert_id = int(source_ref.split(":", 1)[1])
+            except ValueError:
+                continue
+            direct_refs[alert_id] = source_ref
+            continue
+        source, separator, external_event_id = source_ref.partition(":")
+        if separator and source in {"netapp", "isilon"} and external_event_id:
+            legacy_refs[(source, external_event_id)] = source_ref
+
+    reference_filters = []
+    if direct_refs:
+        reference_filters.append(StorageAlerts.id.in_(sorted(direct_refs)))
+    if legacy_refs:
+        reference_filters.append(
+            tuple_(
+                StorageAlerts.source,
+                StorageAlerts.external_event_id,
+            ).in_(sorted(legacy_refs))
+        )
+    if not reference_filters:
+        return {}
+
+    filters = [
+        StorageAlerts.source.in_(("netapp", "isilon")),
+        or_(*reference_filters),
+    ]
+    if storage_cluster_id is not None:
+        filters.append(StorageAlerts.storage_cluster_id == storage_cluster_id)
+    alerts = db.scalars(select(StorageAlerts).where(and_(*filters)))
+
+    result: dict[str, StorageAlerts] = {}
+    ambiguous_legacy_refs: set[str] = set()
+    for alert in alerts:
+        direct_ref = direct_refs.get(alert.id)
+        if direct_ref is not None:
+            result[direct_ref] = alert
+        legacy_ref = legacy_refs.get((alert.source, alert.external_event_id))
+        if legacy_ref is not None:
+            if legacy_ref in result:
+                # Legacy refs are only unique per cluster; without a cluster
+                # filter two clusters can share one ref. Rendering either
+                # cluster's log excerpt would be wrong, so drop the mapping.
+                ambiguous_legacy_refs.add(legacy_ref)
+            else:
+                result[legacy_ref] = alert
+    for legacy_ref in ambiguous_legacy_refs:
+        result.pop(legacy_ref, None)
+    return result
+
+
+def get_vendor_alerts_for_cluster_evidence_refs(
+    db: Session,
+    references: Iterable[tuple[int | None, str]],
+) -> dict[tuple[int, str], StorageAlerts]:
+    direct_refs: dict[tuple[int, int], str] = {}
+    legacy_refs: dict[tuple[int, str, str], str] = {}
+    for cluster_id_value, reference_value in references:
+        if cluster_id_value is None:
+            continue
+        cluster_id = int(cluster_id_value)
+        source_ref = str(reference_value or "")
+        if source_ref.startswith("storage_alert:"):
+            try:
+                alert_id = int(source_ref.split(":", 1)[1])
+            except ValueError:
+                continue
+            direct_refs[(cluster_id, alert_id)] = source_ref
+            continue
+        source, separator, external_event_id = source_ref.partition(":")
+        if separator and source in {"netapp", "isilon"} and external_event_id:
+            legacy_refs[(cluster_id, source, external_event_id)] = source_ref
+
+    reference_filters = []
+    if direct_refs:
+        reference_filters.append(
+            tuple_(StorageAlerts.storage_cluster_id, StorageAlerts.id).in_(
+                sorted(direct_refs)
+            )
+        )
+    if legacy_refs:
+        reference_filters.append(
+            tuple_(
+                StorageAlerts.storage_cluster_id,
+                StorageAlerts.source,
+                StorageAlerts.external_event_id,
+            ).in_(sorted(legacy_refs))
+        )
+    if not reference_filters:
+        return {}
+
+    alerts = db.scalars(
+        select(StorageAlerts).where(
+            StorageAlerts.source.in_(("netapp", "isilon")),
+            or_(*reference_filters),
+        )
+    )
+    result: dict[tuple[int, str], StorageAlerts] = {}
+    for alert in alerts:
+        direct_ref = direct_refs.get((alert.storage_cluster_id, alert.id))
+        if direct_ref is not None:
+            result[(alert.storage_cluster_id, direct_ref)] = alert
+        legacy_ref = legacy_refs.get(
+            (
+                alert.storage_cluster_id,
+                alert.source,
+                alert.external_event_id,
+            )
+        )
+        if legacy_ref is not None:
+            result[(alert.storage_cluster_id, legacy_ref)] = alert
+    return result
 
 
 def get_top_latency_rows(
@@ -252,6 +445,7 @@ def get_repeated_fault_rows(
         select(
             StorageAlerts.source,
             StorageAlerts.fingerprint,
+            func.max(StorageAlerts.id).label("sample_event_id"),
             count.label("occurrence_count"),
             first_seen.label("first_occurred_at"),
             last_seen.label("last_occurred_at"),
@@ -270,6 +464,7 @@ def get_repeated_fault_rows(
         {
             "source": row.source,
             "fingerprint": row.fingerprint,
+            "sample_event_id": int(row.sample_event_id),
             "count": int(row.occurrence_count),
             "first_occurred_at": row.first_occurred_at,
             "last_occurred_at": row.last_occurred_at,

@@ -31,6 +31,7 @@ from routers import (
     storage_usage,
     telemetry,
     users,
+    vendor_event_definitions,
     volumes,
     observability,
 )
@@ -59,6 +60,7 @@ storage_router.include_router(config.router)
 storage_router.include_router(dashboard.router)
 storage_router.include_router(group.router)
 storage_router.include_router(storage_cluster.router)
+storage_router.include_router(vendor_event_definitions.router)
 storage_router.include_router(aggregate.router)
 storage_router.include_router(volumes.router)
 storage_router.include_router(qtrees.router)

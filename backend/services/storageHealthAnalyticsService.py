@@ -13,8 +13,9 @@ from sqlalchemy.orm import Session
 from schemas.capacitySchema import format_capacity_fields
 
 from appConfig import base_config
-from crud import storageHealthAnalyticsCrud
+from crud import storageHealthAnalyticsCrud, vendorEventDefinitionCrud
 from models import Volume
+from services import vendorEventDefinitionService
 from utils.pdf.pdfReporter import PDFReportGenerator
 
 
@@ -198,21 +199,32 @@ def get_system_events(
     end_time: datetime,
     keyword: str | None = None,
     severity: str | None = None,
+    fingerprint: str | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> dict:
+    query = {
+        "keyword": keyword,
+        "severity": severity,
+        "page": page,
+        "page_size": page_size,
+    }
+    if fingerprint is not None:
+        query["fingerprint"] = fingerprint
     total, rows = storageHealthAnalyticsCrud.get_system_event_rows(
         db,
         storage_cluster_id,
         start_time,
         end_time,
-        keyword=keyword,
-        severity=severity,
-        page=page,
-        page_size=page_size,
+        include_identity=True,
+        **query,
     )
+    definition_map = _definition_map_for_events(db, rows)
     return {
-        "data": rows,
+        "data": [
+            _enrich_vendor_event(db, row, definition_map=definition_map)
+            for row in rows
+        ],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -222,11 +234,135 @@ def get_system_events(
 def get_repeated_faults(
     db: Session, storage_cluster_id: int, start_time: datetime, end_time: datetime
 ) -> dict:
+    repeated_rows = storageHealthAnalyticsCrud.get_repeated_fault_rows(
+        db, storage_cluster_id, start_time, end_time
+    )
+    samples = storageHealthAnalyticsCrud.get_system_events_by_ids(
+        db,
+        storage_cluster_id,
+        (row["sample_event_id"] for row in repeated_rows),
+    )
+    definition_map = _definition_map_for_events(db, samples.values())
+    result = []
+    for row in repeated_rows:
+        sample = samples.get(row["sample_event_id"])
+        if sample is None:
+            continue
+        enriched = _enrich_vendor_event(
+            db,
+            sample,
+            definition_map=definition_map,
+        )
+        if enriched["association_type"] != "fault_log":
+            continue
+        result.append(
+            {
+                **row,
+                **_semantics_fields(enriched),
+                "log_excerpt": enriched.get("description"),
+            }
+        )
+    return {"data": result}
+
+
+def _definition_field(definition, name: str):
+    if isinstance(definition, dict):
+        return definition.get(name)
+    return getattr(definition, name, None)
+
+
+def _semantics_fields(event: dict) -> dict:
     return {
-        "data": storageHealthAnalyticsCrud.get_repeated_fault_rows(
-            db, storage_cluster_id, start_time, end_time
+        name: event.get(name)
+        for name in (
+            "event_code",
+            "association_type",
+            "association_type_label",
+            "title_zh",
+            "description_zh",
+            "official_reference_url",
+            "review_status",
         )
     }
+
+
+def _vendor_event_key(row: dict) -> tuple[str, str] | None:
+    storage_type = str(row.get("source") or "").strip().lower()
+    event_code_value = row.get("event_code")
+    event_code = (
+        event_code_value.strip() if isinstance(event_code_value, str) else ""
+    )
+    if storage_type not in {"netapp", "isilon"} or not event_code:
+        return None
+    return storage_type, event_code
+
+
+def _definition_map_for_events(db: Session, rows) -> dict:
+    keys = {
+        key
+        for row in rows
+        if (key := _vendor_event_key(row)) is not None
+    }
+    return vendorEventDefinitionCrud.get_definition_map(db, keys)
+
+
+def _definition_for_event(
+    db: Session,
+    row: dict,
+    definition_map: dict | None,
+):
+    key = _vendor_event_key(row)
+    if definition_map is None:
+        return vendorEventDefinitionService.resolve_definition(
+            db,
+            row.get("source"),
+            row.get("event_code"),
+        )
+    definition = definition_map.get(key) if key is not None else None
+    if (
+        definition is not None
+        and definition.is_active
+        and definition.review_status == "reviewed"
+    ):
+        return vendorEventDefinitionService.serialize_definition(definition)
+    return vendorEventDefinitionService.resolve_definition(
+        db,
+        None,
+        key[1] if key is not None else None,
+    )
+
+
+def _enrich_vendor_event(
+    db: Session,
+    row: dict,
+    *,
+    definition_map: dict | None = None,
+) -> dict:
+    if row.get("source") not in {"netapp", "isilon"}:
+        return dict(row)
+    definition = _definition_for_event(db, row, definition_map)
+    enriched = {
+        **row,
+        "association_type": _definition_field(definition, "association_type"),
+        "association_type_label": _definition_field(definition, "association_type_label"),
+        "title_zh": _definition_field(definition, "title_zh"),
+        "description_zh": _definition_field(definition, "description_zh"),
+        "official_reference_url": _definition_field(
+            definition, "official_reference_url"
+        ),
+        "review_status": _definition_field(definition, "review_status"),
+    }
+    enriched.pop("external_event_id", None)
+    return enriched
+
+
+def get_system_event_detail(
+    db: Session, storage_cluster_id: int, event_id: int
+) -> dict | None:
+    row = storageHealthAnalyticsCrud.get_system_event_by_id(
+        db, storage_cluster_id, event_id
+    )
+    return None if row is None else _enrich_vendor_event(db, row)
 
 
 def _report_data(

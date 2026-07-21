@@ -503,6 +503,85 @@ class StorageAlerts(Base):
     storage_cluster = relationship("StorageCluster", lazy=True)
 
 
+class VendorEventDefinition(Base):
+    __tablename__ = "vendor_event_definitions"
+    __table_args__ = (
+        UniqueConstraint(
+            "storage_type",
+            "event_code",
+            name="uq_vendor_event_definition_storage_code",
+        ),
+        CheckConstraint(
+            "storage_type IN ('netapp', 'isilon')",
+            name="ck_vendor_event_definition_storage_type",
+        ),
+        CheckConstraint(
+            "association_type IN ("
+            "'fault_log', 'performance_anomaly', 'capacity_threshold', "
+            "'system_activity', 'telemetry_degradation', 'unknown'"
+            ")",
+            name="ck_vendor_event_definition_association_type",
+        ),
+        CheckConstraint(
+            "default_severity IS NULL OR default_severity IN ("
+            "'critical', 'error', 'warning', 'info'"
+            ")",
+            name="ck_vendor_event_definition_default_severity",
+        ),
+        CheckConstraint(
+            "review_status IN ('reviewed', 'pending')",
+            name="ck_vendor_event_definition_review_status",
+        ),
+        CheckConstraint(
+            "review_status <> 'reviewed' OR ("
+            "association_type <> 'unknown' "
+            "AND official_reference_url IS NOT NULL "
+            "AND trim(official_reference_url) <> '' "
+            "AND official_reference_url NOT LIKE '%@%' "
+            "AND official_reference_url NOT LIKE '% %' "
+            "AND ((storage_type = 'netapp' AND ("
+            "lower(official_reference_url) LIKE 'https://netapp.com/%' "
+            "OR lower(official_reference_url) LIKE 'https://%.netapp.com/%'"
+            ")) OR (storage_type = 'isilon' AND ("
+            "lower(official_reference_url) LIKE 'https://dell.com/%' "
+            "OR lower(official_reference_url) LIKE 'https://%.dell.com/%' "
+            "OR lower(official_reference_url) LIKE 'https://delltechnologies.com/%' "
+            "OR lower(official_reference_url) LIKE 'https://%.delltechnologies.com/%'"
+            "))) "
+            "AND version_scope IS NOT NULL "
+            "AND trim(version_scope) <> ''"
+            ")",
+            name="ck_vendor_event_definition_reviewed_evidence",
+        ),
+        Index(
+            "ix_vendor_event_definition_filters",
+            "storage_type",
+            "association_type",
+            "review_status",
+        ),
+        Index("ix_vendor_event_definition_event_code", "event_code"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    storage_type = Column(String(32), nullable=False)
+    event_code = Column(String(255), nullable=False)
+    association_type = Column(String(32), nullable=False, default="unknown")
+    title_zh = Column(String(255), nullable=False)
+    description_zh = Column(Text, nullable=False)
+    official_reference_url = Column(String(1000), nullable=True)
+    default_severity = Column(String(16), nullable=True)
+    version_scope = Column(String(255), nullable=True)
+    review_status = Column(String(16), nullable=False, default="pending")
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+
+
 class TelemetryQualitySnapshot(Base):
     __tablename__ = "telemetry_quality_snapshots"
     __table_args__ = (

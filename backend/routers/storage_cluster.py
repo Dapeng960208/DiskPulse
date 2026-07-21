@@ -2,11 +2,16 @@
 import io
 from typing import Annotated, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
-from schemas import storageClusterSchema, commonSchema, storageTrendSchema
+from schemas import (
+    commonSchema,
+    storageClusterSchema,
+    storageHealthAnalyticsSchema,
+    storageTrendSchema,
+)
 from crud import storageClusterCrud
 from crud.questDbCrud import get_storage_cluster_real_time
 from dependencies import CurrentUserDep, UseRatioMaximum, UseRatioMinimum, get_db, require_super_admin, validate_use_ratio_range
@@ -18,6 +23,7 @@ from services.storageHealthAnalyticsService import (
     get_capacity_change,
     get_error_severity,
     get_repeated_faults,
+    get_system_event_detail,
     get_system_events,
     get_top_latency,
     validate_time_range,
@@ -246,17 +252,29 @@ def read_top_latency(
     )
 
 
-@router.get("/{storage_cluster_id}/analytics/repeated-faults", response_model=dict | list)
+@router.get(
+    "/{storage_cluster_id}/analytics/repeated-faults",
+    response_model=(
+        storageHealthAnalyticsSchema.RepeatedFaultList
+        | list[storageHealthAnalyticsSchema.RepeatedFaultOut]
+    ),
+)
 def read_repeated_faults(
     storage_cluster_id: int,
     time_range: AnalyticsTimeRange,
     db: Session = Depends(get_db),
-) -> dict | list:
+) -> storageHealthAnalyticsSchema.RepeatedFaultList | list[
+    storageHealthAnalyticsSchema.RepeatedFaultOut
+]:
     _require_storage_cluster(db, storage_cluster_id)
     return get_repeated_faults(db, storage_cluster_id, *time_range)
 
 
-@router.get("/{storage_cluster_id}/analytics/system-events", response_model=dict)
+@router.get(
+    "/{storage_cluster_id}/analytics/system-events",
+    response_model=storageHealthAnalyticsSchema.SystemEventPage,
+    response_model_exclude_unset=True,
+)
 def read_system_events(
     storage_cluster_id: int,
     time_range: AnalyticsTimeRange,
@@ -265,20 +283,37 @@ def read_system_events(
         Literal["critical", "error", "warning", "info"] | None,
         Query(),
     ] = None,
+    fingerprint: Annotated[str | None, Query(max_length=512)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     db: Session = Depends(get_db),
-) -> dict:
+) -> storageHealthAnalyticsSchema.SystemEventPage:
     _require_storage_cluster(db, storage_cluster_id)
-    return get_system_events(
-        db,
-        storage_cluster_id,
-        *time_range,
-        keyword=keyword.strip() if keyword else None,
-        severity=severity,
-        page=page,
-        page_size=page_size,
-    )
+    query = {
+        "keyword": keyword.strip() if keyword else None,
+        "severity": severity,
+        "page": page,
+        "page_size": page_size,
+    }
+    if fingerprint is not None:
+        query["fingerprint"] = fingerprint
+    return get_system_events(db, storage_cluster_id, *time_range, **query)
+
+
+@router.get(
+    "/{storage_cluster_id}/analytics/system-events/{event_id}",
+    response_model=storageHealthAnalyticsSchema.SystemEventOut,
+)
+def read_system_event_detail(
+    storage_cluster_id: int,
+    event_id: Annotated[int, Path(ge=1)],
+    db: Session = Depends(get_db),
+) -> storageHealthAnalyticsSchema.SystemEventOut:
+    _require_storage_cluster(db, storage_cluster_id)
+    event = get_system_event_detail(db, storage_cluster_id, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="厂商系统事件不存在")
+    return event
 
 
 @router.get("/{storage_cluster_id}/analytics/export")

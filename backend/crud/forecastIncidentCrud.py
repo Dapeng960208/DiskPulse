@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 
-from datetime import datetime
-
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -72,6 +70,27 @@ def get_incident_evidence_by_source_ref(
             IncidentEvidence.source_ref == source_ref,
         )
     ).scalar_one_or_none()
+
+
+def list_existing_incident_evidence_source_refs(
+    db: Session,
+    *,
+    source: str,
+    source_refs,
+) -> set[str]:
+    normalized_refs = sorted({str(source_ref) for source_ref in source_refs if source_ref})
+    existing_refs: set[str] = set()
+    for offset in range(0, len(normalized_refs), 400):
+        batch = normalized_refs[offset : offset + 400]
+        existing_refs.update(
+            db.scalars(
+                select(IncidentEvidence.source_ref).where(
+                    IncidentEvidence.source == source,
+                    IncidentEvidence.source_ref.in_(batch),
+                )
+            )
+        )
+    return existing_refs
 
 
 def get_incident_by_correlation_bucket(
@@ -160,6 +179,24 @@ def list_incident_evidence(db: Session, incident_id: int) -> list[IncidentEviden
         select(IncidentEvidence)
         .where(IncidentEvidence.incident_id == incident_id)
         .order_by(IncidentEvidence.observed_at.desc(), IncidentEvidence.id.desc())
+    ).scalars().all()
+
+
+def list_incident_evidence_for_incidents(
+    db: Session,
+    incident_ids,
+) -> list[IncidentEvidence]:
+    normalized_ids = sorted({int(incident_id) for incident_id in incident_ids})
+    if not normalized_ids:
+        return []
+    return db.execute(
+        select(IncidentEvidence)
+        .where(IncidentEvidence.incident_id.in_(normalized_ids))
+        .order_by(
+            IncidentEvidence.incident_id,
+            IncidentEvidence.observed_at.desc(),
+            IncidentEvidence.id.desc(),
+        )
     ).scalars().all()
 
 
