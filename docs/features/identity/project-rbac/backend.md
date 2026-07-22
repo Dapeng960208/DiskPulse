@@ -14,7 +14,7 @@
 
 项目、项目组、用户目录、大文件和可反查告警在数据库分页、统计和导出前按项目过滤。没有项目作用域的存储集群、容量池、存储空间和 Qtree（NetApp）仅向超级管理员开放。
 
-最终预测列表只返回项目组和用户目录，并在 `count` 与分页前反查当前 `Group` 或 `StorageUsage → Group` 归属、排除已删除资源；不得使用预测生成时的历史 `project_id` 作为当前授权事实。资源预测、容量计划和最终预测列表受 `capacity_prediction_settings.user_visible` 控制，资源关联事件只校验当前项目 `reader` 权限。
+容量耗尽风险按当前资源归属授权：存储集群仅超级管理员可读；项目、项目组和用户目录要求当前项目 `reader` 及以上，并受 `capacity_prediction_settings.user_visible` 控制。预测快照中的历史 `project_id` 不能替代当前资源归属事实。资源关联事件只校验当前项目 `reader` 权限，不复用预测发布开关。完整口径见[四维容量耗尽风险](../../ai/capacity-prediction/overview.md)。
 
 成员 API 位于 `/storage-pulse/api/projects/{project_id}/members`，支持集合 `GET/POST` 和单成员 `PATCH/DELETE`。非超级管理员访问不存在或无权的项目时使用统一拒绝语义，避免枚举项目是否存在。
 

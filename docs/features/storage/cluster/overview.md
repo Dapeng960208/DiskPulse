@@ -21,6 +21,8 @@
 
 前端入口位于“系统管理 → 存储集群”，该菜单直接打开集群列表，不再展开“集群列表、容量池、存储空间、Qtree（NetApp）”三级栏目。现有 `/admin/storage-clusters`、`/admin/aggregates`、`/admin/volumes`、`/admin/qtrees` 以及各详情深链均保持不变；后三个独立列表路由改为隐藏入口，仍可由既有链接访问。集群详情页按需加载当前集群范围的“容量池”“存储空间”和“Qtree（NetApp）”资源表；资源表使用 `QueryForm` 名称筛选，Qtree 额外可按所属存储空间筛选。详情页表格只在内容区纵向滚动，窄宽度会隐藏次要容量列以避免横向滚动，底部分页始终可达。Isilon 集群不显示且不请求 Qtree。
 
+集群详情提供仅超级管理员可见的“耗尽风险”页签，具体预测和分级口径见[四维容量耗尽风险](../../ai/capacity-prediction/overview.md)。
+
 ## PowerScale 会话与权限
 
 PowerScale 集群可选择不缓存、本地文件或 Redis Session 缓存。数据库不保存 Cookie；缓存读取或写入失败时安全注销 OneFS Session。含认证材料的文件和 Redis 必须由部署环境限制访问。

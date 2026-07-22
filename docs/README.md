@@ -39,7 +39,7 @@ AI 相关文档必须进入 `docs/features/ai/<功能>/`。不得在 `docs/featu
 
 | 一级领域 | 二级功能与文档 |
 | --- | --- |
-| AI | [对话与管理中心](./features/ai/chat/overview.md) · [流式工具轨迹](./features/ai/chat/streaming-tool-trace-reconciliation.md) · [智能存储运维调研](./features/ai/storage-management/research.md) |
+| AI | [对话与管理中心](./features/ai/chat/overview.md) · [四维容量耗尽风险](./features/ai/capacity-prediction/overview.md) · [流式工具轨迹](./features/ai/chat/streaming-tool-trace-reconciliation.md) · [智能存储运维调研](./features/ai/storage-management/research.md) |
 | 存储 | [存储集群](./features/storage/cluster/overview.md) · [厂商事件关联](./features/storage/event-association/overview.md) · [配额](./features/storage/quota/overview.md) · [告警](./features/storage/alerts/design.md) · [趋势](./features/storage/trends/design.md) · [可观测性](./features/storage/observability/overview.md) · [事件中心](./features/storage/incident-center/overview.md) |
 | 身份与权限 | [认证](./features/identity/authentication/backend.md) · [用户管理](./features/identity/user-management/overview.md) · [项目级 RBAC 与审计](./features/identity/project-rbac/backend.md) |
 | 组织 | [项目组标签](./features/organization/group-tags/design.md) |
