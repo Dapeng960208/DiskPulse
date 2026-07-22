@@ -141,7 +141,7 @@ describe('ForecastGovernancePage', () => {
   it('opens the baseline algorithm tooltip for pointer and keyboard users', () => {
     const source = readFileSync(resolve('src/pages/admin/forecast-governance/ForecastGovernancePage.vue'), 'utf8');
 
-    expect(source).toContain(':trigger="[\'hover\', \'focus\', \'click\']"');
+    expect(source).toContain(':trigger="[\'hover\', \'focus\']"');
     expect(source).not.toContain('baselineAlgorithmTooltipVisible');
   });
 
