@@ -3,6 +3,7 @@ import { ElTabPane, ElTabs } from 'element-plus';
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import projectApi from '@/api/project-api.js';
+import capacityPredictionApi from '@/api/capacity-prediction-api.js';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
 
 const ProjectMembersTab = defineAsyncComponent(() => import('./components/ProjectMembersTab.vue'));
@@ -11,12 +12,15 @@ const ProjectDiskUsage = defineAsyncComponent(() => import('./components/Project
 const ProjectStorageDistribution = defineAsyncComponent(() => import('./components/ProjectStorageDistribution.vue'));
 const ProjectGroupsTab = defineAsyncComponent(() => import('./components/ProjectGroupsTab.vue'));
 const ProjectUsagesTab = defineAsyncComponent(() => import('./components/ProjectUsagesTab.vue'));
+const CapacityExhaustionRiskPanel = defineAsyncComponent(() => import('@/pages/capacity-prediction/CapacityExhaustionRiskPanel.vue'));
 
 const route = useRoute();
 const breadcrumbs = useBreadcrumbs();
 const projectId = computed(() => Number(route.params.id));
 const project = ref(null);
 const activeTab = ref('realtime');
+const riskVisible = ref(false);
+const riskVisibilityChecked = ref(false);
 const canManageMembers = computed(() => project.value?.capabilities?.manage_members === true);
 const canViewAuditEvents = computed(() => project.value?.capabilities?.view_audit_events === true);
 const canManageProjectAdmins = computed(() => project.value?.capabilities?.manage_project_admins === true);
@@ -34,10 +38,21 @@ async function loadProject() {
   }
 }
 
+async function loadRiskVisibility() {
+  try {
+    riskVisible.value = (await capacityPredictionApi.visibility()).visible === true;
+  } catch {
+    riskVisible.value = false;
+  } finally {
+    riskVisibilityChecked.value = true;
+  }
+}
+
 onMounted(() => {
   breadcrumbs.setDetailTitle(route.name, '');
   breadcrumbs.setDetailBreadcrumb(route.name, []);
   loadProject();
+  loadRiskVisibility();
 });
 </script>
 
@@ -73,6 +88,15 @@ onMounted(() => {
         name="usages"
         lazy>
         <ProjectUsagesTab :project-id="projectId" />
+      </ElTabPane>
+      <ElTabPane
+        v-if="riskVisibilityChecked && riskVisible"
+        label="耗尽风险"
+        name="exhaustion-risk"
+        lazy>
+        <CapacityExhaustionRiskPanel
+          asset-type="project"
+          :asset-id="projectId" />
       </ElTabPane>
       <ElTabPane
         v-if="canManageMembers"

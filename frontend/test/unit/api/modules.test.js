@@ -59,6 +59,7 @@ describe('api modules', () => {
     await capacityPredictionApi.fetchPredictions({ page: 1, size: 20 });
     await capacityPredictionApi.access('group', 7);
     await capacityPredictionApi.fetchPrediction('storage_usage', 8);
+    await capacityPredictionApi.fetchRisk('project', 6);
     await capacityPredictionApi.fetchPlans('group', 7);
     await capacityPredictionApi.fetchRelatedIncidents('storage_usage', 8);
     await capacityPredictionApi.createPlan('group', 7, { capacity_delta: 10 });
@@ -117,6 +118,7 @@ describe('api modules', () => {
     expect(getSpy).toHaveBeenCalledWith('/capacity-predictions', { page: 1, size: 20 });
     expect(getSpy).toHaveBeenCalledWith('/capacity-predictions/group/7/access');
     expect(getSpy).toHaveBeenCalledWith('/capacity-predictions/storage_usage/8');
+    expect(getSpy).toHaveBeenCalledWith('/capacity-predictions/project/6/risk');
     expect(getSpy).toHaveBeenCalledWith('/capacity-predictions/group/7/plans');
     expect(getSpy).toHaveBeenCalledWith('/capacity-predictions/storage_usage/8/related-incidents');
     expect(getSpy).toHaveBeenCalledWith('/12/quota/history');

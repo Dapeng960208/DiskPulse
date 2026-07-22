@@ -1,8 +1,6 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onMounted, reactive, ref, watch } from 'vue';
 import {
-  ElDescriptions,
-  ElDescriptionsItem,
   ElEmpty,
   ElTableColumn,
   ElTabPane,
@@ -16,9 +14,9 @@ import { useBreadcrumbs } from '@/stores/breadcrumbs';
 import storageUsageApi from '@/api/storage-usage-api.js';
 import capacityPredictionApi from '@/api/capacity-prediction-api.js';
 import { formatQuotaLimit } from '@/utils/quota';
-import { formatCapacity } from '@/utils/capacity';
 import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
+const CapacityExhaustionRiskPanel = defineAsyncComponent(() => import('@/pages/capacity-prediction/CapacityExhaustionRiskPanel.vue'));
 
 const route = useRoute();
 const breadcrumbs = useBreadcrumbs();
@@ -27,14 +25,13 @@ const activeTab = ref('capacity');
 const usage = ref(null);
 const usageLoading = ref(false);
 const usageError = ref('');
-const predictionVisible = ref(false);
-const predictionVisibilityChecked = ref(false);
+const riskVisible = ref(false);
+const riskVisibilityChecked = ref(false);
 const quotaHistory = ref([]);
-const prediction = ref(null);
 const incidents = ref([]);
-const loaded = reactive({ quotaHistory: false, prediction: false, incidents: false });
-const loading = reactive({ quotaHistory: false, prediction: false, incidents: false });
-const errors = reactive({ quotaHistory: '', prediction: '', incidents: '' });
+const loaded = reactive({ quotaHistory: false, incidents: false });
+const loading = reactive({ quotaHistory: false, incidents: false });
+const errors = reactive({ quotaHistory: '', incidents: '' });
 const canViewQuotaHistory = computed(() => usage.value?.capabilities?.adjust_quota === true);
 const quotaAdjustmentDialogRef = ref();
 
@@ -49,19 +46,6 @@ function quotaChange(row) {
   const before = formatQuotaLimit(row.before_summary?.hard_limit, { emptyText: '-' });
   const after = formatQuotaLimit(row.after_summary?.hard_limit, { emptyText: '-' });
   return `${before} → ${after}`;
-}
-
-function predictionSource(value) {
-  return {
-    ai_candidate: 'AI 候选',
-    baseline_fallback: '基线回退',
-    baseline: '内置基线',
-  }[value] || '内置基线';
-}
-
-function latestP50(curve) {
-  const values = Array.isArray(curve) ? curve : [];
-  return values.length ? formatCapacity(values.at(-1)?.capacity?.p50, { emptyText: values.at(-1)?.p50 ?? '-' }) : '-';
 }
 
 async function loadUsage() {
@@ -117,39 +101,14 @@ async function handleQuotaAdjusted() {
   await loadUsage();
 }
 
-async function loadPredictionVisibility() {
+async function loadRiskVisibility() {
   try {
     const result = await capacityPredictionApi.visibility();
-    predictionVisible.value = result.visible === true;
+    riskVisible.value = result.visible === true;
   } catch {
-    predictionVisible.value = false;
+    riskVisible.value = false;
   } finally {
-    predictionVisibilityChecked.value = true;
-    if (predictionVisible.value) await loadActiveTab();
-  }
-}
-
-async function loadPrediction() {
-  if (!predictionVisible.value || loaded.prediction || loading.prediction) return;
-  loading.prediction = true;
-  errors.prediction = '';
-  try {
-    prediction.value = await capacityPredictionApi.fetchPrediction('storage_usage', usageId.value, {
-      errorHandlerDisabled: true,
-    });
-    loaded.prediction = true;
-  } catch (error) {
-    prediction.value = null;
-    if (error?.response?.status === 404) {
-      loaded.prediction = true;
-    } else if (error?.response?.status === 403) {
-      predictionVisible.value = false;
-      activeTab.value = 'capacity';
-    } else {
-      errors.prediction = '加载容量预测最终结果失败，请稍后重试';
-    }
-  } finally {
-    loading.prediction = false;
+    riskVisibilityChecked.value = true;
   }
 }
 
@@ -173,7 +132,6 @@ async function loadIncidents() {
 async function loadActiveTab() {
   if (!Number.isInteger(usageId.value) || usageId.value < 1) return;
   if (activeTab.value === 'quota-history') return loadQuotaHistory();
-  if (activeTab.value === 'prediction') return loadPrediction();
   if (activeTab.value === 'incidents') return loadIncidents();
 }
 
@@ -181,7 +139,7 @@ watch(activeTab, loadActiveTab);
 onMounted(() => {
   breadcrumbs.setDetailBreadcrumb(route.name, []);
   loadUsage();
-  loadPredictionVisibility();
+  loadRiskVisibility();
 });
 </script>
 
@@ -265,37 +223,13 @@ onMounted(() => {
         </DataTable>
       </ElTabPane>
       <ElTabPane
-        v-if="predictionVisibilityChecked && predictionVisible"
-        label="容量预测最终结果"
-        name="prediction"
+        v-if="riskVisibilityChecked && riskVisible"
+        label="耗尽风险"
+        name="exhaustion-risk"
         lazy>
-        <div
-          v-if="loading.prediction"
-          class="prediction-loading"
-          role="status"
-          aria-live="polite">
-          正在加载容量预测最终结果
-        </div>
-        <ElEmpty
-          v-else-if="loaded.prediction && !prediction && !errors.prediction"
-          description="暂无容量预测最终结果" />
-        <DataTable
-          v-else-if="errors.prediction"
-          :data="[]"
-          :error="errors.prediction" />
-        <ElDescriptions
-          v-else-if="prediction"
-          :column="4"
-          border>
-          <ElDescriptionsItem label="模型版本">{{ prediction.input_quality?.candidate_version || prediction.algorithm_version || '-' }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="预测来源">{{ predictionSource(prediction.input_quality?.prediction_source) }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="数据质量">{{ prediction.input_quality?.status || '-' }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="覆盖率">{{ prediction.input_quality?.coverage_ratio == null ? '-' : `${Math.round(prediction.input_quality.coverage_ratio * 100)}%` }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="P50 耗尽日期">{{ prediction.exhaustion_dates?.p50 || '30 天内无耗尽风险' }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="最终 P50">{{ latestP50(prediction.curve) }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="最新遥测">{{ prediction.input_quality?.latest_observed_at || '-' }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="预测生成时间">{{ prediction.input_quality?.forecast_fresh_at || prediction.created_at || '-' }}</ElDescriptionsItem>
-        </ElDescriptions>
+        <CapacityExhaustionRiskPanel
+          asset-type="storage_usage"
+          :asset-id="usageId" />
       </ElTabPane>
       <ElTabPane
         label="关联事件"
@@ -392,5 +326,4 @@ onMounted(() => {
   height: 100%;
 }
 
-.prediction-loading { min-height: 160px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
 </style>

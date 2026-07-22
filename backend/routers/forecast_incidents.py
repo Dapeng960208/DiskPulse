@@ -29,6 +29,7 @@ from services import audit_service, forecastIncidentService
 from services import capacityPredictionGovernanceService
 from schemas.capacityPredictionSchema import (
     CapacityPredictionAccessOut,
+    CapacityExhaustionRiskOut,
     CapacityPredictionCandidateCreate,
     CapacityPredictionCandidateOut,
     CapacityPredictionPlanCreate,
@@ -77,6 +78,24 @@ def resource_capacity_prediction(
         db, current_user=current_user, asset_type=asset_type, asset_id=asset_id
     )
     return ForecastOut.model_validate(forecast)
+
+
+@router.get(
+    "/capacity-predictions/{asset_type}/{asset_id}/risk",
+    response_model=CapacityExhaustionRiskOut,
+)
+def resource_capacity_exhaustion_risk(
+    asset_type: Annotated[str, Path(pattern="^(storage_cluster|project|group|storage_usage)$")],
+    asset_id: Annotated[int, Path(ge=1)],
+    current_user: CurrentUserDep,
+    db: DBDep,
+) -> CapacityExhaustionRiskOut:
+    return CapacityExhaustionRiskOut(**capacityPredictionGovernanceService.get_capacity_exhaustion_risk(
+        db,
+        current_user=current_user,
+        asset_type=asset_type,
+        asset_id=asset_id,
+    ))
 
 
 @router.get("/capacity-predictions/{asset_type}/{asset_id}/access", response_model=CapacityPredictionAccessOut)

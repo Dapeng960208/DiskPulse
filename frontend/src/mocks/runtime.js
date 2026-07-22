@@ -359,6 +359,7 @@ const alerts = incidents.map((incident, index) => ({
       id: 1,
       version: 'capacity-ai-v2',
       ai_model_id: 1,
+      ai_model_name: '容量助手',
       enabled: true,
       activation_ready: true,
       forecast_count: 18,
@@ -373,6 +374,7 @@ const alerts = incidents.map((incident, index) => ({
       id: 2,
       version: 'capacity-ai-v3',
       ai_model_id: 3,
+      ai_model_name: '运维问答',
       enabled: false,
       activation_ready: false,
       forecast_count: 6,
@@ -694,11 +696,27 @@ export function createMockGateway() {
     Math.round((Number(item.used) || 200) * (0.82 + index * 0.035)),
   ]);
   const capacityPredictionResource = (assetType, assetId) => {
-    const records = assetType === 'group' ? state.groups : state.usages;
+    const records = {
+      storage_cluster: state.clusters,
+      project: state.projects,
+      group: state.groups,
+      storage_usage: state.usages,
+    }[assetType] || [];
     const item = records.find((record) => record.id === Number(assetId));
     if (!item) throw error(404, '容量预测资源不存在');
     return item;
   };
+  const capacityExhaustionRisk = (assetType, item) => ({
+    asset_type: assetType,
+    asset_id: String(item.id),
+    level: 'watch',
+    label: '关注',
+    p50_exhaustion_at: null,
+    p90_exhaustion_at: '2026-08-18T00:00:00Z',
+    horizon_days: 30,
+    reason: 'P90 预计在 30 日内达到硬限额',
+    generated_at: '2026-07-22T00:00:00Z',
+  });
   const capacityPrediction = (assetType, item) => withCapacity({
     id: 1000 + item.id,
     asset_type: assetType,
@@ -885,11 +903,17 @@ export function createMockGateway() {
         item,
       )), options.params || {});
     }
-    const capacityPredictionResourcePath = path.match(/^\/v1\/capacity-predictions\/(group|storage_usage)\/(\d+)(?:\/(access|plans|related-incidents))?$/);
+    const capacityPredictionResourcePath = path.match(/^\/v1\/capacity-predictions\/(storage_cluster|project|group|storage_usage)\/(\d+)(?:\/(risk|access|plans|related-incidents))?$/);
     if (capacityPredictionResourcePath) {
       const [, assetType, assetId, endpoint] = capacityPredictionResourcePath;
       const item = capacityPredictionResource(assetType, assetId);
-      if (!allowed(account, item.project_id)) throw error(403);
+      if (assetType === 'storage_cluster') {
+        if (account.role !== 'superadmin') throw error(403);
+      } else if (!allowed(account, item.project_id || item.id)) throw error(403);
+      if (endpoint === 'risk') {
+        if (!predictionVisibleTo(account)) throw error(403, '容量预测已停用');
+        return capacityExhaustionRisk(assetType, item);
+      }
       if (endpoint === 'related-incidents') return state.incidents
         .filter((incident) => incident.project_id === item.project_id && incident.category === 'capacity_pressure')
         .map((incident) => ({ id: incident.id, category: incident.category, severity: incident.severity, status: incident.status, updated_at: incident.last_evidence_at, rca_confidence: 'high' }));
@@ -1112,7 +1136,8 @@ export function createMockGateway() {
     }
     if (path === '/v1/admin/capacity-prediction-candidates') {
       if (verb === 'post') {
-        const item = { id: state.capacityPredictionCandidates.length + 1, version: body?.version, ai_model_id: body?.ai_model_id, enabled: false, activation_ready: false, forecast_count: 0, fallback_count: 0, evaluations: [] };
+        const model = state.aiModels.find((record) => record.id === Number(body?.ai_model_id));
+        const item = { id: state.capacityPredictionCandidates.length + 1, version: body?.version, ai_model_id: body?.ai_model_id, ai_model_name: model?.name || null, enabled: false, activation_ready: false, forecast_count: 0, fallback_count: 0, evaluations: [] };
         state.capacityPredictionCandidates.push(item);
         return item;
       }

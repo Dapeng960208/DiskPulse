@@ -7,7 +7,6 @@ const { alertApi, breadcrumbs, capacityPredictionApi, storageUsageApi } = vi.hoi
   breadcrumbs: { setDetailBreadcrumb: vi.fn() },
   capacityPredictionApi: {
     visibility: vi.fn(),
-    fetchPrediction: vi.fn(),
     fetchRelatedIncidents: vi.fn(),
   },
   storageUsageApi: {
@@ -89,13 +88,6 @@ describe('user-directory related data', () => {
       metadata: { change_reason: '项目扩容' },
     }]);
     capacityPredictionApi.visibility.mockResolvedValue({ visible: true });
-    capacityPredictionApi.fetchPrediction.mockResolvedValue({
-      id: 91,
-      algorithm_version: 'capacity-ai-v2',
-      exhaustion_dates: { p50: '2026-10-01' },
-      input_quality: { status: 'ready', coverage_ratio: 0.98, prediction_source: 'ai_candidate' },
-      curve: [{ observed_at: '2026-07-20', p50: 88 }],
-    });
     capacityPredictionApi.fetchRelatedIncidents.mockResolvedValue([{
       id: 301,
       category: 'capacity_pressure',
@@ -109,12 +101,12 @@ describe('user-directory related data', () => {
     });
   });
 
-  it('exposes quota history, final prediction, and incidents without a duplicate alert tab', async () => {
+  it('exposes quota history, exhaustion risk, and incidents without a duplicate alert tab', async () => {
     const wrapper = mountPage();
     await flushPromises();
 
     expect(wrapper.text()).toContain('配额历史');
-    expect(wrapper.text()).toContain('容量预测最终结果');
+    expect(wrapper.text()).toContain('耗尽风险');
     expect(wrapper.text()).toContain('关联事件');
     expect(wrapper.find('[data-tab="alerts"]').exists()).toBe(false);
     expect(storageUsageApi.fetchById).toHaveBeenCalledWith(234, undefined, expect.objectContaining({ errorHandlerDisabled: true }));
@@ -125,10 +117,6 @@ describe('user-directory related data', () => {
     await flushPromises();
     expect(storageUsageApi.quotaHistory).toHaveBeenCalledWith(234, expect.objectContaining({ errorHandlerDisabled: true }));
 
-    wrapper.vm.activeTab = 'prediction';
-    await flushPromises();
-    expect(capacityPredictionApi.fetchPrediction).toHaveBeenCalledWith('storage_usage', 234, expect.objectContaining({ errorHandlerDisabled: true }));
-
     wrapper.vm.activeTab = 'incidents';
     await flushPromises();
     expect(capacityPredictionApi.fetchRelatedIncidents).toHaveBeenCalledWith('storage_usage', 234, expect.objectContaining({ errorHandlerDisabled: true }));
@@ -136,16 +124,6 @@ describe('user-directory related data', () => {
     wrapper.vm.activeTab = 'alerts';
     await flushPromises();
     expect(alertApi.fetch).not.toHaveBeenCalled();
-  });
-
-  it('renders the final P50 value from the API capacity map', async () => {
-    const wrapper = mountPage();
-    await flushPromises();
-
-    expect(wrapper.vm.latestP50([{
-      p50: 2048,
-      capacity: { p50: { value: 2, unit: 'TB' } },
-    }])).toBe('2 TB');
   });
 
   it('does not request quota history when the current user lacks its narrower permission', async () => {
@@ -160,84 +138,19 @@ describe('user-directory related data', () => {
     expect(wrapper.text()).toContain('当前账号无权查看配额历史');
   });
 
-  it('hides the prediction tab when global visibility is disabled', async () => {
+  it('hides the exhaustion-risk tab when global visibility is disabled', async () => {
     capacityPredictionApi.visibility.mockResolvedValueOnce({ visible: false });
     const wrapper = mountPage();
     await flushPromises();
 
-    expect(wrapper.text()).not.toContain('容量预测最终结果');
-    expect(wrapper.text()).not.toContain('加载容量预测最终结果失败');
-    expect(capacityPredictionApi.fetchPrediction).not.toHaveBeenCalled();
+    expect(wrapper.text()).not.toContain('耗尽风险');
   });
 
-  it('treats a prediction visibility 403 as unavailable instead of a load failure', async () => {
+  it('treats a risk visibility 403 as unavailable instead of a load failure', async () => {
     capacityPredictionApi.visibility.mockRejectedValueOnce({ response: { status: 403 } });
     const wrapper = mountPage();
     await flushPromises();
 
-    expect(wrapper.text()).not.toContain('容量预测最终结果');
-    expect(wrapper.text()).not.toContain('加载容量预测最终结果失败');
-    expect(capacityPredictionApi.fetchPrediction).not.toHaveBeenCalled();
-  });
-
-  it('shows an explicit loading state while the final prediction is pending', async () => {
-    let resolvePrediction;
-    capacityPredictionApi.fetchPrediction.mockReturnValueOnce(new Promise((resolve) => {
-      resolvePrediction = resolve;
-    }));
-    const wrapper = mountPage();
-    await flushPromises();
-
-    wrapper.vm.activeTab = 'prediction';
-    await wrapper.vm.$nextTick();
-
-    expect(capacityPredictionApi.fetchPrediction).toHaveBeenCalledTimes(1);
-    expect(wrapper.get('[role="status"]').text()).toContain('正在加载容量预测最终结果');
-
-    resolvePrediction({ id: 91, input_quality: {}, curve: [] });
-    await flushPromises();
-  });
-
-  it('retries a transient prediction failure when the user leaves and reopens the tab', async () => {
-    capacityPredictionApi.fetchPrediction
-      .mockRejectedValueOnce({ response: { status: 500 } })
-      .mockResolvedValueOnce({
-        id: 92,
-        algorithm_version: 'capacity-ai-v3',
-        exhaustion_dates: { p50: null },
-        input_quality: { status: 'ready', prediction_source: 'baseline' },
-        curve: [{ observed_at: '2026-07-21', p50: 90 }],
-      });
-    const wrapper = mountPage();
-    await flushPromises();
-
-    wrapper.vm.activeTab = 'prediction';
-    await flushPromises();
-    expect(wrapper.text()).toContain('加载容量预测最终结果失败，请稍后重试');
-
-    wrapper.vm.activeTab = 'capacity';
-    await wrapper.vm.$nextTick();
-    wrapper.vm.activeTab = 'prediction';
-    await flushPromises();
-
-    expect(capacityPredictionApi.fetchPrediction).toHaveBeenCalledTimes(2);
-    expect(wrapper.text()).not.toContain('加载容量预测最终结果失败，请稍后重试');
-    expect(wrapper.text()).toContain('capacity-ai-v3');
-  });
-
-  it('keeps incidents available when no final prediction exists', async () => {
-    capacityPredictionApi.fetchPrediction.mockRejectedValueOnce({ response: { status: 404 } });
-    const wrapper = mountPage();
-    await flushPromises();
-
-    wrapper.vm.activeTab = 'prediction';
-    await flushPromises();
-    expect(wrapper.text()).toContain('暂无容量预测最终结果');
-
-    wrapper.vm.activeTab = 'incidents';
-    await flushPromises();
-
-    expect(capacityPredictionApi.fetchRelatedIncidents).toHaveBeenCalledTimes(1);
-    expect(alertApi.fetch).not.toHaveBeenCalled();
+    expect(wrapper.text()).not.toContain('耗尽风险');
   });
 });

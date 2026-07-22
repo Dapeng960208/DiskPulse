@@ -7,7 +7,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from schemas.capacitySchema import CapacityResponseBase
 
 
-PredictionAssetType = Literal["group", "storage_usage"]
+PredictionAssetType = Literal["storage_cluster", "project", "group", "storage_usage"]
+
+
+class CapacityExhaustionRiskOut(BaseModel):
+    level: Literal["insufficient", "critical", "high", "watch", "none"]
+    label: str
+    p50_exhaustion_at: datetime | None = None
+    p90_exhaustion_at: datetime | None = None
+    horizon_days: Literal[30] = 30
+    reason: str
+    generated_at: datetime
 
 
 class CapacityPredictionVisibilityOut(BaseModel):
@@ -53,6 +63,7 @@ class CapacityPredictionCandidateOut(BaseModel):
     id: int
     version: str
     ai_model_id: int
+    ai_model_name: str | None = None
     enabled: bool
     created_at: datetime
     evaluations: list[CapacityPredictionEvaluationOut] = Field(default_factory=list)

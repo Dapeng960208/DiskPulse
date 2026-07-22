@@ -56,8 +56,7 @@ export default [
       {
         path: 'usage/:id/capacity-prediction',
         name: 'UsageCapacityPrediction',
-        component: () => import('@/pages/capacity-prediction/CapacityPredictionDetailPage.vue'),
-        props: { assetType: 'storage_usage', listRouteName: 'CapacityPredictions', listLabel: '容量预测' },
+        redirect: (to) => ({ name: 'UsagesDetail', params: { id: to.params.id } }),
         meta: {
           title: '容量预测',
           isHidden: true,
@@ -73,12 +72,10 @@ export default [
       {
         path: 'capacity-predictions',
         name: 'CapacityPredictions',
-        component: () => import('@/pages/capacity-prediction/CapacityPredictionListPage.vue'),
+        redirect: { name: 'Projects' },
         meta: {
           title: '容量预测',
-          isRoot: true,
-          menuOrder: 40,
-          icon: 'i-ri-line-chart-line',
+          isHidden: true,
         },
       },
     ],
@@ -137,8 +134,7 @@ export default [
       {
         path: 'group/:id/capacity-prediction',
         name: 'GroupCapacityPrediction',
-        component: () => import('@/pages/capacity-prediction/CapacityPredictionDetailPage.vue'),
-        props: { assetType: 'group', listRouteName: 'CapacityPredictions', listLabel: '容量预测' },
+        redirect: (to) => ({ name: 'GroupDetail', params: { id: to.params.id } }),
         meta: {
           title: '容量预测',
           isHidden: true,

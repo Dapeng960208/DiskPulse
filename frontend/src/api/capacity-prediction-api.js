@@ -8,6 +8,10 @@ class CapacityPredictionApi extends BaseApi {
     const path = `/capacity-predictions/${assetType}/${assetId}`;
     return config ? this.get(path, undefined, config) : this.get(path);
   }
+  fetchRisk(assetType, assetId, config) {
+    const path = `/capacity-predictions/${assetType}/${assetId}/risk`;
+    return config ? this.get(path, undefined, config) : this.get(path);
+  }
   fetchPlans(assetType, assetId) { return this.get(`/capacity-predictions/${assetType}/${assetId}/plans`); }
   fetchRelatedIncidents(assetType, assetId, config) {
     const path = `/capacity-predictions/${assetType}/${assetId}/related-incidents`;

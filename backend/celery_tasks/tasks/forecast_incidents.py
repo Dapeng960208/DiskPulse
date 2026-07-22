@@ -28,6 +28,7 @@ from models import (
     CapacityForecast,
     AIConfig,
     Group,
+    Project,
     StorageAlerts,
     StorageCluster,
     StorageUsage,
@@ -59,6 +60,7 @@ class CapacityTarget:
 
 _CAPACITY_TABLES = {
     "storage_cluster": ("storage_cluster_storage_usages", "storage_cluster_id"),
+    "project": ("project_storage_usages", "project_id"),
     "volume": ("volume_storage_usages", "volume_id"),
     "qtree": ("qtree_storage_usages", "qtree_id"),
     "group": ("group_storage_usages", "group_id"),
@@ -154,6 +156,17 @@ def _cluster_asset(cluster: StorageCluster, *, project_id: int | None = None) ->
     )
 
 
+def _project_asset(project: Project) -> AssetRef:
+    return AssetRef(
+        asset_type="project",
+        asset_id=str(project.id),
+        storage_cluster_id=None,
+        project_id=project.id,
+        vendor="mixed",
+        display_name=project.name,
+    )
+
+
 def _capacity_targets(db) -> list[CapacityTarget]:
     clusters = {item.id: item for item in db.execute(select(StorageCluster)).scalars()}
     targets: list[CapacityTarget] = []
@@ -161,6 +174,10 @@ def _capacity_targets(db) -> list[CapacityTarget]:
         if cluster.limit and cluster.limit > 0:
             table_name, key_column = _CAPACITY_TABLES["storage_cluster"]
             targets.append(CapacityTarget(_cluster_asset(cluster), float(cluster.limit), table_name, key_column))
+    for project in db.execute(select(Project)).scalars():
+        if project.limit and project.limit > 0:
+            table_name, key_column = _CAPACITY_TABLES["project"]
+            targets.append(CapacityTarget(_project_asset(project), float(project.limit), table_name, key_column))
     for volume in db.execute(select(Volume)).scalars():
         cluster = clusters.get(volume.storage_cluster_id)
         if cluster is None or not volume.limit or volume.limit <= 0:
@@ -372,7 +389,7 @@ def _record_rolling_candidate_evaluations(db, *, now: datetime) -> None:
     targets = [
         target
         for target in _capacity_targets(db)
-        if target.asset_ref.asset_type in {"group", "storage_usage"}
+        if target.asset_ref.asset_type in {"storage_cluster", "project", "group", "storage_usage"}
     ]
     history_cutoff = _utc_day(now) - timedelta(
         days=forecastIncidentService.FORECAST_TRAINING_DAYS + forecastIncidentService.FORECAST_DAYS * 3 - 1
@@ -431,7 +448,7 @@ def run_capacity_forecasts(*, now: datetime | None = None) -> int:
             for target in _capacity_targets(db):
                 forecast = _capacity_forecast_for_target(db, target, now=now)
                 persisted.append(forecast)
-                if target.asset_ref.asset_type in {"group", "storage_usage"}:
+                if target.asset_ref.asset_type in {"storage_cluster", "project", "group", "storage_usage"}:
                     _persist_active_candidate_prediction(db, target=target, baseline=forecast, now=now)
                 exhaustion_p90 = (forecast.exhaustion_dates or {}).get("p90")
                 if exhaustion_p90 is None:

@@ -8,6 +8,7 @@ import CapacityExhaustionRiskPanel from '@/pages/capacity-prediction/CapacityExh
 
 const mountPanel = (props = {}) => shallowMount(CapacityExhaustionRiskPanel, {
   props: { assetType: 'project', assetId: 11, ...props },
+  global: { directives: { loading: () => undefined } },
 });
 
 describe('CapacityExhaustionRiskPanel', () => {

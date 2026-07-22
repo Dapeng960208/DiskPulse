@@ -83,6 +83,7 @@ class AssetRef(BaseModel):
 
     asset_type: Literal[
         "storage_cluster",
+        "project",
         "storage_node",
         "volume",
         "qtree",
@@ -90,7 +91,7 @@ class AssetRef(BaseModel):
         "storage_usage",
     ]
     asset_id: str
-    storage_cluster_id: int
+    storage_cluster_id: int | None
     project_id: int | None = None
     vendor: str
     display_name: str

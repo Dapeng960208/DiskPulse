@@ -38,6 +38,7 @@ import { formatCapacity } from '@/utils/capacity';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
 const ClusterIncidentsTab = defineAsyncComponent(() => import('./components/ClusterIncidentsTab.vue'));
 const ClusterResourceListTab = defineAsyncComponent(() => import('./components/ClusterResourceListTab.vue'));
+const CapacityExhaustionRiskPanel = defineAsyncComponent(() => import('@/pages/capacity-prediction/CapacityExhaustionRiskPanel.vue'));
 
 const route = useRoute();
 const breadcrumbs = useBreadcrumbs();
@@ -895,6 +896,14 @@ onBeforeMount(() => {
                 @size-change="changeSystemEventPageSize" />
             </div>
           </div>
+        </ElTabPane>
+        <ElTabPane
+          label="耗尽风险"
+          name="exhaustion-risk"
+          lazy>
+          <CapacityExhaustionRiskPanel
+            asset-type="storage_cluster"
+            :asset-id="clusterId" />
         </ElTabPane>
         <ElTabPane
           label="关联事件"

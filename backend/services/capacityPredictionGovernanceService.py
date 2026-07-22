@@ -17,13 +17,23 @@ from models import (
     CapacityPredictionCandidateForecast,
     CapacityPredictionEvaluation,
     CapacityPredictionPlan,
+    Project,
+    StorageCluster,
 )
 from services import audit_service, forecastIncidentService, project_access_service
 from services.ai_client import AIClientError, chat_completion
 from utils.auth_service import is_super_admin
 
 
-PredictionAssetType = Literal["group", "storage_usage"]
+PredictionAssetType = Literal["storage_cluster", "project", "group", "storage_usage"]
+
+RISK_LABELS = {
+    "insufficient": "数据不足",
+    "critical": "紧急",
+    "high": "高风险",
+    "watch": "关注",
+    "none": "30 日内无耗尽风险",
+}
 
 
 @dataclass(frozen=True)
@@ -338,6 +348,7 @@ def candidate_meets_activation_gate(evaluations: list[dict[str, Any]]) -> bool:
 
 def candidate_governance_view(db, candidate: CapacityPredictionCandidate) -> dict[str, Any]:
     """Return aggregate evaluation evidence only; resource identities stay private."""
+    model = db.get(AIConfig, candidate.ai_model_id)
     evaluations = capacityPredictionCrud.list_candidate_evaluations(db, candidate_id=candidate.id)
     rows = [
         {
@@ -355,6 +366,7 @@ def candidate_governance_view(db, candidate: CapacityPredictionCandidate) -> dic
         "id": candidate.id,
         "version": candidate.version,
         "ai_model_id": candidate.ai_model_id,
+        "ai_model_name": model.name if model is not None else None,
         "enabled": candidate.enabled,
         "created_at": candidate.created_at,
         "evaluations": rows,
@@ -364,6 +376,18 @@ def candidate_governance_view(db, candidate: CapacityPredictionCandidate) -> dic
 
 
 def _resource(db, *, current_user, asset_type: PredictionAssetType, asset_id: int, minimum_role: str):
+    if asset_type == "storage_cluster":
+        if current_user is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+        if not is_super_admin(current_user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super admin permission required")
+        cluster = db.get(StorageCluster, asset_id)
+        if cluster is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="storage cluster was not found")
+        return cluster, None
+    if asset_type == "project":
+        project_access_service.require_project_permission(db, current_user, asset_id, minimum_role)
+        return db.get(Project, asset_id), asset_id
     if asset_type == "group":
         group = project_access_service.require_group_permission(db, current_user, asset_id, minimum_role)
         return group, group.project_id
@@ -373,6 +397,54 @@ def _resource(db, *, current_user, asset_type: PredictionAssetType, asset_id: in
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="project permission required")
         return usage, None
     return usage, usage.group.project_id
+
+
+def _risk_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def build_exhaustion_risk_summary(forecast, *, now: datetime | None = None) -> dict[str, Any]:
+    """Return the single server-authoritative 30-day exhaustion-risk conclusion."""
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    quality_status = (forecast.input_quality or {}).get("status")
+    exhaustion_dates = forecast.exhaustion_dates or {}
+    p50 = _risk_datetime(exhaustion_dates.get("p50"))
+    p90 = _risk_datetime(exhaustion_dates.get("p90"))
+    if quality_status != "ready":
+        level = "insufficient"
+        reason = "有效日少于 30 天或覆盖率低于 80%"
+    elif p90 is not None and p90 <= now + timedelta(days=7):
+        level = "critical"
+        reason = "P90 预计在 7 日内达到硬限额"
+    elif p50 is not None and p50 <= now + timedelta(days=30):
+        level = "high"
+        reason = "P50 预计在 30 日内达到硬限额"
+    elif p90 is not None and p90 <= now + timedelta(days=30):
+        level = "watch"
+        reason = "P90 预计在 30 日内达到硬限额"
+    else:
+        level = "none"
+        reason = "P50 和 P90 均未在未来 30 日内达到硬限额"
+    return {
+        "level": level,
+        "label": RISK_LABELS[level],
+        "p50_exhaustion_at": p50,
+        "p90_exhaustion_at": p90,
+        "horizon_days": 30,
+        "reason": reason,
+        "generated_at": forecast.created_at,
+    }
 
 
 def prediction_visible_to_user(db, *, current_user) -> bool:
@@ -470,6 +542,23 @@ def get_resource_prediction(db, *, current_user, asset_type: PredictionAssetType
         else None
     )
     return _prediction_view(forecast, candidate_forecast, candidate)
+
+
+def get_capacity_exhaustion_risk(
+    db,
+    *,
+    current_user,
+    asset_type: PredictionAssetType,
+    asset_id: int,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    forecast = get_resource_prediction(
+        db,
+        current_user=current_user,
+        asset_type=asset_type,
+        asset_id=asset_id,
+    )
+    return build_exhaustion_risk_summary(forecast, now=now)
 
 
 def list_final_predictions(db, *, current_user, page: int, size: int):
@@ -571,8 +660,11 @@ def create_capacity_prediction_candidate(db, *, version: str, ai_model_id: int) 
     if capacityPredictionCrud.get_candidate_by_version(db, version) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="capacity prediction version already exists")
     model = db.get(AIConfig, ai_model_id)
-    if model is None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="configured AI model is required")
+    if model is None or model.enabled is not True:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="configured and enabled AI model is required",
+        )
     try:
         return capacityPredictionCrud.add_candidate(
             db,
@@ -643,8 +735,11 @@ def activate_capacity_prediction_candidate(db, *, candidate_id: int) -> Capacity
     if candidate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="capacity prediction candidate was not found")
     model = db.get(AIConfig, candidate.ai_model_id)
-    if model is None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="configured AI model is required")
+    if model is None or model.enabled is not True:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="configured and enabled AI model is required",
+        )
     evaluations = capacityPredictionCrud.list_candidate_evaluations(db, candidate_id=candidate_id)
     evaluation_rows = [
         {

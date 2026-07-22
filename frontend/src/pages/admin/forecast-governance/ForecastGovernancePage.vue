@@ -73,7 +73,9 @@ async function openCreateDialog() {
   error.value = '';
   try {
     const models = await aiApi.listAdminModels();
-    configuredModels.value = Array.isArray(models) ? models : [];
+    configuredModels.value = Array.isArray(models)
+      ? models.filter((model) => model.enabled === true)
+      : [];
   } catch {
     configuredModels.value = [];
     error.value = '加载 AI 中心模型失败';
@@ -138,6 +140,21 @@ onMounted(load);
         @click="openCreateDialog">新增候选模型</ElButton>
     </section>
 
+    <section class="forecast-governance-page__section forecast-governance-page__rules">
+      <div>
+        <strong class="forecast-governance-page__rule-title">内置基线标准</strong>
+        <p>使用最近 45 个 UTC 日的每日最大用量；至少 30 个有效日且覆盖率不低于 80%，才采用 Theil-Sen 趋势与残差分位生成未来 30 日 P10 / P50 / P90。</p>
+      </div>
+      <div>
+        <strong class="forecast-governance-page__rule-title">风险分级标准</strong>
+        <p>P90 在 7 日内耗尽为严重，P50 在 30 日内耗尽为高风险，仅 P90 在 30 日内耗尽为关注；数据不达标时显示数据不足。</p>
+      </div>
+      <div>
+        <strong class="forecast-governance-page__rule-title">AI 候选与启用标准</strong>
+        <p>仅可选择已配置且已启用的 AI 模型。输出必须覆盖 30 个 UTC 日、数值有限且非负，并满足 P10 ≤ P50 ≤ P90；通过 3 个独立 30 日回测窗口、平均 MAPE 至少降低 10% 且耗尽风险覆盖不变差后才能启用，否则回退内置基线。</p>
+      </div>
+    </section>
+
     <section class="forecast-governance-page__section">
       <h3 class="forecast-governance-page__section-heading">模型状态</h3>
       <ElTable
@@ -148,9 +165,10 @@ onMounted(load);
           prop="version"
           min-width="160" />
         <ElTableColumn
-          label="AI 模型 ID"
-          prop="ai_model_id"
-          width="120" />
+          label="AI 模型"
+          min-width="180">
+          <template #default="{ row }">{{ row.ai_model_name || `模型 #${row.ai_model_id}` }}</template>
+        </ElTableColumn>
         <ElTableColumn
           label="评估窗口"
           width="120">
@@ -263,7 +281,7 @@ onMounted(load);
           <ElSelect
             v-model="candidateForm.aiModelId"
             class="!w-full"
-            placeholder="请选择已配置模型">
+            placeholder="请选择已配置且已启用模型">
             <ElOption
               v-for="model in configuredModels"
               :key="model.id"
@@ -291,6 +309,13 @@ onMounted(load);
 .forecast-governance-page__setting,
 .forecast-governance-page__section { padding: var(--spacing-md); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); }
 .forecast-governance-page__section { display: grid; align-content: start; gap: var(--spacing-md); }
+.forecast-governance-page__rules { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.forecast-governance-page__rules p { margin: var(--spacing-xs) 0 0; color: var(--text-secondary); line-height: 1.7; }
+.forecast-governance-page__rule-title { display: block; color: var(--text-primary); }
 .forecast-governance-page__metric-header { display: inline-flex; align-items: center; gap: var(--spacing-xs); }
 .forecast-governance-page__metric-help { color: var(--text-tertiary); cursor: help; outline-offset: 2px; }
+
+@media (max-width: 1100px) {
+  .forecast-governance-page__rules { grid-template-columns: 1fr; }
+}
 </style>

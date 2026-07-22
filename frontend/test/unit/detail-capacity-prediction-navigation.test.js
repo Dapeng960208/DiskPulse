@@ -78,12 +78,15 @@ describe('detail capacity prediction navigation', () => {
     fetchGroup.mockResolvedValue({ id: 234, name: '研发组', project: { name: '项目 A' } });
     setDetailBreadcrumb.mockReset();
     visibilityMock.mockReset();
+    visibilityMock.mockResolvedValue({ visible: true });
   });
 
   it('keeps realtime monitoring and embeds user-directory exhaustion risk', async () => {
     visibilityMock.mockResolvedValue({ visible: true });
 
     const wrapper = mount(UsageDetailPage, { global });
+    await flushPromises();
+    wrapper.vm.activeTab = 'exhaustion-risk';
     await flushPromises();
 
     expect(wrapper.find('.real-time-page-stub').attributes('data-show-header')).toBe('false');
@@ -94,6 +97,8 @@ describe('detail capacity prediction navigation', () => {
 
   it('keeps realtime monitoring and embeds project-group exhaustion risk', async () => {
     const wrapper = mount(GroupDetailPage, { global });
+    await flushPromises();
+    wrapper.vm.activeTab = 'exhaustion-risk';
     await flushPromises();
 
     expect(wrapper.find('.real-time-page-stub').attributes('data-show-header')).toBe('false');
