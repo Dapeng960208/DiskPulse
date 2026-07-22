@@ -402,6 +402,7 @@ describe('frontend mock runtime', () => {
       official_reference_url: expect.stringMatching(/^https:\/\//),
       version_scope: expect.any(String),
       review_status: 'reviewed',
+      recommended_solution_zh: expect.any(String),
     });
 
     const created = await gateway.request(
@@ -417,6 +418,7 @@ describe('frontend mock runtime', () => {
         default_severity: null,
         version_scope: null,
         review_status: 'pending',
+        recommended_solution_zh: null,
         is_active: true,
       },
       superadmin.token,
@@ -428,9 +430,10 @@ describe('frontend mock runtime', () => {
       `/admin/vendor-event-definitions/${created.id}`,
       {
         association_type: 'fault_log',
-        official_reference_url: 'http://docs.example.test/event',
+        official_reference_url: 'https://docs.netapp.com/us-en/ontap-ems/test-events.html',
         version_scope: 'ONTAP test fixture',
         review_status: 'reviewed',
+        recommended_solution_zh: null,
       },
       superadmin.token,
     )).rejects.toMatchObject({ status: 422 });
@@ -536,6 +539,7 @@ describe('frontend mock runtime', () => {
       association_type_label: '故障日志',
       title_zh: expect.any(String),
       review_status: 'reviewed',
+      recommended_solution_zh: expect.any(String),
       fingerprint: expect.any(String),
       description: expect.any(String),
     });
@@ -547,6 +551,7 @@ describe('frontend mock runtime', () => {
       superadmin.token,
     );
     expect(detail.description).toContain('secd.authsys.lookup.failed');
+    expect(detail.recommended_solution_zh).toEqual(expect.any(String));
     expect(detail).not.toHaveProperty('related_info');
     expect(JSON.stringify(detail)).not.toContain('raw');
   });

@@ -38,6 +38,7 @@ def _payload(**overrides):
         "default_severity": "critical",
         "version_scope": "ONTAP 9",
         "review_status": "reviewed",
+        "recommended_solution_zh": "检查磁盘状态，并按官方事件页的处置步骤处理。",
         "is_active": True,
     }
     payload.update(overrides)
@@ -114,6 +115,7 @@ def test_super_admin_can_filter_and_complete_vendor_event_definition_crud_with_s
                 official_reference_url="https://docs.netapp.com/us-en/ontap-ems/",
                 version_scope="ONTAP 9",
                 review_status="reviewed",
+                recommended_solution_zh="检查磁盘状态，并按官方事件页的处置步骤处理。",
             ),
             models.VendorEventDefinition(
                 storage_type="isilon",
@@ -153,6 +155,7 @@ def test_super_admin_can_filter_and_complete_vendor_event_definition_crud_with_s
     assert created.headers["location"] == f"{BASE_PATH}/{definition_id}"
     assert created.json()["association_type"] == "fault_log"
     assert created.json()["association_type_label"] == "故障日志"
+    assert created.json()["recommended_solution_zh"] == _payload()["recommended_solution_zh"]
 
     duplicate = client.post(BASE_PATH, json=_payload())
     assert duplicate.status_code == 409
@@ -175,6 +178,13 @@ def test_super_admin_can_filter_and_complete_vendor_event_definition_crud_with_s
     )
     assert invalid_reviewed.status_code == 422
     assert "已审核" in invalid_reviewed.json()["detail"]
+
+    invalid_solution = client.patch(
+        f"{BASE_PATH}/{definition_id}",
+        json={"recommended_solution_zh": "   "},
+    )
+    assert invalid_solution.status_code == 422
+    assert "推荐解决方案" in invalid_solution.json()["detail"]
 
     cross_vendor_reference = client.patch(
         f"{BASE_PATH}/{definition_id}",

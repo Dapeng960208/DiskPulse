@@ -47,6 +47,7 @@ def _definition(**overrides):
         "official_reference_url": "https://docs.netapp.com/test/events/disk.offline",
         "version_scope": "ONTAP test fixture",
         "review_status": "reviewed",
+        "recommended_solution_zh": "核对厂商事件详情并按官方处置步骤处理。",
     }
     payload.update(overrides)
     return _definition_model()(**payload)
@@ -122,12 +123,21 @@ def test_reviewed_vendor_event_definition_requires_complete_official_evidence():
             official_reference_url="https://docs.netapp.com/test/events/disk.offline",
             version_scope=None,
         )
+    with pytest.raises(ValidationError):
+        schema.VendorEventDefinitionCreate(
+            **base,
+            association_type="fault_log",
+            official_reference_url="https://docs.netapp.com/test/events/disk.offline",
+            version_scope="ONTAP 9",
+            recommended_solution_zh="   ",
+        )
 
     validated = schema.VendorEventDefinitionCreate(
         **base,
         association_type="fault_log",
         official_reference_url="https://docs.netapp.com/test/events/disk.offline",
         version_scope="ONTAP 9",
+        recommended_solution_zh="核对磁盘状态并按官方处置步骤处理。",
     )
     assert validated.review_status == "reviewed"
     host_only = schema.VendorEventDefinitionCreate(
@@ -135,6 +145,7 @@ def test_reviewed_vendor_event_definition_requires_complete_official_evidence():
         association_type="fault_log",
         official_reference_url="https://docs.netapp.com",
         version_scope="ONTAP 9",
+        recommended_solution_zh="核对磁盘状态并按官方处置步骤处理。",
     )
     assert host_only.official_reference_url == "https://docs.netapp.com/"
 
@@ -183,6 +194,16 @@ def test_database_rejects_reviewed_definition_without_complete_official_evidence
         )
     )
 
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+    db_session.add(
+        _definition(
+            event_code="invalid.reviewed.solution",
+            recommended_solution_zh="   ",
+        )
+    )
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()
@@ -251,11 +272,13 @@ def test_vendor_event_definition_crud_round_trip(db_session):
         title_zh="并发请求超过限制",
         description_zh="节点收到的并发请求超过允许上限。",
         official_reference_url="https://docs.netapp.com/test/events/nblade.execsOverLimit",
+        recommended_solution_zh="检查并降低节点并发请求负载。",
     )
     db_session.commit()
 
     fetched = crud.get_definition(db_session, "netapp", "nblade.execsOverLimit")
     assert fetched.id == created.id
+    assert fetched.recommended_solution_zh == "检查并降低节点并发请求负载。"
     assert crud.list_definitions(db_session, storage_type="netapp") == [fetched]
 
     updated = crud.update_definition(db_session, created.id, title_zh="并发请求数超过上限")
@@ -289,6 +312,7 @@ def test_pending_definition_is_not_used_as_reviewed_business_semantics(db_sessio
         official_reference_url=None,
         version_scope=None,
         review_status="pending",
+        recommended_solution_zh=None,
     )
     db_session.add(pending)
     db_session.commit()
@@ -474,6 +498,7 @@ def test_system_events_return_readable_semantics_for_exact_fingerprint(db_sessio
             association_type="performance_anomaly",
             title_zh="并发请求超过限制",
             description_zh="客户端并发请求数超过节点允许上限。",
+            recommended_solution_zh="检查节点负载并降低并发请求。",
         )
     )
     wanted = "netapp:nblade.execsOverLimit:node:node-a"
@@ -512,6 +537,7 @@ def test_system_events_return_readable_semantics_for_exact_fingerprint(db_sessio
     assert row["association_type_label"] == "性能异常"
     assert row["title_zh"] == "并发请求超过限制"
     assert row["description_zh"] == "客户端并发请求数超过节点允许上限。"
+    assert row["recommended_solution_zh"] == "检查节点负载并降低并发请求。"
     assert "raw-payload" not in json.dumps(result, ensure_ascii=False, default=str)
     assert "related_info" not in row
 

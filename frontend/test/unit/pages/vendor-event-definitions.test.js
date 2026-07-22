@@ -50,6 +50,7 @@ const TableColumn = defineComponent({
       official_reference_url: 'https://docs.netapp.com/us-en/ontap-ems-9181/',
       version_scope: 'ONTAP 9.18.1',
       review_status: 'reviewed',
+      recommended_solution_zh: '检查认证后端和网络连通性。',
       is_active: true,
     };
     return () => h('div', [slots.header?.(), slots.default?.({ row })]);
@@ -93,6 +94,7 @@ async function fillDefinitionForm(wrapper, {
   reviewStatus = 'pending',
   officialReferenceUrl = '',
   versionScope = '',
+  recommendedSolution = '',
 } = {}) {
   await wrapper.get('[data-testid="event-association-create"]').trigger('click');
   const dialog = wrapper.findComponent({ name: 'ElDialog' });
@@ -104,6 +106,10 @@ async function fillDefinitionForm(wrapper, {
   await inputs[2].vm.$emit('update:modelValue', '用于验证审核边界的中文说明。');
   await inputs[3].vm.$emit('update:modelValue', officialReferenceUrl);
   await inputs[4].vm.$emit('update:modelValue', versionScope);
+  if (recommendedSolution) {
+    expect(inputs[5]).toBeDefined();
+    await inputs[5].vm.$emit('update:modelValue', recommendedSolution);
+  }
   await selects[0].vm.$emit('update:modelValue', storageType);
   await selects[1].vm.$emit('update:modelValue', associationType);
   await selects[3].vm.$emit('update:modelValue', reviewStatus);
@@ -186,6 +192,13 @@ describe('VendorEventDefinitionPage', () => {
       versionScope: '',
       message: '已审核定义必须填写适用版本',
     },
+    {
+      associationType: 'fault_log',
+      officialReferenceUrl: 'https://docs.netapp.com/us-en/ontap-ems-9181/',
+      versionScope: 'ONTAP 9.18.1',
+      recommendedSolution: '',
+      message: '已审核定义必须填写推荐解决方案',
+    },
   ])('blocks a reviewed definition without complete evidence: $message', async (formState) => {
     const wrapper = await mountPage();
     const saveButton = await fillDefinitionForm(wrapper, {
@@ -212,6 +225,7 @@ describe('VendorEventDefinitionPage', () => {
       official_reference_url: null,
       version_scope: null,
       review_status: 'pending',
+      recommended_solution_zh: null,
     }));
   });
 
@@ -265,6 +279,7 @@ describe('VendorEventDefinitionPage', () => {
       reviewStatus: 'reviewed',
       officialReferenceUrl: 'https://docs.netapp.com/us-en/ontap-ems-9181/',
       versionScope: 'ONTAP 9.18.1',
+      recommendedSolution: '检查认证后端和网络连通性。',
     });
 
     await saveButton.trigger('click');
@@ -275,6 +290,7 @@ describe('VendorEventDefinitionPage', () => {
       official_reference_url: 'https://docs.netapp.com/us-en/ontap-ems-9181/',
       version_scope: 'ONTAP 9.18.1',
       review_status: 'reviewed',
+      recommended_solution_zh: '检查认证后端和网络连通性。',
     }));
   });
 

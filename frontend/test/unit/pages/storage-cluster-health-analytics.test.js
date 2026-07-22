@@ -528,6 +528,7 @@ describe('storage cluster health analytics page', () => {
       event_code: 'secd.authsys.lookup.failed',
       title_zh: '认证服务查询失败',
       association_type_label: '故障日志',
+      recommended_solution_zh: '检查认证后端和网络连通性。',
       description: 'Unable to retrieve credentials for SVM_nas',
       fingerprint: 'netapp:secd.authsys.lookup.failed:node:node-1',
       object_name: 'node-a',
@@ -547,6 +548,7 @@ describe('storage cluster health analytics page', () => {
 
     expect(storageClusterApi.fetchSystemEventDetail).toHaveBeenCalledWith(42, 91);
     expect(wrapper.text()).toContain('Unable to retrieve credentials for SVM_nas');
+    expect(wrapper.text()).toContain('检查认证后端和网络连通性。');
     expect(wrapper.findComponent({ name: 'ElDialog' }).attributes('title')).toBe('事件日志详情');
   });
 
@@ -632,6 +634,7 @@ describe('storage cluster health analytics page', () => {
     expect(detail.text()).toContain('待审核');
     expect(detail.text()).toContain('未分类厂商事件');
     expect(detail.text()).toContain('该事件代码尚未完成审核');
+    expect(detail.text()).toContain('暂无可核验官方方案');
     expect(detail.text()).toContain('disk bay 4 reported an unclassified vendor event');
     expect(detail.text()).not.toContain('候选磁盘故障');
     expect(detail.text()).not.toContain('候选说明不应作为正式故障结论');
