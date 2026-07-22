@@ -129,6 +129,15 @@ describe('ForecastGovernancePage', () => {
     expect(source).toContain('P10 ≤ P50 ≤ P90');
   });
 
+  it('provides an accessible plain-language tooltip for the Theil-Sen baseline', () => {
+    const source = readFileSync(resolve('src/pages/admin/forecast-governance/ForecastGovernancePage.vue'), 'utf8');
+
+    expect(source).toContain('计算历史任意两天的用量变化速度，并取所有斜率的中位数作为趋势');
+    expect(source).toContain('统计实际用量与趋势线之间的偏差');
+    expect(source).toContain('形成偏低、典型和偏高三种预测范围');
+    expect(source).toContain('aria-label="Theil-Sen 趋势与残差分位算法说明"');
+  });
+
   it('activates an eligible candidate and reports a rejected activation', async () => {
     const wrapper = mountPage();
     await flushPromises();
