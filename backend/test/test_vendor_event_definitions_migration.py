@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import importlib.util
 import io
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -98,6 +99,13 @@ def test_sqlite_upgrade_catalog_is_complete_and_replays_from_016(monkeypatch, tm
             }
             reviewed = [row for row in rows if row["review_status"] == "reviewed"]
             pending = [row for row in rows if row["review_status"] == "pending"]
+            assert Counter(
+                (row["storage_type"], row["review_status"]) for row in rows
+            ) == {
+                ("netapp", "reviewed"): 33,
+                ("netapp", "pending"): 10,
+                ("isilon", "pending"): 25,
+            }
             assert reviewed and pending
             assert all(
                 row["association_type"] != "unknown"

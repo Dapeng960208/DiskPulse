@@ -8,7 +8,7 @@
 
 ## 数据模型与分类
 
-`vendor_event_definitions` 以 `(storage_type, event_code)` 唯一标识一条定义。主要字段包括存储类型、事件代码、关联类型、中文标题、中文说明、官网链接、默认严重级别、适用版本、审核状态、启用状态和创建/更新时间。默认严重级别只用于解释目录，具体事件仍优先展示设备实例返回的严重级别。
+`vendor_event_definitions` 以 `(storage_type, event_code)` 唯一标识一条定义。主要字段包括存储类型、事件代码、关联类型、中文标题、中文说明、官网链接、默认严重级别、适用版本、审核状态、`recommended_solution_zh`（中文推荐解决方案）、启用状态和创建/更新时间。默认严重级别只用于解释目录，具体事件仍优先展示设备实例返回的严重级别。
 
 关联类型使用固定枚举：
 
@@ -21,7 +21,7 @@
 | `telemetry_degradation` | 监控能力下降 | 性能归档、遥测或监控留存能力下降，影响观测质量。 |
 | `unknown` | 未分类厂商事件 | 尚无足够依据，必须等待人工审核或设备运行时目录确认。 |
 
-审核状态只有 `reviewed`（已审核）和 `pending`（待审核）。只有 `is_active=true` 且 `review_status=reviewed` 的定义能影响业务分类和展示。定义进入 `reviewed` 前必须同时满足：关联类型不是 `unknown`、有非空版本范围，且官网依据是 `https://` 开头的厂商官方链接。
+审核状态只有 `reviewed`（已审核）和 `pending`（待审核）。只有 `is_active=true` 且 `review_status=reviewed` 的定义能影响业务分类和展示。定义进入 `reviewed` 前必须同时满足：关联类型不是 `unknown`、有非空版本范围、逐代码的厂商官方 HTTPS 依据，以及非空的 `recommended_solution_zh`；方案只能翻译官方处置步骤或明确的“无需操作”结论。
 
 任何状态只要填写官网依据，都会执行存储类型与域名绑定校验：NetApp 只允许 `netapp.com` 及其子域；Isilon/PowerScale 只允许 `dell.com`、`delltechnologies.com` 及其子域。链接禁止用户信息、显式端口、空白、尾点和任意位置的 `@`，避免把跨厂商或伪装链接作为审核依据。
 
@@ -29,7 +29,7 @@
 
 ## 官网依据与基础定义
 
-基础目录包含 16 条有官网依据的已审核定义，以及 7 条必须由目标阵列运行时目录复核的 PowerScale 符号代码待审核候选。已审核 NetApp 定义如下：
+`000000000017` 将当前测试库的 68 个代码全部纳入静态目录：33 条 NetApp 事件有逐代码官方依据并为 `reviewed`，其余 10 条 NetApp 与全部 25 条 PowerScale 代码为 `pending`，逐项原因见[待核验事件清单](unverified-code-list.md)。不得为了维持历史审核数量保留泛化 KB、概览页面或社区帖的推断结果。基础的 12 条已审核 NetApp 定义如下：
 
 | 事件代码 | 中文含义 / 关联类型 | 已核实版本 | 官网依据 |
 | --- | --- | --- | --- |
@@ -46,14 +46,9 @@
 | `ccma.quota.throughput` | 性能归档保留空间不足 / 监控能力下降 | ONTAP 9.14.1、9.18.1 | [ccma.quota events](https://docs.netapp.com/us-en/ontap-ems/ccma-quota-events.html) |
 | `nis.group.db.build.success` | NIS 组数据库构建成功 / 系统运行事件 | ONTAP 9.10.1–9.18.1 | [nis.group events](https://docs.netapp.com/us-en/ontap-ems/nis-group-events.html) |
 
-已审核 PowerScale 数字代码如下。H17458.1 事件列表的[修订记录](https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/revisions-788/)对应 OneFS 9.4.0.0；`400050004` 另有 [CELOG 心跳说明](https://infohub.delltechnologies.com/en-uk/l/powerscale-onefs-advanced-alert-configurations/general-alert-configuration-considerations/)明确从 OneFS 8.0 起可用。
+`017` 还审核了 `arw.volume.state`、`asup.post.drop`、`callhome.*`、`configbr.backupCompleted`、`mhost.ca.connect.*`、`quota.push.*`、`quota.resize.*`、`quota.softlimit.*`、`wafl.quota.user.exceeded`、`wafl.analytics.*`、`wafl.compress.cde.event`、`wafl.data.compaction.event`、`wafl.rclm.est.scan.done` 和 `wafl.spacemgmnt.policyChg`。每条都保存对应的 NetApp EMS 事件页、版本范围和简短中文处置；例如 [AutoSupport 投递失败](https://docs.netapp.com/us-en/ontap-ems-9161/asup-post-events.html)、[配额软限制](https://docs.netapp.com/us-en/ontap-ems/quota-softlimit-events.html) 与 [文件系统分析过载](https://docs.netapp.com/us-en/ontap-ems/wafl-analytics-events.html)。
 
-| 事件代码 | 中文含义 / 关联类型 | 已核实版本 | 官网依据 |
-| --- | --- | --- | --- |
-| `400050004` | CELOG 心跳事件 / 系统运行事件 | OneFS 8.0–9.4.0.0 | [Dell 心跳说明](https://infohub.delltechnologies.com/en-uk/l/powerscale-onefs-advanced-alert-configurations/general-alert-configuration-considerations/) |
-| `400100006` | 计划作业未按计划启动 / 故障日志 | OneFS 9.4.0.0 | [Dell H17458.1 事件列表](https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/appendix-b-full-list-of-srs-brevity/) |
-| `500010001` | SmartQuotas 配额阈值触发 / 容量/配额阈值 | OneFS 9.4.0.0 | [Dell H17458.1 事件列表](https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/appendix-b-full-list-of-srs-brevity/) |
-| `500010002` | SmartQuotas 通知发送失败 / 故障日志 | OneFS 9.4.0.0 | [Dell H17458.1 事件列表](https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/appendix-b-full-list-of-srs-brevity/) |
+Dell 的 [PowerScale SRS Brevity 事件清单](https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/appendix-b-full-list-of-srs-brevity/)可用于定位部分数字事件名称，但公开页面未为本次 25 个代码提供足以审核的逐代码语义、版本和处置闭环，因此它们统一保持 `pending`，不输出候选解释或方案。
 
 PowerScale 还提供[事件组定义 API](https://www.dell.com/support/manuals/en-us/isilon-onefs/ifs_pub_onefs_api_reference/event-eventgroup-definitions-resource?guid=guid-d68ee0f3-45ca-473a-9d00-bec680117ad9&lang=en-us)，用于部署时按目标 OneFS 运行时目录复核符号代码。PowerScale 严重级别可由设备环境配置，因此目录默认值允许为空，并以事件实例值为准。
 
@@ -65,7 +60,7 @@ PowerScale 还提供[事件组定义 API](https://www.dell.com/support/manuals/e
 
 厂商事件采集仍先把设备事实写入 `storage_alerts`。健康分析查询再按 `source + event_code` 解析目录，只将启用且已审核的定义返回为正式关联语义。目录缺失、定义停用或仍待审核时，统一返回“未分类厂商事件”安全说明，不持久化猜测结果。
 
-故障指纹由厂商、事件代码、对象类型和稳定对象 ID 组成，只用于重复事件归组和技术追溯，不代表故障结论。页面默认展示“事件代码 + 中文含义 + 关联类型 + 日志摘要”；管理员从重复故障或系统事件所在行点击“查看日志”，读取具体 `storage_alerts` 记录并显示规范化日志正文、对象、发生时间和目录说明。原始指纹仅在日志对话框的可展开“技术关联信息”中保留，原始厂商载荷不由列表、详情或 AI 工具返回。
+故障指纹由厂商、事件代码、对象类型和稳定对象 ID 组成，只用于重复事件归组和技术追溯，不代表故障结论。页面默认展示“事件代码 + 中文含义 + 关联类型 + 日志摘要”；管理员从重复故障或系统事件所在行点击“查看日志”，读取具体 `storage_alerts` 记录并显示规范化日志正文、对象、发生时间、目录说明和推荐解决方案。已审核定义展示 `recommended_solution_zh`；待审核定义只展示“暂无可核验官方方案”，不输出候选分类或候选处置。原始指纹仅在日志对话框的可展开“技术关联信息”中保留，原始厂商载荷不由列表、详情或 AI 工具返回。
 
 `asset_mapping_missing` 的中文含义是“资产映射不完整”：事件至少已归属存储集群，但节点、卷、Qtree 或项目的稳定映射链路不完整。已识别稳定节点身份的厂商事件不会产生此缺口。该缺口只限制影响范围定位，不表示事件代码或日志正文缺失，也不影响打开规范化日志。
 
@@ -75,7 +70,7 @@ PowerScale 还提供[事件组定义 API](https://www.dell.com/support/manuals/e
 
 ## 管理入口、接口与权限
 
-超级管理员从“系统管理 → 事件关联信息”进入 `/admin/vendor-event-definitions`，可以按存储类型、关联类型、审核状态和关键字查询，并新增、修改、删除、启停定义。写入字段均由服务端枚举、长度和 URL 约束校验，所有变更写入统一操作审计。
+超级管理员从“系统管理 → 事件关联信息”进入 `/admin/vendor-event-definitions`，可以按存储类型、关联类型、审核状态和关键字查询，并新增、修改、删除、启停定义。目录列表与编辑表单展示推荐解决方案；已审核记录保存时必须填写该字段。写入字段均由服务端枚举、长度和 URL 约束校验，所有变更写入统一操作审计。
 
 管理接口使用完整路径：
 
@@ -92,8 +87,8 @@ PowerScale 还提供[事件组定义 API](https://www.dell.com/support/manuals/e
 
 ## 发现、历史修复与部署
 
-“发现已有代码”是升级后由超级管理员人工执行一次的历史补录，不是周期任务。它先幂等写入 16 条官方已审核定义和 7 条运行时待审核候选，再仅对现有 NetApp/Isilon `storage_alerts.related_info.event_code` 做数据库端 `DISTINCT` 提取；不读取完整原始载荷，也不连接存储设备主动枚举代码。自动生成的 `unknown + pending` 占位若命中基础目录会被升级，其他人工或既有定义保持不变；未收录代码创建为 `unknown + pending` 占位，只在管理目录中待审核。
+“发现已有代码”是升级后由超级管理员人工执行一次的历史补录，不是周期任务。完整的 68 条静态目录由迁移 `017` 负责；Discover 只对现有 NetApp/Isilon `storage_alerts.related_info.event_code` 做数据库端 `DISTINCT` 提取，不读取完整原始载荷，也不连接存储设备主动枚举代码。未收录代码只创建 `unknown + pending` 占位，只在管理目录中待审核。
 
 该动作同时执行幂等的历史 Incident 兼容修复：只由非 `critical` 厂商事件错误生成的旧 `device_fault` Incident 标记为已解决并追加 `reconciled` 时间线；原始 `storage_alerts`、证据和诊断记录全部保留。重复执行可用于故障后重试，但不会重复创建占位项、关闭 Incident 或写入时间线。
 
-迁移 revision `000000000016` 只创建目录表并写入基础行，不扫描 `storage_alerts`；降级会删除目录表，但不会删除原始厂商事件。部署顺序为：备份数据库 → 应用迁移 `000000000016` → 部署并重启新 API 与 Celery worker → 超级管理员执行一次“发现已有代码” → 回读新增、既有和历史修复计数并审核待审核项。迁移和 Discover 都是部署操作；自动化验证使用 `backend/config.test.yml` 和隔离测试库，不自动对真实业务数据库执行迁移或 Discover。真实设备运行时目录、版本差异和权限仍需在隔离环境验收。
+迁移 revision `000000000016` 只创建目录表并写入基础行；`000000000017` 增加推荐方案字段、upsert 全部 68 条目录并收紧已审核证据约束。两者都不扫描或删除 `storage_alerts` 原始厂商事件。部署顺序为：备份数据库 → 应用迁移 `000000000017` → 部署并重启新 API 与 Celery worker → 回读覆盖率、审核状态和待核验项。迁移和 Discover 都是部署操作；自动化验证使用 `backend/config.test.yml` 和隔离测试库，不自动对真实业务数据库执行迁移或 Discover。真实设备运行时目录、版本差异和权限仍需在隔离环境验收。

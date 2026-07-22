@@ -85,6 +85,7 @@ def validate_reviewed_definition_values(
     association_type: str,
     official_reference_url: str | None,
     version_scope: str | None,
+    recommended_solution_zh: str | None,
 ) -> None:
     if official_reference_url:
         normalized_reference = _validate_reference_url(official_reference_url)
@@ -110,6 +111,8 @@ def validate_reviewed_definition_values(
     _validate_reference_url(official_reference_url)
     if not version_scope:
         raise ValueError("已审核定义必须提供适用版本范围")
+    if not recommended_solution_zh or not recommended_solution_zh.strip():
+        raise ValueError("已审核定义必须填写推荐解决方案")
 
 
 class VendorEventDefinitionCreate(BaseModel):
@@ -124,6 +127,7 @@ class VendorEventDefinitionCreate(BaseModel):
     default_severity: Severity | None = None
     version_scope: str | None = Field(default=None, max_length=255)
     review_status: ReviewStatus = "pending"
+    recommended_solution_zh: str | None = Field(default=None, max_length=5000)
     is_active: StrictBool = True
 
     @field_validator("event_code")
@@ -144,6 +148,7 @@ class VendorEventDefinitionCreate(BaseModel):
             association_type=self.association_type,
             official_reference_url=self.official_reference_url,
             version_scope=self.version_scope,
+            recommended_solution_zh=self.recommended_solution_zh,
         )
         return self
 
@@ -160,6 +165,7 @@ class VendorEventDefinitionPatch(BaseModel):
     default_severity: Severity | None = None
     version_scope: str | None = Field(default=None, max_length=255)
     review_status: ReviewStatus | None = None
+    recommended_solution_zh: str | None = Field(default=None, max_length=5000)
     is_active: StrictBool | None = None
 
     @field_validator("event_code")
@@ -180,6 +186,7 @@ class VendorEventDefinitionPatch(BaseModel):
             "official_reference_url",
             "default_severity",
             "version_scope",
+            "recommended_solution_zh",
         }
         for field_name in self.model_fields_set - nullable_fields:
             if getattr(self, field_name) is None:
@@ -201,6 +208,7 @@ class VendorEventDefinitionOut(BaseModel):
     default_severity: Severity | None = None
     version_scope: str | None = None
     review_status: ReviewStatus
+    recommended_solution_zh: str | None = None
     is_active: bool
     created_at: datetime
     updated_at: datetime

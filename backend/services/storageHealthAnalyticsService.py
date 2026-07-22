@@ -351,6 +351,9 @@ def _enrich_vendor_event(
             definition, "official_reference_url"
         ),
         "review_status": _definition_field(definition, "review_status"),
+        "recommended_solution_zh": _definition_field(
+            definition, "recommended_solution_zh"
+        ),
     }
     enriched.pop("external_event_id", None)
     return enriched

@@ -352,15 +352,21 @@ def test_common_vendor_event_seed_is_idempotent_and_covers_both_storage_types(db
         code: crud.get_definition(db_session, "isilon", code).version_scope
         for code in ("400050004", "400100006", "500010001", "500010002")
     }
-    assert powerscale_scopes == {
-        "400050004": "OneFS 8.0–9.4.0.0（Dell 心跳说明与 H17458.1 事件列表）",
-        "400100006": "OneFS 9.4.0.0（Dell H17458.1 事件列表）",
-        "500010001": "OneFS 9.4.0.0（Dell H17458.1 事件列表）",
-        "500010002": "OneFS 9.4.0.0（Dell H17458.1 事件列表）",
-    }
+    assert all(scope is None for scope in powerscale_scopes.values())
+    assert all(
+        crud.get_definition(db_session, "isilon", code).review_status == "pending"
+        and crud.get_definition(db_session, "isilon", code).association_type == "unknown"
+        and crud.get_definition(db_session, "isilon", code).recommended_solution_zh is None
+        for code in powerscale_scopes
+    )
+    assert all(
+        row.recommended_solution_zh
+        for row in first_rows
+        if row.review_status == "reviewed"
+    )
 
 
-def test_runtime_and_migration_vendor_event_seeds_stay_identical():
+def test_runtime_seed_does_not_restore_pre_017_powerscale_semantics():
     migration = _contract_module(
         "migrate.versions.000000000016_vendor_event_definitions"
     )
@@ -378,7 +384,15 @@ def test_runtime_and_migration_vendor_event_seeds_stay_identical():
     )
     migration_seeds = [dict(zip(fields, row)) for row in migration._COMMON_SEEDS]
 
-    assert migration_seeds == list(service.COMMON_DEFINITIONS)
+    assert migration_seeds == list(service._LEGACY_COMMON_DEFINITIONS)
+    assert all(
+        seed["association_type"] == "unknown"
+        and seed["review_status"] == "pending"
+        and seed["official_reference_url"] is None
+        and seed["version_scope"] is None
+        for seed in service.COMMON_DEFINITIONS
+        if seed["storage_type"] == "isilon"
+    )
 
 
 def test_vendor_event_migration_leaves_history_discovery_to_the_admin_action():

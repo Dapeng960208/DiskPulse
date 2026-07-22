@@ -407,6 +407,7 @@ const alerts = incidents.map((incident, index) => ({
       default_severity: 'error',
       version_scope: 'ONTAP 9.11.1–9.18.1',
       review_status: 'reviewed',
+      recommended_solution_zh: '检查名称服务配置、网络连通性及相应认证后端。',
       is_active: true,
     },
     {
@@ -420,6 +421,7 @@ const alerts = incidents.map((incident, index) => ({
       default_severity: null,
       version_scope: 'ONTAP 9.10.1–9.18.1',
       review_status: 'reviewed',
+      recommended_solution_zh: '检查客户端并发请求和节点负载，并按事件页的处置步骤处理。',
       is_active: true,
     },
     {
@@ -433,19 +435,21 @@ const alerts = incidents.map((incident, index) => ({
       default_severity: 'info',
       version_scope: 'ONTAP 9.14.1、9.18.1',
       review_status: 'reviewed',
+      recommended_solution_zh: '无需立即操作；保留该完成事件用于审计。',
       is_active: true,
     },
     {
       id: 4,
       storage_type: 'isilon',
       event_code: '500010002',
-      association_type: 'fault_log',
-      title_zh: 'SmartQuotas 通知发送失败',
-      description_zh: '系统未能向相关用户发送配额通知；不代表配额本身未生效。',
-      official_reference_url: 'https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/appendix-b-full-list-of-srs-brevity/',
+      association_type: 'unknown',
+      title_zh: '未收录的厂商事件代码',
+      description_zh: '尚未获得该事件代码的逐项官方语义与处置证据。',
+      official_reference_url: null,
       default_severity: null,
-      version_scope: 'Dell PowerScale 官方事件列表；部署时按目标 OneFS 版本复核',
-      review_status: 'reviewed',
+      version_scope: null,
+      review_status: 'pending',
+      recommended_solution_zh: null,
       is_active: true,
     },
     {
@@ -472,6 +476,7 @@ const alerts = incidents.map((incident, index) => ({
       default_severity: null,
       version_scope: '目标 OneFS 运行时事件目录',
       review_status: 'pending',
+      recommended_solution_zh: null,
       is_active: true,
     },
   ].map((item) => ({
@@ -493,6 +498,7 @@ const alerts = incidents.map((incident, index) => ({
       title_zh: 'UNIX 用户凭据查询失败',
       description_zh: '访问请求中的 UID 无法通过名称服务解析，应检查 NIS、LDAP 或本地名称服务。',
       review_status: 'reviewed',
+      recommended_solution_zh: '检查名称服务配置、网络连通性及相应认证后端。',
       official_reference_url: 'https://docs.netapp.com/us-en/ontap-ems/secd-authsys-events.html',
       object_id: 'node-a',
       object_name: 'node-a',
@@ -512,6 +518,7 @@ const alerts = incidents.map((incident, index) => ({
       title_zh: 'NFS 请求并发超过连接阈值',
       description_zh: '单个连接的并发在途请求超过允许值，客户端性能可能下降。',
       review_status: 'reviewed',
+      recommended_solution_zh: '检查客户端并发请求和节点负载，并按事件页的处置步骤处理。',
       official_reference_url: 'https://docs.netapp.com/us-en/ontap-ems/nblade-execsoverlimit-events.html',
       object_id: 'node-a',
       object_name: 'node-a',
@@ -531,6 +538,7 @@ const alerts = incidents.map((incident, index) => ({
       title_zh: '未收录的厂商事件代码',
       description_zh: '尚未在事件代码目录中确认该厂商事件的中文含义。',
       review_status: 'pending',
+      recommended_solution_zh: null,
       official_reference_url: null,
       object_id: 'node-b',
       object_name: 'node-b',
@@ -545,12 +553,13 @@ const alerts = incidents.map((incident, index) => ({
       severity: 'error',
       event_code: '500010002',
       fingerprint: 'isilon:500010002:cluster:3',
-      association_type: 'fault_log',
-      association_type_label: '故障日志',
-      title_zh: 'SmartQuotas 通知发送失败',
-      description_zh: '系统未能向相关用户发送配额通知；不代表配额本身未生效。',
-      review_status: 'reviewed',
-      official_reference_url: 'https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/appendix-b-full-list-of-srs-brevity/',
+      association_type: 'unknown',
+      association_type_label: '未分类厂商事件',
+      title_zh: '未收录的厂商事件代码',
+      description_zh: '尚未获得该事件代码的逐项官方语义与处置证据。',
+      review_status: 'pending',
+      recommended_solution_zh: null,
+      official_reference_url: null,
       object_id: 'cluster-3',
       object_name: 'PowerScale-研发',
       object_type: 'cluster',
@@ -651,8 +660,8 @@ function validateMockVendorDefinition(item) {
     throw error(422, '官方参考地址必须与存储类型匹配，使用 NetApp 或 Dell 官方 HTTPS 地址，且不能包含空格、认证信息、端口或 @ 字符');
   }
   if (item?.review_status !== 'reviewed') return;
-  if (item.association_type === 'unknown' || !reference || !item.version_scope) {
-    throw error(422, '已审核定义缺少明确分类、官方 HTTPS 参考地址或版本范围');
+  if (item.association_type === 'unknown' || !reference || !item.version_scope || !String(item.recommended_solution_zh || '').trim()) {
+    throw error(422, '已审核定义缺少明确分类、官方 HTTPS 参考地址、版本范围或推荐解决方案');
   }
 }
 function normalizePath(path) { const value = String(path || '').replace(/^https?:\/\/[^/]+/, '').replace(/^\/storage-pulse\/api/, '').split('?')[0].replace(/\/{2,}/g, '/'); return value.length > 1 ? value.replace(/\/$/, '') : value; }
@@ -775,6 +784,7 @@ export function createMockGateway() {
           default_severity: null,
           version_scope: null,
           review_status: 'pending',
+          recommended_solution_zh: null,
           is_active: true,
           created_at: '2026-07-21T09:00:00Z',
           updated_at: '2026-07-21T09:00:00Z',

@@ -25,6 +25,7 @@ class VendorEventSemantics(BaseModel):
     description_zh: str
     official_reference_url: str | None = None
     review_status: str | None = None
+    recommended_solution_zh: str | None = None
 
 
 class SystemEventOut(VendorEventSemantics):

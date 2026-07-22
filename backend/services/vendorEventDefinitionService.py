@@ -38,7 +38,7 @@ _POWERSCALE_EVENT_LIST_URL = (
     "powerscale-onefs-advanced-alert-configurations/"
     "appendix-b-full-list-of-srs-brevity/"
 )
-COMMON_DEFINITIONS: tuple[dict[str, object], ...] = (
+_LEGACY_COMMON_DEFINITIONS: tuple[dict[str, object], ...] = (
     {
         "storage_type": "netapp",
         "event_code": "wafl.vol.blks_used.done",
@@ -339,6 +339,48 @@ COMMON_DEFINITIONS: tuple[dict[str, object], ...] = (
     },
 )
 
+_REVIEWED_SOLUTION_BY_EVENT_CODE = {
+    "wafl.vol.blks_used.done": "无需立即操作；保留该完成事件用于审计。",
+    "wafl.vol.snap_create.done": "无需立即操作；保留该完成事件用于审计。",
+    "wafl.scan.ownblocks.done": "无需立即操作；保留扫描完成记录用于审计。",
+    "wafl.scan.done": "无需立即操作；如伴随失败事件，再按对应失败代码排查。",
+    "nblade.execsOverLimit": "检查客户端并发请求和节点负载，并按官方事件页的处置步骤处理。",
+    "secd.authsys.lookup.failed": "检查名称服务配置、网络连通性及相应认证后端。",
+    "sis.auto.session.change": "无需立即操作；结合负载和存储效率作业状态持续观察。",
+    "fp.est.scan.catalog.updated": "无需立即操作；保留目录更新记录用于审计。",
+    "asup.aods.response.timeOut": "检查 AutoSupport OnDemand 服务连通性和配置。",
+    "kern.uptime.filer": "无需立即操作；保留周期记录用于运行状态审计。",
+    "ccma.quota.throughput": "检查性能归档保留空间和数据增长情况。",
+    "nis.group.db.build.success": "无需立即操作；保留成功记录用于审计。",
+}
+
+
+def _normalize_common_definition(seed: dict[str, object]) -> dict[str, object]:
+    """Keep the runtime seed from restoring unaudited PowerScale meanings."""
+    if seed["storage_type"] == "isilon":
+        return {
+            "storage_type": "isilon",
+            "event_code": seed["event_code"],
+            "association_type": "unknown",
+            "title_zh": UNKNOWN_TITLE_ZH,
+            "description_zh": UNKNOWN_DESCRIPTION_ZH,
+            "official_reference_url": None,
+            "default_severity": None,
+            "version_scope": None,
+            "review_status": "pending",
+        }
+
+    normalized = dict(seed)
+    normalized["recommended_solution_zh"] = _REVIEWED_SOLUTION_BY_EVENT_CODE[
+        str(seed["event_code"])
+    ]
+    return normalized
+
+
+COMMON_DEFINITIONS: tuple[dict[str, object], ...] = tuple(
+    _normalize_common_definition(seed) for seed in _LEGACY_COMMON_DEFINITIONS
+)
+
 
 def association_type_label(association_type: str) -> str:
     return ASSOCIATION_TYPE_LABELS.get(
@@ -362,6 +404,7 @@ def serialize_definition(definition: VendorEventDefinition) -> dict:
         "default_severity": definition.default_severity,
         "version_scope": definition.version_scope,
         "review_status": definition.review_status,
+        "recommended_solution_zh": definition.recommended_solution_zh,
         "is_active": definition.is_active,
         "created_at": definition.created_at,
         "updated_at": definition.updated_at,
@@ -400,6 +443,7 @@ def resolve_definition(
         "default_severity": None,
         "version_scope": None,
         "review_status": "pending",
+        "recommended_solution_zh": None,
         "is_active": False,
         "created_at": None,
         "updated_at": None,
@@ -417,6 +461,7 @@ def _placeholder_values(storage_type: str, event_code: str) -> dict:
         "default_severity": None,
         "version_scope": None,
         "review_status": "pending",
+        "recommended_solution_zh": None,
         "is_active": True,
     }
 
@@ -443,7 +488,7 @@ def seed_common_definitions(db: Session) -> int:
         event_code = str(seed["event_code"])
         existing = existing_by_key.get((storage_type, event_code))
         if existing is None:
-            vendorEventDefinitionCrud.create_definition(db, **seed)
+            vendorEventDefinitionCrud.create_definition(db, **_seed_values(seed))
             inserted += 1
             continue
         if _is_generated_placeholder(existing):
@@ -452,11 +497,23 @@ def seed_common_definitions(db: Session) -> int:
                 existing.id,
                 **{
                     key: value
-                    for key, value in seed.items()
+                    for key, value in _seed_values(seed).items()
                     if key not in {"storage_type", "event_code"}
                 },
             )
     return inserted
+
+
+def _seed_values(seed: dict[str, object]) -> dict[str, object]:
+    values = dict(seed)
+    if (
+        values.get("review_status") == "reviewed"
+        and not values.get("recommended_solution_zh")
+    ):
+        values["recommended_solution_zh"] = (
+            "请依据厂商官方事件页及目标设备运行时事件详情完成处置。"
+        )
+    return values
 
 
 def list_definition_page(
@@ -637,6 +694,10 @@ def update_definition(
                 definition.official_reference_url,
             ),
             "version_scope": changes.get("version_scope", definition.version_scope),
+            "recommended_solution_zh": changes.get(
+                "recommended_solution_zh",
+                definition.recommended_solution_zh,
+            ),
         }
         try:
             validate_reviewed_definition_values(**merged)

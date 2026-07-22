@@ -549,7 +549,9 @@ class VendorEventDefinition(Base):
             "OR lower(official_reference_url) LIKE 'https://%.delltechnologies.com/%'"
             "))) "
             "AND version_scope IS NOT NULL "
-            "AND trim(version_scope) <> ''"
+            "AND trim(version_scope) <> '' "
+            "AND recommended_solution_zh IS NOT NULL "
+            "AND trim(recommended_solution_zh) <> ''"
             ")",
             name="ck_vendor_event_definition_reviewed_evidence",
         ),
@@ -572,6 +574,7 @@ class VendorEventDefinition(Base):
     default_severity = Column(String(16), nullable=True)
     version_scope = Column(String(255), nullable=True)
     review_status = Column(String(16), nullable=False, default="pending")
+    recommended_solution_zh = Column(Text, nullable=True, comment="推荐解决方案（中文）")
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(

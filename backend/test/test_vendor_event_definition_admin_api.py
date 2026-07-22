@@ -242,7 +242,7 @@ def test_super_admin_can_filter_and_complete_vendor_event_definition_crud_with_s
         )
         .all()
     )
-    assert len(update_failures) == 2
+    assert len(update_failures) == 3
     assert {failure.reason_code for failure in update_failures} == {
         "vendor_event_definition_validation_failed"
     }

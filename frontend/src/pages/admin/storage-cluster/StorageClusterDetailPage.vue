@@ -938,6 +938,11 @@ onBeforeMount(() => {
           <ElDescriptionsItem
             label="中文说明"
             :span="2">{{ vendorEventDescription(systemEventDetail) }}</ElDescriptionsItem>
+          <ElDescriptionsItem
+            label="推荐解决方案"
+            :span="2">{{ hasReviewedVendorSemantics(systemEventDetail) && systemEventDetail.recommended_solution_zh
+              ? systemEventDetail.recommended_solution_zh
+              : '暂无可核验官方方案' }}</ElDescriptionsItem>
         </ElDescriptions>
         <details v-if="systemEventDetail?.fingerprint">
           <summary>技术关联信息</summary>

@@ -23,6 +23,7 @@ def create_definition(
     default_severity: str | None = None,
     version_scope: str | None = None,
     review_status: str = "pending",
+    recommended_solution_zh: str | None = None,
     is_active: bool = True,
 ) -> VendorEventDefinition:
     definition = VendorEventDefinition(
@@ -35,6 +36,7 @@ def create_definition(
         default_severity=default_severity,
         version_scope=version_scope,
         review_status=review_status,
+        recommended_solution_zh=recommended_solution_zh,
         is_active=is_active,
     )
     db.add(definition)

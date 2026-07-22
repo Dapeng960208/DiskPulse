@@ -62,6 +62,7 @@ const form = reactive({
   default_severity: '',
   version_scope: '',
   review_status: 'pending',
+  recommended_solution_zh: '',
   is_active: true,
 });
 
@@ -124,6 +125,7 @@ function resetForm() {
     default_severity: '',
     version_scope: '',
     review_status: 'pending',
+    recommended_solution_zh: '',
     is_active: true,
   });
 }
@@ -155,6 +157,7 @@ function formPayload() {
     default_severity: form.default_severity || null,
     version_scope: form.version_scope.trim() || null,
     review_status: form.review_status,
+    recommended_solution_zh: form.recommended_solution_zh.trim() || null,
     is_active: form.is_active,
   };
 }
@@ -194,6 +197,7 @@ function reviewedDefinitionError(payload) {
     return '已审核定义必须填写有效的官方 HTTPS 参考地址';
   }
   if (!payload.version_scope) return '已审核定义必须填写适用版本';
+  if (!payload.recommended_solution_zh) return '已审核定义必须填写推荐解决方案';
   return '';
 }
 
@@ -368,6 +372,12 @@ onMounted(load);
         min-width="300"
         show-overflow-tooltip />
       <ElTableColumn
+        label="推荐解决方案"
+        min-width="300"
+        show-overflow-tooltip>
+        <template #default="{ row }">{{ row.recommended_solution_zh || '待官方核验' }}</template>
+      </ElTableColumn>
+      <ElTableColumn
         label="默认等级"
         width="110">
         <template #default="{ row }">{{ severityLabels[row.default_severity] || '采用实例等级' }}</template>
@@ -513,6 +523,17 @@ onMounted(load);
             v-model="form.version_scope"
             maxlength="255"
             placeholder="例如 ONTAP 9.11.1–9.18.1" />
+        </ElFormItem>
+        <ElFormItem
+          label="推荐解决方案"
+          :required="form.review_status === 'reviewed'">
+          <ElInput
+            v-model="form.recommended_solution_zh"
+            type="textarea"
+            :rows="3"
+            maxlength="5000"
+            show-word-limit
+            placeholder="仅填写可由官方事件页核验的处置建议" />
         </ElFormItem>
         <ElFormItem label="启用状态">
           <ElSwitch
