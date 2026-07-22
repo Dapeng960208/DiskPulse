@@ -138,14 +138,11 @@ describe('ForecastGovernancePage', () => {
     expect(source).toContain('aria-label="Theil-Sen 趋势与残差分位算法说明"');
   });
 
-  it('opens the baseline algorithm tooltip for both pointer and keyboard users', () => {
+  it('opens the baseline algorithm tooltip for pointer and keyboard users', () => {
     const source = readFileSync(resolve('src/pages/admin/forecast-governance/ForecastGovernancePage.vue'), 'utf8');
 
-    expect(source).toContain(':visible="baselineAlgorithmTooltipVisible"');
-    expect(source).toContain('@mouseenter="baselineAlgorithmTooltipVisible = true"');
-    expect(source).toContain('@mouseleave="baselineAlgorithmTooltipVisible = false"');
-    expect(source).toContain('@focus="baselineAlgorithmTooltipVisible = true"');
-    expect(source).toContain('@blur="baselineAlgorithmTooltipVisible = false"');
+    expect(source).toContain(':trigger="[\'hover\', \'focus\', \'click\']"');
+    expect(source).not.toContain('baselineAlgorithmTooltipVisible');
   });
 
   it('activates an eligible candidate and reports a rejected activation', async () => {
