@@ -103,7 +103,7 @@ describe('ForecastGovernancePage', () => {
     expect(wrapper.vm.createDialogVisible).toBe(false);
   });
 
-  it('offers every AI Center model in the candidate-model dropdown without provider or enabled filtering', async () => {
+  it('offers only enabled AI Center models without filtering by provider', async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -111,9 +111,22 @@ describe('ForecastGovernancePage', () => {
 
     expect(aiApi.listAdminModels).toHaveBeenCalledTimes(1);
     expect(wrapper.vm.configuredModels).toEqual([
-      { id: 3, name: '公有预测模型', provider: 'openai', model: 'gpt-forecast', enabled: false },
       { id: 4, name: '本地预测模型', provider: 'ollama', model: 'forecast-local', enabled: true },
     ]);
+  });
+
+  it('explains the baseline, risk tiers, and AI activation gate in the management page', () => {
+    const source = readFileSync(resolve('src/pages/admin/forecast-governance/ForecastGovernancePage.vue'), 'utf8');
+
+    expect(source).toContain('内置基线标准');
+    expect(source).toContain('最近 45 个 UTC 日');
+    expect(source).toContain('至少 30 个有效日');
+    expect(source).toContain('覆盖率不低于 80%');
+    expect(source).toContain('风险分级标准');
+    expect(source).toContain('P90 在 7 日内');
+    expect(source).toContain('AI 候选与启用标准');
+    expect(source).toContain('平均 MAPE 至少降低 10%');
+    expect(source).toContain('P10 ≤ P50 ≤ P90');
   });
 
   it('activates an eligible candidate and reports a rejected activation', async () => {

@@ -16,9 +16,9 @@ vi.mock('vue', async (importOriginal) => {
   return {
     ...actual,
     defineAsyncComponent: () => ({
-      name: 'CapacityPredictionPanel',
-      props: ['assetType', 'assetId', 'visible', 'canManagePlans'],
-      template: '<section data-testid="capacity-prediction-panel">容量预测内容</section>',
+      name: 'CapacityExhaustionRiskPanel',
+      props: ['assetType', 'assetId'],
+      template: '<section data-testid="capacity-exhaustion-risk-panel">耗尽风险内容</section>',
     }),
   };
 });
@@ -80,7 +80,7 @@ describe('detail capacity prediction navigation', () => {
     visibilityMock.mockReset();
   });
 
-  it('keeps the user-directory detail focused on realtime monitoring', async () => {
+  it('keeps realtime monitoring and embeds user-directory exhaustion risk', async () => {
     visibilityMock.mockResolvedValue({ visible: true });
 
     const wrapper = mount(UsageDetailPage, { global });
@@ -89,18 +89,17 @@ describe('detail capacity prediction navigation', () => {
     expect(wrapper.find('.real-time-page-stub').attributes('data-show-header')).toBe('false');
     expect(wrapper.find('.detail-monitor-page__actions').exists()).toBe(false);
     expect(wrapper.find('[data-testid="capacity-prediction-entry"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="capacity-prediction-panel"]').exists()).toBe(false);
-    expect(visibilityMock).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[data-testid="capacity-exhaustion-risk-panel"]').exists()).toBe(true);
   });
 
-  it('keeps the project-group detail focused on realtime monitoring', async () => {
+  it('keeps realtime monitoring and embeds project-group exhaustion risk', async () => {
     const wrapper = mount(GroupDetailPage, { global });
     await flushPromises();
 
     expect(wrapper.find('.real-time-page-stub').attributes('data-show-header')).toBe('false');
     expect(wrapper.find('.detail-monitor-page__actions').exists()).toBe(false);
     expect(wrapper.find('[data-testid="capacity-prediction-entry"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="capacity-prediction-panel"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="capacity-exhaustion-risk-panel"]').exists()).toBe(true);
   });
 
   it('hides the repeated monitoring title and subtitle in the capacity-pool detail page', () => {

@@ -587,7 +587,7 @@ def test_only_candidate_with_passing_evaluations_can_be_enabled(db_session):
         activate_capacity_prediction_candidate(db_session, candidate_id=rejected.id)
 
 
-def test_candidate_can_be_activated_after_its_ai_model_is_disabled(db_session):
+def test_candidate_cannot_be_activated_after_its_ai_model_is_disabled(db_session):
     import models
     from services.capacityPredictionGovernanceService import (
         activate_capacity_prediction_candidate,
@@ -615,9 +615,12 @@ def test_candidate_can_be_activated_after_its_ai_model_is_disabled(db_session):
     model.enabled = False
     db_session.flush()
 
-    activate_capacity_prediction_candidate(db_session, candidate_id=candidate.id)
+    with pytest.raises(HTTPException) as rejected:
+        activate_capacity_prediction_candidate(db_session, candidate_id=candidate.id)
 
-    assert db_session.get(models.CapacityPredictionCandidate, candidate.id).enabled is True
+    assert rejected.value.status_code == 422
+    assert "enabled" in rejected.value.detail
+    assert db_session.get(models.CapacityPredictionCandidate, candidate.id).enabled is False
 
 
 def test_duplicate_candidate_version_returns_a_stable_conflict(db_session):

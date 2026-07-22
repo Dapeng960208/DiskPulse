@@ -15,24 +15,23 @@ describe('list capacity prediction navigation', () => {
   const routes = source('src/router/routes.js');
 
   it.each([
-    ['user directory', usageList, 'UsageCapacityPrediction'],
-    ['project group', groupList, 'GroupCapacityPrediction'],
-  ])('puts the %s prediction entry in the row more-actions menu', (_, page, routeName) => {
+    ['user directory', usageList],
+    ['project group', groupList],
+  ])('removes the standalone prediction action from the %s list', (_, page) => {
     const actions = actionColumn(page);
 
-    expect(page).toContain('capacityPredictionApi.visibility()');
-    expect(page).toContain('openCapacityPrediction');
-    expect(actions).toContain('容量预测');
-    expect(page).toContain(`router.push({ name: '${routeName}'`);
-    expect(actions).toContain('@click="openCapacityPrediction(row)"');
-    expect(actions).not.toContain('capacity-prediction-entry');
+    expect(page).not.toContain('capacityPredictionApi.visibility()');
+    expect(page).not.toContain('openCapacityPrediction');
+    expect(actions).not.toContain('容量预测');
   });
 
-  it('routes list actions to the standalone prediction detail page', () => {
+  it('keeps old prediction deep links only as redirects to resource details', () => {
     expect(routes).toContain("path: 'usage/:id/capacity-prediction'");
     expect(routes).toContain("name: 'UsageCapacityPrediction'");
     expect(routes).toContain("path: 'group/:id/capacity-prediction'");
     expect(routes).toContain("name: 'GroupCapacityPrediction'");
-    expect(routes).toContain("import('@/pages/capacity-prediction/CapacityPredictionDetailPage.vue')");
+    expect(routes).toContain("redirect: (to) => ({ name: 'UsagesDetail', params: { id: to.params.id } })");
+    expect(routes).toContain("redirect: (to) => ({ name: 'GroupDetail', params: { id: to.params.id } })");
+    expect(routes).not.toContain("import('@/pages/capacity-prediction/CapacityPredictionDetailPage.vue')");
   });
 });

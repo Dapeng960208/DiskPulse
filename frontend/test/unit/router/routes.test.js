@@ -94,7 +94,8 @@ describe('router/routes and app shell', () => {
       .filter((route) => !route.meta?.isHidden)
       .map((route) => route.meta.title);
 
-    expect(rootTitles).toEqual(expect.arrayContaining(['概览', '项目', '容量预测', 'AI 助手', '告警']));
+    expect(rootTitles).toEqual(expect.arrayContaining(['概览', '项目', 'AI 助手', '告警']));
+    expect(rootTitles).not.toContain('容量预测');
     expect(rootTitles).not.toEqual(expect.arrayContaining(['用户目录', '项目组']));
     expect(adminTitles).toEqual(expect.arrayContaining([
       '项目组标签',
@@ -196,7 +197,7 @@ describe('router/routes and app shell', () => {
     expect(wrapper.findComponent({ name: 'ElConfigProvider' }).exists()).toBe(true);
   });
 
-  it('places the standalone capacity prediction entry immediately after projects', () => {
+  it('does not expose capacity prediction as a standalone menu entry', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes,
@@ -215,7 +216,7 @@ describe('router/routes and app shell', () => {
     });
     const labels = wrapper.findAll('.menu-item').map((item) => item.text());
 
-    expect(labels[labels.indexOf('项目') + 1]).toBe('容量预测');
+    expect(labels).not.toContain('容量预测');
     expect(labels).not.toContain('项目组');
     expect(labels).not.toContain('用户目录');
   });
@@ -280,12 +281,10 @@ describe('router/routes and app shell', () => {
     expect(groups.meta.isRoot).not.toBe(true);
     expect(capacityPredictions).toEqual(expect.objectContaining({
       path: 'capacity-predictions',
-      meta: expect.objectContaining({
-        title: '容量预测',
-        isRoot: true,
-        icon: 'i-ri-line-chart-line',
-      }),
+      redirect: expect.anything(),
+      meta: expect.objectContaining({ isHidden: true }),
     }));
+    expect(capacityPredictions.meta.isRoot).not.toBe(true);
   });
 
   it('renders storage clusters as a direct menu item without the third-level submenu', () => {
