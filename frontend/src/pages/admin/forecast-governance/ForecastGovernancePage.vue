@@ -143,7 +143,23 @@ onMounted(load);
     <section class="forecast-governance-page__section forecast-governance-page__rules">
       <div>
         <strong class="forecast-governance-page__rule-title">内置基线标准</strong>
-        <p>使用最近 45 个 UTC 日的每日最大用量；至少 30 个有效日且覆盖率不低于 80%，才采用 Theil-Sen 趋势与残差分位生成未来 30 日 P10 / P50 / P90。</p>
+        <p>
+          使用最近 45 个 UTC 日的每日最大用量；至少 30 个有效日且覆盖率不低于 80%，才采用
+          <span class="forecast-governance-page__algorithm-term">
+            Theil-Sen 趋势与残差分位
+            <ElTooltip
+              :trigger="['hover', 'focus']"
+              placement="top"
+              popper-class="forecast-governance-page__algorithm-tooltip"
+              content="Theil-Sen 会计算历史任意两天的用量变化速度，并取所有斜率的中位数作为趋势，减少单日突增或异常值的影响；再统计实际用量与趋势线之间的偏差，用残差 P10 / P50 / P90 表示波动范围，叠加到未来趋势后形成偏低、典型和偏高三种预测范围。">
+              <span
+                class="forecast-governance-page__metric-help i-ri-question-line"
+                tabindex="0"
+                aria-label="Theil-Sen 趋势与残差分位算法说明" />
+            </ElTooltip>
+          </span>
+          生成未来 30 日 P10 / P50 / P90。
+        </p>
       </div>
       <div>
         <strong class="forecast-governance-page__rule-title">风险分级标准</strong>
@@ -312,8 +328,10 @@ onMounted(load);
 .forecast-governance-page__rules { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .forecast-governance-page__rules p { margin: var(--spacing-xs) 0 0; color: var(--text-secondary); line-height: 1.7; }
 .forecast-governance-page__rule-title { display: block; color: var(--text-primary); }
+.forecast-governance-page__algorithm-term { display: inline-flex; align-items: center; gap: var(--spacing-xs); color: var(--text-primary); }
 .forecast-governance-page__metric-header { display: inline-flex; align-items: center; gap: var(--spacing-xs); }
 .forecast-governance-page__metric-help { color: var(--text-tertiary); cursor: help; outline-offset: 2px; }
+:global(.forecast-governance-page__algorithm-tooltip) { max-width: 440px; line-height: 1.6; }
 
 @media (max-width: 1100px) {
   .forecast-governance-page__rules { grid-template-columns: 1fr; }
