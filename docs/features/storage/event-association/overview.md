@@ -29,7 +29,7 @@
 
 ## 官网依据与基础定义
 
-`000000000017` 将当前测试库的 68 个代码全部纳入静态目录：33 条 NetApp 事件有逐代码官方依据并为 `reviewed`，其余 10 条 NetApp 与全部 25 条 PowerScale 代码为 `pending`，逐项原因见[待核验事件清单](unverified-code-list.md)。不得为了维持历史审核数量保留泛化 KB、概览页面或社区帖的推断结果。基础的 12 条已审核 NetApp 定义如下：
+`000000000017` 将当时测试库的 68 个代码纳入静态目录；`000000000018` 补充 NetApp、Dell SRS Brevity 候选，并完整读取 Dell《PowerScale OneFS Event Reference Guide》（2021 年 10 月）的 Software events 与 Hardware events 两章。两章中的 499 条 PowerScale 代码均保存中文标题、说明和管理员操作并升级为 `reviewed`；当前迁移链共覆盖 585 条代码，合计 543 条 `reviewed` 和 42 条 `pending`。待核验原因见[待核验事件清单](unverified-code-list.md)。不得为了维持历史审核数量保留泛化 KB、概览页面或社区帖的推断结果。基础的 12 条已审核 NetApp 定义如下：
 
 | 事件代码 | 中文含义 / 关联类型 | 已核实版本 | 官网依据 |
 | --- | --- | --- | --- |
@@ -48,9 +48,29 @@
 
 `017` 还审核了 `arw.volume.state`、`asup.post.drop`、`callhome.*`、`configbr.backupCompleted`、`mhost.ca.connect.*`、`quota.push.*`、`quota.resize.*`、`quota.softlimit.*`、`wafl.quota.user.exceeded`、`wafl.analytics.*`、`wafl.compress.cde.event`、`wafl.data.compaction.event`、`wafl.rclm.est.scan.done` 和 `wafl.spacemgmnt.policyChg`。每条都保存对应的 NetApp EMS 事件页、版本范围和简短中文处置；例如 [AutoSupport 投递失败](https://docs.netapp.com/us-en/ontap-ems-9161/asup-post-events.html)、[配额软限制](https://docs.netapp.com/us-en/ontap-ems/quota-softlimit-events.html) 与 [文件系统分析过载](https://docs.netapp.com/us-en/ontap-ems/wafl-analytics-events.html)。
 
-Dell 的 [PowerScale SRS Brevity 事件清单](https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/appendix-b-full-list-of-srs-brevity/)可用于定位部分数字事件名称，但公开页面未为本次 25 个代码提供足以审核的逐代码语义、版本和处置闭环，因此它们统一保持 `pending`，不输出候选解释或方案。
+Dell 的 [PowerScale SRS Brevity 事件清单](https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/appendix-b-full-list-of-srs-brevity/)用于定位数字事件名称；[PowerScale OneFS Event Reference Guide（2021 年 10 月）](https://dl.dell.com/content/docu96961)的 Software events 与 Hardware events 章节用于补齐逐代码标题、说明和 Administrator action。该指南两章中的 499 条代码均已翻译并升级为 `reviewed`；SRS 页面有摘要但该版指南没有对应条目的 15 条代码，以及其他缺少版本化处置证据的代码继续保持 `pending`。
 
 PowerScale 还提供[事件组定义 API](https://www.dell.com/support/manuals/en-us/isilon-onefs/ifs_pub_onefs_api_reference/event-eventgroup-definitions-resource?guid=guid-d68ee0f3-45ca-473a-9d00-bec680117ad9&lang=en-us)，用于部署时按目标 OneFS 运行时目录复核符号代码。PowerScale 严重级别可由设备环境配置，因此目录默认值允许为空，并以事件实例值为准。
+
+## 时间关联建议（不改变审核语义）
+
+Dell 的 [SRS Brevity 事件清单](https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/appendix-b-full-list-of-srs-brevity/)提供的是事件代码与英文摘要，不提供 DiskPulse 的时间窗口或重复判断规则。下面的时间标签是用于规划事件关联的操作性元数据，不是厂商对代码的再次解释；在逐代码官方语义、版本和处置证据补齐前，不得据此把 `pending` 定义改为 `reviewed`。
+
+| 时间标签 | 适用的设备摘要模式 | 关联含义 | 建议窗口（以 `event_time` 为中心） |
+| --- | --- | --- | --- |
+| `point` 瞬时事实 | `Disk sector error`、`SMART status threshold exceeded`、`unsupported boot disk` | 单次事实；同一对象和代码在采集重试期间只保留一次证据 | 去重 5 分钟；跨事件关联 30 分钟 |
+| `start` 开始/进入处理 | `FlexProtect job is in progress`、`Drive Stall ... evaluating the drive's health` | 表示任务或评估已开始，不能当作完成或恢复 | 向后 5 分钟寻找前置故障；向后最多 24 小时等待结束事件 |
+| `state` 持续状态 | `write-cache ... is enabled`、`drives ... are not healthy` | 在收到相反状态前保持开放；重复上报更新 `last_evidence_at`，不创建新故障 | 同一对象 24 小时内合并；超过 24 小时重新开启一段状态 |
+| `end` 完成/恢复 | `Disk Repair Completed`、`FlexProtect ... preparing to add the drive`（任务阶段结束摘要需运行时确认） | 只能关闭同一对象、同一任务指纹的开放关联，不能单独证明硬件已恢复 | 向前 24 小时匹配 `start`；无匹配时作为独立系统事件 |
+| `heartbeat`/`activity` 心跳或运行记录 | `SW_CELOG_HEARTBEAT`、作业阶段开始/结束等符号代码 | 仅用于证明采集或作业活动，不进入重复故障 | 仅做 5 分钟去重，不跨窗口合并 |
+
+### 关联键、时间和边界
+
+1. 关联键至少包含 `storage_cluster_id`、厂商、`event_code`、对象类型和稳定对象 ID；不得只按事件代码或完整日志文本合并。
+2. `event_time` 使用设备事件发生时间；缺失或无法解析时，该记录不能参与时间关联。入库和 Incident 计算继续遵守本页既有的 `Asia/Shanghai` 墙上时间与 UTC 转换规则。
+3. “向前/向后”窗口只用于候选证据排序和去重，不改变 `fault_log`、`system_activity` 等目录类型，也不把 `pending` 代码变成正式诊断。
+4. 收到 `end` 或相反状态时，仅关闭同一关联键的开放时间段；没有 `start`、对象不一致或窗口超时的记录必须保留为独立事件，并在界面标注“未找到匹配的开始事件”。
+5. 这些窗口是实现前的默认建议。若采集周期、OneFS 版本或设备运行时目录证明不同的生命周期，应在对应代码定义中增加版本化覆盖值，并记录官方依据；不得静态假设数字代码与符号代码互为开始/结束别名。
 
 `sis.auto.session.change` 表示 ONTAP 后台存储效率会话数发生调整，基础定义将它分为 `system_activity`（系统运行事件），不得解释为性能异常或故障日志。
 
