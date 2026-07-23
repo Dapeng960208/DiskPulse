@@ -8,6 +8,7 @@ from scripts.repair_questdb_timestamps import (
     build_audit_statements,
     build_create_statement,
     build_copy_statement,
+    build_repair_table_names,
     validate_apply_args,
 )
 
@@ -53,6 +54,20 @@ def test_capacity_repair_sql_preserves_soft_quota_columns():
     assert "soft_limit" in copy_sql
     assert "soft_use_ratio" in copy_sql
     assert "dateadd('h', -8, updated_at) AS updated_at" in copy_sql
+
+
+def test_numeric_timestamp_suffix_builds_safe_repair_and_backup_table_names():
+    repair_name, backup_name = build_repair_table_names(
+        "storage_performance_metrics",
+        "20260723141953",
+    )
+
+    assert repair_name == (
+        "storage_performance_metrics__utc_repair_20260723141953"
+    )
+    assert backup_name == (
+        "storage_performance_metrics__local_time_backup_20260723141953"
+    )
 
 
 def test_audit_avoids_postgresql_filter_aggregate_not_supported_by_questdb():
