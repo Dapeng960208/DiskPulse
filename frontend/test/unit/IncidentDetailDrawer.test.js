@@ -68,6 +68,7 @@ describe('IncidentDetailDrawer', () => {
         classification: 'normal_fluctuation',
         urgency: 'low',
         summary: '低负载 IOPS 短时波动，暂无服务影响证据。',
+        evidence_basis: ['绝对 IOPS 低于动态噪声门槛'],
         investigation_steps: ['继续观察下一采集周期'],
         resolution_steps: ['无需设备写操作'],
         analyzed_at: '2026-07-23T06:45:00Z',

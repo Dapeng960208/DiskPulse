@@ -7,6 +7,8 @@ const incidentApi = vi.hoisted(() => ({
   updateIncident: vi.fn(),
   createComment: vi.fn(),
   createMaintenanceWindow: vi.fn(),
+  fetchAiSettings: vi.fn(),
+  updateAiSettings: vi.fn(),
 }));
 
 vi.mock('@/api/incident-api.js', () => ({ default: incidentApi }));
@@ -37,6 +39,8 @@ async function mountPage() {
         ElPagination: passthrough('ElPagination'),
         ElButton: passthrough('ElButton', 'button'),
         ElTag: passthrough('ElTag'),
+        ElInputNumber: passthrough('ElInputNumber', 'input'),
+        TableActionButton: passthrough('TableActionButton', 'button'),
       },
       directives: { loading: () => {} },
     },
@@ -138,5 +142,37 @@ describe('IncidentCenterPage', () => {
       status: 'investigating',
     });
     expect(incidentApi.fetchIncidents).toHaveBeenCalledTimes(2);
+  });
+
+  it('loads and saves ordered AI candidate models with IOPS noise controls', async () => {
+    incidentApi.fetchAiSettings.mockResolvedValue({
+      enabled: true,
+      model_ids: [3, 2],
+      available_models: [{ id: 2, name: 'fallback' }, { id: 3, name: 'primary' }],
+      iops_absolute_floor: 10,
+      iops_baseline_ratio: 0.05,
+    });
+    incidentApi.updateAiSettings.mockResolvedValue({
+      enabled: true,
+      model_ids: [2, 3],
+      available_models: [{ id: 2, name: 'fallback' }, { id: 3, name: 'primary' }],
+      iops_absolute_floor: 12,
+      iops_baseline_ratio: 0.08,
+    });
+    const wrapper = await mountPage();
+
+    await wrapper.vm.openAiSettings();
+    wrapper.vm.moveAiModel(1, -1);
+    wrapper.vm.aiSettings.iops_absolute_floor = 12;
+    wrapper.vm.aiSettings.iops_baseline_ratio = 0.08;
+    await wrapper.vm.saveAiSettings();
+
+    expect(incidentApi.updateAiSettings).toHaveBeenCalledWith({
+      enabled: true,
+      model_ids: [2, 3],
+      iops_absolute_floor: 12,
+      iops_baseline_ratio: 0.08,
+    });
+    expect(wrapper.vm.aiSettingsVisible).toBe(false);
   });
 });

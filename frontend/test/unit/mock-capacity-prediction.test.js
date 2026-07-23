@@ -21,4 +21,23 @@ describe('capacity prediction mock runtime', () => {
       horizon_days: 30,
     }));
   });
+
+  it('keeps Incident AI settings behind the super-admin boundary and preserves candidate order', async () => {
+    const gateway = createMockGateway();
+    const admin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
+    const reader = await gateway.login('demo-reader', DEMO_PASSWORD);
+
+    await expect(gateway.request('get', '/v1/admin/incident-ai-settings', undefined, reader.token))
+      .rejects.toMatchObject({ status: 403 });
+    const saved = await gateway.request('patch', '/v1/admin/incident-ai-settings', {
+      enabled: true,
+      model_ids: [2, 1],
+      iops_absolute_floor: 12,
+      iops_baseline_ratio: 0.08,
+    }, admin.token);
+
+    expect(saved.model_ids).toEqual([2, 1]);
+    expect(saved.models.map((model) => model.id)).toEqual([2, 1]);
+    expect(saved).toMatchObject({ enabled: true, iops_absolute_floor: 12, iops_baseline_ratio: 0.08 });
+  });
 });

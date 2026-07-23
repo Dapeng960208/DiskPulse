@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from crud import aiCrud
+from crud import aiCrud, incidentAiAgentCrud
 from models import AIConfig
 from schemas.aiSchema import AIModelCreate, AIModelPatch
 from services.ai_client import AIClientError, chat_completion
@@ -208,6 +208,8 @@ def delete_model(
     action = "ai.model.delete"
     try:
         model = _get_or_404(db, model_id)
+        if incidentAiAgentCrud.model_is_bound_to_settings(db, model_id):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="模型正被事件 AI 处置设置引用，请先移除候选模型")
         db.delete(model)
         _append_model_audit(
             db,
@@ -226,13 +228,13 @@ def delete_model(
             reason_code="ai_model_conflict",
         )
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="模型已被会话使用，请先停用") from error
-    except HTTPException:
+    except HTTPException as error:
         _record_model_failure(
             db,
             audit_context=audit_context,
             action=action,
             model_id=model_id,
-            reason_code="ai_model_not_found",
+            reason_code="incident_ai_model_bound" if error.status_code == status.HTTP_409_CONFLICT else "ai_model_not_found",
         )
         raise
     except Exception:

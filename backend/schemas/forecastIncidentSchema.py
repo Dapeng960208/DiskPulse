@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from schemas.capacitySchema import CapacityResponseBase
 
 
@@ -70,6 +70,10 @@ class IncidentOut(AssetRefOut):
     last_evidence_at: datetime
     resolved_at: datetime | None
     silenced_until: datetime | None
+    ai_urgency: str | None = None
+    ai_urgency_reason: str | None = None
+    ai_analyzed_at: datetime | None = None
+    ai_assessment: "IncidentAiAssessmentOut | None" = None
     created_at: datetime
     updated_at: datetime
     capabilities: dict[str, bool] = Field(default_factory=dict)
@@ -148,6 +152,54 @@ class IncidentTimelinePresentationOut(BaseModel):
     action_label: str
     summary: str
     actor_label: str
+
+
+class IncidentAiAssessmentOut(BaseModel):
+    classification: Literal["actionable", "normal_fluctuation", "insufficient_evidence"]
+    urgency: Literal["low", "medium", "high", "critical"]
+    summary: str
+    evidence_basis: list[str] = Field(default_factory=list)
+    investigation_steps: list[str] = Field(default_factory=list)
+    resolution_steps: list[str] = Field(default_factory=list)
+    proposed_next_status: Literal["open", "acknowledged", "investigating", "mitigated", "resolved"] | None = None
+    transition_reason: str | None = None
+    model_name: str | None = None
+    analyzed_at: datetime | None = None
+
+
+class IncidentAiSettingsModelOut(BaseModel):
+    id: int
+    name: str
+    provider: str
+    model: str
+
+
+class IncidentAiSettingsOut(BaseModel):
+    enabled: bool
+    model_ids: list[int] = Field(default_factory=list)
+    models: list[IncidentAiSettingsModelOut] = Field(default_factory=list)
+    available_models: list[IncidentAiSettingsModelOut] = Field(default_factory=list)
+    iops_absolute_floor: float
+    iops_baseline_ratio: float
+    updated_at: datetime | None = None
+
+
+class IncidentAiSettingsPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    model_ids: list[int] = Field(default_factory=list, max_length=10)
+    iops_absolute_floor: float = Field(ge=0, le=1_000_000_000)
+    iops_baseline_ratio: float = Field(ge=0, le=1)
+
+    @field_validator("model_ids")
+    @classmethod
+    def unique_model_ids(cls, value: list[int]) -> list[int]:
+        if any(model_id < 1 for model_id in value):
+            raise ValueError("model_ids must contain positive identifiers")
+        if len(value) != len(set(value)):
+            raise ValueError("model_ids must not contain duplicates")
+        return value
 
 
 class DiagnosisOut(BaseModel):

@@ -86,6 +86,8 @@ describe('api modules', () => {
     await incidentApi.updateIncident(21, { status: 'resolved' });
     await incidentApi.createComment(21, { content: 'checked' });
     await incidentApi.createMaintenanceWindow({ starts_at: '2026-07-21T00:00:00Z' });
+    await incidentApi.fetchAiSettings();
+    await incidentApi.updateAiSettings({ enabled: false, model_ids: [], iops_absolute_floor: 10, iops_baseline_ratio: 0.05 });
     await projectApi.fetchStorageRealTimeDataById(6, {});
     await projectApi.fetchStorageSummary({});
     await projectApi.fetchStorageTreeById(7, {});
@@ -124,6 +126,7 @@ describe('api modules', () => {
     expect(getSpy).toHaveBeenCalledWith('/12/quota/history');
     expect(getSpy).toHaveBeenCalledWith('/incidents/21');
     expect(getSpy).toHaveBeenCalledWith('/incidents/21/diagnosis');
+    expect(getSpy).toHaveBeenCalledWith('/admin/incident-ai-settings');
     expect(getSpy).toHaveBeenCalledWith('/10/analytics/system-events', { page: 1 });
     expect(postSpy).toHaveBeenCalledWith('/capacity-predictions/group/7/plans', { capacity_delta: 10 });
     expect(getSpy).toHaveBeenCalledWith('/admin/capacity-prediction-settings');
@@ -147,5 +150,8 @@ describe('api modules', () => {
     expect(patchSpy).toHaveBeenCalledWith('/5/quota', { hard_limit: 100, unit: 'GiB' });
     expect(patchSpy).toHaveBeenCalledWith('/12/quota', { hard_limit: 50, unit: 'GiB' });
     expect(patchSpy).toHaveBeenCalledWith('/incidents/21', { status: 'resolved' });
+    expect(patchSpy).toHaveBeenCalledWith('/admin/incident-ai-settings', {
+      enabled: false, model_ids: [], iops_absolute_floor: 10, iops_baseline_ratio: 0.05,
+    });
   });
 });

@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-from sqlalchemy import select
+from datetime import datetime
 
-from models import AIConfig, IncidentAiModelBinding, IncidentAiSettings, IncidentAiRun
+from sqlalchemy import or_, select
+
+from models import AIConfig, Incident, IncidentAiModelBinding, IncidentAiSettings, IncidentAiRun
 
 
 def get_settings(db) -> IncidentAiSettings | None:
@@ -23,6 +25,18 @@ def list_models_by_ids(db, model_ids: list[int]) -> list[AIConfig]:
     return list(db.scalars(select(AIConfig).where(AIConfig.id.in_(model_ids))))
 
 
+def list_enabled_models(db) -> list[AIConfig]:
+    return list(db.scalars(select(AIConfig).where(AIConfig.enabled.is_(True)).order_by(AIConfig.name, AIConfig.id)))
+
+
+def model_is_bound_to_settings(db, model_id: int) -> bool:
+    return db.scalar(
+        select(IncidentAiModelBinding.id)
+        .where(IncidentAiModelBinding.ai_model_id == model_id)
+        .limit(1)
+    ) is not None
+
+
 def replace_model_bindings(db, *, settings: IncidentAiSettings, model_ids: list[int]) -> None:
     settings.model_bindings.clear()
     db.flush()
@@ -39,3 +53,16 @@ def add_run(db, run: IncidentAiRun) -> IncidentAiRun:
     db.add(run)
     db.flush()
     return run
+
+
+def list_due_incidents(db, *, before: datetime) -> list[Incident]:
+    return list(
+        db.scalars(
+            select(Incident)
+            .where(
+                Incident.status != "resolved",
+                or_(Incident.ai_analyzed_at.is_(None), Incident.ai_analyzed_at <= before),
+            )
+            .order_by(Incident.ai_analyzed_at.asc().nullsfirst(), Incident.id.asc())
+        )
+    )

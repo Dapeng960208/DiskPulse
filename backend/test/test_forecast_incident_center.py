@@ -977,6 +977,96 @@ def test_performance_task_writes_only_after_three_consecutive_five_minute_anomal
 
     assert {item["metric"] for item in findings} == {"latency", "iops", "throughput"}
     assert all(item["window_start"] == UTC_NOW for item in findings)
+    iops_context = next(item["ai_performance_context"] for item in findings if item["metric"] == "iops")
+    assert iops_context["trigger_three_bucket_p95"] == [100.0, 100.0, 100.0]
+    assert len(iops_context["trend_2h_p95"]) == 3
+    assert iops_context["history_28d"]["median"] == 1.0
+    assert {item["metric"] for item in iops_context["associated_metrics"]} == {"latency", "iops", "throughput"}
+
+
+def test_low_zero_mad_iops_is_suppressed_with_cluster_baseline_when_resource_samples_are_insufficient():
+    from celery_tasks.tasks import forecast_incidents
+
+    rows = []
+    for offset in range(12, 0, -1):
+        rows.append(
+            {
+                "storage_cluster_id": "7",
+                "object_type": "volume",
+                "object_id": "cluster-reference",
+                "object_name": "cluster-reference",
+                "latency_total": None,
+                "iops_total": 800.0,
+                "throughput_total": None,
+                "collected_at": UTC_NOW - timedelta(days=offset),
+            }
+        )
+    for offset in (7, 14, 21, 28):
+        rows.append(
+            {
+                "storage_cluster_id": "7",
+                "object_type": "volume",
+                "object_id": "low-iops",
+                "object_name": "low-iops",
+                "latency_total": None,
+                "iops_total": 1.0,
+                "throughput_total": None,
+                "collected_at": UTC_NOW - timedelta(days=offset),
+            }
+        )
+    for minutes in (0, 5, 10):
+        rows.append(
+            {
+                "storage_cluster_id": "7",
+                "object_type": "volume",
+                "object_id": "low-iops",
+                "object_name": "low-iops",
+                "latency_total": None,
+                "iops_total": 11.0,
+                "throughput_total": None,
+                "collected_at": UTC_NOW + timedelta(minutes=minutes),
+            }
+        )
+
+    findings = forecast_incidents._performance_findings(rows, now=UTC_NOW + timedelta(minutes=10))
+
+    assert not [item for item in findings if item["object_id"] == "low-iops" and item["metric"] == "iops"]
+
+
+def test_zero_mad_iops_above_the_configured_dynamic_floor_remains_an_anomaly():
+    from celery_tasks.tasks import forecast_incidents
+
+    rows = []
+    for offset in range(28, 0, -1):
+        rows.append(
+            {
+                "storage_cluster_id": "7",
+                "object_type": "volume",
+                "object_id": "boundary-iops",
+                "object_name": "boundary-iops",
+                "latency_total": None,
+                "iops_total": 0.0,
+                "throughput_total": None,
+                "collected_at": UTC_NOW - timedelta(days=offset),
+            }
+        )
+    for minutes in (0, 5, 10):
+        rows.append(
+            {
+                "storage_cluster_id": "7",
+                "object_type": "volume",
+                "object_id": "boundary-iops",
+                "object_name": "boundary-iops",
+                "latency_total": None,
+                "iops_total": 11.0,
+                "throughput_total": None,
+                "collected_at": UTC_NOW + timedelta(minutes=minutes),
+            }
+        )
+
+    findings = forecast_incidents._performance_findings(rows, now=UTC_NOW + timedelta(minutes=10))
+
+    assert {(item["object_id"], item["metric"]) for item in findings} == {("boundary-iops", "iops")}
 
 
 def test_performance_task_rejects_anomalies_with_a_missing_five_minute_window():

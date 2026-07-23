@@ -40,6 +40,7 @@ ROBUST_Z_THRESHOLD = 3.5
 ZERO_MAD_SCORE = 100.0
 DEFAULT_IOPS_ABSOLUTE_FLOOR = 10.0
 DEFAULT_IOPS_BASELINE_RATIO = 0.05
+IOPS_BASELINE_MIN_SAMPLES = 12
 INCIDENT_STATES = ("open", "acknowledged", "investigating", "mitigated", "resolved")
 INCIDENT_CATEGORIES = (
     "capacity_pressure",
@@ -601,6 +602,8 @@ _TIMELINE_ACTION_LABELS = {
     "unsilenced": "恢复事件通知",
     "commented": "添加评论",
     "reconciled": "系统复核历史事件",
+    "ai_analysis": "AI 处置研判",
+    "ai_status_changed": "AI 自动推进状态",
 }
 
 
@@ -1068,11 +1071,13 @@ def build_timeline_presentation(timeline, *, actor_label: str | None) -> dict[st
         "unsilenced": "后续事件通知已恢复。",
         "commented": "已记录处理评论。",
         "reconciled": "系统根据保留的厂商证据复核并关闭了历史误分类事件。",
+        "ai_analysis": "AI 处置 Agent 已生成研判和建议。",
+        "ai_status_changed": "AI 处置 Agent 已按受限状态机推进事件。",
     }.get(event_type, "系统记录了一次事件更新。")
     return {
         "action_label": _TIMELINE_ACTION_LABELS.get(event_type, "事件更新"),
         "summary": str(timeline.comment).strip() if timeline.comment else default_summary,
-        "actor_label": actor_label or "系统",
+        "actor_label": "AI 处置 Agent" if event_type.startswith("ai_") else actor_label or "系统",
     }
 
 

@@ -20,7 +20,7 @@ from sqlalchemy import select, text
 from appConfig import base_config
 from celery_worker import diskpulse_app
 from celery_tasks.tasks.redis_lock import redis_lock
-from crud import forecastIncidentCrud, telemetryCollectionRunCrud
+from crud import forecastIncidentCrud, incidentAiAgentCrud, telemetryCollectionRunCrud
 from database import SessionLocal
 from dependencies import QuestDBSession
 from models import (
@@ -112,6 +112,16 @@ def _notifications_after_commit(events: Iterable[tuple[int, str]]) -> None:
             logger.warning("Unable to enqueue derived Incident notification: incident=%s", incident_id)
 
 
+def _agent_reviews_after_commit(incident_ids: Iterable[int]) -> None:
+    from celery_tasks.tasks.incident_ai_agent import review_incident_ai_task
+
+    for incident_id in sorted({int(item) for item in incident_ids}):
+        try:
+            review_incident_ai_task.delay(incident_id, "lifecycle")
+        except Exception:
+            logger.warning("Unable to enqueue Incident AI review: incident=%s", incident_id)
+
+
 def _record_correlation(
     db,
     *,
@@ -133,6 +143,7 @@ def _record_correlation(
         incident_id=result.incident.id,
         high_confidence_enabled=_high_confidence_enabled(),
     )
+    db.info.setdefault("incident_ai_review_ids", set()).add(result.incident.id)
     if incidentNotificationService.should_send_incident_notification(
         created=result.created,
         reopened=result.reopened,
@@ -475,6 +486,7 @@ def run_capacity_forecasts(*, now: datetime | None = None) -> int:
         finally:
             if committed:
                 _notifications_after_commit(notifications)
+                _agent_reviews_after_commit(db.info.pop("incident_ai_review_ids", set()))
 
 
 def _raw_point_count(cluster_id: int, component: str, *, started_at: datetime) -> tuple[int, datetime | None]:
@@ -606,6 +618,7 @@ def run_telemetry_quality_snapshots(*, now: datetime | None = None) -> int:
         finally:
             if committed:
                 _notifications_after_commit(notifications)
+                _agent_reviews_after_commit(db.info.pop("incident_ai_review_ids", set()))
 
 
 def _performance_asset(db, *, cluster: StorageCluster, object_type: str, object_id: str, object_name: str | None) -> tuple[AssetRef, str]:
@@ -657,7 +670,69 @@ def _p95(values: list[float]) -> float:
     return float(np.quantile(np.asarray(values, dtype=float), 0.95))
 
 
-def _performance_findings(rows: list[dict], *, now: datetime) -> list[dict]:
+def _safe_performance_ai_context(
+    by_series: dict[tuple[str, str, str, str], list[tuple[datetime, float]]],
+    *,
+    series_key: tuple[str, str, str, str],
+    observed_at: datetime,
+    trigger_values: list[float],
+) -> dict:
+    """Produce metric aggregates only; never persist raw object identifiers or samples."""
+    cluster_id, object_type, object_id, metric = series_key
+
+    def history_summary(points: list[tuple[datetime, float]]) -> dict:
+        history = [
+            value
+            for point_at, value in points
+            if point_at < observed_at and point_at >= observed_at - timedelta(days=28)
+        ]
+        if not history:
+            return {"sample_count": 0, "coverage_ratio": 0.0}
+        median = float(np.median(history))
+        return {
+            "sample_count": len(history),
+            "coverage_ratio": round(min(1.0, len(history) / (28 * 24 * 12)), 4),
+            "median": round(median, 4),
+            "p95": round(_p95(history), 4),
+            "mad": round(float(np.median(np.abs(np.asarray(history) - median))), 4),
+        }
+
+    current_points = sorted(by_series[series_key])
+    trend_points = [
+        {"minutes_before_trigger": int((observed_at - point_at).total_seconds() // 60), "p95": round(value, 4)}
+        for point_at, value in current_points
+        if observed_at - timedelta(hours=2) <= point_at <= observed_at
+    ]
+    associated_metrics = []
+    for candidate_key, candidate_points in by_series.items():
+        candidate_cluster, candidate_type, candidate_object, candidate_metric = candidate_key
+        if (candidate_cluster, candidate_type, candidate_object) != (cluster_id, object_type, object_id):
+            continue
+        candidate_points = sorted(candidate_points)
+        latest = next((value for point_at, value in reversed(candidate_points) if point_at <= observed_at), None)
+        if latest is None:
+            continue
+        associated_metrics.append({
+            "metric": candidate_metric,
+            "latest_p95": round(latest, 4),
+            "history_28d": history_summary(candidate_points),
+        })
+    return {
+        "metric": metric,
+        "trigger_three_bucket_p95": [round(value, 4) for value in trigger_values],
+        "trend_2h_p95": trend_points[-24:],
+        "history_28d": history_summary(current_points),
+        "associated_metrics": sorted(associated_metrics, key=lambda item: item["metric"]),
+    }
+
+
+def _performance_findings(
+    rows: list[dict],
+    *,
+    now: datetime,
+    iops_absolute_floor: float = forecastIncidentService.DEFAULT_IOPS_ABSOLUTE_FLOOR,
+    iops_baseline_ratio: float = forecastIncidentService.DEFAULT_IOPS_BASELINE_RATIO,
+) -> list[dict]:
     buckets: dict[tuple[str, str, str, datetime], dict[str, list[float]]] = {}
     names: dict[tuple[str, str, str], str | None] = {}
     for row in rows:
@@ -710,6 +785,37 @@ def _performance_findings(rows: list[dict], *, now: datetime) -> list[dict]:
         if not forecastIncidentService.qualifies_performance_anomaly([item[-1] for item in last_three]):
             continue
         observed_at, value, baseline, mad, score = last_three[-1]
+        if metric == "iops" and all(item[3] == 0 for item in last_three):
+            resource_history = [
+                item_value
+                for item_at, item_value in values
+                if item_at < observed_at and item_at >= observed_at - timedelta(days=28)
+            ]
+            resource_baseline = (
+                float(np.median(resource_history))
+                if len(resource_history) >= forecastIncidentService.IOPS_BASELINE_MIN_SAMPLES
+                else None
+            )
+            cluster_values = [
+                item_value
+                for (candidate_cluster_id, _candidate_type, _candidate_id, candidate_metric), candidate_values in by_series.items()
+                if candidate_cluster_id == cluster_id and candidate_metric == "iops"
+                for item_at, item_value in candidate_values
+                if item_at < observed_at and item_at >= observed_at - timedelta(days=28)
+            ]
+            cluster_baseline = (
+                float(np.median(cluster_values))
+                if len(cluster_values) >= forecastIncidentService.IOPS_BASELINE_MIN_SAMPLES
+                else None
+            )
+            if forecastIncidentService.should_suppress_zero_mad_iops(
+                [item[1] for item in last_three],
+                resource_baseline=resource_baseline,
+                cluster_baseline=cluster_baseline,
+                absolute_floor=iops_absolute_floor,
+                baseline_ratio=iops_baseline_ratio,
+            ):
+                continue
         findings.append(
             {
                 "cluster_id": int(cluster_id),
@@ -724,6 +830,12 @@ def _performance_findings(rows: list[dict], *, now: datetime) -> list[dict]:
                 "score": score,
                 "window_start": last_three[0][0],
                 "window_end": observed_at,
+                "ai_performance_context": _safe_performance_ai_context(
+                    by_series,
+                    series_key=series_key,
+                    observed_at=observed_at,
+                    trigger_values=[item[1] for item in last_three],
+                ),
             }
         )
     return findings
@@ -736,8 +848,24 @@ def run_performance_anomalies(*, now: datetime | None = None) -> int:
     with SessionLocal() as db:
         try:
             clusters = {item.id: item for item in db.execute(select(StorageCluster)).scalars()}
+            ai_settings = incidentAiAgentCrud.get_settings(db)
+            iops_absolute_floor = (
+                float(ai_settings.iops_absolute_floor)
+                if ai_settings is not None
+                else forecastIncidentService.DEFAULT_IOPS_ABSOLUTE_FLOOR
+            )
+            iops_baseline_ratio = (
+                float(ai_settings.iops_baseline_ratio)
+                if ai_settings is not None
+                else forecastIncidentService.DEFAULT_IOPS_BASELINE_RATIO
+            )
             created = 0
-            for finding in _performance_findings(_performance_rows(cutoff=now - timedelta(days=29)), now=now):
+            for finding in _performance_findings(
+                _performance_rows(cutoff=now - timedelta(days=29)),
+                now=now,
+                iops_absolute_floor=iops_absolute_floor,
+                iops_baseline_ratio=iops_baseline_ratio,
+            ):
                 cluster = clusters.get(finding["cluster_id"])
                 if cluster is None:
                     continue
@@ -776,7 +904,10 @@ def run_performance_anomalies(*, now: datetime | None = None) -> int:
                         evidence_window_end=finding["window_end"],
                         source="questdb_performance",
                         source_ref=source_ref,
-                        input_quality={"asset_mapping": quality == "good"},
+                        input_quality={
+                            "asset_mapping": quality == "good",
+                            "ai_performance_context": finding["ai_performance_context"],
+                        },
                         algorithm_version=forecastIncidentService.ALGORITHM_VERSION,
                     ),
                 )
@@ -805,6 +936,7 @@ def run_performance_anomalies(*, now: datetime | None = None) -> int:
         finally:
             if committed:
                 _notifications_after_commit(notifications)
+                _agent_reviews_after_commit(db.info.pop("incident_ai_review_ids", set()))
 
 
 def _vendor_event_asset(
@@ -958,6 +1090,7 @@ def process_diskpulse_alert_evidence(*, alert_ids: Iterable[int]) -> int:
         finally:
             if committed:
                 _notifications_after_commit(notifications)
+                _agent_reviews_after_commit(db.info.pop("incident_ai_review_ids", set()))
 
 
 def process_vendor_event_evidence(*, storage_cluster_id: int, source: str | None = None) -> int:
@@ -1048,6 +1181,7 @@ def process_vendor_event_evidence(*, storage_cluster_id: int, source: str | None
         finally:
             if committed:
                 _notifications_after_commit(notifications)
+                _agent_reviews_after_commit(db.info.pop("incident_ai_review_ids", set()))
 
 
 @diskpulse_app.task(soft_time_limit=600, time_limit=660, expires=900)

@@ -15,6 +15,8 @@ from schemas.forecastIncidentSchema import (
     ForecastOut,
     ForecastPage,
     IncidentCommentCreate,
+    IncidentAiSettingsOut,
+    IncidentAiSettingsPatch,
     IncidentDetailOut,
     IncidentEvidenceOut,
     IncidentEvidencePresentationOut,
@@ -25,7 +27,7 @@ from schemas.forecastIncidentSchema import (
     IncidentTimelinePresentationOut,
     MaintenanceWindowCreate,
 )
-from services import audit_service, forecastIncidentService
+from services import audit_service, forecastIncidentService, incidentAiAgentService
 from services import capacityPredictionGovernanceService
 from schemas.capacityPredictionSchema import (
     CapacityPredictionAccessOut,
@@ -42,6 +44,40 @@ from schemas.capacityPredictionSchema import (
 
 router = APIRouter(prefix="/v1", tags=["forecast-incidents"])
 DBDep = Annotated[Session, Depends(get_db)]
+
+
+@router.get("/admin/incident-ai-settings", response_model=IncidentAiSettingsOut, dependencies=[Depends(require_super_admin)])
+def incident_ai_settings(_current_user: CurrentUserDep, db: DBDep) -> IncidentAiSettingsOut:
+    return IncidentAiSettingsOut(**incidentAiAgentService.settings_out(db, incidentAiAgentService.get_settings(db)))
+
+
+@router.patch("/admin/incident-ai-settings", response_model=IncidentAiSettingsOut, dependencies=[Depends(require_super_admin)])
+def update_incident_ai_settings(
+    payload: IncidentAiSettingsPatch,
+    request: Request,
+    current_user: CurrentUserDep,
+    db: DBDep,
+) -> IncidentAiSettingsOut:
+    settings = incidentAiAgentService.update_settings(
+        db,
+        actor_id=current_user.id,
+        enabled=payload.enabled,
+        model_ids=payload.model_ids,
+        iops_absolute_floor=payload.iops_absolute_floor,
+        iops_baseline_ratio=payload.iops_baseline_ratio,
+    )
+    audit_service.append_audit_event(
+        db,
+        context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
+        phase="result",
+        action="incident_ai_settings.update",
+        resource_type="incident_ai_settings",
+        resource_id=settings.id,
+        outcome="success",
+        after_summary={"enabled": settings.enabled, "model_ids": payload.model_ids},
+    )
+    db.commit()
+    return IncidentAiSettingsOut(**incidentAiAgentService.settings_out(db, settings))
 
 
 @router.get("/capacity-predictions/visibility", response_model=CapacityPredictionVisibilityOut)

@@ -582,6 +582,13 @@ const alerts = incidents.map((incident, index) => ({
     alerts,
     audits,
     aiModels,
+    incidentAiSettings: {
+      enabled: false,
+      model_ids: [1, 2],
+      iops_absolute_floor: 10,
+      iops_baseline_ratio: 0.05,
+      updated_at: '2026-07-23T06:45:00Z',
+    },
     capacityPredictionSettings: { visible: true },
     capacityPredictionPlans: [
       withCapacity({ id: 1, asset_type: 'storage_usage', asset_id: '101', project_id: 1, effective_at: '2026-08-01T00:00:00Z', capacity_delta: 80, reason: 'Mock 演示容量计划', created_at: '2026-07-18T09:00:00Z' }),
@@ -766,7 +773,7 @@ export function createMockGateway() {
     // project roles. Resolution: enforce the real superadmin boundary once,
     // before list/detail/write dispatch, while preserving personal auth paths.
     if (systemResource && account.role !== 'superadmin') throw error(403);
-    if (path.startsWith('/admin') && account.role !== 'superadmin') throw error(403);
+    if ((path.startsWith('/admin') || path.startsWith('/v1/admin')) && account.role !== 'superadmin') throw error(403);
     if (path === '/admin/vendor-event-definitions/discover' && verb === 'post') {
       const eventCode = 'UNREVIEWED_VENDOR_CODE';
       const existing = state.vendorEventDefinitions.some((item) => item.event_code === eventCode);
@@ -1143,6 +1150,23 @@ export function createMockGateway() {
     if (path === '/v1/admin/capacity-prediction-settings') {
       if (verb === 'patch') Object.assign(state.capacityPredictionSettings, { visible: body?.user_visible === true });
       return state.capacityPredictionSettings;
+    }
+    if (path === '/v1/admin/incident-ai-settings') {
+      if (verb === 'patch') {
+        const selected = body?.model_ids || [];
+        if (body?.enabled && selected.length === 0) throw error(422, '启用 AI 时必须选择至少一个模型');
+        if (selected.some((id) => !state.aiModels.some((model) => model.id === Number(id) && model.enabled))) {
+          throw error(422, '只能选择已启用的 AI 模型');
+        }
+        Object.assign(state.incidentAiSettings, body || {}, { updated_at: '2026-07-23T06:45:00Z' });
+      }
+      const available_models = state.aiModels.filter((model) => model.enabled).map((model) => ({
+        id: model.id, name: model.name, provider: model.provider, model: model.model,
+      }));
+      const models = state.incidentAiSettings.model_ids
+        .map((id) => available_models.find((model) => model.id === Number(id)))
+        .filter(Boolean);
+      return { ...state.incidentAiSettings, models, available_models };
     }
     if (path === '/v1/admin/capacity-prediction-candidates') {
       if (verb === 'post') {

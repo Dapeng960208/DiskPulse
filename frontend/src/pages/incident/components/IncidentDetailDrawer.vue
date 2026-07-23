@@ -123,7 +123,15 @@ const timelineLabels = {
   silenced: '已静默通知',
   unsilenced: '已恢复通知',
   commented: '添加评论',
+  ai_analysis: 'AI 处置研判',
+  ai_status_changed: 'AI 自动推进状态',
 };
+const aiClassificationLabels = {
+  actionable: '需要处置',
+  normal_fluctuation: '正常波动',
+  insufficient_evidence: '证据不足',
+};
+const aiUrgencyLabels = { low: '低', medium: '中', high: '高', critical: '紧急' };
 const statusLabels = {
   open: '未处理',
   acknowledged: '已确认',
@@ -442,6 +450,33 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
         </template>
       </section>
 
+      <section
+        v-if="current.ai_assessment"
+        class="incident-detail__section">
+        <h3>AI 处置建议</h3>
+        <p><ElTag :type="current.ai_assessment.classification === 'actionable' ? 'warning' : 'info'">{{ aiClassificationLabels[current.ai_assessment.classification] || current.ai_assessment.classification }}</ElTag> AI 紧急度：{{ aiUrgencyLabels[current.ai_assessment.urgency] || current.ai_assessment.urgency }}</p>
+        <p>{{ current.ai_assessment.summary }}</p>
+        <template v-if="current.ai_assessment.evidence_basis?.length">
+          <h4>研判依据</h4>
+          <ul class="incident-detail__recommendations"><li
+            v-for="basis in current.ai_assessment.evidence_basis"
+            :key="basis">{{ basis }}</li></ul>
+        </template>
+        <template v-if="current.ai_assessment.investigation_steps?.length">
+          <h4>排查建议</h4>
+          <ol class="incident-detail__recommendations"><li
+            v-for="step in current.ai_assessment.investigation_steps"
+            :key="step">{{ step }}</li></ol>
+        </template>
+        <template v-if="current.ai_assessment.resolution_steps?.length">
+          <h4>解决方案</h4>
+          <ol class="incident-detail__recommendations"><li
+            v-for="step in current.ai_assessment.resolution_steps"
+            :key="step">{{ step }}</li></ol>
+        </template>
+        <p>最近运行：{{ formatLocalDateTime(current.ai_assessment.analyzed_at || current.ai_analyzed_at) }}</p>
+      </section>
+
       <section class="incident-detail__section">
         <h3>关联概览</h3>
         <p v-if="evidenceGroups.length === 0">暂无关联证据。</p>
@@ -589,6 +624,7 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
 .incident-detail__section p { margin: 0; color: var(--text-secondary); }
 .incident-detail__candidate-list { margin: 0; padding-left: 20px; color: var(--text-primary); }
 .incident-detail__candidate-list span { color: var(--text-secondary); }
+.incident-detail__recommendations { display: grid; gap: 4px; margin: 0; padding-left: 20px; color: var(--text-primary); }
 .incident-detail__gap-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .incident-detail__gap-list li { display: grid; gap: 2px; padding: 8px; border-left: 3px solid var(--warning-color); background: var(--bg-secondary); }
 .incident-detail__gap-list span { color: var(--text-secondary); font-size: var(--font-size-sm); }

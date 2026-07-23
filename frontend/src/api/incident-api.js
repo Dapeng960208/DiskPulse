@@ -32,6 +32,14 @@ class IncidentApi extends BaseApi {
   createMaintenanceWindow(payload) {
     return super.post('/maintenance-windows', payload);
   }
+
+  fetchAiSettings() {
+    return super.get('/admin/incident-ai-settings');
+  }
+
+  updateAiSettings(payload) {
+    return super.patch('/admin/incident-ai-settings', payload);
+  }
 }
 
 export default new IncidentApi('/v1');

@@ -12,7 +12,7 @@
 
 - `telemetry_quality_snapshots` 从 `telemetry_collection_runs` 和 QuestDB 覆盖率派生，不会写回或替代账本中的最后成功时间。
 - `capacity_forecasts` 保存存储集群、项目、卷、Qtree、项目组和用户目录的后台预测结果；面向用户的四维预测范围与基线算法以[四维容量耗尽风险](../../ai/capacity-prediction/overview.md)为准。卷和 Qtree 预测继续只作为内部分析事实，不增加详情风险入口。
-- `anomaly_observations` 对 QuestDB 性能样本按 5 分钟桶计算 P95 延迟、IOPS、吞吐量；以过去 28 天同星期/小时中位数与 MAD 建模，绝对鲁棒 Z 分数至少 3.5 且连续三个相邻 5 分钟点才写入。零 MAD 只在数值不同于基线时使用有界高分，孤立尖峰或存在采样空档的三点均不写入。
+- `anomaly_observations` 对 QuestDB 性能样本按 5 分钟桶计算 P95 延迟、IOPS、吞吐量；以过去 28 天同星期/小时中位数与 MAD 建模，绝对鲁棒 Z 分数至少 3.5 且连续三个相邻 5 分钟点才写入。零 MAD 只在数值不同于基线时使用有界高分，孤立尖峰或存在采样空档的三点均不写入。IOPS 的零 MAD 三桶还要经过独立降噪：连续三个 P95 均不超过 `max(绝对下限, 28 天 IOPS 基线 × 比例)` 时不写入异常观察、不创建 Incident、也不触发 Incident 通知；默认下限为 `10 IOPS`、比例为 `5%`。基线优先使用资源至少 12 个近 28 天样本的中位数，资源样本不足时使用所属集群至少 12 个样本的中位数，否则仅使用绝对下限。该确定性规则不依赖 AI 是否启用。
 - `incident_evidence` 的唯一键是 `(source, source_ref)`，只保存引用、类型、时间、缺口和哈希。回放或重算不覆盖原始事实；同算法版本的分析结果以各自唯一键幂等。
 - 事件至少已归属存储集群、但节点/卷/Qtree/项目的稳定映射链路不完整时，使用当前可确认的 `AssetRef` 并记录 `asset_mapping_missing`。该代码的用户语义是“资产映射不完整”；厂商事件已有稳定节点身份时节点级归属已经完成，不记录该缺口。它不表示事件代码或厂商日志缺失，也不影响查看规范化日志和发生时间。
 
@@ -28,6 +28,8 @@
 
 确定性 RCA 至多给出 `capacity_pressure`、`device_fault`、`performance_contention`、`telemetry_blindspot` 三项候选；其中内部 `device_fault` 的用户可见名称是“设备健康风险”。各候选使用固定权重、同类最高证据、冲突扣 0.20、独立类型数/最新时间/固定优先级排序。仅当部署配置 `incident_analytics.replay_gate_verified=true` 且候选分数至少 0.8、含至少两类独立证据时才标记“高”置信度；当前该开关默认关闭。
 
+Incident 可选附加 AI 处置研判，但不会覆盖确定性 `severity`、原始事实或人工操作。AI 仅生成受 schema 约束的分类、独立紧急度、研判依据、排查建议、解决建议与至多一个相邻状态建议；`normal_fluctuation` 必须明确低绝对负载、短时波动或证据不足的依据，`actionable` 必须包含排查与解决建议。成功研判以 `ai_analysis` 时间线评论保存，自动状态变化以 `ai_status_changed` 保存，固定显示操作人为“AI 处置 Agent”。模型只能建议保持当前状态或推进一个相邻状态；服务端在写入前重新比较状态与最后证据快照，因此过期快照、无效输出、模型失败或关闭配置均不会写评论或改状态。正常波动也只能在后续 30 分钟复评中逐步自动推进至已解决。完整约束见[事件 AI 处置 Agent](../../ai/incident-agent/overview.md)。
+
 ## API、权限与审计
 
 接口使用完整路径：
@@ -35,14 +37,18 @@
 - `GET /storage-pulse/api/v1/forecasts`、`GET /storage-pulse/api/v1/anomalies`、`GET /storage-pulse/api/v1/incidents`
 - `GET /storage-pulse/api/v1/incidents/{id}`、`PATCH /storage-pulse/api/v1/incidents/{id}`、`GET /storage-pulse/api/v1/incidents/{id}/diagnosis`
 - `POST /storage-pulse/api/v1/incidents/{id}/comments`、`POST /storage-pulse/api/v1/maintenance-windows`
+- `GET /storage-pulse/api/v1/admin/incident-ai-settings`、`PATCH /storage-pulse/api/v1/admin/incident-ai-settings`
 
 列表先进行项目作用域过滤再数据库分页，`size <= 100`。`reader` 只读本项目事件、诊断和证据摘要；`editor` 可认领、相邻迁移、静默和评论；`project_admin` 可创建本项目维护窗口；无作用域事件只允许 `super_admin` 读取或操作。所有写操作均从 Incident 或维护窗口反查项目并写入统一 `AuditEvent`。
+
+AI 处置设置和候选模型绑定仅 `super_admin` 可读写。启用时至少选择一个全局已启用模型；候选顺序是回退顺序，已被当前设置引用的模型不能删除。设置关闭或候选移除后不再发起新的运行。API 输出中的 `ai_assessment` 只包含模型名称、生成时间和受限建议；不返回原始 prompt、凭据、完整厂商日志、路径或人工评论。
 
 诊断工具只暴露安全摘要：候选、固定分数/置信度、证据 ID、中文数据缺口详情，以及厂商事件的事件代码、实例严重级别和安全关联语义。关联语义只来自启用且已审核目录；其他情况只返回 `unknown` 和“未分类厂商事件”。聊天服务把模型输出限制为这些确定性字段的精确 JSON 回显，并始终由服务端重新渲染；未知证据、候选、分数、置信度或数据缺口会回退到确定性模板。原始路径、作业环境、完整日志、设备凭据、故障指纹和厂商载荷不会进入该工具。
 
 ## 任务、通知与作业关联
 
 - 容量预测每日运行；质量快照在容量、厂商事件和性能原始写入成功后异步排队；性能异常在性能采集成功后异步排队。三者都使用 Redis 单例锁，异常不会回滚原始采集。QuestDB 查询的时间窗口下限统一绑定为 UTC RFC 3339 `Z` 字符串，避免 PGWire 将带时区时间适配为不兼容的 `timestamptz`。
+- 新建、系统重开或新增关联证据的 Incident 在事务提交后异步排入 AI 研判；未解决 Incident 还会按 30 分钟周期复评。任务和运行记录分别以 Redis 锁、事件快照/时间桶幂等键防止并发和重复调用。运行记录只保存触发来源、尝试顺序、脱敏输入快照、实际模型快照、受限结构化结果、状态和脱敏错误码。
 - `incident_notifications.enabled` 是 Incident 通知总开关；启用时默认受众是 `super_admin_usernames`。项目负责人、项目成员、额外用户名、邮件和飞书均需分别显式开启，邮件和飞书可独立投递。仅新建、系统重开和严重度升级尝试发送；维护窗口与静默不影响原始告警或厂商事件通知。
 - `WorkloadStorageAdapter` 是默认不连接客户系统的只读契约。Slurm/LSF/EDA 夹具只输出按实际执行窗口、项目、主机、已解析 `AssetRef` 与 5 分钟窗汇总的 `active_job_count`。作业 ID、原始路径、环境和日志仅可在内存映射中使用，绝不持久化或发送给模型。
 
