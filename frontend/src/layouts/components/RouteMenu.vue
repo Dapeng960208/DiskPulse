@@ -41,6 +41,7 @@ function mapRouteToMenuOption(route, parentPath) {
     index,
     label: route.meta.title,
     icon: route.meta.icon,
+    section: route.meta.menuSection,
     path,
     children:
       route.children && route.children.length > 0

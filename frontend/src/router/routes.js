@@ -259,6 +259,7 @@ export default [
         meta: {
           title: '项目组标签',
           icon: 'i-ri-price-tag-3-line',
+          menuSection: '基础配置',
         },
       },
       {
@@ -278,6 +279,7 @@ export default [
         meta: {
           title: '用户信息管理',
           icon: 'i-ri-team-line',
+          menuSection: '基础配置',
           isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },
@@ -297,6 +299,7 @@ export default [
         meta: {
           title: '系统设置',
           icon: 'i-ri-settings-3-line',
+          menuSection: '基础配置',
           isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },
@@ -307,6 +310,7 @@ export default [
         meta: {
           title: 'AI 中心',
           icon: 'i-ri-robot-2-line',
+          menuSection: '智能治理',
           isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },
@@ -315,17 +319,9 @@ export default [
         name: 'ForecastGovernance',
         component: () => import('@/pages/admin/forecast-governance/ForecastGovernancePage.vue'),
         meta: {
-          title: '容量预测治理', icon: 'i-ri-line-chart-line',
-          isAccessible: () => hasRole('superadmin') ? 200 : 403,
-        },
-      },
-      {
-        path: 'vendor-event-definitions',
-        name: 'VendorEventDefinitions',
-        component: () => import('@/pages/admin/vendor-event-definition/VendorEventDefinitionPage.vue'),
-        meta: {
-          title: '事件关联信息',
-          icon: 'i-ri-links-line',
+          title: '容量预测治理',
+          icon: 'i-ri-line-chart-line',
+          menuSection: '智能治理',
           isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },
@@ -336,6 +332,18 @@ export default [
         meta: {
           title: '事件中心',
           icon: 'i-ri-alarm-warning-line',
+          menuSection: '事件与审计',
+          isAccessible: () => hasRole('superadmin') ? 200 : 403,
+        },
+      },
+      {
+        path: 'vendor-event-definitions',
+        name: 'VendorEventDefinitions',
+        component: () => import('@/pages/admin/vendor-event-definition/VendorEventDefinitionPage.vue'),
+        meta: {
+          title: '厂商事件关联目录',
+          icon: 'i-ri-links-line',
+          menuSection: '事件与审计',
           isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },
@@ -357,6 +365,7 @@ export default [
         meta: {
           title: '统一操作审计',
           icon: 'i-ri-file-search-line',
+          menuSection: '事件与审计',
           isAccessible: () => hasRole('superadmin') ? 200 : 403,
         },
       },

@@ -1,12 +1,23 @@
 <script setup>
 import { ElMenuItem, ElSubMenu } from 'element-plus';
 
-defineProps({
+const props = defineProps({
   option: {
     type: Object,
     required: true,
   },
 });
+
+function shouldShowSection(option, index) {
+  if (!option.section || !option.isVisible()) return false;
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const previousOption = props.option.children[cursor];
+    if (previousOption.isVisible()) {
+      return previousOption.section !== option.section;
+    }
+  }
+  return true;
+}
 </script>
 
 <template>
@@ -35,10 +46,18 @@ defineProps({
             class="flex-shrink-0 text-xl mr-1"></i>
           <span>{{ option.label }}</span>
         </template>
-        <RouteMenuItem
-          v-for="subOption of option.children"
-          :key="subOption.key"
-          :option="subOption" />
+        <template
+          v-for="(subOption, index) of option.children"
+          :key="subOption.key">
+          <li
+            v-if="shouldShowSection(subOption, index)"
+            class="route-menu-section"
+            data-testid="menu-section"
+            aria-hidden="true">
+            {{ subOption.section }}
+          </li>
+          <RouteMenuItem :option="subOption" />
+        </template>
       </ElSubMenu>
     </template>
     <ElMenuItem
@@ -54,3 +73,14 @@ defineProps({
     </ElMenuItem>
   </template>
 </template>
+
+<style scoped>
+.route-menu-section {
+  padding: var(--spacing-md) var(--spacing-xl) var(--spacing-xs);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-normal);
+  user-select: none;
+}
+</style>
