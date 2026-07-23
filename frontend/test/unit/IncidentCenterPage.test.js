@@ -8,8 +8,8 @@ const incidentApi = vi.hoisted(() => ({
   updateIncident: vi.fn(),
   createComment: vi.fn(),
   createMaintenanceWindow: vi.fn(),
-  fetchIncidentAiSettings: vi.fn(),
-  updateIncidentAiSettings: vi.fn(),
+  fetchAiSettings: vi.fn(),
+  updateAiSettings: vi.fn(),
 }));
 
 vi.mock('@/api/incident-api.js', () => ({ default: incidentApi }));
@@ -148,15 +148,15 @@ describe('IncidentCenterPage', () => {
     expect(incidentApi.fetchIncidents).toHaveBeenCalledTimes(2);
   });
 
-  it('loads and saves ordered AI candidate models with IOPS noise controls', async () => {
-    incidentApi.fetchIncidentAiSettings.mockResolvedValue({
+  it('loads and saves ordered AI candidate models through the incident API contract', async () => {
+    incidentApi.fetchAiSettings.mockResolvedValue({
       enabled: true,
       model_ids: [3, 2],
       available_models: [{ id: 2, name: 'fallback' }, { id: 3, name: 'primary' }],
       iops_absolute_floor: 10,
       iops_baseline_ratio: 0.05,
     });
-    incidentApi.updateIncidentAiSettings.mockResolvedValue({
+    incidentApi.updateAiSettings.mockResolvedValue({
       enabled: true,
       model_ids: [2, 3],
       available_models: [{ id: 2, name: 'fallback' }, { id: 3, name: 'primary' }],
@@ -174,7 +174,8 @@ describe('IncidentCenterPage', () => {
     wrapper.vm.aiSettings.iops_baseline_ratio = 0.08;
     await wrapper.vm.saveAiSettings();
 
-    expect(incidentApi.updateIncidentAiSettings).toHaveBeenCalledWith({
+    expect(incidentApi.fetchAiSettings).toHaveBeenCalledTimes(1);
+    expect(incidentApi.updateAiSettings).toHaveBeenCalledWith({
       enabled: true,
       model_ids: [2, 3],
       iops_absolute_floor: 12,
