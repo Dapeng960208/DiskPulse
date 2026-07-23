@@ -457,7 +457,7 @@ def test_project_totals_are_written_to_project_trend_after_aggregation(db_sessio
         metric.soft_limit,
         metric.soft_use_ratio,
         metric.updated_at,
-    ) == ("1", 25, 25, 80, 31.25, NOW)
+    ) == ("1", 25, 25, 80, 31.25, NOW - timedelta(hours=8))
 
 
 def test_project_totals_dedupe_by_target_type_and_id(db_session):

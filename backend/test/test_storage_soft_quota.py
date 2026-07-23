@@ -231,6 +231,11 @@ def test_storage_usage_export_includes_soft_quota_columns(db_session):
 def test_aggregate_questdb_metrics_omit_soft_quota_columns(monkeypatch):
     captured = {}
 
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW
+
     class FakeTransaction:
         def commit(self):
             pass
@@ -252,6 +257,10 @@ def test_aggregate_questdb_metrics_omit_soft_quota_columns(monkeypatch):
         "celery_tasks.manager.storagePulseMonitor.QuestDBSession",
         FakeConnection,
     )
+    monkeypatch.setattr(
+        "celery_tasks.manager.storagePulseMonitor.datetime",
+        FixedDatetime,
+    )
     monitor = object.__new__(StoragePulseMonitor)
     monitor.logger = DummyLogger()
     monitor.storage_type = "netapp"
@@ -264,3 +273,4 @@ def test_aggregate_questdb_metrics_omit_soft_quota_columns(monkeypatch):
 
     assert "soft_limit" not in captured["parameters"][0]
     assert "soft_use_ratio" not in captured["parameters"][0]
+    assert captured["parameters"][0]["updated_at"] == NOW - timedelta(hours=8)

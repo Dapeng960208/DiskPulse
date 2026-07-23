@@ -1134,9 +1134,9 @@ def test_isilon_latency_rows_include_path_read_and_write_latency():
             "latency_total": 2.4,
             "iops_total": 50.0,
             "throughput_total": 3072.0,
-            "collected_at": datetime.fromtimestamp(1784172559, timezone.utc)
-            .astimezone(SYSTEM_TIMEZONE)
-            .replace(tzinfo=None),
+            "collected_at": datetime.fromtimestamp(
+                1784172559, timezone.utc
+            ).replace(tzinfo=None),
         }
     ]
 
@@ -1183,9 +1183,7 @@ def test_isilon_latency_rows_keep_zero_seconds_and_use_device_timestamp():
 
     assert rows[0]["latency_total"] == 0.0
     assert rows[0]["collected_at"] == (
-        datetime.fromtimestamp(captured_at, timezone.utc)
-        .astimezone(SYSTEM_TIMEZONE)
-        .replace(tzinfo=None)
+        datetime.fromtimestamp(captured_at, timezone.utc).replace(tzinfo=None)
     )
 
 

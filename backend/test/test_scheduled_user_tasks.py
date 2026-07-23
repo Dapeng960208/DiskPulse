@@ -263,7 +263,9 @@ def test_user_storage_task_aggregates_rows_with_one_consistent_sample_time(
     assert samples[20].file_used == 7
     assert samples[20].use_ratio == 0
     assert samples[20].soft_use_ratio == 0
-    assert {sample.updated_at for sample in samples.values()} == {sampled_at}
+    assert {sample.updated_at for sample in samples.values()} == {
+        sampled_at - timedelta(hours=8)
+    }
     with session_factory() as db:
         totals = dict(db.query(User.id, User.storage_used).all())
     assert totals == {10: 45.0, 20: 0.0, 30: 0.0}

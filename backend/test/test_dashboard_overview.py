@@ -265,6 +265,40 @@ def test_capacity_trend_binds_aware_questdb_times_as_utc_strings(monkeypatch, pr
     assert captured["params"]["end_time"] == "2026-07-17T00:00:00Z"
 
 
+def test_capacity_trend_interprets_naive_query_times_as_system_wall_time(monkeypatch):
+    from crud import dashboardCrud
+
+    captured = {}
+
+    class FakeQuestDB:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, _query, params):
+            captured["params"] = params
+            return SimpleNamespace(all=lambda: [])
+
+    monkeypatch.setattr(
+        dashboardCrud,
+        "get_active_clusters",
+        lambda _db: [SimpleNamespace(id=2)],
+    )
+    monkeypatch.setattr(dashboardCrud, "QuestDBSession", FakeQuestDB)
+
+    dashboardCrud.get_capacity_trend(
+        db=object(),
+        project_id=None,
+        start_time=datetime(2026, 6, 18, 8, 0),
+        end_time=datetime(2026, 7, 17, 8, 0),
+    )
+
+    assert captured["params"]["start_time"] == "2026-06-18T00:00:00Z"
+    assert captured["params"]["end_time"] == "2026-07-17T00:00:00Z"
+
+
 def test_dashboard_service_returns_not_found_for_unknown_project(db_session):
     from services import dashboardService
 
