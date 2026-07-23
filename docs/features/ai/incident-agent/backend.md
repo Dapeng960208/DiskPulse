@@ -17,7 +17,7 @@
 - `incident_ai_model_bindings`：候选模型和稳定优先级；
 - `incident_ai_runs`：幂等运行和脱敏审计记录。
 
-`celery_tasks.tasks.incident_ai_agent.review_incident_ai_task` 使用事件锁和生命周期快照键；`review_due_incidents_ai_task` 按 30 分钟时间桶复评。`forecast_incidents` 只在关联事件的数据库事务提交后投递生命周期任务。任务只调用 `services.ai_client.chat_completion(..., tools=[])`，未注册设备或数据写工具。
+`celery_tasks.tasks.incident_ai_agent.review_incident_ai_task` 使用事件锁和生命周期快照键；`review_due_incidents_ai_task` 按 30 分钟时间桶复评，并在最近 60 分钟的有效事件中最多选择 5 条。候选排序为 `critical`、未审查或证据更新、最近证据时间；只有最近 60 分钟的 `critical` 生命周期事件会在事务提交后立即投递，其他事件等待定时批次。任务只调用 `services.ai_client.chat_completion(..., tools=[])`，未注册设备或数据写工具。
 
 任务日志使用 `incident`、`trigger`、`task_id`（投递时）、`run_id`、最终 `status`、`model_id` 和安全 `error_code` 标识一次审查的投递、开始、跳过和结束；异常日志保留调用栈，不记录 prompt、凭据或原始厂商日志。
 

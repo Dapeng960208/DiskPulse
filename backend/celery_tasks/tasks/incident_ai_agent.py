@@ -13,6 +13,8 @@ from services import incidentAiAgentService
 
 logger = get_task_logger(__name__)
 REVIEW_INTERVAL = timedelta(minutes=30)
+REVIEW_FRESHNESS_WINDOW = timedelta(minutes=60)
+SCHEDULED_REVIEW_LIMIT = 5
 
 
 def _scheduled_key(incident_id: int, now: datetime) -> str:
@@ -76,7 +78,18 @@ def review_due_incidents_ai_task() -> int:
             settings = incidentAiAgentService.get_settings(db)
             if not settings.enabled:
                 return 0
-            due = incidentAiAgentCrud.list_due_incidents(db, before=now - REVIEW_INTERVAL)
+            due = incidentAiAgentCrud.list_due_incidents(
+                db,
+                before=now - REVIEW_INTERVAL,
+                freshest_after=now - REVIEW_FRESHNESS_WINDOW,
+                limit=SCHEDULED_REVIEW_LIMIT,
+            )
+            logger.info(
+                "Scheduled Incident AI review selection: selected=%s limit=%s freshness_minutes=%s",
+                len(due),
+                SCHEDULED_REVIEW_LIMIT,
+                int(REVIEW_FRESHNESS_WINDOW.total_seconds() // 60),
+            )
             count = 0
             for incident in due:
                 try:

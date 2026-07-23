@@ -113,19 +113,30 @@ def _notifications_after_commit(events: Iterable[tuple[int, str]]) -> None:
             logger.warning("Unable to enqueue derived Incident notification: incident=%s", incident_id)
 
 
-def _agent_reviews_after_commit(incident_ids: Iterable[int]) -> None:
+def _agent_reviews_after_commit(db, incident_ids: Iterable[int]) -> None:
     from celery_tasks.tasks.incident_ai_agent import review_incident_ai_task
 
-    for incident_id in sorted({int(item) for item in incident_ids}):
+    source_ids = sorted({int(item) for item in incident_ids})
+    candidates = incidentAiAgentCrud.list_lifecycle_review_candidates(
+        db,
+        incident_ids=source_ids,
+        freshest_after=datetime.now(timezone.utc) - timedelta(minutes=60),
+    )
+    logger.info(
+        "Incident AI lifecycle review selection: received=%s selected=%s reason=critical_fresh_only",
+        len(source_ids),
+        len(candidates),
+    )
+    for incident in candidates:
         try:
-            task = review_incident_ai_task.delay(incident_id, "lifecycle")
+            task = review_incident_ai_task.delay(incident.id, "lifecycle")
             logger.info(
                 "Incident AI review enqueued: incident=%s trigger=lifecycle task_id=%s",
-                incident_id,
+                incident.id,
                 task.id,
             )
         except Exception:
-            logger.exception("Unable to enqueue Incident AI review: incident=%s trigger=lifecycle", incident_id)
+            logger.exception("Unable to enqueue Incident AI review: incident=%s trigger=lifecycle", incident.id)
 
 
 def _record_correlation(
@@ -492,7 +503,7 @@ def run_capacity_forecasts(*, now: datetime | None = None) -> int:
         finally:
             if committed:
                 _notifications_after_commit(notifications)
-                _agent_reviews_after_commit(db.info.pop("incident_ai_review_ids", set()))
+                _agent_reviews_after_commit(db, db.info.pop("incident_ai_review_ids", set()))
 
 
 def _raw_point_count(cluster_id: int, component: str, *, started_at: datetime) -> tuple[int, datetime | None]:
@@ -624,7 +635,7 @@ def run_telemetry_quality_snapshots(*, now: datetime | None = None) -> int:
         finally:
             if committed:
                 _notifications_after_commit(notifications)
-                _agent_reviews_after_commit(db.info.pop("incident_ai_review_ids", set()))
+                _agent_reviews_after_commit(db, db.info.pop("incident_ai_review_ids", set()))
 
 
 def _performance_asset(db, *, cluster: StorageCluster, object_type: str, object_id: str, object_name: str | None) -> tuple[AssetRef, str]:
@@ -977,7 +988,7 @@ def run_performance_anomalies(*, now: datetime | None = None) -> int:
         finally:
             if committed:
                 _notifications_after_commit(notifications)
-                _agent_reviews_after_commit(db.info.pop("incident_ai_review_ids", set()))
+                _agent_reviews_after_commit(db, db.info.pop("incident_ai_review_ids", set()))
 
 
 def _vendor_event_asset(
@@ -1131,7 +1142,7 @@ def process_diskpulse_alert_evidence(*, alert_ids: Iterable[int]) -> int:
         finally:
             if committed:
                 _notifications_after_commit(notifications)
-                _agent_reviews_after_commit(db.info.pop("incident_ai_review_ids", set()))
+                _agent_reviews_after_commit(db, db.info.pop("incident_ai_review_ids", set()))
 
 
 def process_vendor_event_evidence(*, storage_cluster_id: int, source: str | None = None) -> int:
@@ -1222,7 +1233,7 @@ def process_vendor_event_evidence(*, storage_cluster_id: int, source: str | None
         finally:
             if committed:
                 _notifications_after_commit(notifications)
-                _agent_reviews_after_commit(db.info.pop("incident_ai_review_ids", set()))
+                _agent_reviews_after_commit(db, db.info.pop("incident_ai_review_ids", set()))
 
 
 @diskpulse_app.task(soft_time_limit=600, time_limit=660, expires=900)

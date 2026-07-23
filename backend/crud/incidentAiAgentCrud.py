@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import case, or_, select
 
 from models import AIConfig, Incident, IncidentAiModelBinding, IncidentAiSettings, IncidentAiRun
 
@@ -64,14 +64,50 @@ def add_run(db, run: IncidentAiRun) -> IncidentAiRun:
     return run
 
 
-def list_due_incidents(db, *, before: datetime) -> list[Incident]:
+def list_lifecycle_review_candidates(db, *, incident_ids: list[int], freshest_after: datetime) -> list[Incident]:
+    if not incident_ids:
+        return []
+    return list(
+        db.scalars(
+            select(Incident)
+            .where(
+                Incident.id.in_(incident_ids),
+                Incident.status != "resolved",
+                Incident.severity == "critical",
+                Incident.last_evidence_at >= freshest_after,
+            )
+            .order_by(Incident.last_evidence_at.desc(), Incident.id.desc())
+        )
+    )
+
+
+def list_due_incidents(
+    db,
+    *,
+    before: datetime,
+    freshest_after: datetime,
+    limit: int,
+) -> list[Incident]:
     return list(
         db.scalars(
             select(Incident)
             .where(
                 Incident.status != "resolved",
+                Incident.last_evidence_at >= freshest_after,
                 or_(Incident.ai_analyzed_at.is_(None), Incident.ai_analyzed_at <= before),
             )
-            .order_by(Incident.ai_analyzed_at.asc().nullsfirst(), Incident.id.asc())
+            .order_by(
+                case((Incident.severity == "critical", 0), else_=1),
+                case((
+                    or_(
+                        Incident.ai_analyzed_at.is_(None),
+                        Incident.last_evidence_at > Incident.ai_analyzed_at,
+                    ),
+                    0,
+                ), else_=1),
+                Incident.last_evidence_at.desc(),
+                Incident.id.desc(),
+            )
+            .limit(limit)
         )
     )
