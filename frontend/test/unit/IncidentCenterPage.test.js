@@ -64,6 +64,7 @@ describe('IncidentCenterPage', () => {
     const wrapper = await mountPage();
 
     expect(wrapper.text()).toContain('project-alpha');
+    expect(wrapper.text()).toContain('AI 处置设置');
     expect(incidentApi.fetchIncidents).toHaveBeenCalledWith(expect.objectContaining({ page: 1, size: 20 }));
   });
 

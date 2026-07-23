@@ -64,6 +64,14 @@ describe('IncidentDetailDrawer', () => {
         confidence: 'medium',
         candidates: [{ category: 'device_fault', score: 0.5, evidence_refs: ['netapp:1'], data_gaps: [] }],
       },
+      ai_assessment: {
+        classification: 'normal_fluctuation',
+        urgency: 'low',
+        summary: '低负载 IOPS 短时波动，暂无服务影响证据。',
+        investigation_steps: ['继续观察下一采集周期'],
+        resolution_steps: ['无需设备写操作'],
+        analyzed_at: '2026-07-23T06:45:00Z',
+      },
     });
     incidentApi.updateIncident.mockResolvedValue({ ...incident, status: 'acknowledged' });
     incidentApi.createComment.mockResolvedValue({ id: 2, event_type: 'commented', comment: '处理中' });
@@ -80,6 +88,8 @@ describe('IncidentDetailDrawer', () => {
     expect(incidentApi.fetchIncident).toHaveBeenCalledWith(9);
     expect(wrapper.findComponent({ name: 'ElDrawer' }).attributes('title')).toBe('设备健康风险 #9');
     expect(wrapper.text()).toContain('确定性诊断');
+    expect(wrapper.text()).toContain('AI 处置建议');
+    expect(wrapper.text()).toContain('低负载 IOPS 短时波动');
     const diagnosisTooltip = wrapper.findAllComponents({ name: 'ElTooltip' })
       .find((tooltip) => tooltip.text().includes('确定性诊断'));
     expect(diagnosisTooltip.attributes('content')).toBe('由服务端按固定证据权重计算，不使用 AI 自由生成结论。');

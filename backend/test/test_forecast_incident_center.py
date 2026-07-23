@@ -140,6 +140,15 @@ def test_performance_requires_three_consecutive_robust_z_scores_and_ignores_isol
     assert analytics.robust_z_score(value=9.0, median=1.0, mad=0.0) == 100.0
 
 
+def test_zero_mad_low_iops_uses_resource_baseline_then_cluster_fallback_for_noise_suppression():
+    from services import forecastIncidentService as analytics
+
+    assert analytics.performance_iops_noise_threshold(resource_baseline=0.0, cluster_baseline=800.0) == 10.0
+    assert analytics.performance_iops_noise_threshold(resource_baseline=None, cluster_baseline=800.0) == 40.0
+    assert analytics.should_suppress_zero_mad_iops([2.0, 2.0, 2.0], resource_baseline=0.0, cluster_baseline=800.0) is True
+    assert analytics.should_suppress_zero_mad_iops([11.0, 11.0, 11.0], resource_baseline=0.0, cluster_baseline=800.0) is False
+
+
 def test_diagnosis_uses_fixed_weights_independent_evidence_and_high_confidence_gate():
     from services import forecastIncidentService as analytics
 
