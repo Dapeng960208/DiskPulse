@@ -408,6 +408,52 @@ def test_top_latency_crud_returns_standard_performance_metrics():
     statement = str(connection.execute.call_args.args[0])
     assert "avg(latency_read) AS avg_read_latency" in statement
     assert "avg(latency_write) AS avg_write_latency" in statement
+
+
+def test_hourly_asset_performance_uses_utc_window_and_bound_resource_identity():
+    connection = Mock()
+    connection.execute.return_value.all.return_value = [
+        (START, 6, 1.5, 2.5, 2.0, 240.0, 4096.0),
+    ]
+    session = Mock()
+    session.__enter__ = Mock(return_value=connection)
+    session.__exit__ = Mock(return_value=False)
+
+    with (
+        patch.object(storageHealthAnalyticsCrud, "get_storage_config", return_value=Mock()),
+        patch.object(storageHealthAnalyticsCrud, "QuestDBSession", return_value=session),
+    ):
+        rows = storageHealthAnalyticsCrud.get_hourly_asset_performance(
+            Mock(),
+            storage_cluster_id=7,
+            asset_type="volume",
+            asset_id="volume-9",
+            start_time=START,
+            end_time=END,
+        )
+
+    statement = str(connection.execute.call_args.args[0])
+    parameters = connection.execute.call_args.args[1]
+    assert "storage_performance_metrics" in statement
+    assert "object_type = :asset_type" in statement
+    assert "object_id = :asset_id" in statement
+    assert "SAMPLE BY 1h" in statement
+    assert parameters == {
+        "storage_cluster_id": "7",
+        "asset_type": "volume",
+        "asset_id": "volume-9",
+        "start_time": "2026-07-01T00:00:00Z",
+        "end_time": "2026-07-02T00:00:00Z",
+    }
+    assert rows == [{
+        "hour_start": START,
+        "sample_count": 6,
+        "latency_read": 1.5,
+        "latency_write": 2.5,
+        "latency_total": 2.0,
+        "iops_total": 240.0,
+        "throughput_total": 4096.0,
+    }]
     assert "avg(iops_total) AS avg_iops" in statement
     assert "avg(throughput_total) AS avg_throughput" in statement
     assert "object_id IN (:object_id_0)" in statement
