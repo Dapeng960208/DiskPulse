@@ -9,6 +9,35 @@ import pytest
 UTC_NOW = datetime(2026, 7, 18, 8, 0, tzinfo=timezone.utc)
 
 
+def test_diskpulse_alert_evidence_treats_legacy_alert_time_as_local_wall_time():
+    from celery_tasks.tasks.forecast_incidents import _vendor_event_utc
+
+    local_wall_time = datetime(2026, 7, 23, 12, 8, 19)
+
+    assert _vendor_event_utc(local_wall_time) == datetime(
+        2026,
+        7,
+        23,
+        4,
+        8,
+        19,
+        tzinfo=timezone.utc,
+    )
+
+    task_source = (
+        Path(__file__).resolve().parents[1]
+        / "celery_tasks"
+        / "tasks"
+        / "forecast_incidents.py"
+    ).read_text(encoding="utf-8")
+    process_source = task_source.split(
+        "def process_diskpulse_alert_evidence",
+        maxsplit=1,
+    )[1].split("def process_vendor_event_evidence", maxsplit=1)[0]
+
+    assert "observed_at=_vendor_event_utc(event.updated_at)" in process_source
+
+
 def test_questdb_utc_contract_migration_repairs_existing_performance_incident_times():
     migration = (
         Path(__file__).resolve().parents[1]
