@@ -1,5 +1,6 @@
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { defineComponent, h } from 'vue';
 import { commonDirectives } from '../helpers/mount';
 
 const { aiApi, currentUser, messageApi, router } = vi.hoisted(() => ({
@@ -101,7 +102,7 @@ const SelectStub = {
     disabled: { type: Boolean, default: false },
   },
   emits: ['update:modelValue', 'change'],
-  template: '<div v-bind="$attrs" :modelvalue="modelValue" :disabled="disabled"><slot /></div>',
+  template: '<div v-bind="$attrs" :modelvalue="modelValue" :disabled="disabled || undefined"><slot /></div>',
 };
 
 const OptionStub = {
@@ -131,6 +132,21 @@ const QueryForm = {
   template: '<form><slot /></form>',
 };
 
+let currentAdminModel;
+const TableColumnStub = defineComponent({
+  name: 'ElTableColumn',
+  props: {
+    label: { type: String, default: '' },
+  },
+  setup(props, { slots }) {
+    return () => h(
+      'section',
+      { 'data-column': props.label },
+      slots.default?.({ row: currentAdminModel }) || [],
+    );
+  },
+});
+
 function mountAiCenter() {
   return shallowMount(AiCenterPage, {
     global: {
@@ -143,6 +159,7 @@ function mountAiCenter() {
         ElFormItem: FormItemStub,
         ElOption: OptionStub,
         ElSelect: SelectStub,
+        ElTableColumn: TableColumnStub,
         ElTabs: passthrough('ElTabs'),
         ElTabPane: passthrough('ElTabPane'),
       },
@@ -169,7 +186,7 @@ describe('AI chat model defaults and reasoning controls', () => {
       model(
         2,
         '默认推理模型',
-        reasoningControl('effort', ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']),
+        reasoningControl('effort', ['auto', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']),
         { is_default: true },
       ),
     ]);
@@ -199,6 +216,7 @@ describe('AI chat model defaults and reasoning controls', () => {
       title: '新对话',
       model_id: 2,
     });
+    wrapper.unmount();
 
     aiApi.listModels.mockResolvedValue([
       model(7, '首个模型', reasoningControl('toggle', ['on', 'off'])),
@@ -211,7 +229,7 @@ describe('AI chat model defaults and reasoning controls', () => {
       messages: [],
     });
     const fallbackWrapper = mountAiChat();
-    await flushPromises();
+    await fallbackWrapper.vm.loadInitial();
 
     expect(fallbackWrapper.vm.selectedModelId).toBe(7);
     await fallbackWrapper.vm.createConversation();
@@ -247,6 +265,53 @@ describe('AI chat model defaults and reasoning controls', () => {
     );
   });
 
+  it('starts an unpersisted draft and creates it with the model selected before first send', async () => {
+    aiApi.listConversations.mockResolvedValue([
+      { id: 10, model_id: 2, title: '已有会话' },
+    ]);
+    aiApi.getConversation.mockResolvedValue({
+      id: 10,
+      model_id: 2,
+      title: '已有会话',
+      messages: [],
+    });
+    aiApi.createConversation.mockResolvedValueOnce({
+      id: 11,
+      model_id: 1,
+      title: '新对话',
+      messages: [],
+    });
+    const wrapper = mountAiChat();
+    await flushPromises();
+
+    expect(wrapper.get('[aria-label="选择模型"]').attributes('disabled')).toBe('true');
+    await wrapper.get('[aria-label="新建对话"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.vm.activeConversationId).toBeNull();
+    expect(wrapper.vm.selectedModelId).toBe(2);
+    expect(wrapper.get('[aria-label="选择模型"]').attributes()).not.toHaveProperty('disabled');
+
+    const modelSelector = wrapper.getComponent('[aria-label="选择模型"]');
+    await modelSelector.vm.$emit('update:modelValue', 1);
+    await modelSelector.vm.$emit('change', 1);
+    wrapper.vm.content = '使用其他模型分析';
+    await wrapper.vm.send();
+
+    expect(aiApi.createConversation).toHaveBeenCalledWith({
+      title: '新对话',
+      model_id: 1,
+    });
+    expect(aiApi.streamMessage).toHaveBeenCalledWith(
+      11,
+      '使用其他模型分析',
+      expect.objectContaining({
+        reasoning: 'auto',
+        onEvent: expect.any(Function),
+      }),
+    );
+  });
+
   it('renders effort options with the specified Chinese labels', async () => {
     const wrapper = mountAiChat();
     await flushPromises();
@@ -271,7 +336,7 @@ describe('AI chat model defaults and reasoning controls', () => {
 
   it('renders toggle controls as auto/on/off and explains models without adjustable reasoning', async () => {
     aiApi.listModels.mockResolvedValue([
-      model(3, '开关思考模型', reasoningControl('toggle', ['on', 'off']), { is_default: true }),
+      model(3, '开关思考模型', reasoningControl('toggle', ['auto', 'on', 'off']), { is_default: true }),
     ]);
     const toggleWrapper = mountAiChat();
     await flushPromises();
@@ -362,21 +427,67 @@ describe('AI chat model defaults and reasoning controls', () => {
     expect(wrapper.vm.selectedReasoning).toBe('auto');
     expect(messageApi.warning).toHaveBeenCalledWith(expect.stringMatching(/推理.*自动/));
   });
+
+  it('reloads model capabilities and preserves the prompt when reasoning becomes invalid online', async () => {
+    aiApi.listModels
+      .mockReset()
+      .mockResolvedValueOnce([
+        model(
+          2,
+          '能力变化前',
+          reasoningControl('effort', ['auto', 'high']),
+          { is_default: true },
+        ),
+      ])
+      .mockResolvedValueOnce([
+        model(
+          2,
+          '能力变化后',
+          reasoningControl('effort', ['auto', 'low']),
+          { is_default: true },
+        ),
+      ]);
+    aiApi.listConversations.mockResolvedValue([
+      { id: 10, model_id: 2, title: '已有会话' },
+    ]);
+    aiApi.getConversation.mockResolvedValue({
+      id: 10,
+      model_id: 2,
+      title: '已有会话',
+      messages: [],
+    });
+    aiApi.streamMessage.mockRejectedValue(Object.assign(
+      new Error('当前模型不支持推理设置 high'),
+      { status: 422 },
+    ));
+    const wrapper = mountAiChat();
+    await flushPromises();
+    wrapper.vm.selectedReasoning = 'high';
+    wrapper.vm.content = '保留这段输入';
+
+    await wrapper.vm.send();
+
+    expect(aiApi.listModels).toHaveBeenCalledTimes(2);
+    expect(wrapper.vm.selectedReasoning).toBe('auto');
+    expect(wrapper.vm.content).toBe('保留这段输入');
+    expect(wrapper.vm.failedContent).toBe('保留这段输入');
+    expect(messageApi.warning).toHaveBeenCalledWith('模型能力已变化，请重试');
+  });
 });
 
 describe('AI center default model and capability management', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    aiApi.listAdminModels.mockResolvedValue([
-      {
-        ...model(2, '默认推理模型', reasoningControl('effort', ['low', 'medium', 'high'], {
-          source: 'provider',
-        }), { is_default: true }),
-        base_url: 'https://api.openai.com/v1',
-        capability_status: 'ready',
-        capability_source: 'provider',
-      },
-    ]);
+    currentAdminModel = {
+      ...model(2, '默认推理模型', reasoningControl('effort', ['low', 'medium', 'high'], {
+        source: 'provider',
+      }), { is_default: true }),
+      base_url: 'https://api.openai.com/v1',
+      capability_status: 'ready',
+      capability_source: 'provider',
+      capability_updated_at: '2026-07-23T10:20:30',
+    };
+    aiApi.listAdminModels.mockResolvedValue([currentAdminModel]);
     aiApi.getAiSettings.mockResolvedValue({ default_chat_model_id: 2 });
     aiApi.updateAiSettings.mockResolvedValue({ default_chat_model_id: 2 });
     aiApi.refreshModelCapabilities.mockResolvedValue({
@@ -407,7 +518,7 @@ describe('AI center default model and capability management', () => {
     wrapper.vm.addModel();
     await flushPromises();
 
-    const providerSelect = wrapper.get('.model-provider-select');
+    const providerSelect = wrapper.getComponent('.model-provider-select');
     expect(providerSelect.findAll('span').map((option) => ({
       label: option.attributes('label'),
       value: option.attributes('value'),
@@ -434,6 +545,13 @@ describe('AI center default model and capability management', () => {
       provider: 'deepseek',
       base_url: expect.stringMatching(/^https:\/\//),
     });
+
+    wrapper.vm.applyProviderPreset('minimax');
+    expect(wrapper.vm.form.base_url).toBe('https://api.minimaxi.com/v1');
+
+    wrapper.vm.applyProviderPreset('hunyuan');
+    expect(wrapper.vm.form.base_url).toBe('https://tokenhub.tencentmaas.com/v1');
+
     expect(wrapper.get('.model-base-url').attributes()).not.toHaveProperty('disabled');
   });
 
@@ -441,6 +559,7 @@ describe('AI center default model and capability management', () => {
     const wrapper = mountAiCenter();
     await flushPromises();
 
+    expect(wrapper.get('[data-column="刷新时间"]').text()).toContain('2026-07-23 10:20:30');
     expect(wrapper.vm.capabilitySourceText('provider')).toBe('Provider 动态能力');
     expect(wrapper.vm.capabilitySourceText('official_catalog')).toBe('官方能力目录');
     expect(wrapper.vm.capabilitySourceText('unknown')).toBe('未知');
@@ -452,5 +571,25 @@ describe('AI center default model and capability management', () => {
 
     expect(aiApi.refreshModelCapabilities).toHaveBeenCalledWith(2);
     expect(aiApi.listAdminModels).toHaveBeenCalledOnce();
+    expect(messageApi.success).toHaveBeenCalledWith('模型能力已刷新');
+    expect(messageApi.warning).not.toHaveBeenCalled();
+  });
+
+  it('shows a restricted warning when capability refresh returns failed', async () => {
+    aiApi.refreshModelCapabilities.mockResolvedValue({
+      model_id: 2,
+      status: 'failed',
+      source: 'unknown',
+    });
+    const wrapper = mountAiCenter();
+    await flushPromises();
+    aiApi.listAdminModels.mockClear();
+
+    await wrapper.vm.refreshCapabilities({ id: 2 });
+
+    expect(aiApi.refreshModelCapabilities).toHaveBeenCalledWith(2);
+    expect(aiApi.listAdminModels).toHaveBeenCalledOnce();
+    expect(messageApi.success).not.toHaveBeenCalled();
+    expect(messageApi.warning).toHaveBeenCalledWith(expect.stringMatching(/配置已保存.*自动模式/));
   });
 });

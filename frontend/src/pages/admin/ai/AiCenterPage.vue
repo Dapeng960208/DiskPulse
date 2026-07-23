@@ -27,6 +27,23 @@ import TableActionButton from '@/components/basic/TableActionButton.vue';
 import DataTable from '@/components/data/DataTable.vue';
 import QueryForm from '@/components/form/QueryForm.vue';
 
+const providerOptions = [
+  { value: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
+  { value: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
+  { value: 'ollama', label: 'Ollama', baseUrl: 'http://localhost:11434' },
+  { value: 'claude', label: 'Claude API', baseUrl: 'https://api.anthropic.com' },
+  { value: 'claude_code', label: 'Claude Code', baseUrl: 'https://api.anthropic.com' },
+  { value: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com' },
+  { value: 'dashscope', label: '通义千问', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
+  { value: 'volcengine', label: '豆包', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
+  { value: 'zhipu', label: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4' },
+  { value: 'moonshot', label: 'Kimi', baseUrl: 'https://api.moonshot.cn/v1' },
+  { value: 'minimax', label: 'MiniMax', baseUrl: 'https://api.minimaxi.com/v1' },
+  { value: 'qianfan', label: '百度千帆', baseUrl: 'https://qianfan.baidubce.com/v2' },
+  { value: 'hunyuan', label: '腾讯混元', baseUrl: 'https://tokenhub.tencentmaas.com/v1' },
+];
+const defaultProvider = providerOptions[0];
+
 const route = useRoute();
 const router = useRouter();
 const activeTab = ref(['models', 'audit'].includes(route.query.tab) ? route.query.tab : 'models');
@@ -35,12 +52,14 @@ const audits = ref([]);
 const total = ref(0);
 const loading = ref(false);
 const editingId = ref(null);
+const defaultModelId = ref(null);
+const settingsSubmitting = ref(false);
 const auditQuery = reactive({ page: 1, size: 20, status: '' });
 const form = reactive({
   name: '',
   description: '',
   provider: 'openai',
-  base_url: '',
+  base_url: defaultProvider.baseUrl,
   api_key: '',
   model: '',
   enabled: false,
@@ -52,6 +71,9 @@ const form = reactive({
 const modelSubmitting = ref(false);
 const formSnapshot = ref(JSON.stringify(form));
 const isModelDirty = computed(() => JSON.stringify(form) !== formSnapshot.value);
+const availableDefaultModels = computed(() => models.value.filter(
+  (model) => model.enabled && model.enable_chat,
+));
 const {
   visible: dialogVisible,
   open: openModelDialog,
@@ -67,6 +89,30 @@ watch(activeTab, (tab) => {
 
 async function loadModels() {
   models.value = await aiApi.listAdminModels();
+}
+
+async function loadAiSettings() {
+  if (typeof aiApi.getAiSettings !== 'function') return;
+  const settings = await aiApi.getAiSettings();
+  defaultModelId.value = settings.default_chat_model_id ?? null;
+}
+
+async function saveDefaultModel() {
+  if (settingsSubmitting.value) return;
+  settingsSubmitting.value = true;
+  try {
+    const settings = await aiApi.updateAiSettings({
+      default_chat_model_id: defaultModelId.value,
+    });
+    defaultModelId.value = settings.default_chat_model_id ?? null;
+    models.value = models.value.map((model) => ({
+      ...model,
+      is_default: model.id === defaultModelId.value,
+    }));
+    ElMessage.success('默认聊天模型已更新');
+  } finally {
+    settingsSubmitting.value = false;
+  }
 }
 
 async function loadAudits() {
@@ -101,9 +147,15 @@ function updateAuditPagination(next) {
 
 function resetForm() {
   Object.assign(form, {
-    name: '', description: '', provider: 'openai', base_url: '', api_key: '', model: '',
+    name: '', description: '', provider: defaultProvider.value, base_url: defaultProvider.baseUrl, api_key: '', model: '',
     enabled: false, enable_chat: true, temperature: 0.3, max_tokens: 2048, system_prompt: '',
   });
+}
+
+function applyProviderPreset(provider) {
+  const preset = providerOptions.find((item) => item.value === provider);
+  form.provider = provider;
+  if (preset) form.base_url = preset.baseUrl;
 }
 
 function addModel() {
@@ -154,6 +206,48 @@ async function testModel(model) {
   ElMessage.success(`${result.message}：${result.reply || 'OK'}`);
 }
 
+function capabilitySourceText(value) {
+  return {
+    provider: 'Provider 动态能力',
+    official_catalog: '官方能力目录',
+    unknown: '未知',
+  }[value] || '未知';
+}
+
+function capabilityStatusText(value) {
+  return {
+    ready: '已获取',
+    failed: '获取失败',
+    unknown: '未知',
+    pending: '获取中',
+  }[value] || '未知';
+}
+
+function reasoningKindText(value) {
+  return {
+    effort: '推理强度',
+    toggle: '思考开关',
+    none: '不可调节',
+  }[value] || '未知';
+}
+
+function formatCapabilityUpdatedAt(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+async function refreshCapabilities(model) {
+  const result = await aiApi.refreshModelCapabilities(model.id);
+  if (result.status === 'ready') {
+    ElMessage.success('模型能力已刷新');
+  } else {
+    ElMessage.warning('模型能力获取失败，配置已保存；聊天将仅允许自动模式');
+  }
+  await loadModels();
+}
+
 async function deleteModel(model) {
   await aiApi.deleteModel(model.id);
   ElMessage.success('模型配置已删除');
@@ -177,7 +271,7 @@ function statusType(value) {
 }
 
 onMounted(async () => {
-  await loadModels();
+  await Promise.all([loadModels(), loadAiSettings()]);
   if (activeTab.value === 'audit') await loadAudits();
 });
 </script>
@@ -188,11 +282,46 @@ onMounted(async () => {
       <ElTabPane
         label="模型管理"
         name="models">
+        <div class="ai-default-model">
+          <div>
+            <strong>默认聊天模型</strong>
+            <span>新会话将优先使用此模型</span>
+          </div>
+          <ElSelect
+            v-model="defaultModelId"
+            class="ai-default-model__select"
+            aria-label="默认聊天模型"
+            clearable
+            placeholder="请选择默认模型">
+            <ElOption
+              v-for="model in availableDefaultModels"
+              :key="model.id"
+              :label="model.name"
+              :value="model.id" />
+          </ElSelect>
+          <ElButton
+            type="primary"
+            :loading="settingsSubmitting"
+            @click="saveDefaultModel">
+            保存默认模型
+          </ElButton>
+        </div>
         <DataTable :data="models">
           <ElTableColumn
             prop="name"
             label="名称"
-            min-width="140" />
+            min-width="160">
+            <template #default="{ row }">
+              <span>{{ row.name }}</span>
+              <ElTag
+                v-if="row.is_default"
+                class="ai-model-default-tag"
+                type="success"
+                size="small">
+                默认
+              </ElTag>
+            </template>
+          </ElTableColumn>
           <ElTableColumn
             prop="provider"
             label="Provider"
@@ -201,6 +330,38 @@ onMounted(async () => {
             prop="model"
             label="模型"
             min-width="160" />
+          <ElTableColumn
+            label="推理控制"
+            min-width="120">
+            <template #default="{ row }">
+              {{ reasoningKindText(row.reasoning_control?.kind) }}
+            </template>
+          </ElTableColumn>
+          <ElTableColumn
+            label="能力来源"
+            min-width="140">
+            <template #default="{ row }">
+              {{ capabilitySourceText(row.capability_source || row.reasoning_control?.source) }}
+            </template>
+          </ElTableColumn>
+          <ElTableColumn
+            label="能力状态"
+            min-width="120">
+            <template #default="{ row }">
+              <ElTag :type="(row.capability_status || row.reasoning_control?.status) === 'ready' ? 'success' : 'warning'">
+                {{ capabilityStatusText(row.capability_status || row.reasoning_control?.status) }}
+              </ElTag>
+            </template>
+          </ElTableColumn>
+          <ElTableColumn
+            label="刷新时间"
+            min-width="180">
+            <template #default="{ row }">
+              <time :datetime="row.capability_updated_at">
+                {{ formatCapabilityUpdatedAt(row.capability_updated_at) }}
+              </time>
+            </template>
+          </ElTableColumn>
           <ElTableColumn
             label="密钥"
             width="150"><template #default="{ row }">{{ row.api_key_masked || '未配置' }}</template></ElTableColumn>
@@ -236,6 +397,9 @@ onMounted(async () => {
                     <ElDropdownMenu>
                       <ElDropdownItem @click="testModel(row)">
                         连接测试
+                      </ElDropdownItem>
+                      <ElDropdownItem @click="refreshCapabilities(row)">
+                        刷新能力
                       </ElDropdownItem>
                       <ElDropdownItem
                         class="list-row-actions__danger"
@@ -355,13 +519,17 @@ onMounted(async () => {
             maxlength="100" /></ElFormItem>
         <ElFormItem
           label="Provider"
-          required><ElSelect v-model="form.provider"><ElOption
-            v-for="provider in ['openai', 'openrouter', 'ollama', 'claude']"
-            :key="provider"
-            :label="provider"
-            :value="provider" /></ElSelect></ElFormItem>
+          required><ElSelect
+            v-model="form.provider"
+            class="model-provider-select"
+            @change="applyProviderPreset"><ElOption
+              v-for="provider in providerOptions"
+              :key="provider.value"
+              :label="provider.label"
+              :value="provider.value" /></ElSelect></ElFormItem>
         <ElFormItem label="Base URL"><ElInput
           v-model="form.base_url"
+          class="model-base-url"
           placeholder="留空使用 Provider 默认地址" /></ElFormItem>
         <ElFormItem label="API Key"><ElInput
           v-model="form.api_key"
@@ -403,3 +571,42 @@ onMounted(async () => {
     </ElDialog>
   </section>
 </template>
+
+<style scoped>
+.ai-default-model {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+.ai-default-model > div:first-child {
+  display: flex;
+  flex: 1;
+  min-width: 180px;
+  flex-direction: column;
+  gap: 2px;
+}
+.ai-default-model span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.ai-default-model__select {
+  width: min(320px, 40vw);
+}
+.ai-model-default-tag {
+  margin-left: 8px;
+}
+@media (max-width: 720px) {
+  .ai-default-model {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .ai-default-model__select {
+    width: 100%;
+  }
+}
+</style>

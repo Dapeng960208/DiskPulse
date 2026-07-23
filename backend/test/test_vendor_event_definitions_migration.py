@@ -25,7 +25,8 @@ BASE_REVISION = "000000000015"
 PREVIOUS_REVISION = "000000000016"
 REVISION = "000000000017"
 COMPATIBILITY_REVISION = "000000000018"
-HEAD_REVISION = "000000000019"
+NEXT_REVISION = "000000000019"
+HEAD_REVISION = "000000000020"
 
 
 def _alembic_config() -> Config:
@@ -46,7 +47,8 @@ def test_vendor_event_association_revision_precedes_the_compatibility_head():
     assert scripts.get_heads() == [HEAD_REVISION]
     assert scripts.get_revision(REVISION).down_revision == PREVIOUS_REVISION
     assert scripts.get_revision(COMPATIBILITY_REVISION).down_revision == REVISION
-    assert scripts.get_revision(HEAD_REVISION).down_revision == COMPATIBILITY_REVISION
+    assert scripts.get_revision(NEXT_REVISION).down_revision == COMPATIBILITY_REVISION
+    assert scripts.get_revision(HEAD_REVISION).down_revision == NEXT_REVISION
 
 
 @pytest.mark.parametrize("dialect_name", ("sqlite", "postgresql", "mysql"))

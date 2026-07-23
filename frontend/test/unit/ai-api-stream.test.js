@@ -154,4 +154,20 @@ describe('AI API and SSE stream', () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, body: null });
     await expect(streamConversationMessage(1, 'q', { onEvent: vi.fn() })).rejects.toThrow('不支持流式响应');
   });
+
+  it('preserves the status and detail of a reasoning validation error', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({ detail: '当前模型不支持推理设置 high' }),
+    });
+
+    await expect(streamConversationMessage(1, 'q', {
+      reasoning: 'high',
+      onEvent: vi.fn(),
+    })).rejects.toMatchObject({
+      message: '当前模型不支持推理设置 high',
+      status: 422,
+    });
+  });
 });

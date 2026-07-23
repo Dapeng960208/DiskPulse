@@ -96,9 +96,18 @@ async function responseError(response) {
   throw error;
 }
 
-export async function streamConversationMessage(conversationId, content, { signal, onEvent }) {
+export async function streamConversationMessage(conversationId, content, {
+  signal,
+  onEvent,
+  reasoning = 'auto',
+}) {
   if (mockEnabled()) {
-    const events = await mockGateway().streamAiMessage(getToken(), conversationId, content);
+    const events = await mockGateway().streamAiMessage(
+      getToken(),
+      conversationId,
+      content,
+      { reasoning },
+    );
     const state = { accepted: false, terminal: false };
     for (const parsed of events) {
       if (signal?.aborted) throw new DOMException('请求已取消', 'AbortError');
@@ -114,7 +123,7 @@ export async function streamConversationMessage(conversationId, content, { signa
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
     },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, reasoning }),
     signal,
   });
   if (!response.ok) await responseError(response);
@@ -159,6 +168,12 @@ export default {
   updateModel: (id, payload) => request('patch', `/admin/ai-models/${id}`, { data: payload }),
   deleteModel: (id) => request('delete', `/admin/ai-models/${id}`),
   testModel: (id) => request('post', `/admin/ai-models/${id}/test`),
+  refreshModelCapabilities: (id) => request(
+    'post',
+    `/admin/ai-models/${id}/capabilities/refresh`,
+  ),
+  getAiSettings: () => request('get', '/admin/ai-settings'),
+  updateAiSettings: (payload) => request('patch', '/admin/ai-settings', { data: payload }),
   listAudits: (params) => request('get', '/admin/ai-audits', { params }),
   getAudit: (id) => request('get', `/admin/ai-audits/${id}`),
   getConversationAudits: (id) => request('get', `/admin/ai-audits/conversations/${id}`),

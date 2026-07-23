@@ -342,6 +342,13 @@ const alerts = incidents.map((incident, index) => ({
     metadata: null,
     detail: 'Mock 定时存储采集完成记录',
   });
+  const mockReasoningControls = [
+    { kind: 'effort', options: ['auto', 'low', 'medium', 'high'], provider_default: 'medium', mandatory: false, source: 'official_catalog', status: 'ready' },
+    { kind: 'toggle', options: ['auto', 'on', 'off'], provider_default: 'on', mandatory: false, source: 'official_catalog', status: 'ready' },
+    { kind: 'toggle', options: ['auto', 'on', 'off'], provider_default: null, mandatory: false, source: 'provider', status: 'ready' },
+    { kind: 'none', options: ['auto'], provider_default: null, mandatory: false, source: 'unknown', status: 'unknown' },
+    { kind: 'effort', options: ['auto', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'], provider_default: 'high', mandatory: false, source: 'official_catalog', status: 'ready' },
+  ];
   const aiModels = ['容量助手', '告警分析', '运维问答', '归档顾问', '报表生成'].map((name, index) => ({
     id: index + 1,
     name,
@@ -353,6 +360,13 @@ const alerts = incidents.map((incident, index) => ({
     enable_chat: true,
     temperature: 0.3,
     max_tokens: 2048,
+    reasoning_control: {
+      ...mockReasoningControls[index],
+      updated_at: '2026-07-23T10:00:00Z',
+    },
+    capability_status: mockReasoningControls[index].status,
+    capability_source: mockReasoningControls[index].source,
+    capability_updated_at: '2026-07-23T10:00:00Z',
   }));
   const capacityPredictionCandidates = [
     {
@@ -582,6 +596,7 @@ const alerts = incidents.map((incident, index) => ({
     alerts,
     audits,
     aiModels,
+    aiPlatformSettings: { default_chat_model_id: 1 },
     capacityPredictionSettings: { visible: true },
     capacityPredictionPlans: [
       withCapacity({ id: 1, asset_type: 'storage_usage', asset_id: '101', project_id: 1, effective_at: '2026-08-01T00:00:00Z', capacity_delta: 80, reason: 'Mock 演示容量计划', created_at: '2026-07-18T09:00:00Z' }),
@@ -1139,7 +1154,14 @@ export function createMockGateway() {
     const projectMatch = path.match(/^\/projects\/(\d+)$/);
     if (projectMatch) { const item = state.projects.find((record) => record.id === Number(projectMatch[1])); if (!item || !allowed(account, item.id)) throw error(403); return { ...item, capabilities: capabilities(account, item.id) }; }
     if (path === '/projects') return page(scoped(account, state.projects.map((item) => ({ ...item, project_id: item.id, capabilities: capabilities(account, item.id) }))));
-    if (path === '/ai/models') return state.aiModels.filter((model) => model.enabled && model.enable_chat);
+    if (path === '/ai/models') {
+      return state.aiModels
+        .filter((model) => model.enabled && model.enable_chat)
+        .map((model) => ({
+          ...model,
+          is_default: model.id === state.aiPlatformSettings.default_chat_model_id,
+        }));
+    }
     if (path === '/v1/admin/capacity-prediction-settings') {
       if (verb === 'patch') Object.assign(state.capacityPredictionSettings, { visible: body?.user_visible === true });
       return state.capacityPredictionSettings;
@@ -1161,7 +1183,16 @@ export function createMockGateway() {
       return item;
     }
     if (path === '/ai/conversations') {
-      if (verb === 'post') { const item = { id: state.conversations.length + 1, title: body?.title || '新对话', model_id: body?.model_id || 1, messages: [] }; state.conversations.unshift(item); return item; }
+      if (verb === 'post') {
+        const item = {
+          id: state.conversations.length + 1,
+          title: body?.title || '新对话',
+          model_id: body?.model_id ?? state.aiPlatformSettings.default_chat_model_id,
+          messages: [],
+        };
+        state.conversations.unshift(item);
+        return item;
+      }
       return state.conversations;
     }
     const conversation = path.match(/^\/ai\/conversations\/(\d+)(?:\/quota-confirmations\/[^/]+)?$/);
@@ -1171,9 +1202,33 @@ export function createMockGateway() {
       if (verb === 'delete') { state.conversations.splice(state.conversations.indexOf(item), 1); return {}; }
       return item;
     }
+    if (path === '/admin/ai-settings') {
+      if (verb === 'patch') {
+        state.aiPlatformSettings.default_chat_model_id = body?.default_chat_model_id ?? null;
+      }
+      return { ...state.aiPlatformSettings };
+    }
     if (path === '/admin/ai-models') {
       if (verb === 'post') { const item = { id: state.aiModels.length + 1, ...(body || {}) }; state.aiModels.push(item); return item; }
-      return state.aiModels;
+      return state.aiModels.map((model) => ({
+        ...model,
+        is_default: model.id === state.aiPlatformSettings.default_chat_model_id,
+      }));
+    }
+    const aiModelCapabilities = path.match(/^\/admin\/ai-models\/(\d+)\/capabilities\/refresh$/);
+    if (aiModelCapabilities && verb === 'post') {
+      const item = state.aiModels.find((record) => record.id === Number(aiModelCapabilities[1]));
+      if (!item) throw error(404);
+      item.capability_status = 'ready';
+      item.capability_source = item.reasoning_control?.source === 'provider' ? 'provider' : 'official_catalog';
+      item.capability_updated_at = '2026-07-23T10:30:00Z';
+      item.reasoning_control = {
+        ...(item.reasoning_control || {}),
+        source: item.capability_source,
+        status: item.capability_status,
+        updated_at: item.capability_updated_at,
+      };
+      return { ...item };
     }
     const aiModel = path.match(/^\/admin\/ai-models\/(\d+)(?:\/test)?$/);
     if (aiModel) { const item = state.aiModels.find((record) => record.id === Number(aiModel[1])); if (!item) throw error(404); if (path.endsWith('/test')) return { message: '连接成功', reply: 'Mock OK' }; if (verb === 'delete') { state.aiModels.splice(state.aiModels.indexOf(item), 1); return {}; } if (verb === 'patch') Object.assign(item, body || {}); return item; }
@@ -1205,7 +1260,55 @@ export function createMockGateway() {
     if (path.includes('export') && options.responseType === 'blob') return new Blob(['DiskPulse Mock export']);
     return page(Array.from({ length: 5 }, (_, index) => ({ id: index + 1, name: `Mock 演示数据 ${index + 1}`, project_id: 1, status: 'healthy', capabilities: capabilities(account, 1) })));
   };
-  return { request, login: async (username, password) => { const value = await request('post', '/users/login', { username, password }); return { token: value.token }; }, streamAiMessage: async (_token, id, content) => [{ event: 'accepted', data: { turn_id: id, message: { id: 1, content } } }, { event: 'delta', data: { turn_id: id, text: 'Mock AI 已完成容量摘要。' } }, { event: 'completed', data: { turn_id: id, message: { id: 2, content: 'Mock AI 已完成容量摘要。' } } }] };
+  const streamAiMessage = async (_token, id, content, { reasoning = 'auto' } = {}) => {
+    const conversation = state.conversations.find((item) => item.id === Number(id));
+    const turnId = `mock-turn-${id}-${Date.now()}`;
+    const userMessage = {
+      id: Date.now(),
+      role: 'user',
+      content,
+      reasoning,
+    };
+    conversation?.messages.push(userMessage);
+    return [
+      {
+        event: 'accepted',
+        data: {
+          turn_id: turnId,
+          message: { id: userMessage.id + 1, role: 'assistant', content: '', status: 'streaming' },
+        },
+      },
+      {
+        event: 'user_message',
+        data: {
+          turn_id: turnId,
+          message: userMessage,
+          conversation: conversation || { id, model_id: state.aiPlatformSettings.default_chat_model_id },
+        },
+      },
+      { event: 'delta', data: { turn_id: turnId, text: 'Mock AI 已完成容量摘要。' } },
+      {
+        event: 'completed',
+        data: {
+          turn_id: turnId,
+          message: {
+            id: userMessage.id + 1,
+            role: 'assistant',
+            content: 'Mock AI 已完成容量摘要。',
+            status: 'succeeded',
+          },
+        },
+      },
+    ];
+  };
+  return {
+    request,
+    login: async (username, password) => {
+      const value = await request('post', '/users/login', { username, password });
+      return { token: value.token };
+    },
+    streamAiMessage,
+  };
 }
 
 let gateway;

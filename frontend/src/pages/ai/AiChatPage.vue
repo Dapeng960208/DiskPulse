@@ -20,6 +20,7 @@ const models = ref([]);
 const conversations = ref([]);
 const activeConversationId = ref(null);
 const selectedModelId = ref(null);
+const selectedReasoning = ref('auto');
 const messages = ref([]);
 const content = ref('');
 const failedContent = ref('');
@@ -33,14 +34,64 @@ let abortController = null;
 let activePrompt = '';
 
 const activeConversation = computed(() => conversations.value.find((item) => item.id === activeConversationId.value));
+const selectedModel = computed(() => models.value.find((item) => item.id === selectedModelId.value));
+const selectedReasoningControl = computed(() => selectedModel.value?.reasoning_control || {
+  kind: 'none',
+  options: [],
+  source: 'unknown',
+  status: 'unknown',
+});
+const reasoningLabels = {
+  auto: '自动',
+  none: '无',
+  minimal: '极简',
+  low: '轻度',
+  medium: '标准',
+  high: '深度',
+  xhigh: '超深度',
+  max: '最大',
+  on: '开启',
+  off: '关闭',
+};
+const reasoningOptions = computed(() => [
+  { value: 'auto', label: reasoningLabels.auto },
+  ...(selectedReasoningControl.value.options || [])
+    .filter((value) => value !== 'auto')
+    .map((value) => ({
+      value,
+      label: reasoningLabels[value] || value,
+    })),
+]);
+const reasoningAriaLabel = computed(() => {
+  if (selectedReasoningControl.value.kind === 'effort') return '推理强度';
+  if (selectedReasoningControl.value.kind === 'toggle') return '思考模式';
+  return '推理设置';
+});
+const reasoningSelectable = computed(() => (
+  selectedReasoningControl.value.kind !== 'none'
+  && selectedReasoningControl.value.status === 'ready'
+  && (selectedReasoningControl.value.options || []).some((value) => value !== 'auto')
+));
+const reasoningUnavailableText = computed(() => {
+  const control = selectedReasoningControl.value;
+  if (control.status === 'failed') return '推理能力获取失败，当前使用自动';
+  if (control.kind === 'none' && control.source === 'unknown') return '此模型的推理能力未知，当前使用自动';
+  if (control.kind === 'none') return '此模型不支持可调推理';
+  if (!reasoningSelectable.value) return '当前只能使用自动推理设置';
+  return '';
+});
 
 async function loadInitial() {
   try {
-    [models.value, conversations.value] = await Promise.all([
+    const [availableModels, conversationItems] = await Promise.all([
       aiApi.listModels(),
       aiApi.listConversations(),
     ]);
-    selectedModelId.value = models.value[0]?.id || null;
+    models.value = [...availableModels];
+    conversations.value = [...conversationItems];
+    selectedModelId.value = models.value.find((item) => item.is_default)?.id
+      || models.value[0]?.id
+      || null;
     if (conversations.value.length) await openConversation(conversations.value[0].id);
   } catch {
     ElMessage.error('AI 助手加载失败');
@@ -48,6 +99,12 @@ async function loadInitial() {
 }
 
 async function createConversation() {
+  if (activeConversationId.value) {
+    selectedModelId.value = models.value.find((item) => item.is_default)?.id
+      || models.value[0]?.id
+      || null;
+    selectedReasoning.value = 'auto';
+  }
   if (!selectedModelId.value) {
     ElMessage.warning('当前没有可用模型，请联系超级管理员');
     return null;
@@ -60,12 +117,47 @@ async function createConversation() {
   return conversation;
 }
 
+function startNewConversation() {
+  if (streaming.value) return;
+  activeConversationId.value = null;
+  selectedModelId.value = models.value.find((item) => item.is_default)?.id
+    || models.value[0]?.id
+    || null;
+  selectedReasoning.value = 'auto';
+  messages.value = [];
+  content.value = '';
+  failedContent.value = '';
+  streamStatus.value = '';
+  activeTurnId.value = null;
+  autoFollowMessages.value = true;
+}
+
+function isReasoningSupported(value) {
+  if (value === 'auto') return true;
+  return reasoningSelectable.value
+    && (selectedReasoningControl.value.options || []).includes(value);
+}
+
+function restoreConversationReasoning(conversationMessages) {
+  const latestUserMessage = [...conversationMessages]
+    .reverse()
+    .find((message) => message.role === 'user');
+  const persisted = latestUserMessage?.reasoning || 'auto';
+  if (isReasoningSupported(persisted)) {
+    selectedReasoning.value = persisted;
+    return;
+  }
+  selectedReasoning.value = 'auto';
+  ElMessage.warning('历史推理设置已失效，已切换为自动');
+}
+
 async function openConversation(id) {
   if (streaming.value) return;
   const conversation = await aiApi.getConversation(id);
   activeConversationId.value = id;
   selectedModelId.value = conversation.model_id;
   messages.value = (conversation.messages || []).map(restoreQuotaConfirmation);
+  restoreConversationReasoning(messages.value);
   autoFollowMessages.value = true;
   await scrollToBottom(true);
 }
@@ -97,7 +189,15 @@ async function removeConversation(id) {
   if (activeConversationId.value === id) {
     activeConversationId.value = null;
     messages.value = [];
+    selectedReasoning.value = 'auto';
+    selectedModelId.value = models.value.find((item) => item.is_default)?.id
+      || models.value[0]?.id
+      || null;
   }
+}
+
+function handleModelChange() {
+  selectedReasoning.value = 'auto';
 }
 
 function isNearMessageListBottom() {
@@ -332,6 +432,7 @@ async function send() {
     activePrompt = prompt;
     abortController = new AbortController();
     await aiApi.streamMessage(requestConversationId, prompt, {
+      reasoning: selectedReasoning.value,
       signal: abortController.signal,
       onEvent: (event) => applyEvent(requestConversationId, event),
     });
@@ -339,6 +440,19 @@ async function send() {
     const assistant = findAssistantMessage(activeTurnId.value);
     if (error.name === 'AbortError') {
       if (assistant && assistant.status === 'streaming') assistant.status = 'cancelled';
+    } else if (
+      error.status === 422
+      && String(error.message || '').includes('推理设置')
+    ) {
+      failedContent.value = prompt;
+      content.value = prompt;
+      selectedReasoning.value = 'auto';
+      try {
+        models.value = [...await aiApi.listModels()];
+      } catch {
+        // Keep the existing model list; the retry still uses the safe automatic setting.
+      }
+      ElMessage.warning('模型能力已变化，请重试');
     } else {
       failedContent.value = prompt;
       if (assistant) {
@@ -396,7 +510,7 @@ onMounted(loadInitial);
           plain
           size="small"
           aria-label="新建对话"
-          @click="createConversation"><i class="i-ri-add-line"></i><span>新建</span></ElButton>
+          @click="startNewConversation"><i class="i-ri-add-line"></i><span>新建</span></ElButton>
       </div>
       <ElScrollbar class="conversation-list">
         <button
@@ -572,13 +686,31 @@ onMounted(loadInitial);
             class="composer__model"
             aria-label="选择模型"
             placeholder="选择模型"
-            :disabled="streaming">
+            :disabled="streaming || Boolean(activeConversationId)"
+            @change="handleModelChange">
             <ElOption
               v-for="model in models"
               :key="model.id"
               :label="model.name"
               :value="model.id" />
           </ElSelect>
+          <ElSelect
+            v-model="selectedReasoning"
+            class="composer__reasoning"
+            :aria-label="reasoningAriaLabel"
+            :placeholder="reasoningAriaLabel"
+            :disabled="streaming || !reasoningSelectable">
+            <ElOption
+              v-for="option in reasoningOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value" />
+          </ElSelect>
+          <span
+            v-if="reasoningUnavailableText"
+            class="composer__reasoning-help">
+            {{ reasoningUnavailableText }}
+          </span>
           <ElButton
             v-if="failedContent && !streaming"
             class="composer__retry"
@@ -669,7 +801,10 @@ onMounted(loadInitial);
 .composer__field :deep(.el-textarea__inner:focus) { box-shadow: 0 0 0 2px var(--el-color-primary-light-7); }
 .composer__shortcut { position: absolute; bottom: 12px; left: 16px; color: var(--text-tertiary); font-size: 12px; pointer-events: none; }
 .composer__model { position: absolute; right: 56px; bottom: 10px; width: 132px; }
-.composer__model :deep(.el-select__wrapper) { min-height: 36px; border-radius: var(--radius-full); background: var(--bg-secondary); box-shadow: none; }
+.composer__reasoning { position: absolute; right: 196px; bottom: 10px; width: 112px; }
+.composer__model :deep(.el-select__wrapper),
+.composer__reasoning :deep(.el-select__wrapper) { min-height: 36px; border-radius: var(--radius-full); background: var(--bg-secondary); box-shadow: none; }
+.composer__reasoning-help { position: absolute; right: 196px; bottom: 50px; max-width: 240px; color: var(--text-tertiary); font-size: 12px; text-align: right; }
 .composer__send, .composer__retry { position: absolute; right: 10px; bottom: 10px; width: 36px; height: 36px; padding: 0; border: 0; color: #fff; background: var(--text-primary); box-shadow: none; }
 .composer__send:hover, .composer__retry:hover { color: #fff; background: var(--text-secondary); }
 .composer__send:disabled { color: var(--text-disabled); background: var(--bg-tertiary); }
@@ -681,4 +816,5 @@ onMounted(loadInitial);
 .markdown-body :deep(code) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .markdown-body :deep(a) { color: var(--primary-color); }
 @media (max-width: 860px) { .ai-workspace { grid-template-columns: 1fr; } .conversation-panel { max-height: 220px; border-right: 0; border-bottom: 1px solid var(--border-color); } .chat-panel { min-height: 620px; } }
+@media (max-width: 560px) { .composer__reasoning { right: 56px; bottom: 52px; } .composer__reasoning-help { right: 176px; bottom: 57px; max-width: calc(100% - 196px); } }
 </style>

@@ -946,6 +946,10 @@ class AIConfig(Base):
     temperature = Column(Numeric(3, 2), nullable=False, default=0.3)
     max_tokens = Column(Integer, nullable=False, default=2048)
     system_prompt = Column(Text, nullable=True)
+    capability_cache = Column(Text, nullable=False, default="{}")
+    capability_status = Column(String(20), nullable=False, default="unknown")
+    capability_error = Column(Text, nullable=True)
+    capability_updated_at = Column(DateTime, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
@@ -983,10 +987,28 @@ class AIMessage(Base):
     )
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
+    reasoning = Column(String(20), nullable=False, default="auto")
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
 
     conversation = relationship("AIConversation", back_populates="messages")
+
+
+class AIPlatformSetting(Base):
+    __tablename__ = "ai_platform_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+    default_chat_model_id = Column(
+        Integer,
+        ForeignKey("ai_configs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+    default_chat_model = relationship("AIConfig", foreign_keys=[default_chat_model_id])
 
 
 class AIAuditLog(Base):

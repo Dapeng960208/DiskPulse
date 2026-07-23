@@ -1,19 +1,36 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
+import json
 
 from fastapi import HTTPException, status
+from fastapi import FastAPI
+import httpx
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from crud import aiCrud
-from models import AIConfig
+from models import AIConfig, AIPlatformSetting
 from schemas.aiSchema import AIModelCreate, AIModelPatch
-from services.ai_client import AIClientError, chat_completion
+from services.ai_client import AIClientError, _base_url, _headers, _timeout, chat_completion
+from services.ai_reasoning_service import (
+    control_from_model,
+    failed_reasoning_control,
+    resolve_reasoning_control,
+)
 from services.audit_service import AuditContext, append_audit_event
 from services.ai_security import decrypt_secret, encrypt_secret, mask_secret
 
 
-def serialize_model(model: AIConfig) -> dict:
+def _platform_settings(db: Session) -> AIPlatformSetting | None:
+    return db.get(AIPlatformSetting, 1)
+
+
+def _default_model_id(db: Session) -> int | None:
+    settings = _platform_settings(db)
+    return settings.default_chat_model_id if settings is not None else None
+
+
+def serialize_model(model: AIConfig, *, is_default: bool = False) -> dict:
     secret = decrypt_secret(model.api_key_encrypted)
     return {
         "id": model.id,
@@ -29,6 +46,11 @@ def serialize_model(model: AIConfig) -> dict:
         "temperature": float(model.temperature),
         "max_tokens": model.max_tokens,
         "system_prompt": model.system_prompt,
+        "capability_status": model.capability_status,
+        "capability_error": model.capability_error,
+        "capability_updated_at": model.capability_updated_at,
+        "reasoning_control": control_from_model(model),
+        "is_default": is_default,
         "created_by": model.created_by,
         "updated_by": model.updated_by,
         "created_at": model.created_at,
@@ -37,7 +59,129 @@ def serialize_model(model: AIConfig) -> dict:
 
 
 def list_models(db: Session, *, available_only: bool = False) -> list[dict]:
-    return [serialize_model(item) for item in aiCrud.list_models(db, available_only=available_only)]
+    default_model_id = _default_model_id(db)
+    return [
+        serialize_model(item, is_default=item.id == default_model_id)
+        for item in aiCrud.list_models(db, available_only=available_only)
+    ]
+
+
+def get_platform_settings(db: Session) -> dict:
+    settings = _platform_settings(db)
+    return {
+        "default_chat_model_id": (
+            settings.default_chat_model_id if settings is not None else None
+        ),
+        "updated_by": settings.updated_by if settings is not None else None,
+        "created_at": settings.created_at if settings is not None else None,
+        "updated_at": settings.updated_at if settings is not None else None,
+    }
+
+
+def update_platform_settings(
+    db: Session,
+    default_chat_model_id: int | None,
+    actor_id: int,
+) -> dict:
+    if default_chat_model_id is not None:
+        model = aiCrud.get_model(db, default_chat_model_id)
+        if model is None or not model.enabled or not model.enable_chat:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="默认聊天模型必须已启用且允许聊天",
+            )
+    settings = _platform_settings(db)
+    if settings is None:
+        settings = AIPlatformSetting(id=1)
+        db.add(settings)
+    settings.default_chat_model_id = default_chat_model_id
+    settings.updated_by = actor_id
+    settings.updated_at = datetime.now()
+    db.commit()
+    db.refresh(settings)
+    return get_platform_settings(db)
+
+
+def get_default_chat_model(db: Session) -> AIConfig | None:
+    model_id = _default_model_id(db)
+    if model_id is None:
+        return None
+    model = aiCrud.get_model(db, model_id)
+    if model is None or not model.enabled or not model.enable_chat:
+        return None
+    return model
+
+
+def _ensure_not_default(db: Session, model_id: int) -> None:
+    if _default_model_id(db) == model_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="请先更换默认聊天模型",
+        )
+
+
+def discover_model_capabilities(model: AIConfig) -> dict:
+    provider_metadata = None
+    if model.provider == "openrouter":
+        response = httpx.get(
+            f"{_base_url(model)}/models",
+            headers=_headers(model),
+            timeout=min(_timeout(), 5),
+        )
+        response.raise_for_status()
+        rows = response.json().get("data") or []
+        provider_metadata = next(
+            (item for item in rows if str(item.get("id")) == model.model),
+            None,
+        )
+    elif model.provider == "claude":
+        response = httpx.get(
+            f"{_base_url(model)}/v1/models/{model.model}",
+            headers=_headers(model),
+            timeout=min(_timeout(), 5),
+        )
+        response.raise_for_status()
+        provider_metadata = response.json()
+    return resolve_reasoning_control(
+        model.provider,
+        model.model,
+        provider_metadata=provider_metadata,
+    )
+
+
+def refresh_model_capabilities(db: Session, model: AIConfig) -> dict:
+    try:
+        control = discover_model_capabilities(model)
+        model.capability_cache = json.dumps(control, ensure_ascii=False)
+        model.capability_status = control["status"]
+        model.capability_error = None
+    except Exception as error:
+        control = failed_reasoning_control(error)
+        model.capability_cache = json.dumps(control, ensure_ascii=False)
+        model.capability_status = "failed"
+        model.capability_error = "模型能力获取失败"
+    model.capability_updated_at = datetime.now()
+    db.commit()
+    db.refresh(model)
+    return serialize_model(model, is_default=_default_model_id(db) == model.id)
+
+
+def refresh_model_capabilities_by_id(db: Session, model_id: int) -> dict:
+    return refresh_model_capabilities(db, _get_or_404(db, model_id))
+
+
+def _prime_official_capability(model: AIConfig) -> None:
+    control = resolve_reasoning_control(model.provider, model.model)
+    model.capability_cache = json.dumps(control, ensure_ascii=False)
+    model.capability_status = control["status"]
+    model.capability_error = None
+    model.capability_updated_at = datetime.now()
+
+
+def _refresh_dynamic_capability(db: Session, model: AIConfig) -> dict:
+    if model.provider in {"openrouter", "claude"}:
+        return refresh_model_capabilities(db, model)
+    return serialize_model(model, is_default=_default_model_id(db) == model.id)
 
 
 def _get_or_404(db: Session, model_id: int) -> AIConfig:
@@ -111,6 +255,7 @@ def create_model(
             created_by=actor_id,
             updated_by=actor_id,
         )
+        _prime_official_capability(model)
         aiCrud.add_model(db, model)
         _append_model_audit(
             db,
@@ -139,7 +284,7 @@ def create_model(
             reason_code="ai_model_create_failed",
         )
         raise
-    return serialize_model(model)
+    return _refresh_dynamic_capability(db, model)
 
 
 def update_model(
@@ -154,12 +299,20 @@ def update_model(
     try:
         model = _get_or_404(db, model_id)
         values = payload.model_dump(exclude_unset=True, exclude={"api_key"})
+        disabling_default = (
+            ("enabled" in values and not values["enabled"])
+            or ("enable_chat" in values and not values["enable_chat"])
+        )
+        if disabling_default:
+            _ensure_not_default(db, model_id)
         for key, value in values.items():
             setattr(model, key, value)
         if "api_key" in payload.model_fields_set:
             model.api_key_encrypted = encrypt_secret(payload.api_key or "")
         model.updated_by = actor_id
         model.updated_at = datetime.now()
+        if {"provider", "base_url", "model", "api_key"} & payload.model_fields_set:
+            _prime_official_capability(model)
         _append_model_audit(
             db,
             audit_context=audit_context,
@@ -196,7 +349,9 @@ def update_model(
             reason_code="ai_model_update_failed",
         )
         raise
-    return serialize_model(model)
+    if {"provider", "base_url", "model", "api_key"} & payload.model_fields_set:
+        return _refresh_dynamic_capability(db, model)
+    return serialize_model(model, is_default=_default_model_id(db) == model.id)
 
 
 def delete_model(
@@ -208,6 +363,7 @@ def delete_model(
     action = "ai.model.delete"
     try:
         model = _get_or_404(db, model_id)
+        _ensure_not_default(db, model_id)
         db.delete(model)
         _append_model_audit(
             db,
@@ -255,7 +411,23 @@ def test_model(
     action = "ai.model.test"
     try:
         model = _get_or_404(db, model_id)
-        result = chat_completion(model, [{"role": "user", "content": "请回复 OK"}])
+        messages = [{"role": "user", "content": "请回复 OK"}]
+        if model.provider == "claude_code":
+            from services.claude_code_adapter import claude_code_completion_stream
+
+            events = list(
+                claude_code_completion_stream(
+                    model,
+                    messages,
+                    app=FastAPI(),
+                    registry={},
+                    current_user=None,
+                    user_id=None,
+                )
+            )
+            result_text = events[-1].text
+        else:
+            result_text = chat_completion(model, messages).text
     except AIClientError as error:
         _record_model_failure(
             db,
@@ -291,4 +463,5 @@ def test_model(
         model_id=model.id,
     )
     db.commit()
-    return {"ok": True, "message": "连接成功", "reply": result.text[:500]}
+    _refresh_dynamic_capability(db, model)
+    return {"ok": True, "message": "连接成功", "reply": result_text[:500]}
