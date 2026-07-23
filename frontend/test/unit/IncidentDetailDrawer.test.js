@@ -308,9 +308,12 @@ describe('IncidentDetailDrawer', () => {
     expect(wrapper.text()).not.toContain('追溯编号');
     expect(wrapper.find('details').attributes('open')).toBeUndefined();
     expect(wrapper.find('details').text()).toContain('技术关联信息');
-    expect(wrapper.find('details').text()).toContain('关联对象');
-    expect(wrapper.find('details').text()).toContain('证据范围');
-    expect(wrapper.find('details').text()).toContain('原始关联标识');
+    expect(wrapper.find('details').text()).toContain('证据标识');
+    expect(wrapper.find('details').text()).toContain('标识作用');
+    expect(wrapper.find('details').text()).toContain('回查方式');
+    expect(wrapper.find('details').text()).not.toContain('关联对象');
+    expect(wrapper.find('details').text()).not.toContain('证据范围');
+    expect(wrapper.find('details').text()).not.toContain('证据类型');
     expect(wrapper.findAll('.incident-detail__evidence-item h5').map((item) => item.text())).toEqual([
       '性能采集覆盖不足',
       '性能采集已过期',
