@@ -167,6 +167,26 @@ def test_agent_assessment_rejects_status_skips_and_accepts_a_single_next_step():
         )
 
 
+def test_low_confidence_downgrades_ai_urgency_without_changing_the_incident_severity():
+    from services.incidentAiAgentService import (
+        IncidentAiAssessment,
+        calibrated_ai_urgency,
+    )
+
+    assessment = IncidentAiAssessment(
+        classification="actionable",
+        urgency="critical",
+        confidence="low",
+        summary="证据只覆盖单个短窗口。",
+        evidence_basis=["缺少独立交叉证据"],
+        investigation_steps=["继续核查"],
+        resolution_steps=["确认后再处置"],
+    )
+
+    assert calibrated_ai_urgency(assessment) == ("high", True)
+    assert assessment.urgency == "critical"
+
+
 def test_incident_ai_settings_accept_enabled_models_in_explicit_priority_order(db_session):
     import models
     from services.incidentAiAgentService import update_settings
