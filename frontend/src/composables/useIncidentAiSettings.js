@@ -29,7 +29,7 @@ export function useIncidentAiSettings() {
     aiSettingsLoading.value = true;
     aiSettingsError.value = '';
     try {
-      const result = await incidentApi.fetchIncidentAiSettings();
+      const result = await incidentApi.fetchAiSettings();
       Object.assign(aiSettings, result);
     } catch (err) {
       aiSettingsError.value = err.message || '加载 AI 设置失败';
@@ -43,7 +43,7 @@ export function useIncidentAiSettings() {
     aiSettingsSaving.value = true;
     aiSettingsError.value = '';
     try {
-      await incidentApi.updateIncidentAiSettings({
+      await incidentApi.updateAiSettings({
         enabled: aiSettings.enabled,
         model_ids: aiSettings.model_ids,
         iops_absolute_floor: aiSettings.iops_absolute_floor,
