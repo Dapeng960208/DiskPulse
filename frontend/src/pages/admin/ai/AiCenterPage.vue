@@ -14,11 +14,9 @@ import {
   ElMessage,
   ElMessageBox,
   ElOption,
-  ElPagination,
   ElSelect,
   ElSwitch,
   ElTabPane,
-  ElTable,
   ElTableColumn,
   ElTabs,
   ElTag,
@@ -26,6 +24,8 @@ import {
 import aiApi from '@/api/ai-api';
 import { useDialog } from '@/composables/dialog';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
+import DataTable from '@/components/data/DataTable.vue';
+import QueryForm from '@/components/form/QueryForm.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -81,6 +81,22 @@ async function loadAudits() {
   } finally {
     loading.value = false;
   }
+}
+
+function queryAudits() {
+  auditQuery.page = 1;
+  loadAudits();
+}
+
+function resetAuditFilters() {
+  auditQuery.status = '';
+  queryAudits();
+}
+
+function updateAuditPagination(next) {
+  auditQuery.page = next.page;
+  auditQuery.size = next.pageSize;
+  loadAudits();
 }
 
 function resetForm() {
@@ -172,9 +188,7 @@ onMounted(async () => {
       <ElTabPane
         label="模型管理"
         name="models">
-        <ElTable
-          :data="models"
-          stripe>
+        <DataTable :data="models">
           <ElTableColumn
             prop="name"
             label="名称"
@@ -234,36 +248,45 @@ onMounted(async () => {
               </div>
             </template>
           </ElTableColumn>
-        </ElTable>
+        </DataTable>
       </ElTabPane>
 
       <ElTabPane
         label="审计"
         name="audit">
-        <div class="toolbar">
-          <ElSelect
-            v-model="auditQuery.status"
-            clearable
-            placeholder="全部状态"
-            @change="loadAudits">
-            <ElOption
-              label="成功"
-              value="succeeded" /><ElOption
-                label="失败"
-                value="failed" />
-            <ElOption
-              label="已取消"
-              value="cancelled" /><ElOption
-                label="执行中"
-                value="running" />
-          </ElSelect>
-          <ElButton @click="loadAudits">刷新</ElButton>
-        </div>
-        <ElTable
-          v-loading="loading"
+        <QueryForm
+          @query="queryAudits"
+          @reset="resetAuditFilters">
+          <ElFormItem label="状态">
+            <ElSelect
+              v-model="auditQuery.status"
+              clearable
+              placeholder="全部状态">
+              <ElOption
+                label="成功"
+                value="succeeded" /><ElOption
+                  label="失败"
+                  value="failed" />
+              <ElOption
+                label="已取消"
+                value="cancelled" /><ElOption
+                  label="执行中"
+                  value="running" />
+            </ElSelect>
+          </ElFormItem>
+        </QueryForm>
+        <DataTable
           :data="audits"
-          stripe
-          @row-click="openAudit">
+          :loading="loading"
+          :pagination="{
+            page: auditQuery.page,
+            pageSize: auditQuery.size,
+            total,
+            pageSizes: [20, 50, 100],
+            hideOnSinglePage: true,
+            showJumper: true,
+          }"
+          @update:pagination="updateAuditPagination">
           <ElTableColumn
             prop="id"
             label="ID"
@@ -293,13 +316,20 @@ onMounted(async () => {
             label="错误摘要"
             min-width="220"
             show-overflow-tooltip />
-        </ElTable>
-        <ElPagination
-          v-model:current-page="auditQuery.page"
-          :page-size="auditQuery.size"
-          :total="total"
-          layout="prev, pager, next, total"
-          @current-change="loadAudits" />
+          <ElTableColumn
+            label="操作"
+            width="100"
+            align="right"
+            fixed="right">
+            <template #default="{ row }">
+              <div class="list-row-actions">
+                <TableActionButton
+                  action="detail"
+                  @click="openAudit(row)">查看</TableActionButton>
+              </div>
+            </template>
+          </ElTableColumn>
+        </DataTable>
       </ElTabPane>
     </ElTabs>
 
@@ -373,9 +403,3 @@ onMounted(async () => {
     </ElDialog>
   </section>
 </template>
-
-<style scoped lang="scss">
-.toolbar { display: flex; justify-content: flex-end; gap: 10px; margin: 8px 0 14px; }
-.toolbar .el-select { width: 150px; }
-.el-pagination { justify-content: flex-end; margin-top: 16px; }
-</style>

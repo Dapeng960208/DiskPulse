@@ -1,5 +1,5 @@
 import { flushPromises, shallowMount } from '@vue/test-utils';
-import { defineComponent, h, toRaw } from 'vue';
+import { toRaw } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -42,14 +42,12 @@ vi.mock('@/stores/current-user', () => ({
 const { default: AiChatPage } = await import('@/pages/ai/AiChatPage.vue');
 const { default: AiCenterPage } = await import('@/pages/admin/ai/AiCenterPage.vue');
 
-const passthrough = (name) => defineComponent({
+const passthrough = (name) => ({
   name,
-  setup(_, { slots }) {
-    return () => h('div', slots.default?.());
-  },
+  template: '<div><slot /></div>',
 });
 
-const DataTable = defineComponent({
+const DataTable = {
   name: 'DataTable',
   props: {
     data: { type: Array, default: () => [] },
@@ -57,18 +55,14 @@ const DataTable = defineComponent({
     pagination: { type: Object, default: undefined },
   },
   emits: ['update:pagination'],
-  setup(_, { slots }) {
-    return () => h('div', slots.default?.());
-  },
-});
+  template: '<div><slot /></div>',
+};
 
-const QueryForm = defineComponent({
+const QueryForm = {
   name: 'QueryForm',
   emits: ['query', 'reset'],
-  setup(_, { slots }) {
-    return () => h('form', slots.default?.());
-  },
-});
+  template: '<form><slot /></form>',
+};
 
 const mountAiCenter = () => shallowMount(AiCenterPage, {
   global: {
