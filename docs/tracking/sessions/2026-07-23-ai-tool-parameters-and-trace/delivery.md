@@ -9,11 +9,17 @@
 
 ## 当前状态
 
-进行中：已完成失败测试、最小实现和功能事实文档更新，待完成聚焦验证与交付检查。
+已完成：动态工具依赖参数、健康分析默认时间范围、脱敏执行轨迹、失败原因展示和先澄清后执行策略均已实现。
 
 ## 验证
 
-待本会话结束时填写实际命令与结果。
+- RED：`cd backend; ..\.venv\Scripts\python.exe -m pytest test\test_ai_platform.py::test_cluster_analysis_tools_are_super_admin_only_at_registration_and_execution test\test_storage_health_analytics.py::test_storage_health_endpoint_defaults_to_the_previous_24_hours test\test_ai_services.py::test_tool_trace_keeps_only_safe_failure_reasons_visible -q`，3 项按预期失败。
+- `cd backend; ..\.venv\Scripts\python.exe -m pytest test\test_ai_platform.py test\test_ai_services.py -q`，56 passed。
+- `cd backend; ..\.venv\Scripts\python.exe -m pytest test\test_storage_health_analytics.py -q`，98 passed。
+- `cd backend; ..\.venv\Scripts\python.exe -m pytest test\test_questdb_time_contract_guard.py test\test_datetime_utils.py -q`，15 passed。
+- `cd frontend; pnpm exec vitest run test/unit/ai-pages.test.js --coverage.enabled=false`，26 passed。
+- `cd frontend; pnpm exec eslint src/pages/ai/AiChatPage.vue test/unit/ai-pages.test.js`，通过。
+- `git diff --check`，通过。
 
 ## 风险与未验证范围
 

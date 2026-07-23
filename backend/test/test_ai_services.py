@@ -676,7 +676,7 @@ def test_tool_registry_provider_shapes_and_failure_responses():
         "ok": True,
         "data": {"items": [1, 2], "total": 2},
     }
-    assert execute_tool(app=app, registry=registry, tool_name="error_tool", arguments={})["error"] == "不可用"
+    assert execute_tool(app=app, registry=registry, tool_name="error_tool", arguments={})["error"] == "工具请求失败（HTTP 418）"
     assert execute_tool(app=app, registry=registry, tool_name="text_tool", arguments={})["error"] == "工具返回了非 JSON 响应"
     assert _unwrap([1]) == [1]
     assert _unwrap({"data": {"value": 1}}) == {"value": 1}
