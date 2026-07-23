@@ -27,6 +27,7 @@ from utils.datetime_utils import to_utc_z
 
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_QUESTDB_RESERVED_COLUMNS = frozenset({"limit"})
 _LEGACY_OFFSET = timedelta(hours=8)
 
 
@@ -163,6 +164,11 @@ def _identifier(value: str) -> str:
     return value
 
 
+def _column_identifier(value: str) -> str:
+    value = _identifier(value)
+    return f'"{value}"' if value.lower() in _QUESTDB_RESERVED_COLUMNS else value
+
+
 def build_repair_table_names(table_name: str, suffix: str) -> tuple[str, str]:
     table_name = _identifier(table_name)
     if not suffix:
@@ -176,7 +182,8 @@ def build_repair_table_names(table_name: str, suffix: str) -> tuple[str, str]:
 def build_create_statement(table: QuestDBTable, target_name: str) -> str:
     target_name = _identifier(target_name)
     columns = ", ".join(
-        f"{_identifier(name)} {column_type}" for name, column_type in table.columns
+        f"{_column_identifier(name)} {column_type}"
+        for name, column_type in table.columns
     )
     ttl = f" TTL {table.ttl}" if table.ttl else ""
     return (
@@ -194,8 +201,8 @@ def build_copy_statement(
 ) -> str:
     source_name = _identifier(source_name)
     target_name = _identifier(target_name)
-    column_names = [_identifier(name) for name, _type in table.columns]
-    timestamp_column = _identifier(table.timestamp_column)
+    column_names = [_column_identifier(name) for name, _type in table.columns]
+    timestamp_column = _column_identifier(table.timestamp_column)
     projection = [
         (
             f"dateadd('h', -8, {name}) AS {name}"
