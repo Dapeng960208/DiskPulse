@@ -54,6 +54,25 @@ def upgrade() -> None:
     )
     op.execute(
         """
+        WITH performance_incident_ids AS (
+            SELECT DISTINCT evidence.incident_id
+            FROM incident_evidence AS evidence
+            JOIN anomaly_observations AS anomaly
+              ON evidence.source = 'anomaly_observation'
+             AND evidence.source_ref = 'anomaly:' || anomaly.id::text
+             AND anomaly.source = 'questdb_performance'
+        )
+        UPDATE incidents AS incident
+        SET correlation_bucket_at =
+                TIMESTAMPTZ '1900-01-01 00:00:00+00'
+                + incident.id * interval '1 microsecond'
+        FROM performance_incident_ids AS targets
+        WHERE incident.id = targets.incident_id
+          AND incident.category = 'performance_contention'
+        """
+    )
+    op.execute(
+        """
         WITH performance_bounds AS (
             SELECT
                 evidence.incident_id,
