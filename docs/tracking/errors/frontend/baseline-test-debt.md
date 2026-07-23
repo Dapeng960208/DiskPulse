@@ -11,10 +11,11 @@
 ## 备注
 
 - 分类：`frontend`
-- 出现次数：4
+- 出现次数：5
 - 首次出现：2026-07-20 导航信息架构会话
 - 最近出现：2026-07-20 近三日代码审查修复会话
 - 出现记录：`sessions/2026-07-20-navigation-information-architecture/errors.md`
 - 出现记录：`sessions/2026-07-20-project-usage-reader-default/errors.md`
 - 出现记录：`sessions/2026-07-20-realtime-layout-audit/errors.md`；`detail-capacity-prediction-navigation.test.js` 在收集阶段经由 `AppHeader.vue -> users-api.js` 报 `CrudApi` 基类为 `undefined`，与本次实时布局变更无关。
 - 出现记录：`sessions/2026-07-20-recent-code-review-remediation/errors.md`；本次统一修复过时 stub、Pinia 和认证 mock 后，全量测试恢复通过。
+- 出现记录：`sessions/2026-07-23-system-event-association-guidance/errors.md`；覆盖率全量门禁再次出现列表权限源码契约、页面矩阵数量契约等既有失败，并在并行收集阶段再次出现 `CrudApi` 基类为 `undefined`，与本次系统事件关联提示改动无关。
