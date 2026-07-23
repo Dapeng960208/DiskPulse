@@ -44,6 +44,10 @@ const {
   closeAiSettings,
 } = useIncidentAiSettings();
 
+function updateAiSettings(nextSettings) {
+  Object.assign(aiSettings, nextSettings);
+}
+
 function formatLocalDateTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
@@ -306,6 +310,7 @@ onMounted(query);
       :error="aiSettingsError"
       :settings="aiSettings"
       :selected-models="selectedAiModels"
+      @update:settings="updateAiSettings"
       @save="saveAiSettings"
       @close="closeAiSettings"
     />
