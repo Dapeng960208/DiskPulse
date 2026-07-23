@@ -820,15 +820,15 @@ onBeforeMount(() => {
                 @update:pagination="updateSystemEventPagination">
                 <ElTableColumn
                   label="来源"
-                  class-name="mobile-hidden tablet-hidden"
-                  label-class-name="mobile-hidden tablet-hidden"
+                  min-width="50"
                   prop="source" />
                 <ElTableColumn
                   label="级别"
+                  min-width="50"
                   prop="severity" />
                 <ElTableColumn
                   label="事件代码与含义"
-                  min-width="250"
+                  min-width="100"
                   show-overflow-tooltip>
                   <template #default="{ row }">
                     <strong>{{ vendorEventTitle(row) }}</strong>
@@ -837,7 +837,7 @@ onBeforeMount(() => {
                 </ElTableColumn>
                 <ElTableColumn
                   label="关联类型"
-                  min-width="120">
+                  min-width="50">
                   <template #default="{ row }">
                     <ElTooltip
                       placement="top"
@@ -859,8 +859,7 @@ onBeforeMount(() => {
                 </ElTableColumn>
                 <ElTableColumn
                   label="事件对象"
-                  class-name="mobile-hidden tablet-hidden"
-                  label-class-name="mobile-hidden tablet-hidden"
+                  min-width="50"
                   prop="object_name">
                   <template #default="{ row }">
                     <span :title="row.object_id && row.object_id !== row.object_name ? `原始标识：${row.object_id}` : undefined">
@@ -870,12 +869,12 @@ onBeforeMount(() => {
                 </ElTableColumn>
                 <ElTableColumn
                   label="内容"
-                  class-name="mobile-hidden tablet-hidden"
-                  label-class-name="mobile-hidden tablet-hidden"
+                  min-width="300"
                   prop="description"
                   show-overflow-tooltip />
                 <ElTableColumn
                   label="发生时间"
+                  min-width="50"
                   prop="occurred_at" />
                 <ElTableColumn
                   label="操作"
