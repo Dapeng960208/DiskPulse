@@ -177,6 +177,32 @@ function evidenceLogExcerpt(evidence) {
   return evidence.presentation?.log_excerpt || null;
 }
 
+function formatMetricValue(value, unit) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '-';
+  const formatted = new Intl.NumberFormat('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(number);
+  return unit ? `${formatted} ${unit}` : formatted;
+}
+
+function formatMetricRange(lower, upper, unit) {
+  const lowerValue = formatMetricValue(lower, '');
+  const upperValue = formatMetricValue(upper, '');
+  return `${lowerValue}–${upperValue}${unit ? ` ${unit}` : ''}`;
+}
+
+function evidenceReferencePurpose(evidence) {
+  return evidence.presentation?.reference_purpose
+    || '该标识用于把事件证据与原始事实精确关联，支持去重、审计和回放；它本身不代表故障结论。';
+}
+
+function evidenceLookupHint(evidence) {
+  return evidence.presentation?.lookup_hint
+    || `复制标识 ${evidence.presentation?.technical_ref || evidence.source_ref || '-'}，在事件详情接口返回的 evidence.source_ref 中精确匹配；再按标识前缀回查原始记录。`;
+}
+
 function evidenceKindLabel(evidence) {
   const associationType = evidence.presentation?.association_type
     || evidence.evidence_summary?.association_type;
@@ -461,6 +487,12 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
                 <div><dt>关联内容</dt><dd>{{ evidence.presentation.summary }}</dd></div>
                 <div><dt>影响范围</dt><dd>{{ current.display_name || '当前对象' }} · {{ evidence.presentation.scope_label }}</dd></div>
                 <div><dt>发现时间</dt><dd>{{ formatLocalDateTime(evidence.observed_at) }}</dd></div>
+                <div v-if="evidence.presentation.metric_label"><dt>性能指标</dt><dd>{{ evidence.presentation.metric_label }}</dd></div>
+                <div v-if="evidence.presentation.window_start && evidence.presentation.window_end"><dt>异常时间范围</dt><dd>{{ formatLocalDateTime(evidence.presentation.window_start) }} 至 {{ formatLocalDateTime(evidence.presentation.window_end) }}</dd></div>
+                <div v-if="evidence.presentation.observed_value != null"><dt>窗口末点 P95</dt><dd>{{ formatMetricValue(evidence.presentation.observed_value, evidence.presentation.metric_unit) }}</dd></div>
+                <div v-if="evidence.presentation.baseline_value != null"><dt>历史基线</dt><dd>{{ formatMetricValue(evidence.presentation.baseline_value, evidence.presentation.metric_unit) }}</dd></div>
+                <div v-if="evidence.presentation.reference_lower != null && evidence.presentation.reference_upper != null"><dt>正常参考范围</dt><dd>{{ formatMetricRange(evidence.presentation.reference_lower, evidence.presentation.reference_upper, evidence.presentation.metric_unit) }}</dd></div>
+                <div v-if="evidence.presentation.robust_z_score != null"><dt>偏离程度</dt><dd>鲁棒 Z 分数 {{ Number(evidence.presentation.robust_z_score).toFixed(2) }}</dd></div>
                 <div v-if="evidenceLogExcerpt(evidence)"><dt>日志报错</dt><dd><pre>{{ evidenceLogExcerpt(evidence) }}</pre></dd></div>
               </dl>
               <ul
@@ -477,10 +509,9 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
               <details>
                 <summary>技术关联信息</summary>
                 <dl class="incident-detail__technical-info">
-                  <div><dt>关联对象</dt><dd>{{ current.display_name || '当前对象' }}</dd></div>
-                  <div><dt>证据范围</dt><dd>{{ evidence.presentation.scope_label || '关联记录' }}</dd></div>
-                  <div><dt>证据类型</dt><dd>{{ evidence.presentation.title }}</dd></div>
-                  <div><dt>原始关联标识</dt><dd><code>{{ evidence.presentation.technical_ref }}</code></dd></div>
+                  <div><dt>证据标识</dt><dd><code>{{ evidence.presentation.technical_ref }}</code></dd></div>
+                  <div><dt>标识作用</dt><dd>{{ evidenceReferencePurpose(evidence) }}</dd></div>
+                  <div><dt>回查方式</dt><dd>{{ evidenceLookupHint(evidence) }}</dd></div>
                 </dl>
               </details>
             </article>

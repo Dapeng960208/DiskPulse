@@ -101,6 +101,18 @@ class IncidentEvidencePresentationOut(BaseModel):
     event_code: str | None = None
     log_excerpt: str | None = None
     detail_available: bool = False
+    metric_key: str | None = None
+    metric_label: str | None = None
+    metric_unit: str | None = None
+    window_start: datetime | None = None
+    window_end: datetime | None = None
+    observed_value: float | None = None
+    baseline_value: float | None = None
+    reference_lower: float | None = None
+    reference_upper: float | None = None
+    robust_z_score: float | None = None
+    reference_purpose: str
+    lookup_hint: str
 
 
 class DataGapDetailOut(BaseModel):

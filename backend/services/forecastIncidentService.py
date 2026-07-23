@@ -522,6 +522,21 @@ _EVIDENCE_PRESENTATIONS = {
     "repeated_fault": ("重复故障事件", "同一故障指纹在短时间内重复出现。"),
     "collection_error": ("采集异常", "监控采集任务未能成功完成。"),
 }
+_PERFORMANCE_METRIC_PRESENTATIONS = {
+    "latency": ("P95 总延迟", "ms"),
+    "iops": ("P95 IOPS", "IOPS"),
+    "throughput": ("P95 吞吐量", "B/s"),
+}
+_ANOMALY_Z_THRESHOLD = 3.5
+_NORMAL_DISTRIBUTION_MAD_SCALE = 0.67448975
+_REFERENCE_PURPOSE = (
+    "该标识用于把事件证据与原始事实精确关联，支持去重、审计和回放；"
+    "它本身不代表故障结论。"
+)
+_ANOMALY_REFERENCE_PURPOSE = (
+    "该标识用于把事件证据与原始异常观测精确关联，支持去重、审计和回放；"
+    "它本身不是异常结论。"
+)
 _DATA_GAP_DETAILS = {
     "asset_mapping_missing": {
         "code": "asset_mapping_missing",
@@ -620,6 +635,86 @@ class VendorEvidenceContext:
 
 
 VendorEvidenceContextMap = dict[str, VendorEvidenceContext]
+AnomalyEvidenceContextMap = dict[str, Any]
+
+
+def _anomaly_observation_id(source_ref: str) -> int | None:
+    prefix, separator, raw_id = source_ref.partition(":")
+    if prefix != "anomaly" or not separator or not raw_id.isdigit():
+        return None
+    observation_id = int(raw_id)
+    return observation_id if observation_id > 0 else None
+
+
+def build_anomaly_evidence_context(
+    db,
+    evidence_items: Iterable[IncidentEvidence],
+) -> AnomalyEvidenceContextMap:
+    refs_by_id = {
+        observation_id: source_ref
+        for evidence in evidence_items
+        if evidence.source == "anomaly_observation"
+        for source_ref in [str(evidence.source_ref or "")]
+        for observation_id in [_anomaly_observation_id(source_ref)]
+        if observation_id is not None
+    }
+    observations = forecastIncidentCrud.get_anomaly_observation_map(
+        db, refs_by_id.keys()
+    )
+    return {
+        source_ref: observations[observation_id]
+        for observation_id, source_ref in refs_by_id.items()
+        if observation_id in observations
+    }
+
+
+def _anomaly_context_for_evidence(
+    db,
+    evidence,
+    anomaly_context: AnomalyEvidenceContextMap | None,
+):
+    source_ref = str(evidence.source_ref or "")
+    if anomaly_context is not None:
+        return anomaly_context.get(source_ref)
+    observation_id = _anomaly_observation_id(source_ref)
+    if db is None or observation_id is None:
+        return None
+    return forecastIncidentCrud.get_anomaly_observation_map(
+        db, [observation_id]
+    ).get(observation_id)
+
+
+def _anomaly_reference_range(observation) -> tuple[float, float]:
+    baseline = float(observation.seasonal_baseline)
+    mad = float(observation.mad)
+    if mad == 0:
+        return baseline, baseline
+    deviation = _ANOMALY_Z_THRESHOLD * mad / _NORMAL_DISTRIBUTION_MAD_SCALE
+    return max(0.0, baseline - deviation), baseline + deviation
+
+
+def _reference_guidance(source_ref: str) -> tuple[str, str]:
+    return (
+        _REFERENCE_PURPOSE,
+        (
+            f"复制标识 {source_ref}，在事件详情接口返回的 evidence.source_ref 中精确匹配；"
+            "再按标识前缀到对应预测、告警、厂商事件或监控记录中回查原始事实。"
+        ),
+    )
+
+
+def _anomaly_reference_guidance(source_ref: str, observation) -> tuple[str, str]:
+    observation_id = int(observation.id)
+    metric = str(observation.metric)
+    return (
+        _ANOMALY_REFERENCE_PURPOSE,
+        (
+            f"{source_ref} 中的数字部分是异常观测 ID {observation_id}。"
+            "可在异常观测接口 /storage-pulse/api/v1/anomalies 中使用"
+            f" metric={metric}、observed_from 和 observed_to 缩小时间范围，"
+            f"并在结果中匹配 id={observation_id}。"
+        ),
+    )
 
 
 def _safe_vendor_definition(definition, *, storage_type: str, event_code: str) -> dict[str, Any]:
@@ -793,11 +888,13 @@ def build_evidence_presentation(
     *,
     db=None,
     vendor_context: VendorEvidenceContextMap | None = None,
+    anomaly_context: AnomalyEvidenceContextMap | None = None,
 ) -> dict[str, Any]:
     """Return a safe, user-readable view without changing the immutable evidence fact."""
     source = str(evidence.source or "")
     source_ref = str(evidence.source_ref or "")
     evidence_type = str(evidence.evidence_type or "")
+    reference_purpose, lookup_hint = _reference_guidance(source_ref)
     context = _vendor_context_for_evidence(db, evidence, vendor_context)
     vendor_summary = _vendor_summary_from_context(evidence, context)
     if vendor_summary is not None:
@@ -819,6 +916,8 @@ def build_evidence_presentation(
             "event_code": vendor_summary["event_code"],
             "log_excerpt": alert.description,
             "detail_available": True,
+            "reference_purpose": reference_purpose,
+            "lookup_hint": lookup_hint,
         }
     stream, referenced_at, reference_reason = _telemetry_quality_reference(source_ref)
     if source == "telemetry_quality" or stream is not None:
@@ -845,6 +944,44 @@ def build_evidence_presentation(
             "summary": summary,
             "scope_label": scope_label,
             "technical_ref": source_ref,
+            "reference_purpose": reference_purpose,
+            "lookup_hint": lookup_hint,
+        }
+
+    observation = _anomaly_context_for_evidence(
+        db, evidence, anomaly_context
+    )
+    if source == "anomaly_observation" and observation is not None:
+        metric_key = str(observation.metric)
+        metric_label, metric_unit = _PERFORMANCE_METRIC_PRESENTATIONS.get(
+            metric_key, (metric_key, "")
+        )
+        reference_lower, reference_upper = _anomaly_reference_range(observation)
+        reference_purpose, lookup_hint = _anomaly_reference_guidance(
+            source_ref, observation
+        )
+        return {
+            "group_key": "anomaly_observation",
+            "group_label": "性能异常",
+            "title": "持续性能异常",
+            "summary": (
+                f"{metric_label}连续三个相邻 5 分钟窗口超出基于过去 28 天"
+                "同星期同小时历史样本计算的正常参考范围。"
+            ),
+            "scope_label": metric_label,
+            "technical_ref": source_ref,
+            "metric_key": metric_key,
+            "metric_label": metric_label,
+            "metric_unit": metric_unit,
+            "window_start": observation.evidence_window_start,
+            "window_end": observation.evidence_window_end,
+            "observed_value": float(observation.observed_value),
+            "baseline_value": float(observation.seasonal_baseline),
+            "reference_lower": reference_lower,
+            "reference_upper": reference_upper,
+            "robust_z_score": float(observation.robust_z_score),
+            "reference_purpose": reference_purpose,
+            "lookup_hint": lookup_hint,
         }
 
     title, summary = _EVIDENCE_PRESENTATIONS.get(
@@ -877,6 +1014,8 @@ def build_evidence_presentation(
         "summary": summary,
         "scope_label": scope_label,
         "technical_ref": source_ref,
+        "reference_purpose": reference_purpose,
+        "lookup_hint": lookup_hint,
     }
 
 
@@ -923,7 +1062,7 @@ def _append_evidence(db, incident: Incident, envelope: TelemetryEnvelope) -> Non
         evidence_hash=hashlib.sha256(f"{envelope.source}:{envelope.source_ref}".encode("utf-8")).hexdigest(),
     )
     forecastIncidentCrud.add_incident_evidence(db, evidence)
-    presentation = build_evidence_presentation(evidence)
+    presentation = build_evidence_presentation(evidence, db=db)
     forecastIncidentCrud.add_incident_timeline(
         db,
         IncidentTimeline(

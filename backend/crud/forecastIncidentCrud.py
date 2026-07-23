@@ -301,6 +301,19 @@ def get_anomaly_observation(
     ).scalar_one_or_none()
 
 
+def get_anomaly_observation_map(
+    db: Session,
+    observation_ids,
+) -> dict[int, AnomalyObservation]:
+    normalized_ids = sorted({int(observation_id) for observation_id in observation_ids})
+    if not normalized_ids:
+        return {}
+    rows = db.execute(
+        select(AnomalyObservation).where(AnomalyObservation.id.in_(normalized_ids))
+    ).scalars().all()
+    return {row.id: row for row in rows}
+
+
 def add_anomaly_observation(db: Session, observation: AnomalyObservation) -> AnomalyObservation:
     db.add(observation)
     db.flush()

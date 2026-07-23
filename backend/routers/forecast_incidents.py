@@ -282,10 +282,19 @@ def _incident_detail(db: Session, current_user, incident_id: int) -> IncidentDet
         evidence,
         storage_cluster_id=incident.storage_cluster_id,
     )
+    anomaly_context = forecastIncidentService.build_anomaly_evidence_context(
+        db,
+        evidence,
+    )
     return IncidentDetailOut(
         **_incident_out(db, current_user, incident).model_dump(),
         evidence=[
-            _incident_evidence_out(db, item, vendor_context=vendor_context)
+            _incident_evidence_out(
+                db,
+                item,
+                vendor_context=vendor_context,
+                anomaly_context=anomaly_context,
+            )
             for item in evidence
         ],
         timeline=[_incident_timeline_out(db, item) for item in timeline],
@@ -316,6 +325,7 @@ def _incident_evidence_out(
     evidence,
     *,
     vendor_context: forecastIncidentService.VendorEvidenceContextMap | None = None,
+    anomaly_context: forecastIncidentService.AnomalyEvidenceContextMap | None = None,
 ) -> IncidentEvidenceOut:
     return IncidentEvidenceOut(
         id=evidence.id,
@@ -335,6 +345,7 @@ def _incident_evidence_out(
                 evidence,
                 db=db,
                 vendor_context=vendor_context,
+                anomaly_context=anomaly_context,
             )
         ),
     )
