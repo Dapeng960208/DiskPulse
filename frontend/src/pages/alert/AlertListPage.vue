@@ -256,7 +256,7 @@ query();
       <ElTableColumn
         label="集群"
         align="center"
-        min-width="90">
+        min-width="60">
         <template #default="{ row }">
           {{ row.cluster_name || row.related_info?.context?.cluster || row.related_info?.context?.clusters?.join(', ') || '-' }}
         </template>
