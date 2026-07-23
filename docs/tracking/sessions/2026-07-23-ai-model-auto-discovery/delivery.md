@@ -8,6 +8,7 @@
 ## 已完成
 
 - 已从 `main@8257116` 创建隔离工作区 `diskplus2`，保留主工作区既有未提交改动。
+- 实现期间 `main` 更新至 `9c22ba9`；已无冲突同步其三个已提交的后端文件，未纳入主工作区未提交的事件中心文件。
 - 已完成后端 Provider 目录归一化、空标识回退、权限校验与 API Key 脱敏边界。
 - 已完成前端模型列表选择、手工输入与自动获取状态反馈。
 
@@ -18,6 +19,7 @@
 - GREEN：`cd frontend; pnpm exec vitest run test/unit/ai-reasoning-pages.test.js test/unit/ai-api-stream.test.js test/unit/ai-pages.test.js test/unit/api/modules.test.js --coverage.enabled=false`，50 passed。
 - GREEN：`cd frontend; pnpm run lint` 与 `pnpm run build:test` 均通过。构建仅保留既有 `%VITE_APP_TITLE%` 未定义和大 chunk 警告。
 - 当前环境没有 `pytest-cov` 插件；新增的目录适配、空值回退、权限、脱敏和前端交互均由上述聚焦单元/接口测试覆盖。
+- 同步后：`cd backend; D:\\dev\\DiskPulse\\.venv\\Scripts\\python.exe -m pytest test/test_ai_platform.py test/test_ai_reasoning_effort_red.py test/test_claude_code_adapter.py test/test_forecast_incident_center.py -q`，190 passed；出现一条已记录的 Claude Code 取消协程运行时警告。
 
 ## 风险与未验证范围
 
