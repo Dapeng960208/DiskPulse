@@ -89,6 +89,20 @@ describe('ForecastGovernancePage', () => {
     expect(source).toContain('.forecast-governance-page__section { display: grid; align-content: start; gap: var(--spacing-md); }');
   });
 
+  it('uses shared data tables without page-level Element table styling', () => {
+    const source = readFileSync(resolve('src/pages/admin/forecast-governance/ForecastGovernancePage.vue'), 'utf8');
+    const actionColumn = source.match(
+      /<ElTableColumn\b(?=[^>]*\blabel="操作")[\s\S]*?<\/ElTableColumn>/,
+    )?.[0];
+
+    expect(source.match(/<DataTable\b/g) || []).toHaveLength(2);
+    expect(source).not.toMatch(/<El(?:Table|Pagination)\b/);
+    expect(source).not.toMatch(/:deep\(\s*\.el-table\b|(?:^|[}\s])\.el-pagination\b/m);
+    expect(actionColumn).toBeDefined();
+    expect(actionColumn).toContain('fixed="right"');
+    expect(actionColumn).toContain('class="list-row-actions"');
+  });
+
   it('creates a trimmed candidate and reloads governance state', async () => {
     const wrapper = mountPage();
     await flushPromises();
