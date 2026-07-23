@@ -1,5 +1,5 @@
 import { flushPromises, shallowMount } from '@vue/test-utils';
-import { toRaw } from 'vue';
+import { defineComponent, h, toRaw } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -41,6 +41,46 @@ vi.mock('@/stores/current-user', () => ({
 
 const { default: AiChatPage } = await import('@/pages/ai/AiChatPage.vue');
 const { default: AiCenterPage } = await import('@/pages/admin/ai/AiCenterPage.vue');
+
+const passthrough = (name) => defineComponent({
+  name,
+  setup(_, { slots }) {
+    return () => h('div', slots.default?.());
+  },
+});
+
+const DataTable = defineComponent({
+  name: 'DataTable',
+  props: {
+    data: { type: Array, default: () => [] },
+    loading: { type: Boolean, default: false },
+    pagination: { type: Object, default: undefined },
+  },
+  emits: ['update:pagination'],
+  setup(_, { slots }) {
+    return () => h('div', slots.default?.());
+  },
+});
+
+const QueryForm = defineComponent({
+  name: 'QueryForm',
+  emits: ['query', 'reset'],
+  setup(_, { slots }) {
+    return () => h('form', slots.default?.());
+  },
+});
+
+const mountAiCenter = () => shallowMount(AiCenterPage, {
+  global: {
+    directives: commonDirectives,
+    stubs: {
+      DataTable,
+      QueryForm,
+      ElTabs: passthrough('ElTabs'),
+      ElTabPane: passthrough('ElTabPane'),
+    },
+  },
+});
 
 describe('AI pages interactions', () => {
   beforeEach(() => {
@@ -655,6 +695,95 @@ describe('AI pages interactions', () => {
     expect(source).toContain('height: 100%;');
     expect(source).toContain('border: 1px solid var(--text-tertiary);');
     expect(appLayoutSource).toContain('class="flex-1 min-h-0 flex flex-col"');
+  });
+
+  it('uses two shared data tables without direct Element table or pagination styling', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/pages/admin/ai/AiCenterPage.vue'), 'utf8');
+
+    expect(source.match(/<DataTable\b/g) || []).toHaveLength(2);
+    expect(source).not.toMatch(/<El(?:Table|Pagination)\b/);
+    expect(source).not.toMatch(/:deep\(\s*\.el-table\b|(?:^|[}\s])\.el-pagination\b/m);
+  });
+
+  it('binds model and audit results to the shared table contract and reloads emitted pagination', async () => {
+    const wrapper = mountAiCenter();
+    await flushPromises();
+    wrapper.vm.activeTab = 'audit';
+    await flushPromises();
+
+    const tables = wrapper.findAllComponents(DataTable);
+    expect(tables).toHaveLength(2);
+    expect(tables[0].props('data')).toEqual([
+      { id: 2, name: 'Admin Model', provider: 'openai', model: 'gpt' },
+    ]);
+    expect(tables[1].props()).toMatchObject({
+      data: [{ id: 7, status: 'succeeded' }],
+      loading: false,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 1,
+      },
+    });
+
+    aiApi.listAudits.mockClear();
+    await tables[1].vm.$emit('update:pagination', {
+      page: 2,
+      pageSize: 50,
+      total: 1,
+    });
+    await flushPromises();
+
+    expect(aiApi.listAudits).toHaveBeenLastCalledWith({
+      page: 2,
+      size: 50,
+      status: undefined,
+    });
+  });
+
+  it('filters audits through QueryForm and resets filters to the first page', async () => {
+    const wrapper = mountAiCenter();
+    await flushPromises();
+    wrapper.vm.activeTab = 'audit';
+    await flushPromises();
+    const queryForm = wrapper.getComponent(QueryForm);
+
+    wrapper.vm.auditQuery.page = 3;
+    wrapper.vm.auditQuery.status = 'failed';
+    aiApi.listAudits.mockClear();
+    await queryForm.vm.$emit('query');
+    await flushPromises();
+    expect(aiApi.listAudits).toHaveBeenLastCalledWith({
+      page: 1,
+      size: 20,
+      status: 'failed',
+    });
+
+    wrapper.vm.auditQuery.page = 4;
+    await queryForm.vm.$emit('reset');
+    await flushPromises();
+    expect(wrapper.vm.auditQuery).toMatchObject({ page: 1, size: 20, status: '' });
+    expect(aiApi.listAudits).toHaveBeenLastCalledWith({
+      page: 1,
+      size: 20,
+      status: undefined,
+    });
+  });
+
+  it('uses an explicit audit detail action while preserving detail navigation', async () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/pages/admin/ai/AiCenterPage.vue'), 'utf8');
+    const auditPane = source.match(
+      /<ElTabPane\b(?=[^>]*\bname="audit")[\s\S]*?<\/ElTabPane>/,
+    )?.[0];
+
+    expect(auditPane).toBeDefined();
+    expect(auditPane).toContain('action="detail"');
+    expect(auditPane).toContain('@click="openAudit(row)"');
+
+    const wrapper = mountAiCenter();
+    await flushPromises();
+    wrapper.vm.openAudit({ id: 7 });
+    expect(router.push).toHaveBeenCalledWith('/admin/ai-center/audits/7');
   });
 
   it('creates, updates, tests, deletes models and loads audit filters', async () => {
