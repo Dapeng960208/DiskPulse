@@ -600,13 +600,9 @@ def test_evaluator_uses_current_successful_samples_and_keeps_project_event_aggre
 
     usage_paragraphs = by_type["StorageUsage"].related_info["paragraphs"]
     assert usage_paragraphs[0] == [
-        {"tag": "text", "text": "⚠️ 首次告警", "style": ["bold"]},
-        {"tag": "text", "text": "  ·  当前使用率 96.00%"},
-    ]
-    assert usage_paragraphs[1] == [
         {"tag": "text", "text": "📍 资源信息", "style": ["bold"]}
     ]
-    assert usage_paragraphs[8] == [
+    assert usage_paragraphs[7] == [
         {"tag": "text", "text": "📊 容量概览", "style": ["bold"]}
     ]
     usage_text = "\n".join(
@@ -621,14 +617,15 @@ def test_evaluator_uses_current_successful_samples_and_keeps_project_event_aggre
             "项目组标签：team",
             "项目组：group-a",
             "Linux 路径：/data/alice",
-            "采用口径：硬限额",
             "硬限额：100 GB",
             "软限额：未设置",
             "已使用 96 GB",
-            "硬限额使用率：96.00%",
-            "软限额使用率：未设置",
+            "使用率 🔴 96.00%",
+            "使用率 未设置",
         )
     )
+    assert "首次告警" not in usage_text
+    assert "采用口径" not in usage_text
     project_text = "\n".join(
         "".join(item["text"] for item in paragraph)
         for paragraph in by_type["Project"].related_info["paragraphs"]
@@ -663,8 +660,7 @@ def test_feishu_recovery_notification_uses_hierarchical_rich_text_and_display_un
     )
 
     assert paragraphs[0] == [
-        {"tag": "text", "text": "✅ 恢复通知", "style": ["bold"]},
-        {"tag": "text", "text": "  ·  当前使用率 34.23%"},
+        {"tag": "text", "text": "📍 资源信息", "style": ["bold"]}
     ]
     assert [paragraph[0]["text"] for paragraph in paragraphs if len(paragraph) == 1] == [
         "📍 资源信息",
@@ -673,10 +669,29 @@ def test_feishu_recovery_notification_uses_hierarchical_rich_text_and_display_un
     rendered = "\n".join(
         "".join(item["text"] for item in paragraph) for paragraph in paragraphs
     )
-    assert "硬限额：3.5 TB  ·  已使用 1.2 TB  ·  使用率 34.23%" in rendered
-    assert "软限额：3.15 TB  ·  已使用 1.2 TB  ·  使用率 38.03%" in rendered
+    assert "硬限额：3.5 TB  ·  已使用 1.2 TB  ·  使用率 🟢 34.23%" in rendered
+    assert "软限额：3.15 TB  ·  已使用 1.2 TB  ·  使用率 🟢 38.03%" in rendered
     assert "↩️ 恢复前等级：重要" in rendered
     assert "3584.00 GB" not in rendered
+    assert "恢复通知" not in rendered
+    assert "采用口径" not in rendered
+
+
+@pytest.mark.parametrize(
+    ("ratio", "indicator"),
+    [
+        (79.99, "🟢"),
+        (80, "🟡"),
+        (89.99, "🟡"),
+        (90, "🟠"),
+        (94.99, "🟠"),
+        (95, "🔴"),
+    ],
+)
+def test_feishu_utilization_indicator_follows_alert_threshold_ranges(ratio, indicator):
+    tasks = _module("celery_tasks.tasks.storage_alerts")
+
+    assert tasks._utilization_indicator(DEFAULT_RULE, ratio) == indicator
 
 
 def test_group_alert_cc_users_are_deduplicated_and_must_exist(db_session):
