@@ -77,7 +77,8 @@ def test_performance_incident_snapshot_includes_hourly_24h_metric_context(db_ses
 
     snapshot = incidentAiAgentService._safe_snapshot(db_session, incident)
 
-    context = snapshot["category_context"]
+    assert {"category", "severity", "diagnosis", "performance_context", "category_context"}.isdisjoint(snapshot)
+    context = snapshot["observation_context"]
     assert captured == {
         "storage_cluster_id": 7,
         "asset_type": "volume",
@@ -124,7 +125,7 @@ def test_performance_incident_snapshot_marks_missing_or_unavailable_metrics(db_s
         raising=False,
     )
 
-    no_samples = incidentAiAgentService._safe_snapshot(db_session, incident)["category_context"]
+    no_samples = incidentAiAgentService._safe_snapshot(db_session, incident)["observation_context"]
 
     assert no_samples["data_status"] == "no_samples"
     assert no_samples["data_gaps"] == ["performance_metrics_unavailable"]
@@ -137,18 +138,92 @@ def test_performance_incident_snapshot_marks_missing_or_unavailable_metrics(db_s
         "get_hourly_asset_performance",
         query_failure,
     )
-    unavailable = incidentAiAgentService._safe_snapshot(db_session, incident)["category_context"]
+    unavailable = incidentAiAgentService._safe_snapshot(db_session, incident)["observation_context"]
 
     assert unavailable["data_status"] == "unavailable"
     assert unavailable["data_gaps"] == ["performance_metrics_query_failed"]
 
 
-def test_agent_prompt_requires_category_context_facts_and_disallows_unprovided_signals():
+def test_performance_incident_snapshot_keeps_summary_aligned_with_24_hour_cap(db_session, monkeypatch):
+    from crud import storageHealthAnalyticsCrud
+    from services import incidentAiAgentService
+
+    incident = _incident()
+    incident.storage_cluster_id = 7
+    db_session.add(incident)
+    db_session.commit()
+    monkeypatch.setattr(
+        storageHealthAnalyticsCrud,
+        "get_hourly_asset_performance",
+        lambda *_args, **_kwargs: [
+            {
+                "hour_start": UTC_NOW - timedelta(hours=offset),
+                "sample_count": 1,
+                "latency_total": float(offset),
+            }
+            for offset in range(25)
+        ],
+    )
+
+    context = incidentAiAgentService._safe_snapshot(db_session, incident)["observation_context"]
+
+    assert len(context["hourly_metrics"]) == 24
+    assert context["metric_summary"]["latency_total"] == {
+        "unit": "ms",
+        "sample_count": 24,
+        "min": 0.0,
+        "max": 23.0,
+        "average": 11.5,
+    }
+
+
+@pytest.mark.parametrize(
+    ("category",),
+    [
+        ("capacity_pressure",),
+        ("device_fault",),
+        ("telemetry_blindspot",),
+    ],
+)
+def test_nonperformance_incident_snapshot_uses_source_evidence_context(db_session, category):
+    import models
+    from services import incidentAiAgentService
+
+    incident = _incident()
+    incident.correlation_key = f"nonperformance-{category}"
+    incident.category = category
+    db_session.add(incident)
+    db_session.flush()
+    db_session.add(
+        models.IncidentEvidence(
+            incident_id=incident.id,
+            source="test",
+            source_ref=f"test:{category}",
+            evidence_type="vendor_event",
+            observed_at=UTC_NOW,
+            data_gaps=["source_payload_missing"],
+            evidence_hash=f"hash-{category}",
+        )
+    )
+    db_session.commit()
+
+    context = incidentAiAgentService._safe_snapshot(db_session, incident)["observation_context"]
+
+    assert context == {
+        "scope": "source_evidence",
+        "data_status": "evidence_only",
+        "evidence_count": 1,
+        "data_gaps": ["source_payload_missing"],
+    }
+
+
+def test_agent_prompt_requires_observation_context_facts_and_disallows_unprovided_signals():
     from services.incidentAiAgentService import _messages
 
-    prompt = _messages({"category_context": {}})[0]["content"]
+    prompt = _messages({"observation_context": {}})[0]["content"]
 
-    assert "category_context" in prompt
+    assert "observation_context" in prompt
+    assert "category_context" not in prompt
     assert "CPU" in prompt
     assert "进程" in prompt
 
@@ -475,7 +550,11 @@ def test_incident_ai_review_uses_ordered_fallback_and_persists_only_safe_context
         calls.append(model.id)
         assert "/private/path" not in messages[-1]["content"]
         assert "secret" not in messages[-1]["content"]
-        assert '"trigger_three_bucket_p95":[2.0,2.0,2.0]' in messages[-1]["content"]
+        assert '"trigger_three_bucket_p95":[2.0,2.0,2.0]' not in messages[-1]["content"]
+        assert "performance_contention" not in messages[-1]["content"]
+        assert '"severity"' not in messages[-1]["content"]
+        assert '"diagnosis"' not in messages[-1]["content"]
+        assert '"mad"' not in messages[-1]["content"]
         if model.id == primary.id:
             raise incidentAiAgentService.AIClientError("provider unavailable")
         return SimpleNamespace(text='''{
