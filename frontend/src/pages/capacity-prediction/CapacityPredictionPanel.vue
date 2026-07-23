@@ -1,8 +1,9 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { ElAlert, ElButton, ElDatePicker, ElDescriptions, ElDescriptionsItem, ElDialog, ElEmpty, ElForm, ElFormItem, ElInput, ElInputNumber, ElMessage, ElTable, ElTableColumn, ElTag } from 'element-plus';
+import { ElAlert, ElButton, ElDatePicker, ElDescriptions, ElDescriptionsItem, ElDialog, ElEmpty, ElForm, ElFormItem, ElInput, ElInputNumber, ElMessage, ElTableColumn, ElTag } from 'element-plus';
 import capacityPredictionApi from '@/api/capacity-prediction-api.js';
 import { getChartColors, loadEcharts } from '@/lib/echarts.js';
+import DataTable from '@/components/data/DataTable.vue';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
 import { formatCapacity, formatCapacityFromGb } from '@/utils/capacity';
 
@@ -144,9 +145,10 @@ async function createPlan() {
         ref="chartElement"
         class="capacity-prediction-panel__chart"
         aria-label="容量预测趋势图" />
-      <ElTable
+      <DataTable
         :data="prediction.curve"
-        empty-text="预测数据不足">
+        :loading="loading"
+        density="compact">
         <ElTableColumn
           label="日期"
           prop="observed_at"
@@ -160,15 +162,16 @@ async function createPlan() {
         <ElTableColumn label="P90">
           <template #default="{ row }">{{ formatCurveCapacity(row, 'p90') }}</template>
         </ElTableColumn>
-      </ElTable>
+      </DataTable>
       <div class="capacity-prediction-panel__plans"><span>已批准容量计划：{{ plans.length }} 项</span><TableActionButton
         v-if="canManagePlans"
         action="create"
         @click="openPlanDialog">新增计划</TableActionButton></div>
       <p class="capacity-prediction-panel__audit">审计摘要：{{ auditSummary }}</p>
-      <ElTable
+      <DataTable
         :data="relatedIncidents"
-        empty-text="暂无关联事件或 RCA">
+        :loading="loading"
+        density="compact">
         <ElTableColumn
           label="关联事件"
           prop="id" />
@@ -181,7 +184,7 @@ async function createPlan() {
         <ElTableColumn label="RCA 置信度">
           <template #default="{ row }">{{ row.rca_confidence || '待生成' }}</template>
         </ElTableColumn>
-      </ElTable>
+      </DataTable>
       <p class="capacity-prediction-panel__incident-boundary">关联事件：容量风险、异常与 RCA 请在事件中心查看；原始告警和厂商系统事件仍保留在原有入口。</p>
     </template>
     <ElDialog
