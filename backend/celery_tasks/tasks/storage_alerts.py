@@ -20,6 +20,7 @@ from models import (
     StorageUsage,
     User,
 )
+from schemas.capacitySchema import format_capacity
 from schemas.storageAlertRuleSchema import DEFAULT_STORAGE_ALERT_RULE
 from services.audit_service import AuditContext, append_audit_event
 from services.feishuNotificationService import FeishuNotificationService
@@ -42,7 +43,6 @@ EVENT_TYPE_LABELS = {
     "repeat": "重复告警",
     "recovery": "恢复通知",
 }
-QUOTA_BASIS_LABELS = {"hard": "硬限额", "soft": "软限额"}
 ALERT_LEVEL_LABELS = {"important": "重要", "serious": "严重", "emergency": "紧急"}
 
 
@@ -63,8 +63,34 @@ def _effective_rule(system_rule, target_type, project, group=None):
     ).rule
 
 
-def _display(value, suffix=""):
-    return "未设置" if value is None else f"{value:.2f}{suffix}"
+def _text(text, *, bold=False):
+    element = {"tag": "text", "text": text}
+    if bold:
+        element["style"] = ["bold"]
+    return element
+
+
+def _detail_row(label, value):
+    return [_text(f"{label}：", bold=True), _text(value)]
+
+
+def _display_capacity(value):
+    display = format_capacity(value)
+    return "未设置" if display is None else f"{display.value} {display.unit}"
+
+
+def _utilization_indicator(rule, value):
+    if value >= rule["emergency"]["threshold"]:
+        return "🔴"
+    if value >= rule["serious"]["threshold"]:
+        return "🟠"
+    if value >= rule["important"]["threshold"]:
+        return "🟡"
+    return "🟢"
+
+
+def _display_ratio(rule, value):
+    return "未设置" if value is None else f"{_utilization_indicator(rule, value)} {value:.2f}%"
 
 
 def _paragraphs(target, rule, ratio, event_type, context, previous_level=None):
@@ -75,20 +101,48 @@ def _paragraphs(target, rule, ratio, event_type, context, previous_level=None):
         "project": "项目",
         "group_tag": "项目组标签",
         "group": "项目组",
-        "linux_path": "Linux路径",
+        "linux_path": "Linux 路径",
     }
-    lines = [f"{labels[key]}：{', '.join(value) if isinstance(value, list) else value}\n" for key, value in context.items() if value]
-    lines.extend(
+    paragraphs = [
+        [_text("📍 资源信息", bold=True)],
+    ]
+    paragraphs.extend(
+        _detail_row(
+            labels[key],
+            "、".join(str(item) for item in value) if isinstance(value, list) else str(value),
+        )
+        for key, value in context.items()
+        if value
+    )
+    paragraphs.extend(
         [
-            f"事件：{EVENT_TYPE_LABELS.get(event_type, event_type)}\n",
-            f"采用口径：{QUOTA_BASIS_LABELS.get(rule['quota_basis'], rule['quota_basis'])}，使用率：{ratio:.2f}%\n",
-            f"硬限额：{_display(target.limit, ' GB')}，已使用：{_display(target.used, ' GB')}，硬限额使用率：{_display(target.use_ratio, '%')}\n",
-            f"软限额：{_display(target.soft_limit, ' GB')}，已使用：{_display(target.used, ' GB')}，软限额使用率：{_display(target.soft_use_ratio, '%')}\n",
+            [_text("📊 容量概览", bold=True)],
+            _detail_row(
+                "硬限额",
+                (
+                    f"{_display_capacity(target.limit)}  ·  "
+                    f"已使用 {_display_capacity(target.used)}  ·  "
+                    f"使用率 {_display_ratio(rule, target.use_ratio)}"
+                ),
+            ),
+            _detail_row(
+                "软限额",
+                (
+                    f"{_display_capacity(target.soft_limit)}  ·  "
+                    f"已使用 {_display_capacity(target.used)}  ·  "
+                    f"使用率 {_display_ratio(rule, target.soft_use_ratio)}"
+                ),
+            ),
         ]
     )
     if previous_level:
-        lines.append(f"恢复前等级：{ALERT_LEVEL_LABELS.get(previous_level, previous_level)}")
-    return [[{"tag": "text", "text": line} for line in lines]]
+        paragraphs.append(
+            _detail_row(
+                "↩️ 恢复前等级",
+                ALERT_LEVEL_LABELS.get(previous_level, previous_level),
+            )
+        )
+    return paragraphs
 
 
 def _evaluate_one(
