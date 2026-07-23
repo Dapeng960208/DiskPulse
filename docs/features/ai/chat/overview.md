@@ -17,12 +17,13 @@
 
 AI 持久化包含：
 
-- `ai_configs`：Provider、模型、温度、Token 上限、启用状态和加密后的 API Key。
+- `ai_configs`：Provider、模型、温度、Token 上限、启用状态、加密后的 API Key，以及模型推理能力缓存、获取状态、脱敏错误和刷新时间。
+- `ai_platform_settings`：全局默认聊天模型。初始值可以为空；默认模型必须保持启用且允许聊天。
 - `ai_conversations`：用户、模型、标题和时间戳。
-- `ai_messages`：会话内用户与助手消息。
+- `ai_messages`：会话内用户与助手消息；用户消息同时保存本次选择的 `reasoning`，用于恢复会话内的推理设置。
 - `ai_audit_logs`：请求状态、工具调用计数、脱敏摘要、Trace ID 和错误摘要。
 
-API Key 使用 `cryptography` 的 Fernet 加密，密钥由独立的 `ai.config_secret_key` 派生。管理接口只返回掩码和是否已配置，不返回明文或密文。审计只保存消息长度、响应长度和工具名称/状态，不保存原始提问、工具参数或工具结果；配额确认例外仅在所属审计中保留白名单预览字段、最终决定和 `ok`/限长可读错误，以便会话重载恢复卡片，不保留 Redis 中的执行参数或设备完整返回。
+API Key 使用 `cryptography` 的 Fernet 加密，密钥由独立的 `ai.config_secret_key` 派生。管理接口只返回掩码和是否已配置，不返回明文或密文。审计只保存消息长度、所选推理值、实际发送值、响应长度和工具名称/状态，不保存原始提问、工具参数、工具结果或 Provider 返回的思维链；聊天历史和页面也不展示思维链。配额确认例外仅在所属审计中保留白名单预览字段、最终决定和 `ok`/限长可读错误，以便会话重载恢复卡片，不保留 Redis 中的执行参数或设备完整返回。
 
 ## 3. 运行配置
 
@@ -35,7 +36,18 @@ API Key 使用 `cryptography` 的 Fernet 加密，密钥由独立的 `ai.config_
 
 ## 4. Provider 与连接测试
 
-支持 `openai`、`openrouter`、`ollama`、`claude`。OpenAI 兼容 Provider 使用 `/chat/completions`，Claude 使用 `/v1/messages`；未配置 Base URL 时使用各 Provider 默认地址。AI 中心的“连接测试”会向 Provider 真实发送最小消息，不以配置格式校验代替网络调用。
+支持 `openai`、`openrouter`、`ollama`、`claude`、`claude_code`、`deepseek`、`dashscope`、`volcengine`、`zhipu`、`moonshot`、`minimax`、`qianfan` 和 `hunyuan`。管理页面为这些 Provider 提供默认且可编辑的 Base URL；AI 中心的“连接测试”会向 Provider 真实发送最小消息，不以配置格式校验代替网络调用。
+
+模型推理能力按“Provider 动态元数据、内置官方能力目录、`unknown`”顺序解析。`GET /ai/models` 对每个模型返回 `is_default` 和统一的 `reasoning_control`：
+
+- `kind` 为 `effort`、`toggle` 或 `none`，分别表示原生多档强度、原生思考开关或不可调节。
+- `options` 只包含模型原生支持的值；`provider_default` 表示 Provider 默认值，`mandatory` 表示该模型是否强制推理。
+- `source` 为 `provider`、`official_catalog` 或 `unknown`，并返回 `status` 和 `updated_at` 供页面展示能力状态。
+- `auto` 是所有模型都允许的客户端值，表示不发送推理控制参数并遵循 Provider 默认行为。能力获取失败或模型未知时只能选择 `auto`，不得猜测或静默降级为其他档位。
+
+不同 Provider 保留原生语义：OpenAI、OpenRouter、部分 Ollama GPT-OSS、部分 GLM、Kimi 和混元模型使用原生强度档位；Ollama 其他思考模型、DeepSeek、通义千问、豆包及部分国内模型使用原生开关；官方未声明可调能力的模型返回 `none`。系统不把思考预算或开关近似成虚假的强度档位。
+
+`claude_code` 通过 Claude Agent SDK 调用，只注册 DiskPulse 动态 MCP 工具，并禁用文件、Shell 等 Claude Code 内置工具；工具执行继续使用当前登录用户的认证、权限、项目隔离、配额确认和审计边界。
 
 ## 5. 对话与 SSE
 
@@ -46,6 +58,10 @@ API Key 使用 `cryptography` 的 Fernet 加密，密钥由独立的 `ai.config_
 - `GET|DELETE /ai/conversations/{id}`
 - `POST /ai/conversations/{id}/messages`
 - `POST /ai/conversations/{id}/messages/stream`
+
+创建会话时 `model_id` 可以省略；服务端使用管理员配置的默认聊天模型。没有默认模型且调用方未显式传入模型时返回明确配置错误。已有会话继续绑定创建时的模型，不随默认模型变化。
+
+同步和流式消息请求都接受每条消息的 `reasoning`。默认值 `auto`；其他值只能是能力契约声明的 `on`、`off` 或 `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`。服务端在发送前按当前能力再次校验，能力已过期或值不受支持时返回 `422`，不向 Provider 发送近似值。
 
 流式接口事件顺序由下列固定事件组成：`accepted`、`user_message`、`status`、`tool_call_started`、`tool_call_finished`、`delta`、`completed`、`error`、`cancelled`。客户端必须先收到 `accepted`，终态必须是最后一个已知事件；违反该顺序或截断时保留部分输出并进入可重试失败态。服务端保存最近 20 条历史；首条用户消息会自动生成最多 32 字的会话标题。
 
@@ -72,12 +88,18 @@ API Key 使用 `cryptography` 的 Fernet 加密，密钥由独立的 `ai.config_
 - `GET|POST /admin/ai-models`
 - `PATCH|DELETE /admin/ai-models/{id}`
 - `POST /admin/ai-models/{id}/test`
+- `POST /admin/ai-models/{id}/capabilities/refresh`
+- `GET|PATCH /admin/ai-settings`
 - `GET /admin/ai-audits`
 - `GET /admin/ai-audits/{id}`
 - `GET /admin/ai-audits/conversations/{conversation_id}`
+
+超级管理员通过 `PATCH /admin/ai-settings` 设置全局默认聊天模型。默认模型必须启用且允许聊天；停用或删除当前默认模型会返回 `409`，必须先更换默认模型。创建模型、修改 Provider/Base URL/API Key/模型标识或连接测试成功时会刷新能力，也可以手动调用刷新接口。刷新失败不阻止保存配置，但该模型只能使用 `auto`。
 
 前端入口为 `/admin/ai-center?tab=models|audit`，隐藏审计详情路由为 `/admin/ai-center/audits/:id`。
 
 ## 8. 部署边界
 
 部署必须提供独立 AI 加密密钥、可用 Redis 和当前数据库迁移。超级管理员通过 AI 中心配置模型并执行真实连接测试；普通用户的流式对话需在部署环境冒烟。不得提交真实 API Key、AI 加密密钥或生产 Provider 地址。
+
+本期不提供截图中的独立“速度”控制，也不提供管理员默认推理档位；默认推理行为固定为 `auto`。

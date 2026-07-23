@@ -4,12 +4,13 @@
 
 | 模块 | 职责 |
 | --- | --- |
-| `models.py` 与当前数据库迁移 | 模型配置、会话、消息和审计四类持久化对象。 |
+| `models.py` 与当前数据库迁移 | 模型配置、平台设置、会话、消息和审计五类持久化对象。 |
 | `schemas/aiSchema.py` | 用户会话、管理配置和审计查询的输入输出约束。 |
 | `crud/aiCrud.py` | AI 表的最小查询与写入封装。 |
 | `services/ai_security.py` | API Key 加密、解密和掩码。 |
 | `services/ai_rate_limit.py` | Redis DB 7 固定分钟窗口限流。 |
-| `services/ai_client.py` | OpenAI 兼容接口与 Claude 接口的请求、流式响应和工具调用归一化。 |
+| `services/ai_reasoning_service.py` | Provider 能力发现、官方能力目录、统一 `reasoning_control` 和请求参数映射。 |
+| `services/ai_client.py` | OpenAI 兼容接口、Provider 原生接口与 Claude 接口的请求、流式响应和工具调用归一化。 |
 | `services/ai_tool_service.py` | 从 FastAPI 路由生成常规只读工具和受角色保护的系统管理工具，并以当前用户身份执行。 |
 | `services/ai_chat_service.py` | 会话隔离、消息持久化、Provider 调用、工具循环和审计状态机。 |
 | `routers/ai.py`、`routers/ai_admin.py` | 登录用户对话 API、SSE 输出和超级管理员 API。 |
@@ -21,7 +22,7 @@
 1. JWT 依赖解析当前用户，Redis 以 `user_id` 执行固定窗口限流。
 2. 使用 `conversation_id + user_id` 查询会话。查不到一律返回 `404`，不向调用方暴露其他用户是否拥有该会话。
 3. 校验会话绑定模型仍处于启用且允许对话状态。
-4. 保存用户消息、首条消息标题和 `running` 审计，再开始输出 SSE。这样即使 Provider 失败或客户端断开，用户输入和审计仍可恢复。
+4. 按会话模型当前 `reasoning_control` 校验本条消息的 `reasoning`，保存用户消息、首条消息标题和 `running` 审计，再开始输出 SSE。这样即使 Provider 失败或客户端断开，用户输入、所选推理值和审计仍可恢复。
 5. 按消息 ID 倒序取最近 20 条，再反转为时间正序发送给 Provider。
 6. 从当前 FastAPI 应用路由构建工具注册表，并转换为当前 Provider 的工具格式。
 7. 流式读取模型输出；普通文本产生 `delta`，工具请求进入最多 4 轮的执行循环。工具参数若不是 JSON 对象，则在服务端保留工具名和错误类别，不保留原始参数。
@@ -47,14 +48,55 @@
 
 ## 4. Provider 适配
 
-- `openai`、`openrouter`、`ollama` 共用 OpenAI Chat Completions 协议；`claude` 使用 Messages API。
+| Provider | 能力来源与原生请求语义 |
+| --- | --- |
+| `openai` | 保持 Chat Completions，按官方模型目录解析档位并发送 `reasoning_effort`；未知模型只允许 `auto`。 |
+| `openrouter` | 从模型接口读取 `supported_efforts`、`default_effort` 和 `mandatory`，通过 `reasoning.effort` 发送。 |
+| `ollama` | 使用原生 `/api/chat` 的 `think`；GPT-OSS 模型使用 `low/medium/high`，其他思考模型使用布尔开关。 |
+| `claude` | 从 `/v1/models` 能力字段读取档位，通过 `output_config.effort` 发送；adaptive thinking 模型按要求省略不兼容的采样参数。 |
+| `claude_code` | 使用 `claude-agent-sdk==0.2.123` 和模型专用 API Key，通过 SDK `effort` 发送。只挂载 DiskPulse 进程内 MCP 工具并设置 `tools=[]`，不提供文件、Shell、插件或其他外部 MCP 工具。 |
+| `deepseek` | 按具体模型使用 `thinking` 开关或 `reasoning_effort`；工具回合保留 Provider 要求回传的当前请求状态。 |
+| `dashscope` | 使用 DashScope OpenAI 兼容入口和原生 `enable_thinking` 开关，不把 `thinking_budget` 近似为强度。 |
+| `volcengine` | 使用火山方舟 OpenAI 兼容入口和 `thinking.type` 开关。 |
+| `zhipu` | 较早模型使用原生思考开关，官方声明支持档位的模型使用 `reasoning_effort`。 |
+| `moonshot` | 按模型使用原生 `reasoning_effort` 或 `thinking`，并保留工具回合要求的当前请求状态。 |
+| `minimax` | 支持其 OpenAI/Anthropic 兼容入口；官方未声明可调档位的模型返回 `none`。 |
+| `qianfan` | 按官方模型目录选择 `thinking`、`enable_thinking` 或 `reasoning_effort`，单次请求不同时发送多种控制参数。 |
+| `hunyuan` | 默认使用 TokenHub 入口；支持档位的模型使用 `low/medium/high`，其他思考模型使用原生开关。 |
+
+所有适配器只发送模型声明支持的控制参数；开关或预算能力不映射为虚假强度。
 - Provider 客户端把文本和工具调用统一为 `AICompletionStreamEvent`，对话服务不解析厂商原始响应。
+- DeepSeek、Kimi 等要求在工具调用后回传推理状态的 Provider，只在当前 Provider 请求上下文中保留必要状态；返回的思维链不会进入 `ai_messages`、SSE 或审计。
 - OpenAI 兼容 Provider 可能发送 `choices: []` 的用量或状态帧；该帧不含增量或工具调用，客户端会忽略并继续读取后续有效帧。
 - OpenAI 工具名称和 JSON 参数可能分多个 delta 到达，按工具索引拼接后再校验 JSON。
 - Claude 的 `tool_use` 和 `input_json_delta` 分开到达；缺失的 `input` 才兼容为空对象，显式空字符串、数组、`null` 或其他非对象均保留为参数错误，避免误执行为 `{}`。
 - 非 JSON 或非对象参数抛出带工具 ID、工具名和错误类别的内部异常；编排层只将安全的格式提示回送给模型，最多重试两次，不将原始参数写入 SSE 或审计。
 - 工具结果按厂商要求回填：OpenAI 使用 `assistant.tool_calls + tool`，Claude 使用 `assistant.tool_use + user.tool_result`。
 - 管理端连接测试真实发送最小消息，不把 URL、密钥格式校验当作连接成功。
+
+### 4.1 推理能力契约
+
+对外模型能力统一为 `reasoning_control`：
+
+| 字段 | 约束 |
+| --- | --- |
+| `kind` | `effort`、`toggle`、`none`。 |
+| `options` | `auto` 加上模型原生支持的可选值；`auto` 表示不发送 Provider 推理控制参数。 |
+| `provider_default` | Provider 声明的默认推理设置；未知时为 `null`。 |
+| `mandatory` | Provider 是否要求模型始终推理。 |
+| `source` | `provider`、`official_catalog`、`unknown`。 |
+| `status` | 能力获取状态；失败状态只允许消息使用 `auto`。 |
+| `updated_at` | 最近一次能力解析或刷新时间。 |
+
+解析顺序固定为动态 Provider 元数据优先、内置官方能力目录其次、未知能力最后。管理员创建配置、修改 Provider/Base URL/API Key/模型标识、连接测试成功或主动刷新时更新缓存；刷新失败只保存脱敏错误，不阻止模型配置写入。
+
+消息请求的 `reasoning` 默认为 `auto`，表示完全省略 Provider 推理参数。其他值必须属于当前 `options`；开关模型只接受 `on/off`，强度模型只接受 `none/minimal/low/medium/high/xhigh/max` 中模型声明的子集。无效值返回 `422`，不得静默降级。标题、摘要和连接测试等后台调用固定使用 `auto`。
+
+### 4.2 默认聊天模型
+
+`ai_platform_settings` 是平台级单例设置，`default_chat_model_id` 可以为空。`POST /ai/conversations` 的 `model_id` 可选：显式值仍按既有启用和聊天权限校验，省略时读取默认聊天模型；未配置可用默认模型时返回明确配置错误。
+
+`GET|PATCH /admin/ai-settings` 仅允许超级管理员读取和修改默认模型。默认模型必须同时满足 `enabled=true` 和 `enable_chat=true`；停用、取消聊天权限或删除当前默认模型返回 `409`，要求管理员先切换默认值。
 
 ## 5. 动态工具与系统管理权限
 
@@ -79,7 +121,7 @@
 
 - API Key 使用 `ai.config_secret_key` 经 SHA-256 派生 Fernet 密钥后加密；`fernet::` 前缀用于识别当前密文格式。配置密钥必须独立且不得使用占位值。
 - 管理响应只包含密钥掩码和是否已配置；空更新不会覆盖已有密钥。
-- 审计请求只保存 `[REDACTED]` 和长度；响应保存消息 ID、长度、最终状态及可选恢复操作。工具展示明细和管理写请求的 `body` 按敏感字段脱敏并限长，非法原始参数不保存。
+- 审计请求只保存 `[REDACTED]`、长度、用户选择的 `reasoning`、解析后的控制类型和实际发送值；响应保存消息 ID、长度、最终状态及可选恢复操作。Provider 返回的思维链不保存、不展示。工具展示明细和管理写请求的 `body` 按敏感字段脱敏并限长，非法原始参数不保存。
 - 限流键为 `diskpulse:ai:rate:{user_id}:{UTC分钟}`。首次计数设置 60 秒过期；超限返回 `429 + Retry-After`。
 - Redis 是聊天入口的安全依赖，连接或命令失败时采用关闭式失败并返回 `503`，不绕过限流。
 - 工具循环受 `ai.max_tool_iterations` 限制，避免模型递归调用工具造成不可控资源消耗。
@@ -100,7 +142,7 @@
 
 ## 8. 验证边界
 
-AI 回归应覆盖轮次上限降级、无工具总结、参数校验修复、失败调用改参重试、同参成功结果复用、性能/事件工具的注册权限、系统管理工具的双层鉴权、写请求 `body` 转发与空响应处理。部署环境仍需验证真实 Provider、Redis、数据库迁移和不同权限用户的完整 SSE 对话。
+AI 回归应覆盖各 Provider 的推理参数映射与采样参数剔除、动态能力与目录回退、能力刷新失败后仅允许 `auto`、默认模型设置和停用/删除保护、每消息推理校验、Claude Code 工具白名单及取消清理、DeepSeek/Kimi 工具回合状态、数据库迁移，以及既有轮次上限降级、无工具总结、参数校验修复、失败调用改参重试、同参成功结果复用、动态工具权限和空响应处理。部署环境仍需验证真实 Provider、Redis、数据库迁移和不同权限用户的完整 SSE 对话。
 
 ## 9. Incident 诊断工具约束
 

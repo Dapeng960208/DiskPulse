@@ -19,6 +19,8 @@ FileNotFoundError: Configuration file not found: D:\dev\DiskPulse\.worktrees\eve
 ## 备注
 
 - 分类：`backend`
-- 出现次数：3
-- 首次与最近出现：2026-07-21，`2026-07-21-event-association-catalog`
+- 出现次数：4
+- 首次出现：2026-07-21，`2026-07-21-event-association-catalog`
+- 最近出现：2026-07-23，`2026-07-23-ai-model-reasoning-effort`
 - 出现记录：`sessions/2026-07-21-event-association-catalog/errors.md`
+- 出现记录：`sessions/2026-07-23-ai-model-reasoning-effort/errors.md`；临时 Alembic SQLite 验证直接导入 `models/database` 时，worktree 缺少 `backend/config.yml`，改为在脚本中显式提供最小测试配置后继续验证。
