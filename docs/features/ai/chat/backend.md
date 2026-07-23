@@ -104,9 +104,9 @@
 
 系统管理工具必须同时声明 `ai_exposed=true` 和 `ai_system_management=true`。只有 `is_super_admin(current_user)` 为真时才会注册，允许的方法限定为 `GET`、`POST`、`PUT`、`PATCH`、`DELETE`；不会按 `/admin` 或其他路径名称自动推断权限。
 
-当前系统管理工具包括存储集群、容量池、存储空间、项目组标签、用户和 AI 模型配置的非删除已授权操作，以及存储设置和离职备份记录的只读查询。项目组与用户目录的限额调整工具仅对超级管理员注册，继续复用原有配额 PATCH 路由、请求校验、设备写入和通知逻辑。全部删除工具、创建用户、创建容量池、创建/更新存储空间、全部 Qtree（NetApp）工具、存储设置更新及 AI 审计查询均不注册。
+当前系统管理工具包括存储集群、容量池、存储空间、项目组标签、用户和 AI 模型配置的非删除已授权操作，以及存储设置和离职备份记录的只读查询。项目组与用户目录的限额调整工具仅对超级管理员注册，继续复用原有配额 PATCH 路由、请求校验、设备写入和通知逻辑。全部删除工具、创建用户、创建容量池、创建/更新存储空间、Qtree（NetApp）写工具、存储设置更新及 AI 审计查询均不注册。
 
-`GET /v1/anomalies` 和 `GET /v1/incidents` 分别以 `list_performance_anomalies`、`list_incidents` 注册给所有登录用户，原路由继续按当前用户可见项目过滤；`get_incident_diagnosis` 用于读取已定位事件的确定性诊断。`GET /volumes/{volume_id}/monitoring/ai` 仅作为超级管理员工具 `get_volume_performance_monitoring` 注册，并将原监控结果投影为性能指标、容量趋势、存储空间标识和项目绑定摘要，排除 `linux_path`。
+集群详情的 JSON 读工具一律标记 `ai_system_management=true`：`/storage-clusters/{storage_cluster_id}` 的实时趋势和健康分析（容量变化、严重级别、Top 延迟、重复故障、系统事件及详情）、容量池与存储树、存储空间实时趋势、Qtree（NetApp）列表/详情/实时趋势、`/v1/capacity-predictions/{asset_type}/{asset_id}/risk`、`/v1/forecasts`、`/v1/anomalies`、`/v1/incidents` 和确定性 Incident 诊断。它们只对超级管理员注册，并在执行期再次校验当前用户；底层路由继续执行既有认证、数据范围和参数校验。集群健康分析 `export` 保持未注册，因为工具执行只接受 JSON 响应。`GET /volumes/{volume_id}/monitoring/ai` 继续作为超级管理员工具 `get_volume_performance_monitoring`，并将原监控结果投影为性能指标、容量趋势、存储空间标识和项目绑定摘要，排除 `linux_path`。
 
 执行阶段再次以当前认证用户调用 `is_super_admin`，即使旧注册表被复用也会拒绝普通用户。内部 ASGI 请求使用当前用户 ID 签发的 Bearer Token，继续经过原 API 的认证、权限和数据范围逻辑。写请求的 JSON 内容必须放在受 Pydantic 校验的 `body` 信封内；转发时排除 Pydantic 计算字段，避免其被原路由的 `extra="forbid"` 校验拒绝。
 
