@@ -56,6 +56,23 @@ def test_capacity_repair_sql_preserves_soft_quota_columns():
     assert "dateadd('h', -8, updated_at) AS updated_at" in copy_sql
 
 
+def test_user_repair_sql_quotes_reserved_limit_column():
+    table = next(item for item in TABLES if item.name == "user_storage_usages")
+
+    create_sql = build_create_statement(
+        table,
+        "user_storage_usages__utc_repair",
+    )
+    copy_sql = build_copy_statement(
+        table,
+        source_name=table.name,
+        target_name="user_storage_usages__utc_repair",
+    )
+
+    assert '"limit" DOUBLE' in create_sql
+    assert '"limit"' in copy_sql
+
+
 def test_numeric_timestamp_suffix_builds_safe_repair_and_backup_table_names():
     repair_name, backup_name = build_repair_table_names(
         "storage_performance_metrics",
