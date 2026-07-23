@@ -812,6 +812,10 @@ class Incident(Base):
     resolved_at = Column(UTCDateTime(), nullable=True)
     silenced_until = Column(UTCDateTime(), nullable=True)
     silence_reason = Column(String(500), nullable=True)
+    ai_urgency = Column(String(16), nullable=True)
+    ai_urgency_reason = Column(String(1000), nullable=True)
+    ai_assessment = Column(JSON, nullable=True)
+    ai_analyzed_at = Column(UTCDateTime(), nullable=True)
     created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
     updated_at = Column(UTCDateTime(), nullable=False, default=utc_now, onupdate=utc_now)
 
@@ -846,6 +850,60 @@ class IncidentTimeline(Base):
     to_status = Column(String(16), nullable=True)
     comment = Column(Text, nullable=True)
     occurred_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+
+
+class IncidentAiSettings(Base):
+    __tablename__ = "incident_ai_settings"
+
+    id = Column(Integer, primary_key=True)
+    enabled = Column(Boolean, nullable=False, default=False)
+    iops_absolute_floor = Column(Float, nullable=False, default=10.0)
+    iops_baseline_ratio = Column(Float, nullable=False, default=0.05)
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utc_now, onupdate=utc_now)
+    model_bindings = relationship(
+        "IncidentAiModelBinding",
+        order_by="IncidentAiModelBinding.priority",
+        cascade="all, delete-orphan",
+        back_populates="settings",
+    )
+
+
+class IncidentAiModelBinding(Base):
+    __tablename__ = "incident_ai_model_bindings"
+    __table_args__ = (
+        UniqueConstraint("settings_id", "ai_model_id", name="uq_incident_ai_model_binding"),
+        UniqueConstraint("settings_id", "priority", name="uq_incident_ai_model_priority"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    settings_id = Column(Integer, ForeignKey("incident_ai_settings.id", ondelete="CASCADE"), nullable=False)
+    ai_model_id = Column(Integer, ForeignKey("ai_configs.id", ondelete="RESTRICT"), nullable=False)
+    priority = Column(Integer, nullable=False)
+    settings = relationship("IncidentAiSettings", back_populates="model_bindings")
+    ai_model = relationship("AIConfig")
+
+
+class IncidentAiRun(Base):
+    __tablename__ = "incident_ai_runs"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_incident_ai_run_idempotency"),
+        Index("ix_incident_ai_run_incident_started", "incident_id", desc("started_at")),
+    )
+
+    id = Column(Integer, primary_key=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False)
+    trigger = Column(String(32), nullable=False)
+    idempotency_key = Column(String(255), nullable=False)
+    status = Column(String(16), nullable=False, default="running")
+    model_id = Column(Integer, ForeignKey("ai_configs.id", ondelete="SET NULL"), nullable=True)
+    model_snapshot = Column(JSON, nullable=True)
+    attempt_summary = Column(JSON, nullable=False, default=list)
+    input_snapshot = Column(JSON, nullable=False, default=dict)
+    assessment = Column(JSON, nullable=True)
+    error_code = Column(String(64), nullable=True)
+    started_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+    completed_at = Column(UTCDateTime(), nullable=True)
 
 
 class MaintenanceWindow(Base):
