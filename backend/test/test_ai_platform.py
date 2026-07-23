@@ -234,6 +234,20 @@ def test_cluster_analysis_tools_are_super_admin_only_at_registration_and_executi
         for name in expected
     } == expected
     assert all(admin_registry[name].system_management is True for name in expected)
+    analytics_tools = {
+        "get_storage_cluster_capacity_change",
+        "get_storage_cluster_error_severity",
+        "get_storage_cluster_top_latency",
+        "get_storage_cluster_repeated_faults",
+        "list_storage_cluster_system_events",
+    }
+    for name in analytics_tools:
+        schema = admin_registry[name].input_model.model_json_schema()
+        assert {"start_time", "end_time"} <= set(schema["properties"])
+        assert "最近 24 小时" in schema["properties"]["start_time"]["description"]
+        assert "最近 24 小时" in schema["properties"]["end_time"]["description"]
+        assert {"start_time", "end_time"}.isdisjoint(schema.get("required", []))
+        assert admin_registry[name].input_model.model_validate({"storage_cluster_id": 1})
     assert execute_tool(
         app=app,
         registry=admin_registry,

@@ -648,6 +648,18 @@ def test_storage_health_read_endpoints_return_service_results(
     assert body == payload
 
 
+def test_storage_health_endpoint_defaults_to_the_previous_24_hours(analytics_client, monkeypatch):
+    default_end = datetime(2026, 7, 23, 9, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(storage_cluster, "_analytics_default_end", lambda: default_end)
+    with patch("routers.storage_cluster.get_error_severity", return_value={"counts": {}, "total": 0}) as service:
+        response = analytics_client.get(
+            "/storage-pulse/api/storage-clusters/1/analytics/error-severity",
+        )
+
+    assert response.status_code == 200
+    assert service.call_args.args[2:] == (default_end - timedelta(hours=24), default_end)
+
+
 def test_system_events_endpoint_forwards_search_and_pagination(analytics_client):
     payload = {"data": [], "total": 0, "page": 2, "page_size": 20}
     with patch(

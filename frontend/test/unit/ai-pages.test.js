@@ -124,6 +124,30 @@ describe('AI pages interactions', () => {
     expect(aiApi.streamMessage).toHaveBeenCalledTimes(3);
   });
 
+  it('labels a safe failed tool result as the failure reason in the execution trace', async () => {
+    const wrapper = shallowMount(AiChatPage);
+    await flushPromises();
+    wrapper.vm.messages = [{
+      id: 90,
+      role: 'assistant',
+      content: '',
+      status: 'streaming',
+      tool_calls: [{
+        call_id: 'failed-time-range',
+        tool_name: 'get_storage_cluster_error_severity',
+        status: 'failed',
+        expanded: true,
+        arguments: { storage_cluster_id: 1 },
+        result: { ok: false, error: '查询参数不完整：缺少开始时间、结束时间' },
+      }],
+    }];
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.text()).toContain('执行轨迹');
+    expect(wrapper.text()).toContain('失败原因');
+    expect(wrapper.text()).toContain('查询参数不完整：缺少开始时间、结束时间');
+  });
+
   it('restores a persisted quota confirmation card when opening conversation history', async () => {
     // Review source: quota confirmation existed only in the live SSE event.
     // Resolution contract: the safe confirmation payload returned by history

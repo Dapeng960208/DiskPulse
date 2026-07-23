@@ -545,6 +545,20 @@ def test_tool_trace_redacts_sensitive_result_keys_before_persisting():
     assert display == {"accessToken": "[REDACTED]", "nested": {"apiKey": "[REDACTED]"}}
 
 
+def test_tool_trace_keeps_only_safe_failure_reasons_visible():
+    display, truncated = ai_chat_service._display_tool_result(
+        {"ok": False, "error": "查询参数不完整：缺少开始时间、结束时间"}
+    )
+
+    assert truncated is False
+    assert display == {"ok": False, "error": "查询参数不完整：缺少开始时间、结束时间"}
+
+    hidden, _ = ai_chat_service._display_tool_result(
+        {"ok": False, "error": "Bearer secret-token is invalid"}
+    )
+    assert hidden == {"ok": False, "error": "工具请求失败，请稍后重试"}
+
+
 def test_stream_history_replaces_unattributed_assistant_turn_with_safe_placeholder(db_session, monkeypatch):
     seed_user(db_session)
     configured = seed_model(db_session)
