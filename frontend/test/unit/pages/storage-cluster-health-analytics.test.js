@@ -809,6 +809,12 @@ describe('storage cluster health analytics page', () => {
     expect(storageClusterApi.fetchById).toHaveBeenCalledWith(42);
   });
 
+  it('uses the shared data table without page-level table style overrides', () => {
+    expect(storageClusterDetailSource.match(/<DataTable\b/g)).toHaveLength(3);
+    expect(storageClusterDetailSource).not.toMatch(/<ElTable\b|<ElPagination\b/);
+    expect(storageClusterDetailSource).not.toMatch(/\.table-wrap\b|:deep\(\.el-table/);
+  });
+
   it('allows tab panes to shrink so fixed log actions remain reachable on narrow screens', () => {
     expect(storageClusterDetailSource).toMatch(
       /\.storage-health-page__tabs :deep\(\.el-tab-pane\)\s*\{[^}]*min-width:\s*0;/s,
