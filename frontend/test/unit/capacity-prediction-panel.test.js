@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElMessage } from 'element-plus';
@@ -12,10 +14,26 @@ const api = vi.hoisted(() => ({
 vi.mock('@/api/capacity-prediction-api.js', () => ({ default: api }));
 vi.mock('@/lib/echarts.js', () => ({
   getChartColors: () => ['#1', '#2', '#3', '#4'],
-  loadEcharts: vi.fn(),
+  loadEcharts: vi.fn(async () => ({
+    init: vi.fn(() => ({
+      setOption: vi.fn(),
+      dispose: vi.fn(),
+    })),
+  })),
 }));
 
 import CapacityPredictionPanel from '@/pages/capacity-prediction/CapacityPredictionPanel.vue';
+
+const panelSource = readFileSync(resolve('src/pages/capacity-prediction/CapacityPredictionPanel.vue'), 'utf8');
+const DataTable = {
+  name: 'DataTable',
+  props: {
+    data: { type: Array, default: () => [] },
+    loading: Boolean,
+    density: String,
+  },
+  template: '<section><slot /></section>',
+};
 
 const mountPanel = (props = {}) => shallowMount(CapacityPredictionPanel, {
   props: { assetType: 'group', assetId: 7, visible: true, ...props },
@@ -24,6 +42,7 @@ const mountPanel = (props = {}) => shallowMount(CapacityPredictionPanel, {
     stubs: {
       ElAlert: { props: ['title'], template: '<div data-test="error">{{ title }}</div>' },
       ElEmpty: { props: ['description'], template: '<div data-test="empty">{{ description }}</div>' },
+      DataTable,
     },
   },
 });
@@ -36,6 +55,44 @@ describe('CapacityPredictionPanel', () => {
     api.createPlan.mockResolvedValue({ id: 1 });
     vi.spyOn(ElMessage, 'success').mockImplementation(() => {});
     vi.spyOn(ElMessage, 'error').mockImplementation(() => {});
+  });
+
+  it('uses exactly two shared data tables without page-level table overrides', () => {
+    const dataTableTags = panelSource.match(/<DataTable\b[^>]*>/gs) ?? [];
+
+    expect(dataTableTags).toHaveLength(2);
+    expect(dataTableTags[0]).toContain(':data="prediction.curve"');
+    expect(dataTableTags[1]).toContain(':data="relatedIncidents"');
+    expect(dataTableTags.every((tag) => tag.includes(':loading="loading"'))).toBe(true);
+    expect(panelSource).not.toMatch(/<ElTable\b/);
+    expect(panelSource).not.toMatch(/:deep\(\.el-table\b/);
+  });
+
+  it('passes curve and incident results through the shared table loading contract', async () => {
+    const curve = [{ observed_at: '2026-07-23', p10: 10, p50: 20, p90: 30 }];
+    const incidents = [{ id: 11, severity: 'warning', status: 'open' }];
+    api.fetchPrediction.mockResolvedValue({
+      data_unit: 'GB',
+      curve,
+      exhaustion_dates: {},
+      input_quality: {},
+      algorithm_version: 'capacity-ai-v2',
+    });
+    api.fetchRelatedIncidents.mockResolvedValue(incidents);
+
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    const tables = wrapper.findAllComponents({ name: 'DataTable' });
+    expect(tables).toHaveLength(2);
+    expect(tables[0].props()).toMatchObject({ data: curve, loading: false });
+    expect(tables[1].props()).toMatchObject({ data: incidents, loading: false });
+
+    api.fetchPrediction.mockReturnValueOnce(new Promise(() => {}));
+    await wrapper.setProps({ assetId: 8 });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.findAllComponents({ name: 'DataTable' }).every((table) => table.props('loading'))).toBe(true);
   });
 
   it('renders an empty state when the resource has no forecast yet', async () => {
