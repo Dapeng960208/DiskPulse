@@ -139,7 +139,7 @@ describe('router/routes and app shell', () => {
     expect(associationRoute).toEqual(expect.objectContaining({
       path: 'vendor-event-definitions',
       meta: expect.objectContaining({
-        title: '事件关联信息',
+        title: '厂商事件关联目录',
         icon: 'i-ri-links-line',
       }),
     }));
@@ -241,8 +241,8 @@ describe('router/routes and app shell', () => {
       'Settings',
       'AICenter',
       'ForecastGovernance',
-      'VendorEventDefinitions',
       'IncidentCenter',
+      'VendorEventDefinitions',
       'AuditEvents',
     ]);
     expect(Object.fromEntries(visibleRoutes.filter((route) => route.name).map((route) => [route.name, route.meta.icon]))).toEqual({
@@ -267,6 +267,41 @@ describe('router/routes and app shell', () => {
       Volumes: '/admin/volumes',
       Qtrees: '/admin/qtrees',
     });
+  });
+
+  it('classifies System Management entries after the standalone storage cluster entry', () => {
+    const router = createRouter({ history: createMemoryHistory(), routes });
+    const wrapper = shallowMount(RouteMenu, {
+      global: {
+        plugins: [createPinia(), router],
+        stubs: {
+          ElMenu: { template: '<div><slot /></div>' },
+          RouteMenuItem: {
+            name: 'RouteMenuItem',
+            props: ['option'],
+            template: '<span class="menu-item">{{ option.label }}</span>',
+          },
+        },
+      },
+    });
+    const adminOption = wrapper
+      .findAllComponents({ name: 'RouteMenuItem' })
+      .map((item) => item.props('option'))
+      .find((option) => option.label === '系统管理');
+
+    expect(adminOption.children
+      .filter((option) => option.isVisible())
+      .map(({ label, section }) => [label, section])).toEqual([
+      ['存储集群', undefined],
+      ['项目组标签', '基础配置'],
+      ['用户信息管理', '基础配置'],
+      ['系统设置', '基础配置'],
+      ['AI 中心', '智能治理'],
+      ['容量预测治理', '智能治理'],
+      ['事件中心', '事件与审计'],
+      ['厂商事件关联目录', '事件与审计'],
+      ['统一操作审计', '事件与审计'],
+    ]);
   });
 
   it('keeps project-scoped resource deep links while hiding their root-menu entries', () => {
