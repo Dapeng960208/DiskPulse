@@ -928,7 +928,7 @@ def process_diskpulse_alert_evidence(*, alert_ids: Iterable[int]) -> int:
                     asset_ref=asset,
                     source="diskpulse_alert",
                     source_ref=f"diskpulse:{event.id}",
-                    observed_at=_utc(event.updated_at),
+                    observed_at=_vendor_event_utc(event.updated_at),
                     collected_at=datetime.now(timezone.utc),
                     metric_or_event=(
                         "hard_limit_alert" if event.quota_basis == "hard" else "soft_limit_alert"
