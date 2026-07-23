@@ -164,6 +164,10 @@ describe('ClusterIncidentsTab', () => {
   });
 
   it('uses the shared data table contract for loading, rows, and server-side pagination', async () => {
+    let resolveIncidents;
+    incidentApi.fetchIncidents.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveIncidents = resolve;
+    }));
     const wrapper = shallowMount(ClusterIncidentsTab, {
       props: { clusterId: 42 },
       global: {
@@ -178,6 +182,7 @@ describe('ClusterIncidentsTab', () => {
         },
       },
     });
+    await wrapper.vm.$nextTick();
 
     const table = wrapper.getComponent(DataTable);
     expect(table.props()).toMatchObject({
@@ -192,6 +197,10 @@ describe('ClusterIncidentsTab', () => {
       },
     });
 
+    resolveIncidents({
+      total: 1,
+      content: [{ id: 7, display_name: 'volume-a', category: 'performance_contention', status: 'open' }],
+    });
     await flushPromises();
 
     expect(table.props()).toMatchObject({

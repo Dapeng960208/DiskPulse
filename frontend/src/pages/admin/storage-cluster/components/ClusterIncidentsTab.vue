@@ -1,9 +1,10 @@
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue';
-import { ElButton, ElFormItem, ElOption, ElPagination, ElSelect, ElTable, ElTableColumn, ElTag } from 'element-plus';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { ElFormItem, ElOption, ElSelect, ElTableColumn, ElTag } from 'element-plus';
 import incidentApi from '@/api/incident-api.js';
 import IncidentDetailDrawer from '@/pages/incident/components/IncidentDetailDrawer.vue';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
+import DataTable from '@/components/data/DataTable.vue';
 import QueryForm from '@/components/form/QueryForm.vue';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 
@@ -22,6 +23,13 @@ const selectedIncident = ref(null);
 const detailVisible = ref(false);
 const filters = reactive({ status: '', category: '' });
 const { showCapacityColumns, showSecondaryColumns } = useResponsiveTableColumns();
+const pagination = computed(() => ({
+  page: page.value,
+  pageSize: size.value,
+  total: total.value,
+  pageSizes: [20, 50, 100],
+  hideOnSinglePage: true,
+}));
 
 function formatLocalDateTime(value) {
   const date = new Date(value);
@@ -86,6 +94,13 @@ function resetFilters() {
   load(true);
 }
 
+function updatePagination({ page: nextPage, pageSize }) {
+  const pageSizeChanged = pageSize !== size.value;
+  size.value = pageSize;
+  page.value = pageSizeChanged ? 1 : nextPage;
+  load();
+}
+
 watch(() => props.clusterId, () => load(true));
 onMounted(load);
 </script>
@@ -145,10 +160,11 @@ onMounted(load);
       <div><dt>容量预测</dt><dd>{{ forecastCount }}</dd></div>
       <div><dt>性能异常</dt><dd>{{ anomalyCount }}</dd></div>
     </dl>
-    <ElTable
-      v-loading="loading"
+    <DataTable
+      :pagination="pagination"
+      :loading="loading"
       :data="incidents"
-      empty-text="暂无关联事件">
+      @update:pagination="updatePagination">
       <ElTableColumn
         label="受影响对象"
         prop="display_name"
@@ -181,22 +197,15 @@ onMounted(load);
         align="right"
         width="90"
         fixed="right">
-        <template #default="{ row }"><TableActionButton
-          action="detail"
-          @click="openDetail(row)">查看</TableActionButton></template>
+        <template #default="{ row }">
+          <div class="list-row-actions">
+            <TableActionButton
+              action="detail"
+              @click="openDetail(row)">查看</TableActionButton>
+          </div>
+        </template>
       </ElTableColumn>
-    </ElTable>
-    <ElPagination
-      v-if="total > 0"
-      class="cluster-incidents-tab__pagination"
-      background
-      layout="total, sizes, prev, pager, next"
-      :current-page="page"
-      :page-size="size"
-      :page-sizes="[20, 50, 100]"
-      :total="total"
-      @current-change="(value) => { page = value; load(); }"
-      @size-change="(value) => { size = value; load(true); }" />
+    </DataTable>
     <IncidentDetailDrawer
       v-model="detailVisible"
       :incident="selectedIncident"
@@ -210,8 +219,5 @@ onMounted(load);
 .cluster-incidents-tab__summary div { padding: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-secondary); }
 .cluster-incidents-tab__summary dt { color: var(--text-secondary); font-size: var(--font-size-sm); }
 .cluster-incidents-tab__summary dd { margin: 4px 0 0; color: var(--text-primary); font-size: var(--font-size-lg); font-weight: 600; }
-.cluster-incidents-tab__pagination { display: flex; justify-content: flex-end; margin-top: var(--spacing-md); }
-.cluster-incidents-tab :deep(.el-table__body-wrapper) { overflow-x: hidden !important; }
-.cluster-incidents-tab :deep(.el-table .cell) { overflow-wrap: anywhere; white-space: normal; }
 @media (max-width: 640px) { .cluster-incidents-tab__summary { grid-template-columns: 1fr; } }
 </style>
