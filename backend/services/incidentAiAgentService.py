@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Schema and execution boundary for the background Incident AI agent."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import math
 from typing import Any, Callable, Literal
@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from crud import incidentAiAgentCrud
 from models import IncidentAiRun, IncidentTimeline
 from services.ai_client import AIClientError, chat_completion
+from utils.datetime_utils import from_questdb_utc
 
 
 IncidentAiClassification = Literal["actionable", "normal_fluctuation", "insufficient_evidence"]
@@ -19,7 +20,13 @@ IncidentAiUrgency = Literal["low", "medium", "high", "critical"]
 IncidentAiConfidence = Literal["low", "medium", "high"]
 IncidentStatus = Literal["open", "acknowledged", "investigating", "mitigated", "resolved"]
 
-
+PERFORMANCE_METRIC_UNITS = {
+    "latency_read": "ms",
+    "latency_write": "ms",
+    "latency_total": "ms",
+    "iops_total": "IOPS",
+    "throughput_total": "B/s",
+}
 class IncidentAiAssessment(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -121,111 +128,150 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _utc_z(value: datetime) -> str:
+    return from_questdb_utc(value).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _finite_number(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _performance_observation_context(db, incident) -> dict[str, Any]:
+    """Build a capped, event-scoped 24-hour context without exposing query controls to AI."""
+    from crud import storageHealthAnalyticsCrud
+
+    resource = {
+        "asset_type": str(incident.asset_type),
+        "asset_id": str(incident.asset_id),
+        "storage_cluster_id": incident.storage_cluster_id,
+    }
+    if incident.storage_cluster_id is None or not resource["asset_type"] or not resource["asset_id"]:
+        return {
+            "scope": "asset_metrics_24h",
+            "data_status": "unavailable",
+            "resource": resource,
+            "data_gaps": ["performance_identity_unavailable"],
+        }
+    end_time = from_questdb_utc(incident.last_evidence_at)
+    start_time = end_time - timedelta(hours=24)
+    window = {
+        "start_at": _utc_z(start_time),
+        "end_at": _utc_z(end_time),
+        "timezone": "UTC",
+    }
+    try:
+        rows = storageHealthAnalyticsCrud.get_hourly_asset_performance(
+            db,
+            storage_cluster_id=incident.storage_cluster_id,
+            asset_type=resource["asset_type"],
+            asset_id=resource["asset_id"],
+            start_time=start_time,
+            end_time=end_time,
+        )
+    except Exception:
+        return {
+            "scope": "asset_metrics_24h",
+            "data_status": "unavailable",
+            "resource": resource,
+            "window": window,
+            "data_gaps": ["performance_metrics_query_failed"],
+        }
+
+    hourly_metrics = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        try:
+            hour_start = _utc_z(row["hour_start"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        point = {"hour_start": hour_start, "sample_count": max(0, int(row.get("sample_count") or 0))}
+        for metric in PERFORMANCE_METRIC_UNITS:
+            number = _finite_number(row.get(metric))
+            if number is not None:
+                point[metric] = number
+        hourly_metrics.append(point)
+    hourly_metrics.sort(key=lambda point: point["hour_start"])
+    hourly_metrics = hourly_metrics[-24:]
+    metric_values = {
+        metric: [point[metric] for point in hourly_metrics if metric in point]
+        for metric in PERFORMANCE_METRIC_UNITS
+    }
+    metric_summary = {
+        metric: {
+            "unit": unit,
+            "sample_count": len(metric_values[metric]),
+            **(
+                {
+                    "min": min(metric_values[metric]),
+                    "max": max(metric_values[metric]),
+                    "average": sum(metric_values[metric]) / len(metric_values[metric]),
+                }
+                if metric_values[metric]
+                else {}
+            ),
+        }
+        for metric, unit in PERFORMANCE_METRIC_UNITS.items()
+    }
+    if not hourly_metrics:
+        return {
+            "scope": "asset_metrics_24h",
+            "data_status": "no_samples",
+            "resource": resource,
+            "window": window,
+            "hourly_metrics": [],
+            "metric_summary": metric_summary,
+            "data_gaps": ["performance_metrics_unavailable"],
+        }
+    return {
+        "scope": "asset_metrics_24h",
+        "data_status": "data",
+        "resource": resource,
+        "window": window,
+        "hourly_metrics": hourly_metrics,
+        "metric_summary": metric_summary,
+        "sample_count": sum(point["sample_count"] for point in hourly_metrics),
+        "missing_hour_count": max(0, 24 - len(hourly_metrics)),
+        "data_gaps": [],
+    }
+
+
+def _source_evidence_context(evidence) -> dict[str, Any]:
+    data_gaps = sorted({gap for item in evidence for gap in (item.data_gaps or []) if isinstance(gap, str)})
+    return {
+        "scope": "source_evidence",
+        "data_status": "evidence_only",
+        "evidence_count": len(evidence),
+        "data_gaps": data_gaps[:12],
+    }
+
+
 def _safe_snapshot(db, incident) -> dict[str, Any]:
     from crud import forecastIncidentCrud
-    from services import forecastIncidentService
 
-    diagnosis = forecastIncidentCrud.latest_diagnosis(db, incident.id)
     evidence = forecastIncidentCrud.list_incident_evidence(db, incident.id)
-    anomaly_context = forecastIncidentService.build_anomaly_evidence_context(db, evidence)
-
-    def safe_number(value):
-        try:
-            number = float(value)
-        except (TypeError, ValueError):
-            return None
-        return number if math.isfinite(number) else None
-
-    def safe_integer(value, *, minimum: int, maximum: int) -> int:
-        try:
-            number = int(value)
-        except (TypeError, ValueError):
-            return minimum
-        return max(minimum, min(maximum, number))
-
-    def safe_history(value):
-        if not isinstance(value, dict):
-            return {"sample_count": 0, "coverage_ratio": 0.0}
-        result = {
-            "sample_count": safe_integer(value.get("sample_count"), minimum=0, maximum=100_000),
-            "coverage_ratio": max(0.0, min(1.0, safe_number(value.get("coverage_ratio")) or 0.0)),
-        }
-        for key in ("median", "p95", "mad"):
-            number = safe_number(value.get(key))
-            if number is not None:
-                result[key] = number
-        return result
-
-    performance_context = []
-    for observation in anomaly_context.values():
-        value = (observation.input_quality or {}).get("ai_performance_context")
-        if not isinstance(value, dict):
-            continue
-        trend = []
-        for point in (value.get("trend_2h_p95") or [])[-24:]:
-            if not isinstance(point, dict):
-                continue
-            measured = safe_number(point.get("p95"))
-            if measured is not None:
-                trend.append({
-                    "minutes_before_trigger": safe_integer(point.get("minutes_before_trigger"), minimum=0, maximum=120),
-                    "p95": measured,
-                })
-        associated_metrics = []
-        for metric in (value.get("associated_metrics") or [])[:3]:
-            if not isinstance(metric, dict) or metric.get("metric") not in {"latency", "iops", "throughput"}:
-                continue
-            latest = safe_number(metric.get("latest_p95"))
-            if latest is not None:
-                associated_metrics.append({
-                    "metric": metric["metric"],
-                    "latest_p95": latest,
-                    "history_28d": safe_history(metric.get("history_28d")),
-                })
-        performance_context.append({
-            "metric": value.get("metric") if value.get("metric") in {"latency", "iops", "throughput"} else "unknown",
-            "trigger_three_bucket_p95": [
-                number for number in (safe_number(item) for item in (value.get("trigger_three_bucket_p95") or [])[:3])
-                if number is not None
-            ],
-            "trend_2h_p95": trend,
-            "history_28d": safe_history(value.get("history_28d")),
-            "associated_metrics": associated_metrics,
-        })
+    observation_context = (
+        _performance_observation_context(db, incident)
+        if incident.category == "performance_contention"
+        else _source_evidence_context(evidence)
+    )
     return {
-        "category": incident.category,
-        "severity": incident.severity,
         "status": incident.status,
         "opened_at": incident.opened_at.isoformat(),
         "last_evidence_at": incident.last_evidence_at.isoformat(),
-        "diagnosis": (
-            {
-                "confidence": diagnosis.confidence,
-                "candidates": [
-                    {
-                        "category": item.get("category"),
-                        "score": item.get("score"),
-                        "evidence_count": len(item.get("evidence_refs") or []),
-                        "data_gaps": item.get("data_gaps") or [],
-                    }
-                    for item in diagnosis.candidates or []
-                    if isinstance(item, dict)
-                ],
-                "data_gaps": diagnosis.data_gaps,
-            }
-            if diagnosis is not None
-            else None
-        ),
         "evidence": [
             {
                 "source": item.source,
-                "type": item.evidence_type,
                 "observed_at": item.observed_at.isoformat(),
                 "data_gaps": list(item.data_gaps or []),
             }
             for item in evidence[-20:]
         ],
-        "performance_context": performance_context[:6],
+        "observation_context": observation_context,
     }
 
 
@@ -236,6 +282,8 @@ def _messages(snapshot: dict[str, Any]) -> list[dict[str, str]]:
             "content": (
                 "你是 DiskPulse 事件处置 Agent。仅依据提供的脱敏事件事实判断，"
                 "不得虚构设备操作、凭据、路径或未给出的证据。"
+                "observation_context 仅包含可验证的观测、窗口和采集状态；必须引用其中的指标、时间范围或数据缺口。"
+                "不得声称已检查未提供的 CPU、内存、进程、网络或业务请求数据。"
                 "仅返回 JSON：classification(actionable|normal_fluctuation|insufficient_evidence)、"
                 "urgency(low|medium|high|critical)、confidence(low|medium|high)、summary、investigation_steps、resolution_steps、"
                 "evidence_basis、proposed_next_status、transition_reason。"

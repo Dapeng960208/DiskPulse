@@ -2,7 +2,7 @@
 
 ## 背景与目标
 
-事件 AI 处置 Agent 当前只转发异常证据中预先生成的 `ai_performance_context`。当该字段未生成时，`performance_context` 为空，模型只能重复“请补充 CPU、内存、磁盘 I/O”等通用建议，无法解释当前事件。
+事件 AI 处置 Agent 曾转发异常证据中预先生成的 `ai_performance_context`。当该字段未生成时，`performance_context` 为空，模型只能重复“请补充 CPU、内存、磁盘 I/O”等通用建议，无法解释当前事件；其中的算法候选和鲁棒统计也会锚定模型结论。
 
 本变更使 Agent 在每次研判前，从受限的监控事实中构造与事件类别相符的上下文。性能争用事件必须带有当前事件资源近 24 个完整小时的五项性能指标聚合；没有样本时必须明确说明数据缺失。目标是提升研判的可验证性，不授予模型执行查询、设备操作或跨资源读取权限。
 
@@ -16,19 +16,17 @@
 
 ## 数据边界与架构
 
-`incidentAiAgentService._safe_snapshot` 新增一个纯读取的类型化上下文构造器。它接收当前 Incident、已关联证据和 PostgreSQL/QuestDB 会话，返回可 JSON 序列化的有限数据：
+`incidentAiAgentService._safe_snapshot` 新增一个纯读取的观测上下文构造器。它接收当前 Incident、已关联证据和 PostgreSQL/QuestDB 会话，返回可 JSON 序列化的有限数据：
 
-- 保留现有诊断、关联证据和异常上下文，作为模型判断的证据链。
-- 对 `performance_contention`：以事件的 `asset_type`、`asset_id`、`storage_cluster_id` 为固定过滤条件，从 QuestDB `storage_performance_metrics` 读取 `[last_evidence_at - 24h, last_evidence_at]`。按 UTC 小时聚合 `latency_read`、`latency_write`、`latency_total`、`iops_total`、`throughput_total` 的平均值和采样数；最多 24 桶、每指标最多 24 个有限数值。另给出每项指标的样本总数、缺失小时数、最小/最大/平均值，以及事件最近三小时的桶。
-- 对 `capacity_pressure`：保留预测/容量证据的时间、阈值、使用率和数据缺口；不伪造性能序列。
-- 对 `device_fault`：保留厂商健康证据的标准化类别、发生时间、受影响资源和数据缺口；不读取原始厂商日志、路径或凭据。
-- 对 `telemetry_blindspot`：保留采集连续性、最后样本时间、覆盖率和数据缺口；不将无数据误说成性能正常。
+- 只保留关联来源、观测时间、数据缺口和受限性能聚合；不发送事件类别、确定性严重程度、诊断候选/分数/置信度、MAD 等鲁棒统计、旧异常触发摘要或证据类型。
+- 对 `performance_contention`：以事件的 `asset_type`、`asset_id`、`storage_cluster_id` 为固定过滤条件，从 QuestDB `storage_performance_metrics` 读取 `[last_evidence_at - 24h, last_evidence_at)`。按 UTC 小时聚合 `latency_read`、`latency_write`、`latency_total`、`iops_total`、`throughput_total` 的平均值和采样数；最多 24 桶、每指标最多 24 个有限数值。另给出每项指标的样本总数、缺失小时数、最小/最大/平均值，以及事件最近三小时的桶。
+- 非性能路径只发送关联来源数、观测时间和数据缺口；服务端使用哪种事件路径不作为标签发送，且不读取原始厂商日志、路径或凭据。
 
 时间窗口锚定 `incident.last_evidence_at`，而不是 worker 当前时间，因此重试与定时复评产生相同的事实窗口。QuestDB 查询使用 UTC RFC 3339 `Z` 绑定边界，查询结果的 naive 时间按 UTC 解释。读取失败、对象标识不完整或没有样本时，快照写入结构化 `data_status`/`data_gaps`，AI 仍可进行“证据不足”判断，但不得把缺失解释为正常。
 
 ## 模型提示与大小限制
 
-系统提示将说明 `category_context` 是唯一可用的类型化事实：必须引用其中的指标、时间范围或明确数据缺口；没有事实不得声称已检查 CPU、进程、网络或业务请求。模型仍只返回既有的结构化评估和置信度字段。
+系统提示将说明 `observation_context` 是唯一可用的观测事实：必须引用其中的指标、时间范围或明确数据缺口；没有事实不得声称已检查 CPU、进程、网络或业务请求。模型仍只返回既有的结构化评估和置信度字段。
 
 快照不会包含路径、命令、密钥、完整厂商日志、人工评论或跨项目资产。聚合结果限制为单个事件、固定 24 小时、五个指标和 24 个小时桶；数值须为有限 `float`，异常值丢弃。QuestDB 不可用只会降低 AI 证据，不会阻断事件生命周期或触发写操作。
 

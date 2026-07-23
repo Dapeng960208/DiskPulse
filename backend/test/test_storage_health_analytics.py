@@ -408,6 +408,25 @@ def test_top_latency_crud_returns_standard_performance_metrics():
     statement = str(connection.execute.call_args.args[0])
     assert "avg(latency_read) AS avg_read_latency" in statement
     assert "avg(latency_write) AS avg_write_latency" in statement
+    assert "avg(iops_total) AS avg_iops" in statement
+    assert "avg(throughput_total) AS avg_throughput" in statement
+    assert "object_id IN (:object_id_0)" in statement
+    assert connection.execute.call_args.args[1]["object_id_0"] == "volume-1"
+    assert rows == [
+        {
+            "object_id": "volume-1",
+            "object_name": "vol-a",
+            "object_type": "volume",
+            "p95_latency": 9.5,
+            "avg_latency": 5.0,
+            "max_latency": 12.0,
+            "avg_read_latency": 3.0,
+            "avg_write_latency": 7.0,
+            "avg_iops": 125.0,
+            "avg_throughput": 4096.0,
+            "sample_count": 8,
+        }
+    ]
 
 
 def test_hourly_asset_performance_uses_utc_window_and_bound_resource_identity():
@@ -454,25 +473,6 @@ def test_hourly_asset_performance_uses_utc_window_and_bound_resource_identity():
         "iops_total": 240.0,
         "throughput_total": 4096.0,
     }]
-    assert "avg(iops_total) AS avg_iops" in statement
-    assert "avg(throughput_total) AS avg_throughput" in statement
-    assert "object_id IN (:object_id_0)" in statement
-    assert connection.execute.call_args.args[1]["object_id_0"] == "volume-1"
-    assert rows == [
-        {
-            "object_id": "volume-1",
-            "object_name": "vol-a",
-            "object_type": "volume",
-            "p95_latency": 9.5,
-            "avg_latency": 5.0,
-            "max_latency": 12.0,
-            "avg_read_latency": 3.0,
-            "avg_write_latency": 7.0,
-            "avg_iops": 125.0,
-            "avg_throughput": 4096.0,
-            "sample_count": 8,
-        }
-    ]
 
 
 def test_repeated_faults_group_vendor_events_only():

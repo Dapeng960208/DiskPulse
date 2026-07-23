@@ -429,6 +429,57 @@ def get_top_latency_rows(
     ]
 
 
+def get_hourly_asset_performance(
+    db: Session,
+    *,
+    storage_cluster_id: int,
+    asset_type: str,
+    asset_id: str,
+    start_time: datetime,
+    end_time: datetime,
+) -> list[dict]:
+    """Return a bounded, read-only hourly performance series for one incident asset."""
+    normalized_type = str(asset_type or "").strip()
+    normalized_id = str(asset_id or "").strip()
+    if storage_cluster_id < 1 or not normalized_type or not normalized_id or start_time >= end_time:
+        return []
+    statement = text(
+        "SELECT collected_at, count() AS sample_count, "
+        "avg(latency_read) AS latency_read, "
+        "avg(latency_write) AS latency_write, "
+        "avg(latency_total) AS latency_total, "
+        "avg(iops_total) AS iops_total, "
+        "avg(throughput_total) AS throughput_total "
+        "FROM storage_performance_metrics "
+        "WHERE storage_cluster_id = :storage_cluster_id "
+        "AND object_type = :asset_type "
+        "AND object_id = :asset_id "
+        "AND collected_at >= :start_time AND collected_at < :end_time "
+        "SAMPLE BY 1h"
+    )
+    parameters = {
+        "storage_cluster_id": str(storage_cluster_id),
+        "asset_type": normalized_type,
+        "asset_id": normalized_id,
+        "start_time": to_utc_z(start_time),
+        "end_time": to_utc_z(end_time),
+    }
+    with QuestDBSession(config=get_storage_config(db=db)) as connection:
+        rows = connection.execute(statement, parameters).all()
+    return [
+        {
+            "hour_start": row[0],
+            "sample_count": int(row[1]),
+            "latency_read": None if row[2] is None else float(row[2]),
+            "latency_write": None if row[3] is None else float(row[3]),
+            "latency_total": None if row[4] is None else float(row[4]),
+            "iops_total": None if row[5] is None else float(row[5]),
+            "throughput_total": None if row[6] is None else float(row[6]),
+        }
+        for row in rows
+    ]
+
+
 def has_performance_metrics(db: Session, storage_cluster_id: int) -> bool:
     statement = text(
         "SELECT 1 FROM storage_performance_metrics "

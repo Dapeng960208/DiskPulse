@@ -19,6 +19,8 @@
 
 `celery_tasks.tasks.incident_ai_agent.review_incident_ai_task` 使用事件锁和生命周期快照键；`review_due_incidents_ai_task` 按 30 分钟时间桶复评，并在最近 60 分钟的有效事件中最多选择 5 条。候选排序为 `critical`、未审查或证据更新、最近证据时间；只有最近 60 分钟的 `critical` 生命周期事件会在事务提交后立即投递，其他事件等待定时批次。任务只调用 `services.ai_client.chat_completion(..., tools=[])`，未注册设备或数据写工具。
 
+调用前，`incidentAiAgentService` 生成受限 `observation_context`。性能路径只通过参数化的 QuestDB 查询读取当前 `storage_cluster_id`、`asset_type` 和 `asset_id` 的 `[last_evidence_at - 24h, last_evidence_at)` 数据，按 UTC 小时聚合 `latency_read`、`latency_write`、`latency_total`、`iops_total` 和 `throughput_total`，最多保留 24 个桶。输入同时携带资源范围、窗口、每桶采样数、指标汇总和缺失小时数；无法查询、无样本或资产身份不完整时输出安全的缺口码，不回显连接错误。选择哪条服务端路径不会作为标签序列化给模型；快照不包含事件类别、确定性严重程度、诊断候选/分数/置信度、MAD 等鲁棒统计、旧异常触发摘要或证据类型。系统提示禁止模型声称已检查快照未提供的 CPU、内存、进程、网络或业务请求数据。
+
 任务日志使用 `incident`、`trigger`、`task_id`（投递时）、`run_id`、最终 `status`、`model_id` 和安全 `error_code` 标识一次审查的投递、开始、跳过和结束；异常日志保留调用栈，不记录 prompt、凭据或原始厂商日志。
 
 ## 降噪
