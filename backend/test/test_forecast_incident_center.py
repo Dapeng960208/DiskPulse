@@ -38,6 +38,25 @@ def test_diskpulse_alert_evidence_treats_legacy_alert_time_as_local_wall_time():
     assert "observed_at=_vendor_event_utc(event.updated_at)" in process_source
 
 
+def test_diskpulse_alert_time_migration_repairs_existing_capacity_incidents():
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "migrate"
+        / "versions"
+        / "000000000020_repair_diskpulse_alert_evidence_times.py"
+    )
+
+    sql = migration.read_text(encoding="utf-8")
+
+    assert 'down_revision = "000000000019"' in sql
+    assert "diskpulse_alert" in sql
+    assert "storage_alerts" in sql
+    assert "AT TIME ZONE 'Asia/Shanghai'" in sql
+    assert "capacity_pressure" in sql
+    assert "1900-01-02 00:00:00+00" in sql
+    assert "interval '1 microsecond'" in sql
+
+
 def test_questdb_utc_contract_migration_repairs_existing_performance_incident_times():
     migration = (
         Path(__file__).resolve().parents[1]
