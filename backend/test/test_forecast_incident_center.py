@@ -9,6 +9,26 @@ import pytest
 UTC_NOW = datetime(2026, 7, 18, 8, 0, tzinfo=timezone.utc)
 
 
+def test_questdb_utc_contract_migration_repairs_existing_performance_incident_times():
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "migrate"
+        / "versions"
+        / "000000000019_repair_questdb_performance_times.py"
+    )
+
+    sql = migration.read_text(encoding="utf-8")
+
+    assert 'down_revision = "000000000018"' in sql
+    assert "questdb_performance" in sql
+    assert "anomaly_observation" in sql
+    assert "performance_contention" in sql
+    assert "interval '8 hours'" in sql
+    assert "regexp_replace" in sql
+    assert "correlation_bucket_at" in sql
+    assert "last_evidence_at" in sql
+
+
 def _asset(project_id: int | None = 1):
     from services.forecastIncidentService import AssetRef
 
