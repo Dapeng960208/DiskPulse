@@ -236,6 +236,16 @@ describe('project detail information architecture', () => {
     expect(tab).toContain('<DataTable');
     expect(tab).toContain('<AccessibleResourceLink');
     expect(tab).toContain('<StorageTypeTag');
+    expect(tab).toContain('label="硬限额"');
+    expect(tab).toContain('label="软限额"');
+    expect(tab).toContain('label="使用量"');
+    expect(tab).toContain('label="硬限额使用率(%)"');
+    expect(tab).toContain('label="软限额使用率(%)"');
+    expect(tab).toContain('formatQuotaLimit(row.capacity?.limit ?? row.limit)');
+    expect(tab).toContain('formatQuotaLimit(row.capacity?.soft_limit ?? row.soft_limit)');
+    expect(tab).toContain('canRenderQuotaProgress({ used: row.used, total: row.limit })');
+    expect(tab).toContain('canRenderQuotaProgress({ used: row.used, total: row.soft_limit })');
+    expect(tab).toContain('type="warning">无软限额');
   });
 
   it('requests the selected project groups with server pagination', async () => {

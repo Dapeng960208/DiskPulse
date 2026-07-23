@@ -13,7 +13,10 @@ describe('realtime page height contract', () => {
 
     expect(userDirectoryDetail).toContain(':fill-content="true"');
     expect(groupDetail).toContain(':fill-content="true"');
+    expect(groupDetail).toContain('class="detail-monitor-page__capacity-tab"');
     expect(groupDetail).toMatch(/\.detail-monitor-page \{\r?\n  display: flex;\r?\n  flex: 1 1 auto;\r?\n  flex-direction: column;\r?\n  min-height: 0;\r?\n  height: 100%;/);
+    expect(groupDetail).toMatch(/:deep\(\.detail-monitor-page__content \.el-tabs__content\) \{\r?\n  display: flex;\r?\n  flex: 1 1 auto;\r?\n  flex-direction: column;\r?\n  min-height: 0;/);
+    expect(groupDetail).toMatch(/:deep\(\.detail-monitor-page__content \.detail-monitor-page__capacity-tab\) \{\r?\n  display: flex;\r?\n  flex: 1 1 auto;\r?\n  flex-direction: column;\r?\n  min-height: 0;/);
     expect(aggregateDetail).toContain(':fill-content="true"');
     expect(qtreeDetail).toContain(':fill-content="true"');
   });
