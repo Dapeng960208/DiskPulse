@@ -93,7 +93,7 @@ section=capacity|severity|latency|faults|all
 
 ## 派生预测与关联事件
 
-集群详情新增懒加载“关联事件”页签。该页签只读取项目作用域内的派生 Incident、容量预测数和性能异常数；打开后才请求 `GET /storage-pulse/api/v1/incidents`、`GET /storage-pulse/api/v1/forecasts` 和 `GET /storage-pulse/api/v1/anomalies`。关联事件列表可按状态和事件类型筛选。点击事件可查看不可变证据引用、确定性诊断与操作时间线。
+集群详情新增懒加载“关联事件”页签。该页签只读取项目作用域内的派生 Incident、容量预测数和性能异常数；打开后才请求 `GET /storage-pulse/api/v1/incidents`、`GET /storage-pulse/api/v1/forecasts` 和 `GET /storage-pulse/api/v1/anomalies`。关联事件列表可按状态和事件类型筛选。点击事件可查看不可变证据引用、确定性诊断与操作时间线。详情抽屉标题和“事件主题”明确区分容量告警、容量预测、系统故障事件、性能异常和监控异常；每条证据直接展示“关联类型”和“关联内容”。只有已明确关联为 `fault_log` 的厂商证据称为“系统故障事件”，未分类的严重厂商事件继续显示“设备健康风险”。历史时间线中泛化的“关联事件证据”说明按当前 Incident 主题改为可读摘要，并引导查看上方明确的证据类型、内容和影响范围。
 
 该页签不改变本页的“故障分析”与“系统事件”语义：厂商原始事件仍来自 `storage_alerts` 的 `netapp`/`isilon` 记录，既有告警页仍只显示 `source=diskpulse`。派生分析侧的 `asset_mapping_missing` 显示为“资产映射不完整”，表示事件至少已归属集群，但节点/卷/Qtree/项目的稳定映射链路不完整；已有稳定节点身份的厂商事件不产生该缺口。它不会修改或隐藏厂商原始记录，也不表示事件代码或日志缺失。
 
