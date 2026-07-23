@@ -28,6 +28,13 @@
 - 列表接口在数据库分页和 count 后再返回当前页。列表摘要只读取展示所需字段；关联统计应按当前页主键批量补齐，不得把详情页的深加载集合搬到列表页。
 - 新增高频过滤、排序、关联查找或物化读取路径时，评估并实现对应索引。项目隔离字段优先作为组合索引前缀。
 
+## QuestDB 时间契约
+
+- QuestDB designated timestamp 统一表示 UTC 瞬时。当前 PGWire 连接固定为 `timezone=UTC`，写入前必须把 `Asia/Shanghai` 本地墙上时间或任意 aware 时间转换为 UTC，再去除 `tzinfo` 交给驱动；禁止把上海本地 naive 时间直接写入。
+- QuestDB 查询时间边界统一绑定为 UTC RFC 3339 `Z` 字符串，不能直接绑定 aware `datetime`，也不能把上海本地 naive 字符串当作 UTC。
+- QuestDB 驱动返回的 naive timestamp 必须先按 UTC 解释。面向用户的趋势和详情接口再显式转换为 `Asia/Shanghai` 本地墙上时间；派生分析保持 UTC-aware 时间。
+- designated timestamp 不能原地更新。历史时间修复必须停写、重建表、核对行数与最小/最大时间并保留原表备份，禁止在混有新 UTC 行和旧本地墙钟行时整体平移。
+
 ## 兼容性与验证
 
 - PostgreSQL 迁移默认兼容 SQLite、PostgreSQL 与 MySQL；使用方言无关的 SQLAlchemy 类型、绑定参数和 DDL/DML 表达式。必须分支时，明确每个方言的兼容策略。

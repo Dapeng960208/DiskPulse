@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from crud.configCrud import get_storage_config
 from sqlalchemy import  text
+from utils.datetime_utils import questdb_to_system_local_naive, to_utc_z
 from utils.query import require_allowed
 
 
@@ -57,7 +58,11 @@ def get_storage_real_time(columns: List[str], table_prefix: str, attribute_id: i
     with QuestDBSession(config=storage_config) as conn:
         result = conn.execute(
             text(select_command),
-            {"attribute_id": str(attribute_id), "start_time": str(start_time), "end_time": str(end_time)},
+            {
+                "attribute_id": str(attribute_id),
+                "start_time": to_utc_z(start_time),
+                "end_time": to_utc_z(end_time),
+            },
         ).fetchall()
     return result
 
@@ -67,7 +72,12 @@ def process_result_data(result: List[Any], columns: List[str]) -> Dict[str, List
     for i, column in enumerate(columns):
         source = []
         for item in result:
-            row = [item[-1].strftime("%Y-%m-%d %H:%M:00"), item[i]]
+            row = [
+                questdb_to_system_local_naive(item[-1]).strftime(
+                    "%Y-%m-%d %H:%M:00"
+                ),
+                item[i],
+            ]
             source.append(row)
         data[column] = source
     return data
@@ -129,7 +139,10 @@ def get_high_avg_usage(table_prefix: str, storage_config: Any, end_time: datetim
             avg_use_ratio >= :threshold;
     """
     with QuestDBSession(config=storage_config) as conn:
-        result = conn.execute(text(select_command), {"end_time": str(end_time), "threshold": threshold}).fetchall()
+        result = conn.execute(
+            text(select_command),
+            {"end_time": to_utc_z(end_time), "threshold": threshold},
+        ).fetchall()
     return result
 
 
@@ -154,7 +167,10 @@ def get_cluster_storage_real_time(start_time: datetime,
             ORDER BY updated_at;
     """
     with QuestDBSession(config=storage_config) as conn:
-        result = conn.execute(text(select_command), {"start_time": str(start_time), "end_time": str(end_time)}).fetchall()
+        result = conn.execute(
+            text(select_command),
+            {"start_time": to_utc_z(start_time), "end_time": to_utc_z(end_time)},
+        ).fetchall()
     return result
 
 
@@ -168,8 +184,8 @@ def get_project_storage_usage(storage_config: Any, start_time: datetime | None =
         params['attribute_id']  = str( project_id)
     if start_time and end_time:
         query_conditions.append('updated_at BETWEEN :start_time AND :end_time')
-        params['start_time'] = str(start_time)
-        params['end_time'] = str(end_time)
+        params['start_time'] = to_utc_z(start_time)
+        params['end_time'] = to_utc_z(end_time)
     if query_conditions:
         select_command += " WHERE " + " AND ".join(query_conditions)
     select_command += f" GROUP BY project_id"
@@ -232,7 +248,17 @@ def get_storage_cluster_real_time(db: Session, storage_cluster_id: int, start_ti
     with QuestDBSession(config=storage_config) as conn:
         result = conn.execute(
             text(select_command),
-            {"storage_cluster_id": str(storage_cluster_id), "start_time": str(start_time), "end_time": str(end_time)},
+            {
+                "storage_cluster_id": str(storage_cluster_id),
+                "start_time": to_utc_z(start_time),
+                "end_time": to_utc_z(end_time),
+            },
         ).fetchall()
 
-    return [[item[1].strftime("%Y-%m-%d %H:%M:00"), item[0]] for item in result]
+    return [
+        [
+            questdb_to_system_local_naive(item[1]).strftime("%Y-%m-%d %H:%M:00"),
+            item[0],
+        ]
+        for item in result
+    ]

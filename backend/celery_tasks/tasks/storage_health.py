@@ -15,7 +15,12 @@ from dependencies import QuestDBSession
 from models import StorageAlerts, StorageCluster, Volume
 from services.storageHealthAnalyticsService import normalize_severity
 from services import telemetryObservabilityService
-from utils.datetime_utils import SYSTEM_TIMEZONE, to_system_local_naive, to_utc_z
+from utils.datetime_utils import (
+    SYSTEM_TIMEZONE,
+    to_questdb_utc_naive,
+    to_system_local_naive,
+    to_utc_z,
+)
 
 
 logger = get_task_logger(__name__)
@@ -388,7 +393,9 @@ def _netapp_performance_rows(
                 "latency_total": latency_total,
                 "iops_total": _number(metrics.get("iops")),
                 "throughput_total": _number(metrics.get("throughput")),
-                "collected_at": _datetime(metrics.get("timestamp"), now),
+                "collected_at": to_questdb_utc_naive(
+                    _datetime(metrics.get("timestamp"), now)
+                ),
             }
         )
     return rows
@@ -449,7 +456,9 @@ def _isilon_performance_rows(
                 "latency_total": value,
                 "iops_total": _number(record.get("iops_total")),
                 "throughput_total": _number(record.get("throughput_total")),
-                "collected_at": _datetime(record.get("timestamp") or record.get("time"), now),
+                "collected_at": to_questdb_utc_naive(
+                    _datetime(record.get("timestamp") or record.get("time"), now)
+                ),
             }
         )
     workloads = [row for row in rows if row["object_type"] == "volume"]

@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 from crud.configCrud import get_storage_config
 from dependencies import QuestDBSession
 from models import StorageAlerts
-from utils.datetime_utils import to_system_local_naive
+from utils.datetime_utils import (
+    questdb_to_system_local_naive,
+    to_system_local_naive,
+    to_utc_z,
+)
 
 
 def _naive(value: datetime) -> datetime:
@@ -39,11 +43,17 @@ def get_capacity_points(
             statement,
             {
                 "storage_cluster_id": str(storage_cluster_id),
-                "start_time": str(start_time),
-                "end_time": str(end_time),
+                "start_time": to_utc_z(start_time),
+                "end_time": to_utc_z(end_time),
             },
         ).all()
-    return [{"updated_at": row[1], "used": row[0]} for row in rows]
+    return [
+        {
+            "updated_at": questdb_to_system_local_naive(row[1]),
+            "used": row[0],
+        }
+        for row in rows
+    ]
 
 
 def get_capacity_boundaries(
@@ -63,8 +73,8 @@ def get_capacity_boundaries(
             statement,
             {
                 "storage_cluster_id": str(storage_cluster_id),
-                "start_time": str(start_time),
-                "end_time": str(end_time),
+                "start_time": to_utc_z(start_time),
+                "end_time": to_utc_z(end_time),
             },
         ).first()
     if row is None:
@@ -392,8 +402,8 @@ def get_top_latency_rows(
     )
     parameters = {
         "storage_cluster_id": str(storage_cluster_id),
-        "start_time": str(start_time),
-        "end_time": str(end_time),
+        "start_time": to_utc_z(start_time),
+        "end_time": to_utc_z(end_time),
         "limit": limit,
         **identity_parameters,
     }

@@ -30,6 +30,8 @@
 
 项目容量趋势读取 QuestDB 的 `project_storage_usages`。每轮存储采集先在 PostgreSQL 内完成项目组更新和项目去重汇总，事务提交成功后才写入项目趋势；只有该项目所有启用项目组所在的存储集群均采集成功时才写入，避免混入跨集群的部分结果。
 
+所有容量趋势表的 `updated_at` 都表示 UTC 瞬时。写入边界把 DiskPulse `Asia/Shanghai` naive 墙上时间转换为 UTC naive 值，查询边界绑定 UTC `Z` 字符串，API 返回图表时间前再转换为 `Asia/Shanghai`；不得依赖 worker、API 或浏览器宿主机时区。
+
 ## 详情展示
 
 - 资源详情使用动态面包屑，不额外复制资源名称或时间摘要。

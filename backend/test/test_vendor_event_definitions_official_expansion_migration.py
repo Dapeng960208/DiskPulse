@@ -15,6 +15,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 BASE_REVISION = "000000000015"
 PREVIOUS_REVISION = "000000000017"
 REVISION = "000000000018"
+HEAD_REVISION = "000000000019"
 EXPECTED_ADDITIONAL_CODES = {
     ("netapp", "raid.disk.illegalAttach"),
     ("netapp", "raid.disk.io.toFailedDisk"),
@@ -62,8 +63,9 @@ def _catalog():
 def test_official_fault_expansion_is_the_current_compatibility_head():
     scripts = ScriptDirectory.from_config(_alembic_config())
 
-    assert scripts.get_heads() == [REVISION]
+    assert scripts.get_heads() == [HEAD_REVISION]
     assert scripts.get_revision(REVISION).down_revision == PREVIOUS_REVISION
+    assert scripts.get_revision(HEAD_REVISION).down_revision == REVISION
 
 
 def test_official_catalog_evidence_is_preserved_in_the_initializer():

@@ -22,6 +22,7 @@ from models import Group, Project, Qtree, StorageCluster, StorageUsage, Volume
 from crud import usersCrud
 from services import telemetryObservabilityService
 from services.audit_service import AuditContext, append_audit_event
+from utils.datetime_utils import to_questdb_utc_naive
 logger = get_task_logger(__name__)
 
 
@@ -162,7 +163,7 @@ def write_project_usage_metrics(db, project_ids, *, collected_at, session_factor
             used_ratio=project.use_ratio or 0,
             soft_limit=project.soft_limit,
             soft_use_ratio=project.soft_use_ratio,
-            updated_at=collected_at,
+            updated_at=to_questdb_utc_naive(collected_at),
         )
         for project in projects
     ]
@@ -584,7 +585,7 @@ def user_storage_statistics_schedule_task():
                         else 0
                     ),
                     file_used=float(row.file_used or 0),
-                    updated_at=sampled_at,
+                    updated_at=to_questdb_utc_naive(sampled_at),
                 )
             )
 

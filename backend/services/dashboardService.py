@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from crud import dashboardCrud
 from services.storageTrendService import build_dashboard_trend_meta
+from utils.datetime_utils import questdb_to_system_local_naive
 
 
 logger = logging.getLogger(__name__)
@@ -113,7 +114,10 @@ def get_capacity_trend(db: Session, project_id: int | None = None):
         logger.warning("QuestDB dashboard capacity trend is unavailable", exc_info=True)
         return []
     return [
-        {"timestamp": timestamp, "used_gb": _number(used_gb)}
+        {
+            "timestamp": questdb_to_system_local_naive(timestamp),
+            "used_gb": _number(used_gb),
+        }
         for timestamp, used_gb in rows
     ]
 

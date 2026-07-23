@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
-from datetime import timezone
-
 from sqlalchemy import and_, bindparam, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from dependencies import QuestDBSession
 from models import Group, Project, StorageAlerts, StorageCluster, StorageUsage, User
+from utils.datetime_utils import to_utc_z
 from utils.query import apply_use_ratio_range
 
 
 def _questdb_time(value):
-    if value.tzinfo is None:
-        return value.isoformat()
-    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return to_utc_z(value)
 
 
 def get_project(db: Session, project_id: int):

@@ -15,6 +15,7 @@ from crud.configCrud import get_storage_config
 from dependencies import QuestDBSession
 from sqlalchemy import text
 from services.volumeMonitoringService import METRICS, resolve_performance_identity, validate_metrics
+from utils.datetime_utils import questdb_to_system_local_naive, to_utc_z
 from utils.query import apply_use_ratio_range, get_sort_column
 
 
@@ -114,7 +115,11 @@ def get_volume_monitoring(db: Session, volume_id: int, start_time: datetime | No
     }
     columns = ", ".join(f"max({metric}) AS {metric}" for metric in selected_metrics)
     sample_by = "SAMPLE BY 1d" if end_time and start_time and (end_time - start_time).days > 30 else "SAMPLE BY 1h" if end_time and start_time and (end_time - start_time).days > 7 else "SAMPLE BY 1m"
-    params = {"cluster_id": str(volume.storage_cluster_id), "start_time": str(start_time), "end_time": str(end_time)}
+    params = {
+        "cluster_id": str(volume.storage_cluster_id),
+        "start_time": to_utc_z(start_time),
+        "end_time": to_utc_z(end_time),
+    }
 
     def query_performance(identity_value):
         sql = text(
@@ -140,7 +145,15 @@ def get_volume_monitoring(db: Session, volume_id: int, start_time: datetime | No
     )
     performance = []
     for index, metric in enumerate(selected_metrics):
-        data = [[row[-1].strftime("%Y-%m-%d %H:%M:00"), row[index]] for row in rows]
+        data = [
+            [
+                questdb_to_system_local_naive(row[-1]).strftime(
+                    "%Y-%m-%d %H:%M:00"
+                ),
+                row[index],
+            ]
+            for row in rows
+        ]
         performance.append({"metric": metric, "unit": METRICS[metric][1], "data": data,
                             "status": "data" if data else "empty", "match_source": match_source})
     return {"info": volume, "binding": binding, "capacity": format_trend_data(capacity, "TB"),

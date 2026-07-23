@@ -25,6 +25,8 @@ NetApp 事件来自 ONTAP EMS，性能来自 Volume `metric`。ONTAP 返回的 V
 
 PowerScale 事件来自 event group/list。逐存储空间性能先通过 `/platform/latest` 发现资源版本，再从 `/{version}/performance/datasets` 选择包含 `path` 识别维度的 dataset，读取 `/{version}/performance/datasets/{id}/workloads` 建立 workload ID 到完整路径的映射，最后使用 dataset 的 `statkey` 请求 `/{version}/statistics/current`。每条 workload 的 `latency_read`、`latency_write` 和 `latency_other` 按 `sum/count` 求平均，OneFS 该计数使用微秒口径，写入 QuestDB 前统一除以 `1000` 转为毫秒；综合延迟使用三类请求的加权平均，`protocol_ops`（兼容 `ops`）映射到 IOPS，`bytes_in + bytes_out` 映射到吞吐量，`time` Unix 时间戳作为设备采集时间。不能用节点磁盘延迟替代目录延迟，也不能按容量或 IOPS 推算未返回路径的延迟。
 
+容量与性能的 QuestDB designated timestamp 都保存 UTC 瞬时：设备 aware/Unix 时间和 DiskPulse `Asia/Shanghai` naive 墙上时间必须在写入边界统一转换为 UTC naive 值。查询窗口使用 UTC `Z` 参数；驱动读出的 naive timestamp 先按 UTC 解释，趋势和监控接口再转换为 `Asia/Shanghai` 展示，Incident 派生保持 UTC-aware 时间。历史错误数据按[QuestDB 时间修复指南](./questdb-timestamp-repair.md)处理。
+
 容量采集会把 NetApp Volume UUID、PowerScale Directory Quota ID（设备未返回 ID 时使用 quota 路径）写入 PostgreSQL `Volume.performance_object_id`。性能采集只为当前集群中已存在该稳定身份的 `Volume` 写入 `object_type=volume` 样本；PowerScale workload 仍以完整路径匹配 Directory Quota，但 QuestDB `object_id` 统一写入关联后的 quota ID，`object_name` 保留路径用于展示。父目录、节点指标和其他未关联 workload 即使存在性能数据，也不会误标成 DiskPulse Volume。
 
 存储集群性能分析和存储空间性能监控都按同一个 `Volume.performance_object_id` 查询。缺少稳定身份或采集记录无法关联时不做名称猜测，对应卷性能返回空数据；容量趋势仍可独立展示。部署迁移后需要先成功执行一次容量采集，现有 `Volume` 才会补齐厂商身份。
@@ -37,6 +39,7 @@ OneFS event list 外层记录中的 `events[]` 按单条设备事件展开；eve
 
 - 设备事件每分钟采集；首次回看 24 小时，之后回看最近 5 分钟，并按厂商事件 ID 去重。
 - `storage_alerts.updated_at` 沿用 DiskPulse 应用时区 `Asia/Shanghai` 的 naive 墙上时间口径；厂商事件携带时区时先显式换算到该时区再去除时区信息，不能使用无参数 `astimezone()` 或 `datetime.fromtimestamp()` 隐式继承宿主机时区。派生 Incident 前必须把该墙上时间按 `Asia/Shanghai` 解释并转换为 UTC，不能直接附加 UTC 时区，否则事件中心会多显示 8 小时。NetApp 增量查询的 `since` 单独换算为 UTC `Z` 格式，不能据此把事件入库时间描述为 UTC。
+- 上述 PostgreSQL 厂商事件墙上时间是兼容边界，不适用于 QuestDB；QuestDB 容量和性能 timestamp 一律遵守 UTC 契约。
 - 性能指标每 5 分钟采集，从功能启用后开始累计，不回灌设备历史性能。
 - `storage_performance_metrics` 保留 180 天；所有分析查询和导出时间范围最多 180 天。
 - 本功能不新增 `storage_alerts` 清理任务，其既有历史数据仍按系统原有策略保留，但超过 180 天不能通过健康分析接口查询。

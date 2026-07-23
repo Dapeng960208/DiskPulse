@@ -43,6 +43,7 @@ from services import (
 )
 from crud import capacityPredictionCrud, vendorEventDefinitionCrud
 from services.forecastIncidentService import AssetRef, TelemetryEnvelope
+from utils.datetime_utils import from_questdb_utc
 
 
 logger = get_task_logger(__name__)
@@ -92,14 +93,10 @@ def _five_minute_slot(value: datetime) -> datetime:
 
 
 def _normalise_quest_time(value) -> datetime | None:
-    if isinstance(value, datetime):
-        return _utc(value)
-    if isinstance(value, str):
-        try:
-            return _utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
-        except ValueError:
-            return None
-    return None
+    try:
+        return from_questdb_utc(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _high_confidence_enabled() -> bool:
