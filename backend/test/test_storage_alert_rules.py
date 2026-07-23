@@ -6,6 +6,7 @@ import io
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 import pytest
@@ -597,8 +598,19 @@ def test_evaluator_uses_current_successful_samples_and_keeps_project_event_aggre
     assert by_type["StorageUsage"].related_info["context"]["project"] == "project-a"
     assert db_session.query(models.StorageAlertState).filter_by(target_type="storage_usage", target_id=2).first() is None
 
-    usage_text = "".join(
-        item["text"] for item in by_type["StorageUsage"].related_info["paragraphs"][0]
+    usage_paragraphs = by_type["StorageUsage"].related_info["paragraphs"]
+    assert usage_paragraphs[0] == [
+        {"tag": "text", "text": "⚠️ 首次告警", "style": ["bold"]},
+        {"tag": "text", "text": "  ·  当前使用率 96.00%"},
+    ]
+    assert usage_paragraphs[1] == [
+        {"tag": "text", "text": "📍 资源信息", "style": ["bold"]}
+    ]
+    assert usage_paragraphs[8] == [
+        {"tag": "text", "text": "📊 容量概览", "style": ["bold"]}
+    ]
+    usage_text = "\n".join(
+        "".join(item["text"] for item in paragraph) for paragraph in usage_paragraphs
     )
     assert all(
         value in usage_text
@@ -608,34 +620,63 @@ def test_evaluator_uses_current_successful_samples_and_keeps_project_event_aggre
             "项目：project-a",
             "项目组标签：team",
             "项目组：group-a",
-            "Linux路径：/data/alice",
-            "事件：首次告警",
+            "Linux 路径：/data/alice",
             "采用口径：硬限额",
-            "硬限额：100.00 GB",
+            "硬限额：100 GB",
             "软限额：未设置",
-            "已使用：96.00 GB",
+            "已使用 96 GB",
             "硬限额使用率：96.00%",
             "软限额使用率：未设置",
         )
     )
-    project_text = "".join(
-        item["text"] for item in by_type["Project"].related_info["paragraphs"][0]
+    project_text = "\n".join(
+        "".join(item["text"] for item in paragraph)
+        for paragraph in by_type["Project"].related_info["paragraphs"]
     )
     assert "项目：project-a" in project_text
-    assert "集群：cluster-a, cluster-b" in project_text
-    recovery_text = "".join(
-        item["text"]
-        for item in tasks._paragraphs(
-            db_session.get(models.Project, 1),
-            DEFAULT_RULE,
-            79,
-            "recovery",
-            {"project": "project-a"},
-            "serious",
-        )[0]
+    assert "集群：cluster-a、cluster-b" in project_text
+
+
+def test_feishu_recovery_notification_uses_hierarchical_rich_text_and_display_units():
+    tasks = _module("celery_tasks.tasks.storage_alerts")
+    target = SimpleNamespace(
+        limit=3584,
+        used=1226.68,
+        use_ratio=34.23,
+        soft_limit=3225.6,
+        soft_use_ratio=38.03,
     )
-    assert "事件：恢复通知" in recovery_text
-    assert "恢复前等级：严重" in recovery_text
+    paragraphs = tasks._paragraphs(
+        target,
+        DEFAULT_RULE,
+        34.23,
+        "recovery",
+        {
+            "username": "tangjing",
+            "cluster": "北京",
+            "project": "SPA3610",
+            "group_tag": "红区",
+            "group": "tmpdata-fe",
+            "linux_path": "/tmpdata/project/spa3610/user/FE/tangjing",
+        },
+        "important",
+    )
+
+    assert paragraphs[0] == [
+        {"tag": "text", "text": "✅ 恢复通知", "style": ["bold"]},
+        {"tag": "text", "text": "  ·  当前使用率 34.23%"},
+    ]
+    assert [paragraph[0]["text"] for paragraph in paragraphs if len(paragraph) == 1] == [
+        "📍 资源信息",
+        "📊 容量概览",
+    ]
+    rendered = "\n".join(
+        "".join(item["text"] for item in paragraph) for paragraph in paragraphs
+    )
+    assert "硬限额：3.5 TB  ·  已使用 1.2 TB  ·  使用率 34.23%" in rendered
+    assert "软限额：3.15 TB  ·  已使用 1.2 TB  ·  使用率 38.03%" in rendered
+    assert "↩️ 恢复前等级：重要" in rendered
+    assert "3584.00 GB" not in rendered
 
 
 def test_group_alert_cc_users_are_deduplicated_and_must_exist(db_session):
