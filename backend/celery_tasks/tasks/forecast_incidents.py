@@ -118,9 +118,14 @@ def _agent_reviews_after_commit(incident_ids: Iterable[int]) -> None:
 
     for incident_id in sorted({int(item) for item in incident_ids}):
         try:
-            review_incident_ai_task.delay(incident_id, "lifecycle")
+            task = review_incident_ai_task.delay(incident_id, "lifecycle")
+            logger.info(
+                "Incident AI review enqueued: incident=%s trigger=lifecycle task_id=%s",
+                incident_id,
+                task.id,
+            )
         except Exception:
-            logger.warning("Unable to enqueue Incident AI review: incident=%s", incident_id)
+            logger.exception("Unable to enqueue Incident AI review: incident=%s trigger=lifecycle", incident_id)
 
 
 def _record_correlation(

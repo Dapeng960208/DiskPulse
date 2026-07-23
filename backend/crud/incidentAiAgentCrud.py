@@ -49,6 +49,15 @@ def get_run_by_idempotency_key(db, key: str) -> IncidentAiRun | None:
     return db.scalar(select(IncidentAiRun).where(IncidentAiRun.idempotency_key == key))
 
 
+def get_latest_run(db, *, incident_id: int) -> IncidentAiRun | None:
+    return db.scalar(
+        select(IncidentAiRun)
+        .where(IncidentAiRun.incident_id == incident_id)
+        .order_by(IncidentAiRun.started_at.desc(), IncidentAiRun.id.desc())
+        .limit(1)
+    )
+
+
 def add_run(db, run: IncidentAiRun) -> IncidentAiRun:
     db.add(run)
     db.flush()

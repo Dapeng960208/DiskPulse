@@ -40,6 +40,45 @@ def _incident(*, status="open"):
     )
 
 
+def test_incident_output_exposes_the_latest_ai_review_state(db_session, monkeypatch):
+    import models
+    from routers import forecast_incidents
+    from services import forecastIncidentService
+
+    incident = _incident()
+    db_session.add(incident)
+    db_session.flush()
+    db_session.add_all([
+        models.IncidentAiRun(
+            incident_id=incident.id,
+            trigger="scheduled",
+            idempotency_key="scheduled:1:1",
+            status="succeeded",
+            started_at=datetime(2026, 7, 23, 6, 30, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 7, 23, 6, 31, tzinfo=timezone.utc),
+            input_snapshot={},
+            attempt_summary=[],
+        ),
+        models.IncidentAiRun(
+            incident_id=incident.id,
+            trigger="lifecycle",
+            idempotency_key="lifecycle:1:open:2026-07-23T06:45:00+00:00",
+            status="running",
+            started_at=datetime(2026, 7, 23, 6, 45, tzinfo=timezone.utc),
+            input_snapshot={},
+            attempt_summary=[],
+        ),
+    ])
+    db_session.commit()
+    monkeypatch.setattr(forecastIncidentService, "incident_capabilities", lambda *_args, **_kwargs: {})
+
+    result = forecast_incidents._incident_out(db_session, SimpleNamespace(), incident)
+
+    assert result.ai_review.status == "running"
+    assert result.ai_review.trigger == "lifecycle"
+    assert result.ai_review.started_at == datetime(2026, 7, 23, 6, 45, tzinfo=timezone.utc)
+
+
 def test_agent_assessment_rejects_status_skips_and_accepts_a_single_next_step():
     from services.incidentAiAgentService import IncidentAiAssessment, validate_agent_assessment
 

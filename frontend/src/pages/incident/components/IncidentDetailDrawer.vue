@@ -132,6 +132,14 @@ const aiClassificationLabels = {
   insufficient_evidence: '证据不足',
 };
 const aiUrgencyLabels = { low: '低', medium: '中', high: '高', critical: '紧急' };
+const aiReviewStatusLabels = {
+  running: 'AI 正在审查',
+  succeeded: 'AI 审查已完成',
+  failed: 'AI 审查未完成',
+  superseded: 'AI 审查结果已过期',
+  skipped: 'AI 审查已跳过',
+};
+const aiReviewTriggerLabels = { lifecycle: '事件触发', scheduled: '定时复查' };
 const statusLabels = {
   open: '未处理',
   acknowledged: '已确认',
@@ -448,6 +456,21 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
             </li>
           </ul>
         </template>
+      </section>
+
+      <section
+        v-if="current.ai_review"
+        class="incident-detail__section">
+        <h3>AI 审查状态</h3>
+        <p>
+          <ElTag :type="current.ai_review.status === 'running' ? 'warning' : 'info'">
+            {{ aiReviewStatusLabels[current.ai_review.status] || current.ai_review.status }}
+          </ElTag>
+          {{ aiReviewTriggerLabels[current.ai_review.trigger] || current.ai_review.trigger }}
+        </p>
+        <p>开始时间：{{ formatLocalDateTime(current.ai_review.started_at) }}</p>
+        <p v-if="current.ai_review.completed_at">完成时间：{{ formatLocalDateTime(current.ai_review.completed_at) }}</p>
+        <p v-else>审查结果生成后会自动显示。</p>
       </section>
 
       <section

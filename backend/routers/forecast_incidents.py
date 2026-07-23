@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy.orm import Session
 
-from crud import forecastIncidentCrud
+from crud import forecastIncidentCrud, incidentAiAgentCrud
 from dependencies import CurrentUserDep, get_db, require_super_admin
 from schemas.forecastIncidentSchema import (
     AnomalyOut,
@@ -412,8 +412,20 @@ def _incident_timeline_out(db: Session, timeline) -> IncidentTimelineOut:
 
 
 def _incident_out(db: Session, current_user, incident) -> IncidentOut:
+    latest_ai_review = incidentAiAgentCrud.get_latest_run(db, incident_id=incident.id)
     return IncidentOut(
-        **IncidentOut.model_validate(incident).model_dump(exclude={"capabilities"}),
+        **IncidentOut.model_validate(incident).model_dump(exclude={"capabilities", "ai_review"}),
+        ai_review=(
+            {
+                "status": latest_ai_review.status,
+                "trigger": latest_ai_review.trigger,
+                "started_at": latest_ai_review.started_at,
+                "completed_at": latest_ai_review.completed_at,
+                "error_code": latest_ai_review.error_code,
+            }
+            if latest_ai_review is not None
+            else None
+        ),
         capabilities=forecastIncidentService.incident_capabilities(
             db, current_user=current_user, incident=incident
         ),

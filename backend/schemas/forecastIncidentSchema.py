@@ -74,6 +74,7 @@ class IncidentOut(AssetRefOut):
     ai_urgency_reason: str | None = None
     ai_analyzed_at: datetime | None = None
     ai_assessment: "IncidentAiAssessmentOut | None" = None
+    ai_review: "IncidentAiReviewOut | None" = None
     created_at: datetime
     updated_at: datetime
     capabilities: dict[str, bool] = Field(default_factory=dict)
@@ -165,6 +166,14 @@ class IncidentAiAssessmentOut(BaseModel):
     transition_reason: str | None = None
     model_name: str | None = None
     analyzed_at: datetime | None = None
+
+
+class IncidentAiReviewOut(BaseModel):
+    status: Literal["running", "succeeded", "failed", "superseded", "skipped"]
+    trigger: Literal["lifecycle", "scheduled"]
+    started_at: datetime
+    completed_at: datetime | None = None
+    error_code: str | None = None
 
 
 class IncidentAiSettingsModelOut(BaseModel):

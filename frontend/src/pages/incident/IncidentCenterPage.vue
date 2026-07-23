@@ -76,6 +76,7 @@ const categoryLabels = {
   telemetry_blindspot: '监控盲区',
 };
 const aiUrgencyLabels = { low: '低', medium: '中', high: '高', critical: '紧急' };
+const aiReviewStatusLabels = { running: 'AI 审查中' };
 
 const editableStatusOptions = computed(() => {
   const currentStatus = editingIncident.value?.status;
@@ -218,7 +219,10 @@ onMounted(query);
         width="120">
         <template #default="{ row }">
           <ElTag
-            v-if="row.ai_urgency"
+            v-if="row.ai_review?.status === 'running'"
+            type="warning">{{ aiReviewStatusLabels[row.ai_review.status] }}</ElTag>
+          <ElTag
+            v-else-if="row.ai_urgency"
             :type="row.ai_urgency === 'critical' ? 'danger' : row.ai_urgency === 'high' ? 'warning' : 'info'">{{ aiUrgencyLabels[row.ai_urgency] || row.ai_urgency }}</ElTag>
           <span v-else>-</span>
         </template>

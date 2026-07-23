@@ -21,12 +21,15 @@ def _scheduled_key(incident_id: int, now: datetime) -> str:
 
 @diskpulse_app.task(soft_time_limit=90, time_limit=120, expires=180)
 def review_incident_ai_task(incident_id: int, trigger: str = "lifecycle") -> int:
+    logger.info("Incident AI review started: incident=%s trigger=%s", incident_id, trigger)
     with redis_lock(f"incident_ai_review:{incident_id}", expires=180) as have_lock:
         if not have_lock:
+            logger.info("Incident AI review skipped: incident=%s trigger=%s reason=lock_unavailable", incident_id, trigger)
             return 0
         with SessionLocal() as db:
             incident = forecastIncidentCrud.get_incident(db, incident_id)
             if incident is None:
+                logger.info("Incident AI review skipped: incident=%s trigger=%s reason=incident_not_found", incident_id, trigger)
                 return 0
             key = (
                 f"lifecycle:{incident.id}:{incident.status}:{incident.last_evidence_at.isoformat()}"
@@ -34,15 +37,32 @@ def review_incident_ai_task(incident_id: int, trigger: str = "lifecycle") -> int
                 else _scheduled_key(incident.id, datetime.now(timezone.utc))
             )
             try:
-                return int(incidentAiAgentService.review_incident(
+                run = incidentAiAgentService.review_incident(
                     db,
                     incident_id=incident.id,
                     trigger=trigger,
                     idempotency_key=key,
-                ) is not None)
+                )
+                if run is None:
+                    logger.info(
+                        "Incident AI review skipped: incident=%s trigger=%s reason=not_eligible",
+                        incident_id,
+                        trigger,
+                    )
+                    return 0
+                logger.info(
+                    "Incident AI review finished: incident=%s trigger=%s run_id=%s status=%s model_id=%s error_code=%s",
+                    incident_id,
+                    trigger,
+                    run.id,
+                    run.status,
+                    run.model_id,
+                    run.error_code,
+                )
+                return 1
             except Exception:
                 db.rollback()
-                logger.exception("Incident AI review failed: incident=%s", incident_id)
+                logger.exception("Incident AI review failed unexpectedly: incident=%s trigger=%s", incident_id, trigger)
                 return 0
 
 

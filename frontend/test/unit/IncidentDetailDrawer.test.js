@@ -103,6 +103,28 @@ describe('IncidentDetailDrawer', () => {
     expect(ElMessage.success).toHaveBeenCalledWith('事件已认领');
   });
 
+  it('identifies an AI review that is currently running before an assessment is available', async () => {
+    incidentApi.fetchIncident.mockResolvedValueOnce({
+      ...incident,
+      evidence: [],
+      timeline: [],
+      diagnosis: null,
+      ai_assessment: null,
+      ai_review: {
+        status: 'running',
+        trigger: 'lifecycle',
+        started_at: '2026-07-23T06:45:00Z',
+        completed_at: null,
+      },
+    });
+
+    const wrapper = await mountDrawer();
+
+    expect(wrapper.text()).toContain('AI 正在审查');
+    expect(wrapper.text()).toContain('事件触发');
+    expect(wrapper.text()).toContain('2026-07-23 14:45:00');
+  });
+
   it('only shows claim before assignment and only shows release when the current user can release it', async () => {
     incidentApi.fetchIncident.mockResolvedValueOnce({
       ...incident,
