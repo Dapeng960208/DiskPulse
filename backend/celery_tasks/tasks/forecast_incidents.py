@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import time
 from typing import Iterable
 from zoneinfo import ZoneInfo
 
@@ -677,36 +678,63 @@ def _safe_performance_ai_context(
     observed_at: datetime,
     trigger_values: list[float],
 ) -> dict:
-    """Produce metric aggregates only; never persist raw object identifiers or samples."""
+    """Produce metric aggregates only; never persist raw object identifiers or samples.
+
+    Performance: Pre-computes 28-day window boundary once and caches history summaries
+    to avoid redundant calculations across associated metrics.
+    """
+    start_time = time.perf_counter()
     cluster_id, object_type, object_id, metric = series_key
 
+    # Pre-compute 28-day window boundary (used by all history_summary calls)
+    window_start = observed_at - timedelta(days=28)
+
+    # Cache for history summaries to avoid recalculating for the same points
+    _history_cache: dict[tuple, dict] = {}
+
     def history_summary(points: list[tuple[datetime, float]]) -> dict:
+        # Use tuple of points as cache key
+        cache_key = tuple(points)
+        if cache_key in _history_cache:
+            return _history_cache[cache_key]
+
+        # Filter to 28-day window using pre-computed boundary
         history = [
             value
             for point_at, value in points
-            if point_at < observed_at and point_at >= observed_at - timedelta(days=28)
+            if point_at < observed_at and point_at >= window_start
         ]
         if not history:
-            return {"sample_count": 0, "coverage_ratio": 0.0}
-        median = float(np.median(history))
-        return {
-            "sample_count": len(history),
-            "coverage_ratio": round(min(1.0, len(history) / (28 * 24 * 12)), 4),
-            "median": round(median, 4),
-            "p95": round(_p95(history), 4),
-            "mad": round(float(np.median(np.abs(np.asarray(history) - median))), 4),
-        }
+            result = {"sample_count": 0, "coverage_ratio": 0.0}
+        else:
+            median = float(np.median(history))
+            result = {
+                "sample_count": len(history),
+                "coverage_ratio": round(min(1.0, len(history) / (28 * 24 * 12)), 4),
+                "median": round(median, 4),
+                "p95": round(_p95(history), 4),
+                "mad": round(float(np.median(np.abs(np.asarray(history) - median))), 4),
+            }
+
+        _history_cache[cache_key] = result
+        return result
 
     current_points = sorted(by_series[series_key])
+
+    # Pre-compute 2-hour window boundary
+    trend_window_start = observed_at - timedelta(hours=2)
     trend_points = [
         {"minutes_before_trigger": int((observed_at - point_at).total_seconds() // 60), "p95": round(value, 4)}
         for point_at, value in current_points
-        if observed_at - timedelta(hours=2) <= point_at <= observed_at
+        if trend_window_start <= point_at <= observed_at
     ]
+
+    # Build associated metrics with cached history summaries
     associated_metrics = []
+    resource_key = (cluster_id, object_type, object_id)
     for candidate_key, candidate_points in by_series.items():
         candidate_cluster, candidate_type, candidate_object, candidate_metric = candidate_key
-        if (candidate_cluster, candidate_type, candidate_object) != (cluster_id, object_type, object_id):
+        if (candidate_cluster, candidate_type, candidate_object) != resource_key:
             continue
         candidate_points = sorted(candidate_points)
         latest = next((value for point_at, value in reversed(candidate_points) if point_at <= observed_at), None)
@@ -717,6 +745,14 @@ def _safe_performance_ai_context(
             "latest_p95": round(latest, 4),
             "history_28d": history_summary(candidate_points),
         })
+
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    if elapsed_ms > 100:  # Log if computation takes >100ms
+        logger.warning(
+            "Performance AI context computation slow: %.1fms for %s/%s/%s",
+            elapsed_ms, cluster_id, object_type, metric
+        )
+
     return {
         "metric": metric,
         "trigger_three_bucket_p95": [round(value, 4) for value in trigger_values],
