@@ -427,18 +427,4 @@ watch(
   min-height: 0;
   height: auto;
 }
-
-.cluster-resource-list-tab :deep(.table-wrapper) {
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-.cluster-resource-list-tab :deep(.el-table__body-wrapper) {
-  overflow-x: hidden !important;
-}
-
-.cluster-resource-list-tab :deep(.el-table .cell) {
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
 </style>
