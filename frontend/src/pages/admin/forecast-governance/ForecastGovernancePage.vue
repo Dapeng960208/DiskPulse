@@ -11,7 +11,6 @@ import {
   ElOption,
   ElSelect,
   ElSwitch,
-  ElTable,
   ElTableColumn,
   ElTag,
   ElTooltip,
@@ -19,6 +18,7 @@ import {
 import capacityPredictionApi from '@/api/capacity-prediction-api.js';
 import aiApi from '@/api/ai-api.js';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
+import DataTable from '@/components/data/DataTable.vue';
 
 const visible = ref(false);
 const loading = ref(false);
@@ -118,9 +118,7 @@ onMounted(load);
 </script>
 
 <template>
-  <section
-    v-loading="loading"
-    class="forecast-governance-page">
+  <section class="forecast-governance-page">
     <ElAlert
       v-if="error"
       :title="error"
@@ -173,9 +171,9 @@ onMounted(load);
 
     <section class="forecast-governance-page__section">
       <h3 class="forecast-governance-page__section-heading">模型状态</h3>
-      <ElTable
+      <DataTable
         :data="candidates"
-        empty-text="暂无候选预测模型">
+        :loading="loading">
         <ElTableColumn
           label="版本"
           prop="version"
@@ -211,30 +209,34 @@ onMounted(load);
         <ElTableColumn
           label="操作"
           width="120"
-          align="right">
+          align="right"
+          fixed="right">
           <template #default="{ row }">
-            <TableActionButton
-              v-if="!row.enabled"
-              action="activate"
-              :disabled="!row.activation_ready"
-              :loading="activatingId === row.id"
-              @click="activateCandidate(row)">
-              启用
-            </TableActionButton>
+            <div class="list-row-actions">
+              <TableActionButton
+                v-if="!row.enabled"
+                action="activate"
+                :disabled="!row.activation_ready"
+                :loading="activatingId === row.id"
+                @click="activateCandidate(row)">
+                启用
+              </TableActionButton>
+            </div>
           </template>
         </ElTableColumn>
-      </ElTable>
+      </DataTable>
     </section>
 
     <section class="forecast-governance-page__section">
       <h3 class="forecast-governance-page__section-heading">跨资源滚动回测评估</h3>
       <ElEmpty
-        v-if="evaluationRows.length === 0"
+        v-if="!loading && evaluationRows.length === 0"
         description="暂无完成的 30 天评估窗口"
         :image-size="72" />
-      <ElTable
+      <DataTable
         v-else
-        :data="evaluationRows">
+        :data="evaluationRows"
+        :loading="loading">
         <ElTableColumn
           label="版本"
           prop="version"
@@ -279,7 +281,7 @@ onMounted(load);
           width="130">
           <template #default="{ row }"><ElTag :type="row.risk_coverage_ok ? 'success' : 'danger'">{{ row.risk_coverage_ok ? '不变差' : '不满足' }}</ElTag></template>
         </ElTableColumn>
-      </ElTable>
+      </DataTable>
     </section>
 
     <ElDialog
@@ -323,7 +325,7 @@ onMounted(load);
 .forecast-governance-page__setting strong { margin-right: auto; }
 .forecast-governance-page__section-heading { display: flex; align-items: center; justify-content: flex-start; height: 40px; text-align: left; }
 .forecast-governance-page__setting,
-.forecast-governance-page__section { padding: var(--spacing-md); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); }
+.forecast-governance-page__rules { padding: var(--spacing-md); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); }
 .forecast-governance-page__section { display: grid; align-content: start; gap: var(--spacing-md); }
 .forecast-governance-page__rules { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .forecast-governance-page__rules p { margin: var(--spacing-xs) 0 0; color: var(--text-secondary); line-height: 1.7; }
