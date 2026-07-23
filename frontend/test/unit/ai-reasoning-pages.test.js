@@ -28,6 +28,7 @@ const { aiApi, currentUser, messageApi, router } = vi.hoisted(() => ({
     updateModel: vi.fn(),
     deleteModel: vi.fn(),
     testModel: vi.fn(),
+    discoverModels: vi.fn(),
     listAudits: vi.fn(),
     getAudit: vi.fn(),
     getConversationAudits: vi.fn(),
@@ -495,6 +496,10 @@ describe('AI center default model and capability management', () => {
       status: 'ready',
       source: 'provider',
     });
+    aiApi.discoverModels.mockResolvedValue({
+      models: ['gpt-5.6-sol', 'gpt-5.6-mini'],
+      default_model: 'gpt-5.6-sol',
+    });
     aiApi.listAudits.mockResolvedValue({ content: [], total: 0 });
   });
 
@@ -553,6 +558,37 @@ describe('AI center default model and capability management', () => {
     expect(wrapper.vm.form.base_url).toBe('https://tokenhub.tencentmaas.com/v1');
 
     expect(wrapper.get('.model-base-url').attributes()).not.toHaveProperty('disabled');
+  });
+
+  it('keeps a manually entered model as the default and auto-discovers one when the identifier is blank', async () => {
+    const wrapper = mountAiCenter();
+    await flushPromises();
+    wrapper.vm.addModel();
+    wrapper.vm.form.name = '自动发现模型';
+    wrapper.vm.form.model = '';
+
+    await wrapper.vm.saveModel();
+
+    expect(aiApi.discoverModels).toHaveBeenCalledWith({
+      provider: 'openai',
+      base_url: 'https://api.openai.com/v1',
+      api_key: '',
+    });
+    expect(aiApi.createModel).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'gpt-5.6-sol',
+    }));
+    expect(wrapper.vm.modelDiscoveryStatus).toBe('ready');
+
+    aiApi.discoverModels.mockClear();
+    wrapper.vm.addModel();
+    wrapper.vm.form.name = '手工默认模型';
+    wrapper.vm.form.model = 'manual-model';
+    await wrapper.vm.saveModel();
+
+    expect(aiApi.discoverModels).not.toHaveBeenCalled();
+    expect(aiApi.createModel).toHaveBeenLastCalledWith(expect.objectContaining({
+      model: 'manual-model',
+    }));
   });
 
   it('maps capability status/source for display and refreshes one model on demand', async () => {

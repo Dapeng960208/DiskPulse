@@ -32,6 +32,7 @@ from routers import (
     users,
     volumes,
 )
+from schemas.aiSchema import AIModelCreate
 from services import ai_chat_service
 from services import ai_config_service
 from services import quotaService
@@ -759,6 +760,72 @@ def test_non_super_admin_cannot_manage_ai_models(api_client_factory, db_session)
     client = api_client_factory([ai_admin.router], headers={"Authorization": f"Bearer {issue_token(1)}"})
 
     assert client.get("/storage-pulse/api/admin/ai-models").status_code == 403
+    assert client.post(
+        "/storage-pulse/api/admin/ai-models/discover",
+        json={"provider": "openai", "base_url": "https://ai.example.com/v1", "api_key": "secret-key-1234"},
+    ).status_code == 403
+
+
+def test_blank_model_identifier_uses_the_first_discovered_provider_model(db_session, monkeypatch):
+    base_config.set("ai.config_secret_key", "test-ai-config-secret-key")
+    _seed_user(db_session)
+    requested_models = []
+
+    def discovered_models(config):
+        requested_models.append(config)
+        return ["gpt-5.6-sol", "gpt-5.6-mini"]
+
+    monkeypatch.setattr(ai_config_service, "list_provider_models", discovered_models, raising=False)
+    payload = AIModelCreate(
+        name="自动发现模型",
+        provider="openai",
+        base_url="https://ai.example.com/v1",
+        api_key="secret-key-1234",
+        model="",
+        enabled=True,
+    )
+
+    created = ai_config_service.create_model(db_session, payload, actor_id=1)
+
+    assert created["model"] == "gpt-5.6-sol"
+    assert len(requested_models) == 1
+    assert requested_models[0].model == ""
+    assert decrypt_secret(requested_models[0].api_key_encrypted) == "secret-key-1234"
+
+
+def test_super_admin_can_discover_a_sanitized_provider_model_catalog(
+    api_client_factory,
+    db_session,
+    monkeypatch,
+):
+    base_config.set("ai.config_secret_key", "test-ai-config-secret-key")
+    admin = _seed_user(db_session, rd_username="alice")
+    captured = []
+
+    def discovered_models(config):
+        captured.append(config)
+        return ["gpt-5.6-sol", "gpt-5.6-mini"]
+
+    monkeypatch.setattr(ai_config_service, "list_provider_models", discovered_models, raising=False)
+    client = api_client_factory([ai_admin.router], headers={"Authorization": f"Bearer {issue_token(admin.id)}"})
+
+    response = client.post(
+        "/storage-pulse/api/admin/ai-models/discover",
+        json={
+            "provider": "openai",
+            "base_url": "https://ai.example.com/v1",
+            "api_key": "secret-key-1234",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "models": ["gpt-5.6-sol", "gpt-5.6-mini"],
+        "default_model": "gpt-5.6-sol",
+    }
+    assert len(captured) == 1
+    assert decrypt_secret(captured[0].api_key_encrypted) == "secret-key-1234"
+    assert "secret-key-1234" not in response.text
 
 
 def test_chat_stream_persists_messages_and_isolates_conversations(
