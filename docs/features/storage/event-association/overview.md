@@ -29,7 +29,7 @@
 
 ## 官网依据与基础定义
 
-`000000000017` 将当时测试库的 68 个代码纳入静态目录；`000000000018` 补充 NetApp、Dell SRS Brevity 候选，并完整读取 Dell《PowerScale OneFS Event Reference Guide》（2021 年 10 月）的 Software events 与 Hardware events 两章。两章中的 499 条 PowerScale 代码均保存中文标题、说明和管理员操作并升级为 `reviewed`；当前迁移链共覆盖 585 条代码，合计 543 条 `reviewed` 和 42 条 `pending`。待核验原因见[待核验事件清单](unverified-code-list.md)。不得为了维持历史审核数量保留泛化 KB、概览页面或社区帖的推断结果。基础的 12 条已审核 NetApp 定义如下：
+独立初始化目录汇总了测试库原有的 68 个代码，以及原 revision `000000000018` 整理的 NetApp、Dell SRS Brevity 候选和 Dell《PowerScale OneFS Event Reference Guide》（2021 年 10 月）Software events、Hardware events 两章。两章中的 499 条 PowerScale 代码均保存中文标题、说明和管理员操作并升级为 `reviewed`。目录还读取 NetApp《raid events : ONTAP EMS reference》（2026 年 5 月 19 日生成，文档源为 ONTAP 9.14.1），只收录 `WARNING` 及以上严重度；该文档实际筛出 `ERROR` 104 条、`ALERT` 31 条、`EMERGENCY` 17 条，共 152 条，未出现 `WARNING`。初始化目录共覆盖 730 条代码，合计 688 条 `reviewed` 和 42 条 `pending`。完整索引见 [NetApp ONTAP 清单](netapp-event-association-list.md)和 [Dell PowerScale 清单](isilon-event-association-list.md)，待核验原因见[待核验事件清单](unverified-code-list.md)。不得为了维持历史审核数量保留泛化 KB、概览页面或社区帖的推断结果。基础的 12 条已审核 NetApp 定义如下：
 
 | 事件代码 | 中文含义 / 关联类型 | 已核实版本 | 官网依据 |
 | --- | --- | --- | --- |
@@ -46,7 +46,9 @@
 | `ccma.quota.throughput` | 性能归档保留空间不足 / 监控能力下降 | ONTAP 9.14.1、9.18.1 | [ccma.quota events](https://docs.netapp.com/us-en/ontap-ems/ccma-quota-events.html) |
 | `nis.group.db.build.success` | NIS 组数据库构建成功 / 系统运行事件 | ONTAP 9.10.1–9.18.1 | [nis.group events](https://docs.netapp.com/us-en/ontap-ems/nis-group-events.html) |
 
-`017` 还审核了 `arw.volume.state`、`asup.post.drop`、`callhome.*`、`configbr.backupCompleted`、`mhost.ca.connect.*`、`quota.push.*`、`quota.resize.*`、`quota.softlimit.*`、`wafl.quota.user.exceeded`、`wafl.analytics.*`、`wafl.compress.cde.event`、`wafl.data.compaction.event`、`wafl.rclm.est.scan.done` 和 `wafl.spacemgmnt.policyChg`。每条都保存对应的 NetApp EMS 事件页、版本范围和简短中文处置；例如 [AutoSupport 投递失败](https://docs.netapp.com/us-en/ontap-ems-9161/asup-post-events.html)、[配额软限制](https://docs.netapp.com/us-en/ontap-ems/quota-softlimit-events.html) 与 [文件系统分析过载](https://docs.netapp.com/us-en/ontap-ems/wafl-analytics-events.html)。
+初始化目录还审核了 `arw.volume.state`、`asup.post.drop`、`callhome.*`、`configbr.backupCompleted`、`mhost.ca.connect.*`、`quota.push.*`、`quota.resize.*`、`quota.softlimit.*`、`wafl.quota.user.exceeded`、`wafl.analytics.*`、`wafl.compress.cde.event`、`wafl.data.compaction.event`、`wafl.rclm.est.scan.done` 和 `wafl.spacemgmnt.policyChg`。每条都保存对应的 NetApp EMS 事件页、版本范围和简短中文处置；例如 [AutoSupport 投递失败](https://docs.netapp.com/us-en/ontap-ems-9161/asup-post-events.html)、[配额软限制](https://docs.netapp.com/us-en/ontap-ems/quota-softlimit-events.html) 与 [文件系统分析过载](https://docs.netapp.com/us-en/ontap-ems/wafl-analytics-events.html)。
+
+NetApp RAID 补充定义使用 [ONTAP 9.14.1 raid events](https://docs.netapp.com/us-en/ontap-ems-9141/raid-aggr-events.html) 作为逐代码官方依据，翻译 `Description` 与 `Corrective Action`，并保留厂商严重度映射：`WARNING→warning`、`ERROR→error`、`ALERT/EMERGENCY→critical`。低于 `WARNING` 的 `NOTICE`、`INFORMATIONAL` 等事件不因本次 PDF 批量收录而升级；其中 `raid.aggr.log.CP.count` 仍按待核验清单管理。
 
 Dell 的 [PowerScale SRS Brevity 事件清单](https://infohub.delltechnologies.com/en-us/l/powerscale-onefs-advanced-alert-configurations/appendix-b-full-list-of-srs-brevity/)用于定位数字事件名称；[PowerScale OneFS Event Reference Guide（2021 年 10 月）](https://dl.dell.com/content/docu96961)的 Software events 与 Hardware events 章节用于补齐逐代码标题、说明和 Administrator action。该指南两章中的 499 条代码均已翻译并升级为 `reviewed`；SRS 页面有摘要但该版指南没有对应条目的 15 条代码，以及其他缺少版本化处置证据的代码继续保持 `pending`。
 
@@ -107,8 +109,8 @@ Dell 的 [SRS Brevity 事件清单](https://infohub.delltechnologies.com/en-us/l
 
 ## 发现、历史修复与部署
 
-“发现已有代码”是升级后由超级管理员人工执行一次的历史补录，不是周期任务。完整的 68 条静态目录由迁移 `017` 负责；Discover 只对现有 NetApp/Isilon `storage_alerts.related_info.event_code` 做数据库端 `DISTINCT` 提取，不读取完整原始载荷，也不连接存储设备主动枚举代码。未收录代码只创建 `unknown + pending` 占位，只在管理目录中待审核。
+“发现已有代码”是升级后由超级管理员人工执行一次的历史补录，不是周期任务。内置的 730 条目录由独立初始化脚本负责；Discover 只对现有 NetApp/Isilon `storage_alerts.related_info.event_code` 做数据库端 `DISTINCT` 提取，不读取完整原始载荷，也不连接存储设备主动枚举代码。未收录代码只创建 `unknown + pending` 占位，只在管理目录中待审核。
 
 该动作同时执行幂等的历史 Incident 兼容修复：只由非 `critical` 厂商事件错误生成的旧 `device_fault` Incident 标记为已解决并追加 `reconciled` 时间线；原始 `storage_alerts`、证据和诊断记录全部保留。重复执行可用于故障后重试，但不会重复创建占位项、关闭 Incident 或写入时间线。
 
-迁移 revision `000000000016` 只创建目录表并写入基础行；`000000000017` 增加推荐方案字段、upsert 全部 68 条目录并收紧已审核证据约束。两者都不扫描或删除 `storage_alerts` 原始厂商事件。部署顺序为：备份数据库 → 应用迁移 `000000000017` → 部署并重启新 API 与 Celery worker → 回读覆盖率、审核状态和待核验项。迁移和 Discover 都是部署操作；自动化验证使用 `backend/config.test.yml` 和隔离测试库，不自动对真实业务数据库执行迁移或 Discover。真实设备运行时目录、版本差异和权限仍需在隔离环境验收。
+迁移 revision `000000000016` 只创建目录表、索引和约束；`000000000017` 只增加推荐方案字段并收紧已审核证据约束；`000000000018` 作为已发布 revision 的兼容标记保留，不写目录数据。部署统一运行 `python backend/scripts/initialize_vendor_event_definitions.py`：命令先升级 Alembic 至 `head`，再按 `(storage_type, event_code)` 插入缺失定义；已有同键记录、管理员新增记录和 `storage_alerts` 原始厂商事件都不会被更新或删除。重复执行只会报告已有数量，不重复插入。自动化验证使用隔离数据库；真实设备运行时目录、版本差异和权限仍需在隔离环境验收。

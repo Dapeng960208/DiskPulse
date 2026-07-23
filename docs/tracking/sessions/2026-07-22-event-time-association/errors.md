@@ -1,3 +1,3 @@
 # 本会话错误记录
 
-无已确认且需要进入可复现错误分类库的本会话错误。
+[PostgreSQL 显式 ID 种子后序列未同步](../../errors/backend/postgresql-sequence-after-explicit-seed.md)
