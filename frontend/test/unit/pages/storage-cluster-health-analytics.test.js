@@ -90,6 +90,16 @@ const Select = defineComponent({
   },
 });
 
+const Tooltip = defineComponent({
+  name: 'ElTooltip',
+  setup(_, { slots }) {
+    return () => h('div', { 'data-testid': 'association-tooltip' }, [
+      ...(slots.default?.() || []),
+      h('div', { class: 'association-tooltip__content' }, slots.content?.()),
+    ]);
+  },
+});
+
 const Pagination = defineComponent({
   name: 'ElPagination',
   props: {
@@ -185,6 +195,7 @@ async function mountPage() {
         ElInput: Input,
         ElSelect: Select,
         ElOption: passthrough('ElOption', 'option'),
+        ElTooltip: Tooltip,
         ElPagination: Pagination,
         ElTable: Table,
         ElTableColumn: TableColumn,
@@ -230,6 +241,7 @@ describe('storage cluster health analytics page', () => {
       association_type_label: '故障日志',
       title_zh: '认证服务查询失败',
       description_zh: '名称服务或认证后端查询失败。',
+      recommended_solution_zh: '检查认证后端和网络连通性。',
       review_status: 'reviewed',
       object_id: 'node-a',
       object_name: 'node-a',
@@ -505,6 +517,34 @@ describe('storage cluster health analytics page', () => {
     expect(wrapper.html()).toContain('label="事件对象"');
     expect(wrapper.html()).toContain('prop="object_name"');
     expect(wrapper.text()).not.toContain('扩容');
+  });
+
+  it('keeps event semantics compact and reveals association guidance on hover', async () => {
+    storageClusterApi.fetchSystemEvents.mockResolvedValue({
+      total: 1,
+      page: 1,
+      page_size: 20,
+      data: [tableRow],
+    });
+    const wrapper = await mountPage();
+
+    await selectTab(wrapper, 'faults');
+
+    const eventSection = wrapper.get('.system-events');
+    const columns = eventSection.findAllComponents({ name: 'ElTableColumn' });
+    const associationColumn = columns.find((column) => column.attributes('label') === '关联类型');
+    expect(associationColumn.attributes('min-width')).toBe('120');
+    expect(eventSection.text()).toContain('认证服务查询失败');
+    expect(eventSection.text()).toContain('secd.authsys.lookup.failed');
+    expect(associationColumn.findAllComponents({ name: 'ElTag' }).map((tag) => tag.text()))
+      .toEqual(['故障日志']);
+    expect(associationColumn.text()).not.toContain('已审核');
+
+    const tooltip = associationColumn.getComponent({ name: 'ElTooltip' });
+    expect(tooltip.text()).toContain('关联提示');
+    expect(tooltip.text()).toContain('名称服务或认证后端查询失败。');
+    expect(tooltip.text()).toContain('采取措施');
+    expect(tooltip.text()).toContain('检查认证后端和网络连通性。');
   });
 
   it('explains repeated event fingerprints and opens the normalized vendor log', async () => {
