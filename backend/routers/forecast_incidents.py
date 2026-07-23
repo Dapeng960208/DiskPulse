@@ -119,6 +119,12 @@ def resource_capacity_prediction(
 @router.get(
     "/capacity-predictions/{asset_type}/{asset_id}/risk",
     response_model=CapacityExhaustionRiskOut,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "get_storage_cluster_exhaustion_risk",
+        "ai_description": "查询存储集群及关联资源的容量耗尽风险",
+    },
 )
 def resource_capacity_exhaustion_risk(
     asset_type: Annotated[str, Path(pattern="^(storage_cluster|project|group|storage_usage)$")],
@@ -414,7 +420,16 @@ def _incident_out(db: Session, current_user, incident) -> IncidentOut:
     )
 
 
-@router.get("/forecasts", response_model=ForecastPage)
+@router.get(
+    "/forecasts",
+    response_model=ForecastPage,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "list_storage_cluster_forecasts",
+        "ai_description": "分页查询存储集群关联的容量预测",
+    },
+)
 def list_forecasts(
     current_user: CurrentUserDep,
     db: DBDep,
@@ -437,8 +452,9 @@ def list_forecasts(
     response_model=AnomalyPage,
     openapi_extra={
         "ai_exposed": True,
+        "ai_system_management": True,
         "ai_name": "list_performance_anomalies",
-        "ai_description": "分页查询当前用户可见的存储集群性能异常",
+        "ai_description": "分页查询存储集群性能异常",
     },
 )
 def list_anomalies(
@@ -473,8 +489,9 @@ def list_anomalies(
     response_model=IncidentPage,
     openapi_extra={
         "ai_exposed": True,
+        "ai_system_management": True,
         "ai_name": "list_incidents",
-        "ai_description": "分页查询当前用户可见的故障分析事件",
+        "ai_description": "分页查询存储集群故障分析事件",
     },
 )
 def list_incidents(
@@ -508,8 +525,9 @@ def get_incident(incident_id: Annotated[int, Path(ge=1)], current_user: CurrentU
     response_model=DiagnosisToolOut,
     openapi_extra={
         "ai_exposed": True,
+        "ai_system_management": True,
         "ai_name": "get_incident_diagnosis",
-        "ai_description": "读取当前用户有权查看的确定性 Incident 诊断与证据摘要",
+        "ai_description": "读取存储集群故障的确定性 Incident 诊断与证据摘要",
     },
 )
 def get_incident_diagnosis(incident_id: int, current_user: CurrentUserDep, db: DBDep) -> DiagnosisToolOut:

@@ -173,7 +173,16 @@ def delete_storage_cluster(
     return {"message": "success"}
 
 
-@router.get("/{storage_cluster_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_storage_cluster_realtime", "ai_description": "查询存储集群实时容量趋势"})
+@router.get(
+    "/{storage_cluster_id}/realtime",
+    response_model=commonSchema.ResponseStorageUsageModel,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "get_storage_cluster_realtime",
+        "ai_description": "查询存储集群实时容量趋势",
+    },
+)
 def read_storage_cluster_realtime(
     storage_cluster_id: int,
     start_time: datetime | None = None,
@@ -201,7 +210,16 @@ def read_storage_cluster_realtime(
     )
 
 
-@router.get("/{storage_cluster_id}/analytics/capacity-change", response_model=dict)
+@router.get(
+    "/{storage_cluster_id}/analytics/capacity-change",
+    response_model=dict,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "get_storage_cluster_capacity_change",
+        "ai_description": "查询存储集群容量变化分析",
+    },
+)
 def read_capacity_change(
     storage_cluster_id: int,
     time_range: AnalyticsTimeRange,
@@ -221,7 +239,16 @@ def read_capacity_change(
     }
 
 
-@router.get("/{storage_cluster_id}/analytics/error-severity", response_model=dict)
+@router.get(
+    "/{storage_cluster_id}/analytics/error-severity",
+    response_model=dict,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "get_storage_cluster_error_severity",
+        "ai_description": "查询存储集群故障严重级别统计",
+    },
+)
 def read_error_severity(
     storage_cluster_id: int,
     time_range: AnalyticsTimeRange,
@@ -231,7 +258,16 @@ def read_error_severity(
     return get_error_severity(db, storage_cluster_id, *time_range)
 
 
-@router.get("/{storage_cluster_id}/analytics/top-latency", response_model=dict | list)
+@router.get(
+    "/{storage_cluster_id}/analytics/top-latency",
+    response_model=dict | list,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "get_storage_cluster_top_latency",
+        "ai_description": "查询存储集群高延迟性能分析",
+    },
+)
 def read_top_latency(
     storage_cluster_id: int,
     time_range: AnalyticsTimeRange,
@@ -258,6 +294,12 @@ def read_top_latency(
         storageHealthAnalyticsSchema.RepeatedFaultList
         | list[storageHealthAnalyticsSchema.RepeatedFaultOut]
     ),
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "get_storage_cluster_repeated_faults",
+        "ai_description": "查询存储集群重复故障分析",
+    },
 )
 def read_repeated_faults(
     storage_cluster_id: int,
@@ -274,6 +316,12 @@ def read_repeated_faults(
     "/{storage_cluster_id}/analytics/system-events",
     response_model=storageHealthAnalyticsSchema.SystemEventPage,
     response_model_exclude_unset=True,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "list_storage_cluster_system_events",
+        "ai_description": "分页查询存储集群厂商系统事件",
+    },
 )
 def read_system_events(
     storage_cluster_id: int,
@@ -303,6 +351,12 @@ def read_system_events(
 @router.get(
     "/{storage_cluster_id}/analytics/system-events/{event_id}",
     response_model=storageHealthAnalyticsSchema.SystemEventOut,
+    openapi_extra={
+        "ai_exposed": True,
+        "ai_system_management": True,
+        "ai_name": "get_storage_cluster_system_event",
+        "ai_description": "查询指定存储集群厂商系统事件详情",
+    },
 )
 def read_system_event_detail(
     storage_cluster_id: int,

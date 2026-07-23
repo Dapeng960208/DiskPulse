@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from dependencies import CurrentUserDep, get_db, require_super_admin
-from schemas.aiSchema import AIModelCreate, AIModelPatch
+from schemas.aiSchema import AIModelCreate, AIModelPatch, AIPlatformSettingsPatch
 from services import ai_audit_service, ai_config_service, audit_service
 
 
@@ -27,6 +27,24 @@ router = APIRouter(
 )
 def models(_current_user: CurrentUserDep, db: Session = Depends(get_db)):
     return ai_config_service.list_models(db)
+
+
+@router.get("/ai-settings")
+def settings(_current_user: CurrentUserDep, db: Session = Depends(get_db)):
+    return ai_config_service.get_platform_settings(db)
+
+
+@router.patch("/ai-settings")
+def update_settings(
+    payload: AIPlatformSettingsPatch,
+    current_user: CurrentUserDep,
+    db: Session = Depends(get_db),
+):
+    return ai_config_service.update_platform_settings(
+        db,
+        payload.default_chat_model_id,
+        current_user.id,
+    )
 
 
 @router.post(
@@ -120,6 +138,15 @@ def test_model(
             actor_user_id=current_user.id,
         ),
     )
+
+
+@router.post("/ai-models/{model_id}/capabilities/refresh")
+def refresh_model_capabilities(
+    model_id: int,
+    _current_user: CurrentUserDep,
+    db: Session = Depends(get_db),
+):
+    return ai_config_service.refresh_model_capabilities_by_id(db, model_id)
 
 
 @router.get("/ai-audits")

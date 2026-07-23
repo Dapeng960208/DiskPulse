@@ -16,8 +16,19 @@ from crud import aiCrud
 from models import AIConversation, AIAuditLog, AIMessage, Group, StorageUsage, User
 from services.audit_service import AuditContext, append_audit_event, redact_audit_payload
 from services import ai_quota_confirmation_service
-from services.ai_client import AIClientError, AIClientToolArgumentsError, AIClientToolCall, chat_completion_stream
-from services.ai_config_service import serialize_model
+from services.ai_client import (
+    AIClientError,
+    AIClientToolArgumentsError,
+    AIClientToolCall,
+    chat_completion_stream,
+    provider_protocol,
+    reasoning_wire_value,
+)
+from services.ai_config_service import (
+    get_default_chat_model,
+    list_models as list_configured_models,
+)
+from services.ai_reasoning_service import validate_reasoning
 from services.ai_tool_service import build_tool_registry, execute_tool, tool_definitions
 from services.incidentAiService import render_restricted_diagnosis
 from services.project_access_service import accessible_project_ids
@@ -355,6 +366,7 @@ def serialize_message(
         "conversation_id": message.conversation_id,
         "role": message.role,
         "content": message.content if visible or message.role != "assistant" else _HIDDEN_HISTORY_CONTENT,
+        "reasoning": message.reasoning,
         "created_at": message.created_at,
         "updated_at": message.updated_at,
     }
@@ -398,7 +410,7 @@ def serialize_conversation(
 
 
 def list_available_models(db: Session) -> list[dict]:
-    return [serialize_model(item) for item in aiCrud.list_models(db, available_only=True)]
+    return list_configured_models(db, available_only=True)
 
 
 def list_conversations(db: Session, user_id: int) -> list[dict]:
@@ -409,17 +421,27 @@ def create_conversation(
     db: Session,
     user_id: int,
     title: str,
-    model_id: int,
+    model_id: int | None,
     audit_context: AuditContext | None = None,
 ) -> dict:
-    model = aiCrud.get_model(db, model_id)
+    model = (
+        aiCrud.get_model(db, model_id)
+        if model_id is not None
+        else get_default_chat_model(db)
+    )
+    if model_id is None and model is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="管理员尚未配置默认聊天模型",
+        )
     if model is None or not model.enabled or not model.enable_chat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="可用 AI 模型不存在")
+    selected_model_id = model.id
     conversation = aiCrud.add_conversation(
         db,
         AIConversation(
             user_id=user_id,
-            model_id=model_id,
+            model_id=selected_model_id,
             title=title.strip() or "新对话",
         ),
     )
@@ -433,7 +455,7 @@ def create_conversation(
             resource_type="ai_conversation",
             resource_id=conversation.id,
             outcome="success",
-            after_summary={"model_id": model_id},
+            after_summary={"model_id": selected_model_id},
         )
     db.commit()
     db.refresh(conversation)
@@ -563,18 +585,21 @@ def _provider_tool_messages(provider: str, call: AIClientToolCall, result: dict)
                 ],
             },
         ]
+    assistant_message = {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {
+                "id": call.tool_id,
+                "type": "function",
+                "function": {"name": call.name, "arguments": json.dumps(call.arguments, ensure_ascii=False)},
+            }
+        ],
+    }
+    if provider in {"deepseek", "moonshot"} and call.reasoning_content:
+        assistant_message["reasoning_content"] = call.reasoning_content
     return [
-        {
-            "role": "assistant",
-            "content": "",
-            "tool_calls": [
-                {
-                    "id": call.tool_id,
-                    "type": "function",
-                    "function": {"name": call.name, "arguments": json.dumps(call.arguments, ensure_ascii=False)},
-                }
-            ],
-        },
+        assistant_message,
         {"role": "tool", "tool_call_id": call.tool_id, "content": content},
     ]
 
@@ -773,6 +798,7 @@ def stream_message(
     conversation_id: int,
     user_id: int,
     content: str,
+    reasoning: str = "auto",
     current_user: User | None = None,
     audit_context: AuditContext | None = None,
 ) -> Iterator[tuple[str, dict]]:
@@ -780,10 +806,16 @@ def stream_message(
     model = aiCrud.get_model(db, conversation.model_id)
     if model is None or not model.enabled or not model.enable_chat:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="当前 AI 模型不可用")
+    reasoning_control = validate_reasoning(model, reasoning)
 
     user_message = aiCrud.add_message(
         db,
-        AIMessage(conversation_id=conversation.id, role="user", content=content.strip()),
+        AIMessage(
+            conversation_id=conversation.id,
+            role="user",
+            content=content.strip(),
+            reasoning=reasoning,
+        ),
     )
     assistant = aiCrud.add_message(
         db,
@@ -800,7 +832,16 @@ def stream_message(
             user_id=user_id,
             source="chat",
             source_ref=str(conversation.id),
-            request_payload=json.dumps({"content": "[REDACTED]", "length": len(content)}, ensure_ascii=False),
+            request_payload=json.dumps(
+                {
+                    "content": "[REDACTED]",
+                    "length": len(content),
+                    "reasoning_requested": reasoning,
+                    "reasoning_kind": reasoning_control["kind"],
+                    "reasoning_sent": reasoning_wire_value(model, reasoning),
+                },
+                ensure_ascii=False,
+            ),
             response_payload=json.dumps({"message_id": assistant.id}, ensure_ascii=False),
             status="running",
             trace_id=(audit_context.trace_id if audit_context is not None else uuid4().hex),
@@ -835,6 +876,7 @@ def stream_message(
     emitted_text: list[str] = []
     final_text = ""
     confirmation_pending: dict | None = None
+    confirmation_tool_name: str | None = None
     recovery: dict | None = None
     degraded_error_message: str | None = None
     terminal = False
@@ -860,7 +902,79 @@ def stream_message(
         yield "status", {"turn_id": turn_id, "status": "thinking"}
         # Build from live routes inside the failure boundary so setup failures retain a terminal reply.
         registry = build_tool_registry(app, current_user=current_user)
-        tools = tool_definitions(registry, model.provider)
+        protocol = provider_protocol(model)
+        tools = tool_definitions(registry, protocol)
+
+        def execute_claude_code_tool(tool_name: str, arguments: dict) -> dict:
+            nonlocal confirmation_pending, confirmation_tool_name
+            if ai_quota_confirmation_service.is_quota_write_tool(tool_name):
+                definition = registry.get(tool_name)
+                if definition is None:
+                    return {"ok": False, "error": f"工具 {tool_name} 未获授权"}
+                try:
+                    confirmation_pending = (
+                        ai_quota_confirmation_service.prepare_confirmation(
+                            db,
+                            definition=definition,
+                            arguments=arguments,
+                            user_id=user_id,
+                            conversation_id=conversation.id,
+                            audit=audit,
+                        )
+                    )
+                    confirmation_tool_name = tool_name
+                    return {
+                        "ok": True,
+                        "data": {
+                            "confirmation_required": confirmation_pending,
+                        },
+                    }
+                except HTTPException as error:
+                    return {"ok": False, "error": str(error.detail)}
+            return execute_tool(
+                app=app,
+                registry=registry,
+                tool_name=tool_name,
+                arguments=arguments,
+                user_id=user_id,
+                current_user=current_user,
+            )
+
+        def record_claude_code_tool(tool_name: str, arguments: dict, result: dict) -> None:
+            audit.tool_call_count += 1
+            if result.get("ok") is False:
+                audit.tool_failed_count += 1
+            display_result, truncated = _display_tool_result(result)
+            definition = registry.get(tool_name)
+            visibility = (
+                _tool_visibility(db, definition, arguments, result)
+                if definition is not None
+                else _unknown_visibility()
+            )
+            needs_confirmation = (
+                isinstance(result.get("data"), dict)
+                and isinstance(result["data"].get("confirmation_required"), dict)
+            )
+            tool_trace.append(
+                {
+                    "call_id": f"{audit.id}:claude-code:{audit.tool_call_count}",
+                    "sequence": audit.tool_call_count,
+                    "iteration": 1,
+                    "tool_name": tool_name,
+                    "arguments": _redact_sensitive(_json_safe(arguments)),
+                    "status": (
+                        "awaiting_confirmation"
+                        if needs_confirmation
+                        else ("succeeded" if result.get("ok") is True else "failed")
+                    ),
+                    "elapsed_ms": None,
+                    "result": display_result,
+                    "truncated": truncated,
+                    "visibility": visibility,
+                }
+            )
+            _persist_running_audit(db, audit, tool_trace)
+
         system_messages = [{"role": "system", "content": model.system_prompt or SYSTEM_PROMPT}]
         if any(item.system_management for item in registry.values()):
             system_messages.append({"role": "system", "content": _SYSTEM_MANAGEMENT_PROMPT})
@@ -873,8 +987,24 @@ def stream_message(
             while True:
                 streamed_text: list[str] = []
                 try:
-                    for event in chat_completion_stream(model, messages, tools=tools):
+                    provider_kwargs = {"tools": tools}
+                    if reasoning != "auto":
+                        provider_kwargs["reasoning"] = reasoning
+                    if model.provider == "claude_code":
+                        provider_kwargs.update(
+                            {
+                                "app": app,
+                                "registry": registry,
+                                "current_user": current_user,
+                                "user_id": user_id,
+                                "tool_handler": execute_claude_code_tool,
+                                "on_tool_result": record_claude_code_tool,
+                            }
+                        )
+                    for event in chat_completion_stream(model, messages, **provider_kwargs):
                         if event.kind == "delta" and event.text:
+                            if confirmation_pending is not None:
+                                continue
                             streamed_text.append(event.text)
                             emitted_text.append(event.text)
                             if not diagnosis_payloads:
@@ -905,6 +1035,14 @@ def stream_message(
             if recovery is not None:
                 break
             calls = completion.tool_calls or []
+            if confirmation_pending is not None:
+                yield "quota_confirmation_required", {
+                    "turn_id": turn_id,
+                    "tool_name": confirmation_tool_name or "quota_adjustment",
+                    **confirmation_pending,
+                }
+                final_text = "配额调整已生成安全预览，请在五分钟内确认或取消。"
+                break
             if not calls:
                 raw_text = "".join(emitted_text) or completion.text or "".join(streamed_text)
                 if diagnosis_payloads:
@@ -1027,7 +1165,7 @@ def stream_message(
                     }
                     final_text = "配额调整已生成安全预览，请在五分钟内确认或取消。"
                     break
-                messages.extend(_provider_tool_messages(model.provider, call, result))
+                messages.extend(_provider_tool_messages(protocol, call, result))
                 if call.name == "get_incident_diagnosis" and result.get("ok") is True:
                     messages.append(
                         {

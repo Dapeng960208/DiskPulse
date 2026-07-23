@@ -16,7 +16,9 @@ BASE_REVISION = "000000000015"
 PREVIOUS_REVISION = "000000000017"
 REVISION = "000000000018"
 QUESTDB_TIME_REPAIR_REVISION = "000000000019"
-HEAD_REVISION = "000000000020"
+DISKPULSE_ALERT_EVIDENCE_REPAIR_REVISION = "000000000020"
+INCIDENT_AI_AGENT_REVISION = "000000000021"
+HEAD_REVISION = "000000000022"
 EXPECTED_ADDITIONAL_CODES = {
     ("netapp", "raid.disk.illegalAttach"),
     ("netapp", "raid.disk.io.toFailedDisk"),
@@ -67,7 +69,15 @@ def test_official_fault_expansion_is_the_current_compatibility_head():
     assert scripts.get_heads() == [HEAD_REVISION]
     assert scripts.get_revision(REVISION).down_revision == PREVIOUS_REVISION
     assert scripts.get_revision(QUESTDB_TIME_REPAIR_REVISION).down_revision == REVISION
-    assert scripts.get_revision(HEAD_REVISION).down_revision == QUESTDB_TIME_REPAIR_REVISION
+    assert (
+        scripts.get_revision(DISKPULSE_ALERT_EVIDENCE_REPAIR_REVISION).down_revision
+        == QUESTDB_TIME_REPAIR_REVISION
+    )
+    assert (
+        scripts.get_revision(INCIDENT_AI_AGENT_REVISION).down_revision
+        == DISKPULSE_ALERT_EVIDENCE_REPAIR_REVISION
+    )
+    assert scripts.get_revision(HEAD_REVISION).down_revision == INCIDENT_AI_AGENT_REVISION
 
 
 def test_official_catalog_evidence_is_preserved_in_the_initializer():

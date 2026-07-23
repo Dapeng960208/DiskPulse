@@ -162,10 +162,16 @@ def test_dynamic_tool_registry_only_exposes_marked_get_routes():
     )["error"] == "工具参数无效"
 
 
-def test_performance_and_incident_analysis_tools_are_exposed_with_their_access_boundaries(monkeypatch):
+def test_cluster_analysis_tools_are_super_admin_only_at_registration_and_execution(monkeypatch):
     app = FastAPI()
-    app.include_router(forecast_incidents.router)
-    app.include_router(volumes.router)
+    for router in (
+        storage_cluster.router,
+        aggregate.router,
+        volumes.router,
+        qtrees.router,
+        forecast_incidents.router,
+    ):
+        app.include_router(router)
 
     original_get = base_config.get
 
@@ -179,17 +185,61 @@ def test_performance_and_incident_analysis_tools_are_exposed_with_their_access_b
     reader_registry = build_tool_registry(app, current_user=reader)
     admin_registry = build_tool_registry(app, current_user=admin)
 
-    assert {
-        name: (reader_registry[name].route_path, reader_registry[name].method)
-        for name in {"list_performance_anomalies", "list_incidents", "get_incident_diagnosis"}
-    } == {
+    expected = {
+        "get_storage_cluster_realtime": ("/storage-clusters/{storage_cluster_id}/realtime", "GET"),
+        "get_storage_cluster_capacity_change": (
+            "/storage-clusters/{storage_cluster_id}/analytics/capacity-change",
+            "GET",
+        ),
+        "get_storage_cluster_error_severity": (
+            "/storage-clusters/{storage_cluster_id}/analytics/error-severity",
+            "GET",
+        ),
+        "get_storage_cluster_top_latency": (
+            "/storage-clusters/{storage_cluster_id}/analytics/top-latency",
+            "GET",
+        ),
+        "get_storage_cluster_repeated_faults": (
+            "/storage-clusters/{storage_cluster_id}/analytics/repeated-faults",
+            "GET",
+        ),
+        "list_storage_cluster_system_events": (
+            "/storage-clusters/{storage_cluster_id}/analytics/system-events",
+            "GET",
+        ),
+        "get_storage_cluster_system_event": (
+            "/storage-clusters/{storage_cluster_id}/analytics/system-events/{event_id}",
+            "GET",
+        ),
+        "get_aggregate_realtime": ("/aggregates/{aggregate_id}/realtime", "GET"),
+        "list_aggregate_storage_trees": ("/aggregates/storage-trees/", "GET"),
+        "get_aggregate_storage_tree": ("/aggregates/{aggregate_id}/storage-tree", "GET"),
+        "get_volume_realtime": ("/volumes/{volume_id}/realtime", "GET"),
+        "list_qtrees": ("/qtrees/", "GET"),
+        "get_qtree": ("/qtrees/{qtree_id}", "GET"),
+        "get_qtree_realtime": ("/qtrees/{qtree_id}/realtime", "GET"),
+        "get_storage_cluster_exhaustion_risk": (
+            "/v1/capacity-predictions/{asset_type}/{asset_id}/risk",
+            "GET",
+        ),
+        "list_storage_cluster_forecasts": ("/v1/forecasts", "GET"),
         "list_performance_anomalies": ("/v1/anomalies", "GET"),
         "list_incidents": ("/v1/incidents", "GET"),
         "get_incident_diagnosis": ("/v1/incidents/{incident_id}/diagnosis", "GET"),
     }
-    assert "get_volume_performance_monitoring" not in reader_registry
-    assert admin_registry["get_volume_performance_monitoring"].route_path == "/volumes/{volume_id}/monitoring/ai"
-    assert admin_registry["get_volume_performance_monitoring"].system_management is True
+    assert not (set(expected) & set(reader_registry))
+    assert {
+        name: (admin_registry[name].route_path, admin_registry[name].method)
+        for name in expected
+    } == expected
+    assert all(admin_registry[name].system_management is True for name in expected)
+    assert execute_tool(
+        app=app,
+        registry=admin_registry,
+        tool_name="get_storage_cluster_capacity_change",
+        arguments={},
+        current_user=reader,
+    ) == {"ok": False, "error": "系统管理工具仅限超级管理员"}
 
 
 def test_system_management_tools_require_super_admin_for_registry_and_execution(monkeypatch):
@@ -304,6 +354,7 @@ def test_registered_system_management_crud_tools_are_admin_only(monkeypatch):
         storage_back_up_records.router,
         group.router,
         storage_usage.router,
+        forecast_incidents.router,
     ):
         app.include_router(router)
 
@@ -341,6 +392,46 @@ def test_registered_system_management_crud_tools_are_admin_only(monkeypatch):
         "list_storage_backup_records": ("/storage-back-up-records/", "GET"),
         "adjust_group_quota": ("/groups/{group_id}/quota", "PATCH"),
         "adjust_storage_usage_quota": ("/storage-usages/{storage_usage_id}/quota", "PATCH"),
+        "get_storage_cluster_realtime": ("/storage-clusters/{storage_cluster_id}/realtime", "GET"),
+        "get_storage_cluster_capacity_change": (
+            "/storage-clusters/{storage_cluster_id}/analytics/capacity-change",
+            "GET",
+        ),
+        "get_storage_cluster_error_severity": (
+            "/storage-clusters/{storage_cluster_id}/analytics/error-severity",
+            "GET",
+        ),
+        "get_storage_cluster_top_latency": (
+            "/storage-clusters/{storage_cluster_id}/analytics/top-latency",
+            "GET",
+        ),
+        "get_storage_cluster_repeated_faults": (
+            "/storage-clusters/{storage_cluster_id}/analytics/repeated-faults",
+            "GET",
+        ),
+        "list_storage_cluster_system_events": (
+            "/storage-clusters/{storage_cluster_id}/analytics/system-events",
+            "GET",
+        ),
+        "get_storage_cluster_system_event": (
+            "/storage-clusters/{storage_cluster_id}/analytics/system-events/{event_id}",
+            "GET",
+        ),
+        "get_aggregate_realtime": ("/aggregates/{aggregate_id}/realtime", "GET"),
+        "list_aggregate_storage_trees": ("/aggregates/storage-trees/", "GET"),
+        "get_aggregate_storage_tree": ("/aggregates/{aggregate_id}/storage-tree", "GET"),
+        "get_volume_realtime": ("/volumes/{volume_id}/realtime", "GET"),
+        "list_qtrees": ("/qtrees/", "GET"),
+        "get_qtree": ("/qtrees/{qtree_id}", "GET"),
+        "get_qtree_realtime": ("/qtrees/{qtree_id}/realtime", "GET"),
+        "get_storage_cluster_exhaustion_risk": (
+            "/v1/capacity-predictions/{asset_type}/{asset_id}/risk",
+            "GET",
+        ),
+        "list_storage_cluster_forecasts": ("/v1/forecasts", "GET"),
+        "list_performance_anomalies": ("/v1/anomalies", "GET"),
+        "list_incidents": ("/v1/incidents", "GET"),
+        "get_incident_diagnosis": ("/v1/incidents/{incident_id}/diagnosis", "GET"),
     }
     admin_registry = build_tool_registry(app, current_user=admin)
     reader_registry = build_tool_registry(app, current_user=reader)
@@ -358,11 +449,8 @@ def test_registered_system_management_crud_tools_are_admin_only(monkeypatch):
         "create_volume",
         "update_volume",
         "delete_volume",
-        "list_qtrees",
-        "create_qtree",
-        "get_qtree",
-        "get_qtree_realtime",
-        "update_qtree",
+            "create_qtree",
+            "update_qtree",
         "delete_qtree",
         "delete_group_tag",
         "create_user",
@@ -380,16 +468,7 @@ def test_registered_system_management_crud_tools_are_admin_only(monkeypatch):
             ("/users/logout", "POST"),
             ("/users/current/profile", "GET"),
             ("/users/sync-ldap", "POST"),
-            ("/storage-clusters/{storage_cluster_id}/realtime", "GET"),
-            ("/storage-clusters/{storage_cluster_id}/analytics/capacity-change", "GET"),
-            ("/storage-clusters/{storage_cluster_id}/analytics/error-severity", "GET"),
-            ("/storage-clusters/{storage_cluster_id}/analytics/top-latency", "GET"),
-            ("/storage-clusters/{storage_cluster_id}/analytics/repeated-faults", "GET"),
-            ("/storage-clusters/{storage_cluster_id}/analytics/system-events", "GET"),
             ("/storage-clusters/{storage_cluster_id}/analytics/export", "GET"),
-            ("/aggregates/{aggregate_id}/realtime", "GET"),
-            ("/volumes/{volume_id}/realtime", "GET"),
-            ("/qtrees/{qtree_id}/realtime", "GET"),
             ("/admin/ai-models/{model_id}/test", "POST"),
             ("/admin/ai-audits", "GET"),
             ("/admin/ai-audits/conversations/{conversation_id}", "GET"),

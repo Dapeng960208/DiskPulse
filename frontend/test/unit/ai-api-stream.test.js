@@ -50,11 +50,42 @@ describe('AI API and SSE stream', () => {
     await aiApi.listAudits({ page: 2 });
     await aiApi.getAudit(5);
     await aiApi.getConversationAudits(3);
+    await aiApi.getAiSettings();
+    await aiApi.updateAiSettings({ default_chat_model_id: 4 });
+    await aiApi.refreshModelCapabilities(4);
 
     expect(request.get).toHaveBeenCalledWith('/ai/models', { params: undefined });
     expect(request.post).toHaveBeenCalledWith('/ai/conversations', { model_id: 1 }, { params: undefined });
     expect(request.patch).toHaveBeenCalledWith('/admin/ai-models/4', { enabled: true }, { params: undefined });
     expect(request.get).toHaveBeenCalledWith('/admin/ai-audits', { params: { page: 2 } });
+    expect(request.get).toHaveBeenCalledWith('/admin/ai-settings', { params: undefined });
+    expect(request.patch).toHaveBeenCalledWith(
+      '/admin/ai-settings',
+      { default_chat_model_id: 4 },
+      { params: undefined },
+    );
+    expect(request.post).toHaveBeenCalledWith(
+      '/admin/ai-models/4/capabilities/refresh',
+      undefined,
+      { params: undefined },
+    );
+  });
+
+  it('sends the selected reasoning value in a streaming message request', async () => {
+    global.fetch = vi.fn().mockResolvedValue(streamResponse([
+      'event: accepted\ndata: {"turn_id":"turn-reasoning","message":{"id":1,"role":"assistant"}}\n\n'
+        + 'event: completed\ndata: {"turn_id":"turn-reasoning","message":{"id":1,"role":"assistant"}}',
+    ]));
+
+    await streamConversationMessage(8, 'question', {
+      reasoning: 'high',
+      onEvent: vi.fn(),
+    });
+
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+      content: 'question',
+      reasoning: 'high',
+    });
   });
 
   it('parses events split across response chunks and flushes the final block', async () => {
@@ -122,5 +153,21 @@ describe('AI API and SSE stream', () => {
 
     global.fetch = vi.fn().mockResolvedValue({ ok: true, body: null });
     await expect(streamConversationMessage(1, 'q', { onEvent: vi.fn() })).rejects.toThrow('不支持流式响应');
+  });
+
+  it('preserves the status and detail of a reasoning validation error', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({ detail: '当前模型不支持推理设置 high' }),
+    });
+
+    await expect(streamConversationMessage(1, 'q', {
+      reasoning: 'high',
+      onEvent: vi.fn(),
+    })).rejects.toMatchObject({
+      message: '当前模型不支持推理设置 high',
+      status: 422,
+    });
   });
 });

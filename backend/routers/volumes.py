@@ -66,7 +66,7 @@ def read_volume(volume_id: int, db: Session = Depends(get_db)):
     return db_volume
 
 
-@router.get("/{volume_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_volume_realtime", "ai_description": "查询存储空间实时容量趋势"})
+@router.get("/{volume_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_system_management": True, "ai_name": "get_volume_realtime", "ai_description": "查询存储空间实时容量趋势"})
 def read_volume_realtime_data(volume_id: int, start_time: datetime | None = None,
                               end_time: datetime | None = None,
                               indicator: storageTrendSchema.TrendIndicator = 'used', db: Session = Depends(get_db)):

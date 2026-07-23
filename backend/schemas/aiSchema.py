@@ -1,11 +1,37 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-AIProvider = Literal["openai", "openrouter", "ollama", "claude"]
+AIProvider = Literal[
+    "openai",
+    "openrouter",
+    "ollama",
+    "claude",
+    "claude_code",
+    "deepseek",
+    "dashscope",
+    "volcengine",
+    "zhipu",
+    "moonshot",
+    "minimax",
+    "qianfan",
+    "hunyuan",
+]
+ReasoningValue = Literal[
+    "auto",
+    "off",
+    "on",
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+]
 
 
 class AIModelCreate(BaseModel):
@@ -52,6 +78,11 @@ class AIModelOut(BaseModel):
     temperature: float
     max_tokens: int
     system_prompt: str | None
+    capability_status: str
+    capability_error: str | None
+    capability_updated_at: datetime | None
+    reasoning_control: dict[str, Any]
+    is_default: bool
     created_by: int | None
     updated_by: int | None
     created_at: datetime
@@ -60,11 +91,16 @@ class AIModelOut(BaseModel):
 
 class ConversationCreate(BaseModel):
     title: str = Field(default="新对话", min_length=1, max_length=255)
-    model_id: int = Field(ge=1)
+    model_id: int | None = Field(default=None, ge=1)
 
 
 class MessageCreate(BaseModel):
     content: str = Field(min_length=1, max_length=32000)
+    reasoning: ReasoningValue = "auto"
+
+
+class AIPlatformSettingsPatch(BaseModel):
+    default_chat_model_id: int | None = Field(default=None, ge=1)
 
 
 class QuotaConfirmationDecision(BaseModel):

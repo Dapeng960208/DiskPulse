@@ -26,7 +26,9 @@ PREVIOUS_REVISION = "000000000016"
 REVISION = "000000000017"
 COMPATIBILITY_REVISION = "000000000018"
 QUESTDB_TIME_REPAIR_REVISION = "000000000019"
-HEAD_REVISION = "000000000020"
+DISKPULSE_ALERT_EVIDENCE_REPAIR_REVISION = "000000000020"
+INCIDENT_AI_AGENT_REVISION = "000000000021"
+HEAD_REVISION = "000000000022"
 
 
 def _alembic_config() -> Config:
@@ -51,7 +53,15 @@ def test_vendor_event_association_revision_precedes_the_compatibility_head():
         scripts.get_revision(QUESTDB_TIME_REPAIR_REVISION).down_revision
         == COMPATIBILITY_REVISION
     )
-    assert scripts.get_revision(HEAD_REVISION).down_revision == QUESTDB_TIME_REPAIR_REVISION
+    assert (
+        scripts.get_revision(DISKPULSE_ALERT_EVIDENCE_REPAIR_REVISION).down_revision
+        == QUESTDB_TIME_REPAIR_REVISION
+    )
+    assert (
+        scripts.get_revision(INCIDENT_AI_AGENT_REVISION).down_revision
+        == DISKPULSE_ALERT_EVIDENCE_REPAIR_REVISION
+    )
+    assert scripts.get_revision(HEAD_REVISION).down_revision == INCIDENT_AI_AGENT_REVISION
 
 
 @pytest.mark.parametrize("dialect_name", ("sqlite", "postgresql", "mysql"))

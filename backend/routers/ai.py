@@ -78,6 +78,7 @@ def message(
         user_id=current_user.id,
         current_user=current_user,
         content=payload.content,
+        reasoning=payload.reasoning,
         audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
     )
 
@@ -104,6 +105,7 @@ def stream_message(
             user_id=current_user.id,
             current_user=current_user,
             content=payload.content,
+            reasoning=payload.reasoning,
             audit_context=audit_service.audit_context_for_request(request, actor_user_id=current_user.id),
         )
         try:

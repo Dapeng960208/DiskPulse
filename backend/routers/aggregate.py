@@ -66,7 +66,7 @@ def read_aggregate(aggregate_id: int, db: Session = Depends(get_db)):
     return db_aggregate
 
 
-@router.get("/{aggregate_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_aggregate_realtime", "ai_description": "查询容量池实时容量趋势"})
+@router.get("/{aggregate_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_system_management": True, "ai_name": "get_aggregate_realtime", "ai_description": "查询容量池实时容量趋势"})
 def read_aggregate_realtime_data(aggregate_id: int, start_time: datetime | None = None,
                                  end_time: datetime | None = None,
                                  indicator: storageTrendSchema.TrendIndicator = 'used', db: Session = Depends(get_db)):
@@ -122,7 +122,7 @@ def delete_aggregate(
     return aggregateCrud.delete_aggregate(db=db, aggregate_id=aggregate_id)
 
 
-@router.get('/storage-trees/', response_model=commonSchema.ResponseResourceModel, openapi_extra={"ai_exposed": True, "ai_name": "list_aggregate_storage_trees", "ai_description": "查询容量池存储树"})
+@router.get('/storage-trees/', response_model=commonSchema.ResponseResourceModel, openapi_extra={"ai_exposed": True, "ai_system_management": True, "ai_name": "list_aggregate_storage_trees", "ai_description": "查询容量池存储树"})
 def get_aggregate_storage_trees(
     value_type: str = 'limit',
     storage_cluster_id: Annotated[int | None, Query(ge=1)] = None,
@@ -141,7 +141,7 @@ def get_aggregate_storage_trees(
     return commonSchema.ResponseResourceModel(data=tree, data_unit="TB")
 
 
-@router.get('/{aggregate_id}/storage-tree', response_model=commonSchema.ResponseResourceModel, openapi_extra={"ai_exposed": True, "ai_name": "get_aggregate_storage_tree", "ai_description": "查询指定容量池存储树"})
+@router.get('/{aggregate_id}/storage-tree', response_model=commonSchema.ResponseResourceModel, openapi_extra={"ai_exposed": True, "ai_system_management": True, "ai_name": "get_aggregate_storage_tree", "ai_description": "查询指定容量池存储树"})
 def get_aggregate_storage_tree_by_id(
     aggregate_id: int,
     value_type: str = 'used',

@@ -30,6 +30,7 @@ class AIClientToolCall:
     tool_id: str
     name: str
     arguments: dict[str, Any]
+    reasoning_content: str = ""
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,20 @@ def _base_url(config: AIConfig) -> str:
         "openrouter": "https://openrouter.ai/api/v1",
         "ollama": "http://localhost:11434/v1",
         "claude": "https://api.anthropic.com",
+        "deepseek": "https://api.deepseek.com",
+        "dashscope": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "volcengine": "https://ark.cn-beijing.volces.com/api/v3",
+        "zhipu": "https://open.bigmodel.cn/api/paas/v4",
+        "moonshot": "https://api.moonshot.cn/v1",
+        "minimax": "https://api.minimaxi.com/v1",
+        "qianfan": "https://qianfan.baidubce.com/v2",
+        "hunyuan": "https://tokenhub.tencentmaas.com/v1",
     }.get(config.provider, "")
+
+
+def _ollama_root(config: AIConfig) -> str:
+    base = _base_url(config).rstrip("/")
+    return base[:-3] if base.lower().endswith("/v1") else base
 
 
 def _timeout() -> int:
@@ -97,13 +111,28 @@ def _decode_arguments(
 def _headers(config: AIConfig) -> dict[str, str]:
     key = decrypt_secret(config.api_key_encrypted)
     headers = {"Content-Type": "application/json"}
-    if config.provider == "claude":
+    if provider_protocol(config) == "claude":
         headers["anthropic-version"] = "2023-06-01"
         if key:
             headers["x-api-key"] = key
     elif key:
         headers["Authorization"] = f"Bearer {key}"
     return headers
+
+
+def provider_protocol(config: AIConfig) -> str:
+    if config.provider == "claude":
+        return "claude"
+    if (
+        config.provider == "minimax"
+        and (config.base_url or "").strip().rstrip("/").lower().endswith("/anthropic")
+    ):
+        return "claude"
+    if config.provider == "ollama":
+        return "ollama"
+    if config.provider == "claude_code":
+        return "claude_code"
+    return "openai"
 
 
 def _openai_payload(
@@ -147,6 +176,117 @@ def _claude_payload(
     return payload
 
 
+def _provider_payload(
+    config: AIConfig,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    *,
+    stream: bool,
+    reasoning: str = "auto",
+) -> dict[str, Any]:
+    if provider_protocol(config) == "claude" or config.provider == "claude_code":
+        payload = _claude_payload(config, messages, tools, stream=stream)
+    elif config.provider == "ollama":
+        payload = {
+            "model": config.model,
+            "messages": messages,
+            "stream": stream,
+            "options": {
+                "temperature": float(config.temperature),
+                "num_predict": config.max_tokens,
+            },
+        }
+        if tools:
+            payload["tools"] = tools
+    else:
+        payload = _openai_payload(config, messages, tools, stream=stream)
+
+    if reasoning == "auto":
+        return payload
+    if config.provider == "zhipu":
+        if reasoning in {"on", "off"}:
+            payload["thinking"] = {
+                "type": "enabled" if reasoning == "on" else "disabled"
+            }
+        else:
+            payload["reasoning_effort"] = reasoning
+    elif config.provider == "moonshot":
+        if reasoning in {"on", "off"}:
+            payload["thinking"] = {
+                "type": "enabled" if reasoning == "on" else "disabled"
+            }
+        else:
+            payload["reasoning_effort"] = reasoning
+    elif config.provider == "hunyuan":
+        model_name = config.model.strip().lower()
+        if model_name.startswith("qwen3.5-"):
+            payload["enable_thinking"] = reasoning == "on"
+        elif model_name.startswith("minimax-m3"):
+            payload["thinking"] = {
+                "type": "adaptive" if reasoning == "on" else "disabled"
+            }
+        elif reasoning in {"on", "off"}:
+            payload["thinking"] = {
+                "type": "enabled" if reasoning == "on" else "disabled"
+            }
+        else:
+            payload["reasoning_effort"] = reasoning
+    elif config.provider == "openai":
+        payload["reasoning_effort"] = reasoning
+    elif config.provider == "openrouter":
+        payload["reasoning"] = {"effort": reasoning}
+    elif config.provider == "ollama":
+        payload["think"] = reasoning if reasoning not in {"on", "off"} else reasoning == "on"
+    elif config.provider in {"claude", "claude_code"}:
+        payload["output_config"] = {"effort": reasoning}
+        payload["thinking"] = {"type": "adaptive"}
+        payload.pop("temperature", None)
+    elif config.provider == "deepseek":
+        if reasoning in {"on", "off"}:
+            payload["thinking"] = {"type": "enabled" if reasoning == "on" else "disabled"}
+        else:
+            payload["reasoning_effort"] = reasoning
+        payload.pop("temperature", None)
+    elif config.provider == "dashscope":
+        payload["enable_thinking"] = reasoning == "on"
+    elif config.provider == "qianfan":
+        model_name = config.model.strip().lower()
+        if model_name.startswith("qwen3"):
+            payload["enable_thinking"] = reasoning == "on"
+        elif reasoning in {"on", "off"}:
+            payload["thinking"] = {
+                "type": "enabled" if reasoning == "on" else "disabled"
+            }
+        else:
+            payload["reasoning_effort"] = reasoning
+    elif config.provider == "volcengine":
+        payload["thinking"] = {"type": "enabled" if reasoning == "on" else "disabled"}
+    return payload
+
+
+def reasoning_wire_value(config: AIConfig, reasoning: str) -> object | None:
+    if reasoning == "auto":
+        return None
+    payload = _provider_payload(
+        config,
+        [],
+        [],
+        stream=False,
+        reasoning=reasoning,
+    )
+    for key in (
+        "reasoning",
+        "reasoning_effort",
+        "think",
+        "output_config",
+        "thinking",
+        "enable_thinking",
+    ):
+        if key in payload:
+            return payload[key]
+    return None
+
+
 def _raise_provider_error(error: httpx.HTTPError) -> None:
     if isinstance(error, httpx.HTTPStatusError) and error.response is not None:
         raise AIClientError(f"AI 服务返回 HTTP {error.response.status_code}") from error
@@ -160,16 +300,51 @@ def chat_completion(
     messages: list[dict[str, Any]],
     *,
     tools: list[dict[str, Any]] | None = None,
+    reasoning: str = "auto",
 ) -> AICompletionResult:
     base = _base_url(config)
     if not base:
         raise AIClientError("AI base_url 未配置")
     tool_defs = tools or []
     try:
-        if config.provider == "claude":
+        if config.provider == "ollama":
+            response = httpx.post(
+                f"{_ollama_root(config)}/api/chat",
+                json=_provider_payload(
+                    config,
+                    messages,
+                    tool_defs,
+                    stream=False,
+                    reasoning=reasoning,
+                ),
+                headers=_headers(config),
+                timeout=_timeout(),
+            )
+            response.raise_for_status()
+            message = response.json()["message"]
+            text_parts = [str(message.get("content") or "")]
+            calls = [
+                AIClientToolCall(
+                    tool_id=str(item.get("id") or f"tool_{index}"),
+                    name=str(item.get("function", {}).get("name") or ""),
+                    arguments=_decode_arguments(
+                        (item.get("function") or {}).get("arguments", {}),
+                        tool_id=str(item.get("id") or f"tool_{index}"),
+                        tool_name=str(item.get("function", {}).get("name") or ""),
+                    ),
+                )
+                for index, item in enumerate(message.get("tool_calls") or [])
+            ]
+        elif provider_protocol(config) == "claude":
             response = httpx.post(
                 f"{base}/v1/messages",
-                json=_claude_payload(config, messages, tool_defs, stream=False),
+                json=_provider_payload(
+                    config,
+                    messages,
+                    tool_defs,
+                    stream=False,
+                    reasoning=reasoning,
+                ),
                 headers=_headers(config),
                 timeout=_timeout(),
             )
@@ -192,13 +367,20 @@ def chat_completion(
         else:
             response = httpx.post(
                 f"{base}/chat/completions",
-                json=_openai_payload(config, messages, tool_defs, stream=False),
+                json=_provider_payload(
+                    config,
+                    messages,
+                    tool_defs,
+                    stream=False,
+                    reasoning=reasoning,
+                ),
                 headers=_headers(config),
                 timeout=_timeout(),
             )
             response.raise_for_status()
             message = response.json()["choices"][0]["message"]
             text_parts = [str(message.get("content") or "")]
+            reasoning_content = str(message.get("reasoning_content") or "")
             calls = [
                 AIClientToolCall(
                     tool_id=str(item.get("id") or ""),
@@ -208,6 +390,7 @@ def chat_completion(
                         tool_id=str(item.get("id") or ""),
                         tool_name=str(item.get("function", {}).get("name") or ""),
                     ),
+                    reasoning_content=reasoning_content,
                 )
                 for item in message.get("tool_calls") or []
             ]
@@ -225,14 +408,23 @@ def _openai_stream(
     config: AIConfig,
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]],
+    *,
+    reasoning: str = "auto",
 ) -> Iterator[AICompletionStreamEvent]:
     text_parts: list[str] = []
+    reasoning_parts: list[str] = []
     # OpenAI-compatible providers split and interleave tool fields; index is the stable join key.
     calls: dict[int, dict[str, Any]] = {}
     with httpx.stream(
         "POST",
         f"{_base_url(config)}/chat/completions",
-        json=_openai_payload(config, messages, tools, stream=True),
+        json=_provider_payload(
+            config,
+            messages,
+            tools,
+            stream=True,
+            reasoning=reasoning,
+        ),
         headers=_headers(config),
         timeout=_timeout(),
     ) as response:
@@ -253,6 +445,9 @@ def _openai_stream(
                 text = str(content)
                 text_parts.append(text)
                 yield AICompletionStreamEvent(kind="delta", text=text)
+            reasoning_content = delta.get("reasoning_content")
+            if reasoning_content:
+                reasoning_parts.append(str(reasoning_content))
             for item in delta.get("tool_calls") or []:
                 index = int(item.get("index", 0))
                 current = calls.setdefault(index, {"id": "", "name": "", "arguments": "", "has_arguments": False})
@@ -271,6 +466,7 @@ def _openai_stream(
                 tool_id=value["id"] or f"tool_{index}",
                 tool_name=value["name"],
             ),
+            reasoning_content="".join(reasoning_parts),
         )
         for index, value in sorted(calls.items())
     ]
@@ -282,17 +478,80 @@ def _openai_stream(
     )
 
 
+def _ollama_stream(
+    config: AIConfig,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    *,
+    reasoning: str = "auto",
+) -> Iterator[AICompletionStreamEvent]:
+    text_parts: list[str] = []
+    calls: list[AIClientToolCall] = []
+    with httpx.stream(
+        "POST",
+        f"{_ollama_root(config)}/api/chat",
+        json=_provider_payload(
+            config,
+            messages,
+            tools,
+            stream=True,
+            reasoning=reasoning,
+        ),
+        headers=_headers(config),
+        timeout=_timeout(),
+    ) as response:
+        response.raise_for_status()
+        for line in response.iter_lines():
+            if not line.strip():
+                continue
+            data = json.loads(line)
+            message = data.get("message") or {}
+            content = str(message.get("content") or "")
+            if content:
+                text_parts.append(content)
+                yield AICompletionStreamEvent(kind="delta", text=content)
+            for index, item in enumerate(message.get("tool_calls") or []):
+                function = item.get("function") or {}
+                calls.append(
+                    AIClientToolCall(
+                        tool_id=str(item.get("id") or f"tool_{len(calls) + index}"),
+                        name=str(function.get("name") or ""),
+                        arguments=_decode_arguments(
+                            function.get("arguments", {}),
+                            tool_id=str(item.get("id") or f"tool_{len(calls) + index}"),
+                            tool_name=str(function.get("name") or ""),
+                        ),
+                    )
+                )
+            if data.get("done") is True:
+                break
+    yield AICompletionStreamEvent(
+        kind="completed",
+        text="".join(text_parts).strip(),
+        tool_calls=calls,
+        stop_reason="tool_calls" if calls else "final",
+    )
+
+
 def _claude_stream(
     config: AIConfig,
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]],
+    *,
+    reasoning: str = "auto",
 ) -> Iterator[AICompletionStreamEvent]:
     text_parts: list[str] = []
     calls: dict[int, dict[str, Any]] = {}
     with httpx.stream(
         "POST",
         f"{_base_url(config)}/v1/messages",
-        json=_claude_payload(config, messages, tools, stream=True),
+        json=_provider_payload(
+            config,
+            messages,
+            tools,
+            stream=True,
+            reasoning=reasoning,
+        ),
         headers=_headers(config),
         timeout=_timeout(),
     ) as response:
@@ -356,15 +615,53 @@ def chat_completion_stream(
     messages: list[dict[str, Any]],
     *,
     tools: list[dict[str, Any]] | None = None,
+    reasoning: str = "auto",
+    app: Any = None,
+    registry: dict[str, Any] | None = None,
+    current_user: Any = None,
+    user_id: int | None = None,
+    tool_handler: Any = None,
+    on_tool_result: Any = None,
 ) -> Iterator[AICompletionStreamEvent]:
-    if not _base_url(config):
+    if config.provider != "claude_code" and not _base_url(config):
         raise AIClientError("AI base_url 未配置")
     try:
         # Normalize provider-specific streams before the chat orchestration layer sees them.
-        if config.provider == "claude":
-            yield from _claude_stream(config, messages, tools or [])
+        if config.provider == "claude_code":
+            from services.claude_code_adapter import claude_code_completion_stream
+
+            yield from claude_code_completion_stream(
+                config,
+                messages,
+                app=app,
+                registry=registry or {},
+                current_user=current_user,
+                user_id=user_id,
+                reasoning=reasoning,
+                tool_handler=tool_handler,
+                on_tool_result=on_tool_result,
+            )
+        elif provider_protocol(config) == "claude":
+            yield from _claude_stream(
+                config,
+                messages,
+                tools or [],
+                reasoning=reasoning,
+            )
+        elif config.provider == "ollama":
+            yield from _ollama_stream(
+                config,
+                messages,
+                tools or [],
+                reasoning=reasoning,
+            )
         else:
-            yield from _openai_stream(config, messages, tools or [])
+            yield from _openai_stream(
+                config,
+                messages,
+                tools or [],
+                reasoning=reasoning,
+            )
     except (httpx.HTTPError, json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
         if isinstance(error, httpx.HTTPError):
             _raise_provider_error(error)
