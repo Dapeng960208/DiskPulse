@@ -100,22 +100,14 @@ const Tooltip = defineComponent({
   },
 });
 
-const Pagination = defineComponent({
-  name: 'ElPagination',
+const DataTable = defineComponent({
+  name: 'DataTable',
   props: {
-    currentPage: { type: Number, default: 1 },
-    pageSize: { type: Number, default: 20 },
-    total: { type: Number, default: 0 },
+    data: { type: Array, default: () => [] },
+    loading: { type: Boolean, default: false },
+    pagination: { type: Object, default: undefined },
   },
-  emits: ['current-change', 'size-change'],
-  setup(props) {
-    return () => h('nav', { 'data-testid': 'system-event-pagination' }, `${props.total}`);
-  },
-});
-
-const Table = defineComponent({
-  name: 'ElTable',
-  props: { data: { type: Array, default: () => [] } },
+  emits: ['update:pagination'],
   setup(props, { slots }) {
     return () => h('div', [JSON.stringify(props.data), ...(slots.default?.() || [])]);
   },
@@ -196,9 +188,8 @@ async function mountPage() {
         ElSelect: Select,
         ElOption: passthrough('ElOption', 'option'),
         ElTooltip: Tooltip,
-        ElPagination: Pagination,
-        ElTable: Table,
         ElTableColumn: TableColumn,
+        DataTable,
         ElTag: passthrough('ElTag'),
         TableActionButton: passthrough('TableActionButton', 'button'),
         ElTabs: Tabs,
@@ -467,7 +458,7 @@ describe('storage cluster health analytics page', () => {
       categories: ['vol-b'],
       data: [[3.5]],
     });
-    expect(wrapper.get('[data-tab="performance"]').findComponent({ name: 'ElTable' }).props('data'))
+    expect(wrapper.get('[data-tab="performance"]').findComponent({ name: 'DataTable' }).props('data'))
       .toEqual([expect.objectContaining({ object_id: 'volume-2' })]);
 
     await wrapper.get('.performance-metrics').findComponent({ name: 'ElSelect' })
@@ -716,9 +707,12 @@ describe('storage cluster health analytics page', () => {
       page_size: 20,
     });
 
-    const pagination = eventSection.findComponent({ name: 'ElPagination' });
-    expect(pagination.props()).toMatchObject({ currentPage: 1, pageSize: 20, total: 45 });
-    await pagination.vm.$emit('current-change', 2);
+    const eventTable = eventSection.findComponent({ name: 'DataTable' });
+    expect(eventTable.props('pagination')).toMatchObject({ page: 1, pageSize: 20, total: 45 });
+    await eventTable.vm.$emit('update:pagination', {
+      ...eventTable.props('pagination'),
+      page: 2,
+    });
     await flushPromises();
 
     expect(storageClusterApi.fetchSystemEvents).toHaveBeenLastCalledWith(42, {

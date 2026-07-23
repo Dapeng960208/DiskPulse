@@ -13,9 +13,7 @@ import {
   ElInput,
   ElMessage,
   ElOption,
-  ElPagination,
   ElSelect,
-  ElTable,
   ElTableColumn,
   ElTag,
   ElTabPane,
@@ -37,6 +35,7 @@ import { getDefaultTime } from '@/composables/common';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
 import { formatCapacity } from '@/utils/capacity';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
+import DataTable from '@/components/data/DataTable.vue';
 const ClusterIncidentsTab = defineAsyncComponent(() => import('./components/ClusterIncidentsTab.vue'));
 const ClusterResourceListTab = defineAsyncComponent(() => import('./components/ClusterResourceListTab.vue'));
 const CapacityExhaustionRiskPanel = defineAsyncComponent(() => import('@/pages/capacity-prediction/CapacityExhaustionRiskPanel.vue'));
@@ -312,14 +311,11 @@ function resetSystemEventFilters() {
   loadSystemEvents(true);
 }
 
-function changeSystemEventPage(page) {
-  systemEventPagination.page = page;
+function updateSystemEventPagination(pagination) {
+  const pageSizeChanged = pagination.pageSize !== systemEventPagination.pageSize;
+  systemEventPagination.pageSize = pagination.pageSize;
+  systemEventPagination.page = pageSizeChanged ? 1 : pagination.page;
   loadSystemEvents();
-}
-
-function changeSystemEventPageSize(pageSize) {
-  systemEventPagination.pageSize = pageSize;
-  loadSystemEvents(true);
 }
 
 function loadActiveTab(force = false) {
@@ -645,24 +641,22 @@ onBeforeMount(() => {
                 width="100%"
                 height="360px" />
             </div>
-            <div class="table-wrap">
-              <ElTable :data="filteredLatencyData">
-                <ElTableColumn
-                  label="对象"
-                  prop="object_name" />
-                <ElTableColumn
-                  label="类型"
-                  prop="object_type" />
-                <ElTableColumn
-                  v-for="metric in selectedPerformanceMetricOptions"
-                  :key="metric.key"
-                  :label="`${metric.label}(${metric.unit})`"
-                  :prop="metric.key" />
-                <ElTableColumn
-                  label="样本数"
-                  prop="sample_count" />
-              </ElTable>
-            </div>
+            <DataTable :data="filteredLatencyData">
+              <ElTableColumn
+                label="对象"
+                prop="object_name" />
+              <ElTableColumn
+                label="类型"
+                prop="object_type" />
+              <ElTableColumn
+                v-for="metric in selectedPerformanceMetricOptions"
+                :key="metric.key"
+                :label="`${metric.label}(${metric.unit})`"
+                :prop="metric.key" />
+              <ElTableColumn
+                label="样本数"
+                prop="sample_count" />
+            </DataTable>
           </div>
         </ElTabPane>
 
@@ -724,72 +718,66 @@ onBeforeMount(() => {
                 title="错误严重级别"
                 width="100%"
                 height="360px" />
-              <div class="table-wrap">
-                <ElTable
-                  :data="faultData"
-                  empty-text="暂无重复故障">
-                  <ElTableColumn
-                    label="来源"
-                    class-name="mobile-hidden tablet-hidden"
-                    label-class-name="mobile-hidden tablet-hidden"
-                    prop="source" />
-                  <ElTableColumn
-                    label="事件代码与含义"
-                    min-width="260"
-                    show-overflow-tooltip>
-                    <template #default="{ row }">
-                      <strong>{{ row.title_zh || '未收录的厂商事件代码' }}</strong>
-                      <div class="repeated-event__code">{{ row.event_code || '-' }}</div>
-                    </template>
-                  </ElTableColumn>
-                  <ElTableColumn
-                    label="关联类型"
-                    min-width="130">
-                    <template #default="{ row }">
-                      <ElTag :type="row.association_type === 'fault_log' ? 'danger' : 'warning'">
-                        {{ row.association_type_label || '未分类厂商事件' }}
-                      </ElTag>
-                    </template>
-                  </ElTableColumn>
-                  <ElTableColumn
-                    label="日志摘要"
-                    class-name="mobile-hidden tablet-hidden"
-                    label-class-name="mobile-hidden tablet-hidden"
-                    prop="log_excerpt"
-                    min-width="260"
-                    show-overflow-tooltip />
-                  <ElTableColumn
-                    label="次数"
-                    prop="count" />
-                  <ElTableColumn
-                    label="首次发生"
-                    class-name="mobile-hidden tablet-hidden"
-                    label-class-name="mobile-hidden tablet-hidden"
-                    prop="first_occurred_at" />
-                  <ElTableColumn
-                    label="最近发生"
-                    prop="last_occurred_at" />
-                  <ElTableColumn
-                    label="操作"
-                    align="right"
-                    fixed="right"
-                    width="110">
-                    <template #default="{ row }">
-                      <div class="list-row-actions">
-                        <TableActionButton
-                          :data-testid="`repeated-event-log-${row.sample_event_id}`"
-                          action="detail"
-                          @click="openSystemEventDetail(row)">查看日志</TableActionButton>
-                      </div>
-                    </template>
-                  </ElTableColumn>
-                </ElTable>
-              </div>
+              <DataTable :data="faultData">
+                <ElTableColumn
+                  label="来源"
+                  class-name="mobile-hidden tablet-hidden"
+                  label-class-name="mobile-hidden tablet-hidden"
+                  prop="source" />
+                <ElTableColumn
+                  label="事件代码与含义"
+                  min-width="260"
+                  show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <strong>{{ row.title_zh || '未收录的厂商事件代码' }}</strong>
+                    <div class="text-secondary">{{ row.event_code || '-' }}</div>
+                  </template>
+                </ElTableColumn>
+                <ElTableColumn
+                  label="关联类型"
+                  min-width="130">
+                  <template #default="{ row }">
+                    <ElTag :type="row.association_type === 'fault_log' ? 'danger' : 'warning'">
+                      {{ row.association_type_label || '未分类厂商事件' }}
+                    </ElTag>
+                  </template>
+                </ElTableColumn>
+                <ElTableColumn
+                  label="日志摘要"
+                  class-name="mobile-hidden tablet-hidden"
+                  label-class-name="mobile-hidden tablet-hidden"
+                  prop="log_excerpt"
+                  min-width="260"
+                  show-overflow-tooltip />
+                <ElTableColumn
+                  label="次数"
+                  prop="count" />
+                <ElTableColumn
+                  label="首次发生"
+                  class-name="mobile-hidden tablet-hidden"
+                  label-class-name="mobile-hidden tablet-hidden"
+                  prop="first_occurred_at" />
+                <ElTableColumn
+                  label="最近发生"
+                  prop="last_occurred_at" />
+                <ElTableColumn
+                  label="操作"
+                  align="right"
+                  fixed="right"
+                  width="110">
+                  <template #default="{ row }">
+                    <div class="list-row-actions">
+                      <TableActionButton
+                        :data-testid="`repeated-event-log-${row.sample_event_id}`"
+                        action="detail"
+                        @click="openSystemEventDetail(row)">查看日志</TableActionButton>
+                    </div>
+                  </template>
+                </ElTableColumn>
+              </DataTable>
             </div>
             <div class="system-events">
-              <div class="system-events__heading">
-                <h3>系统事件</h3>
-              </div>
+              <h3>系统事件</h3>
               <FilterForm
                 class="system-event-filter"
                 @query="loadSystemEvents(true)"
@@ -820,10 +808,16 @@ onBeforeMount(() => {
                   </ElSelect>
                 </ElFormItem>
               </FilterForm>
-              <ElTable
-                v-loading="loading.systemEvents"
+              <DataTable
                 :data="systemEventData"
-                empty-text="暂无系统事件">
+                :loading="loading.systemEvents"
+                :pagination="{
+                  ...systemEventPagination,
+                  pageSizes: [20, 50, 100],
+                  hideOnSinglePage: true,
+                  showJumper: true,
+                }"
+                @update:pagination="updateSystemEventPagination">
                 <ElTableColumn
                   label="来源"
                   class-name="mobile-hidden tablet-hidden"
@@ -838,7 +832,7 @@ onBeforeMount(() => {
                   show-overflow-tooltip>
                   <template #default="{ row }">
                     <strong>{{ vendorEventTitle(row) }}</strong>
-                    <div class="repeated-event__code">{{ row.event_code || '-' }}</div>
+                    <div class="text-secondary">{{ row.event_code || '-' }}</div>
                   </template>
                 </ElTableColumn>
                 <ElTableColumn
@@ -896,18 +890,7 @@ onBeforeMount(() => {
                     </div>
                   </template>
                 </ElTableColumn>
-              </ElTable>
-              <ElPagination
-                v-if="systemEventPagination.total > 0"
-                class="system-event-pagination"
-                background
-                layout="total, sizes, prev, pager, next, jumper"
-                :current-page="systemEventPagination.page"
-                :page-size="systemEventPagination.pageSize"
-                :page-sizes="[20, 50, 100]"
-                :total="systemEventPagination.total"
-                @current-change="changeSystemEventPage"
-                @size-change="changeSystemEventPageSize" />
+              </DataTable>
             </div>
           </div>
         </ElTabPane>
@@ -978,7 +961,6 @@ onBeforeMount(() => {
   min-height: 0;
   height: 100%;
 }
-.repeated-event__code { margin-top: 2px; color: var(--text-secondary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-size-xs); }
 .system-event-association-guidance { max-width: 360px; line-height: 1.5; }
 .system-event-association-guidance p { margin: var(--spacing-xs) 0 var(--spacing-sm); }
 .system-event-association-guidance p:last-child { margin-bottom: 0; }
@@ -1054,21 +1036,6 @@ onBeforeMount(() => {
   gap: 16px;
 }
 
-.table-wrap {
-  max-width: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-.storage-health-page :deep(.el-table__body-wrapper) {
-  overflow-x: hidden !important;
-}
-
-.storage-health-page :deep(.el-table .cell) {
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
 .performance-charts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
@@ -1085,24 +1052,8 @@ onBeforeMount(() => {
   margin-top: 20px;
 }
 
-.system-events__heading {
-  margin-bottom: var(--spacing-md);
-
-  p {
-    margin-top: var(--spacing-xs);
-    color: var(--text-tertiary);
-    font-size: var(--font-size-sm);
-  }
-}
-
 .system-event-filter {
   margin-bottom: var(--spacing-md);
-}
-
-.system-event-pagination {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: var(--spacing-md);
 }
 
 @media (max-width: 960px) {
