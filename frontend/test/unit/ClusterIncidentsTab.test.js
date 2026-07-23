@@ -2,6 +2,7 @@ import { defineComponent, h } from 'vue';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { vi } from 'vitest';
 import ClusterIncidentsTab from '@/pages/admin/storage-cluster/components/ClusterIncidentsTab.vue';
+import clusterIncidentsTabSource from '@/pages/admin/storage-cluster/components/ClusterIncidentsTab.vue?raw';
 
 const incidentApi = vi.hoisted(() => ({
   fetchIncidents: vi.fn(),
@@ -27,6 +28,29 @@ const Select = defineComponent({
   },
 });
 
+const DataTable = defineComponent({
+  name: 'DataTable',
+  props: {
+    data: { type: Array, default: () => [] },
+    loading: Boolean,
+    pagination: { type: Object, default: () => ({}) },
+  },
+  emits: ['update:pagination'],
+  setup(props, { slots }) {
+    return () => h('section', { 'data-testid': 'cluster-incidents-table' }, [
+      JSON.stringify(props.data),
+      ...(slots.default?.() || []),
+    ]);
+  },
+});
+
+const tableStubs = {
+  DataTable,
+  ElTable: { props: ['data'], template: '<div>{{ JSON.stringify(data) }}<slot /></div>' },
+  ElTableColumn: { template: '<div />' },
+  ElPagination: { template: '<div />' },
+};
+
 describe('ClusterIncidentsTab', () => {
   beforeEach(() => {
     incidentApi.fetchIncidents.mockResolvedValue({
@@ -47,9 +71,7 @@ describe('ClusterIncidentsTab', () => {
           ElFormItem: { template: '<div><slot /></div>' },
           ElSelect: Select,
           ElOption: { template: '<option />' },
-          ElTable: { props: ['data'], template: '<div>{{ JSON.stringify(data) }}<slot /></div>' },
-          ElTableColumn: { template: '<div />' },
-          ElPagination: { template: '<div />' },
+          ...tableStubs,
           ElTag: { template: '<span><slot /></span>' },
         },
       },
@@ -72,9 +94,7 @@ describe('ClusterIncidentsTab', () => {
           ElFormItem: { template: '<div><slot /></div>' },
           ElSelect: Select,
           ElOption: { template: '<option />' },
-          ElTable: { props: ['data'], template: '<div>{{ JSON.stringify(data) }}<slot /></div>' },
-          ElTableColumn: { template: '<div />' },
-          ElPagination: { template: '<div />' },
+          ...tableStubs,
           ElTag: { template: '<span><slot /></span>' },
         },
       },
@@ -101,9 +121,7 @@ describe('ClusterIncidentsTab', () => {
           ElFormItem: { template: '<div><slot /></div>' },
           ElSelect: Select,
           ElOption: { template: '<option />' },
-          ElTable: { props: ['data'], template: '<div>{{ JSON.stringify(data) }}<slot /></div>' },
-          ElTableColumn: { template: '<div />' },
-          ElPagination: { template: '<div />' },
+          ...tableStubs,
           ElTag: { template: '<span><slot /></span>' },
         },
       },
@@ -123,9 +141,7 @@ describe('ClusterIncidentsTab', () => {
           ElFormItem: { template: '<div><slot /></div>' },
           ElSelect: Select,
           ElOption: { template: '<option />' },
-          ElTable: { props: ['data'], template: '<div>{{ JSON.stringify(data) }}<slot /></div>' },
-          ElTableColumn: { template: '<div />' },
-          ElPagination: { template: '<div />' },
+          ...tableStubs,
           ElTag: { template: '<span><slot /></span>' },
         },
       },
@@ -145,5 +161,105 @@ describe('ClusterIncidentsTab', () => {
       page: 1,
       size: 20,
     });
+  });
+
+  it('uses the shared data table contract for loading, rows, and server-side pagination', async () => {
+    const wrapper = shallowMount(ClusterIncidentsTab, {
+      props: { clusterId: 42 },
+      global: {
+        directives: { loading: () => {} },
+        stubs: {
+          QueryForm,
+          ElFormItem: { template: '<div><slot /></div>' },
+          ElSelect: Select,
+          ElOption: { template: '<option />' },
+          ...tableStubs,
+          ElTag: { template: '<span><slot /></span>' },
+        },
+      },
+    });
+
+    const table = wrapper.getComponent(DataTable);
+    expect(table.props()).toMatchObject({
+      data: [],
+      loading: true,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        pageSizes: [20, 50, 100],
+        hideOnSinglePage: true,
+      },
+    });
+
+    await flushPromises();
+
+    expect(table.props()).toMatchObject({
+      data: [{ id: 7, display_name: 'volume-a', category: 'performance_contention', status: 'open' }],
+      loading: false,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 1,
+      },
+    });
+  });
+
+  it('loads the requested page and resets to page one when the page size changes', async () => {
+    const wrapper = shallowMount(ClusterIncidentsTab, {
+      props: { clusterId: 42 },
+      global: {
+        directives: { loading: () => {} },
+        stubs: {
+          QueryForm,
+          ElFormItem: { template: '<div><slot /></div>' },
+          ElSelect: Select,
+          ElOption: { template: '<option />' },
+          ...tableStubs,
+          ElTag: { template: '<span><slot /></span>' },
+        },
+      },
+    });
+    await flushPromises();
+
+    const table = wrapper.getComponent(DataTable);
+    await table.vm.$emit('update:pagination', { page: 3, pageSize: 20 });
+    await flushPromises();
+    expect(incidentApi.fetchIncidents).toHaveBeenLastCalledWith({
+      storage_cluster_id: 42,
+      page: 3,
+      size: 20,
+    });
+
+    await table.vm.$emit('update:pagination', { page: 3, pageSize: 50 });
+    await flushPromises();
+    expect(incidentApi.fetchIncidents).toHaveBeenLastCalledWith({
+      storage_cluster_id: 42,
+      page: 1,
+      size: 50,
+    });
+  });
+
+  it('keeps the detail action fixed on the right and aligned with global row actions', () => {
+    const marker = clusterIncidentsTabSource.indexOf('openDetail(row)');
+    const start = clusterIncidentsTabSource.lastIndexOf('<ElTableColumn', marker);
+    const actionColumn = clusterIncidentsTabSource.slice(
+      start,
+      clusterIncidentsTabSource.indexOf('</ElTableColumn>', marker),
+    );
+
+    expect(actionColumn).toContain('fixed="right"');
+    expect(actionColumn).toContain('align="right"');
+    expect(actionColumn).toMatch(/\bwidth="\d+"/);
+    expect(actionColumn).toContain('class="list-row-actions"');
+  });
+
+  it('does not bypass shared table and pagination styling inside the tab', () => {
+    expect(clusterIncidentsTabSource).toContain("import DataTable from '@/components/data/DataTable.vue';");
+    expect(clusterIncidentsTabSource).toContain('<DataTable');
+    expect(clusterIncidentsTabSource).not.toMatch(/<ElTable\b|<ElPagination\b/);
+    expect(clusterIncidentsTabSource).not.toMatch(
+      /cluster-incidents-tab__pagination|:deep\(\.el-table|:deep\(\.el-pagination/,
+    );
   });
 });
