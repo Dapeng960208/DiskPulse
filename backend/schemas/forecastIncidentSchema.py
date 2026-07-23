@@ -79,6 +79,14 @@ class IncidentOut(AssetRefOut):
     updated_at: datetime
     capabilities: dict[str, bool] = Field(default_factory=dict)
 
+    @field_validator("ai_assessment", mode="before")
+    @classmethod
+    def _normalize_legacy_ai_assessment(cls, value):
+        """Keep incident list responses compatible with assessments written before confidence."""
+        if isinstance(value, dict) and "confidence" not in value:
+            return {**value, "confidence": "low"}
+        return value
+
 
 class IncidentEvidenceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -158,6 +166,7 @@ class IncidentTimelinePresentationOut(BaseModel):
 class IncidentAiAssessmentOut(BaseModel):
     classification: Literal["actionable", "normal_fluctuation", "insufficient_evidence"]
     urgency: Literal["low", "medium", "high", "critical"]
+    confidence: Literal["low", "medium", "high"] = "low"
     summary: str
     evidence_basis: list[str] = Field(default_factory=list)
     investigation_steps: list[str] = Field(default_factory=list)
@@ -166,6 +175,8 @@ class IncidentAiAssessmentOut(BaseModel):
     transition_reason: str | None = None
     model_name: str | None = None
     analyzed_at: datetime | None = None
+    model_urgency: Literal["low", "medium", "high", "critical"] | None = None
+    urgency_downgraded: bool = False
 
 
 class IncidentAiReviewOut(BaseModel):

@@ -132,6 +132,7 @@ const aiClassificationLabels = {
   insufficient_evidence: '证据不足',
 };
 const aiUrgencyLabels = { low: '低', medium: '中', high: '高', critical: '紧急' };
+const aiConfidenceLabels = { low: '低', medium: '中', high: '高' };
 const aiReviewStatusLabels = {
   running: 'AI 正在审查',
   succeeded: 'AI 审查已完成',
@@ -477,7 +478,7 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
         v-if="current.ai_assessment"
         class="incident-detail__section">
         <h3>AI 处置建议</h3>
-        <p><ElTag :type="current.ai_assessment.classification === 'actionable' ? 'warning' : 'info'">{{ aiClassificationLabels[current.ai_assessment.classification] || current.ai_assessment.classification }}</ElTag> AI 紧急度：{{ aiUrgencyLabels[current.ai_assessment.urgency] || current.ai_assessment.urgency }}</p>
+        <p><ElTag :type="current.ai_assessment.classification === 'actionable' ? 'warning' : 'info'">{{ aiClassificationLabels[current.ai_assessment.classification] || current.ai_assessment.classification }}</ElTag> AI 紧急度：{{ aiUrgencyLabels[current.ai_assessment.urgency] || current.ai_assessment.urgency }}<span v-if="current.ai_assessment.urgency_downgraded">（低置信度已降级）</span>；置信度：{{ aiConfidenceLabels[current.ai_assessment.confidence] || current.ai_assessment.confidence || '-' }}</p>
         <p>{{ current.ai_assessment.summary }}</p>
         <template v-if="current.ai_assessment.evidence_basis?.length">
           <h4>研判依据</h4>

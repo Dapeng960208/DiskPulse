@@ -16,6 +16,7 @@ from services.ai_client import AIClientError, chat_completion
 
 IncidentAiClassification = Literal["actionable", "normal_fluctuation", "insufficient_evidence"]
 IncidentAiUrgency = Literal["low", "medium", "high", "critical"]
+IncidentAiConfidence = Literal["low", "medium", "high"]
 IncidentStatus = Literal["open", "acknowledged", "investigating", "mitigated", "resolved"]
 
 
@@ -24,6 +25,7 @@ class IncidentAiAssessment(BaseModel):
 
     classification: IncidentAiClassification
     urgency: IncidentAiUrgency
+    confidence: IncidentAiConfidence
     summary: str = Field(min_length=1, max_length=2000)
     evidence_basis: list[str] = Field(default_factory=list, max_length=8)
     investigation_steps: list[str] = Field(default_factory=list, max_length=8)
@@ -51,6 +53,15 @@ def validate_agent_assessment(assessment: IncidentAiAssessment, *, current_statu
     if not can_transition_incident(current_status, assessment.proposed_next_status):
         raise ValueError("AI 建议的状态必须是当前状态的相邻下一步")
     return assessment
+
+
+def calibrated_ai_urgency(assessment: IncidentAiAssessment) -> tuple[IncidentAiUrgency, bool]:
+    """Apply the conservative urgency floor without changing deterministic severity."""
+    if assessment.confidence != "low":
+        return assessment.urgency, False
+    downgrade = {"critical": "high", "high": "medium", "medium": "low", "low": "low"}
+    urgency = downgrade[assessment.urgency]
+    return urgency, urgency != assessment.urgency
 
 
 def update_settings(
@@ -226,7 +237,7 @@ def _messages(snapshot: dict[str, Any]) -> list[dict[str, str]]:
                 "你是 DiskPulse 事件处置 Agent。仅依据提供的脱敏事件事实判断，"
                 "不得虚构设备操作、凭据、路径或未给出的证据。"
                 "仅返回 JSON：classification(actionable|normal_fluctuation|insufficient_evidence)、"
-                "urgency(low|medium|high|critical)、summary、investigation_steps、resolution_steps、"
+                "urgency(low|medium|high|critical)、confidence(low|medium|high)、summary、investigation_steps、resolution_steps、"
                 "evidence_basis、proposed_next_status、transition_reason。"
                 "normal_fluctuation 的 evidence_basis 必须明确低绝对负载、短时波动或证据不足；"
                 "actionable 必须包含至少一项排查步骤和一项解决建议。"
@@ -237,13 +248,20 @@ def _messages(snapshot: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
-def _comment(assessment: IncidentAiAssessment) -> str:
+def _comment(
+    assessment: IncidentAiAssessment,
+    *,
+    effective_urgency: IncidentAiUrgency,
+    urgency_downgraded: bool,
+) -> str:
     sections = [
-        f"AI 研判（紧急度：{assessment.urgency}）：{assessment.summary}",
+        f"AI 研判（紧急度：{effective_urgency}，置信度：{assessment.confidence}）：{assessment.summary}",
         "研判依据：" + ("；".join(assessment.evidence_basis) or "当前关联证据不足以形成更多依据。"),
         "排查建议：" + ("；".join(assessment.investigation_steps) or "继续依据关联证据观察。"),
         "解决建议：" + ("；".join(assessment.resolution_steps) or "当前无需设备写操作。"),
     ]
+    if urgency_downgraded:
+        sections.append("低置信度已将 AI 紧急度降一级；确定性事件严重度未改变。")
     if assessment.transition_reason:
         sections.append(f"状态建议：{assessment.transition_reason}")
     return "\n".join(sections)[:2000]
@@ -333,14 +351,31 @@ def review_incident(
         run.completed_at = _utc_now()
         db.commit()
         return run
+    effective_urgency, urgency_downgraded = calibrated_ai_urgency(assessment)
     analyzed_at = _utc_now()
     payload = assessment.model_dump(mode="json")
-    payload.update({"model_name": selected_model.name, "analyzed_at": analyzed_at.isoformat()})
-    current.ai_urgency = assessment.urgency
+    payload.update({
+        "model_name": selected_model.name,
+        "analyzed_at": analyzed_at.isoformat(),
+        "model_urgency": assessment.urgency,
+        "urgency": effective_urgency,
+        "urgency_downgraded": urgency_downgraded,
+    })
+    current.ai_urgency = effective_urgency
     current.ai_urgency_reason = assessment.summary
     current.ai_assessment = payload
     current.ai_analyzed_at = analyzed_at
-    db.add(IncidentTimeline(incident_id=current.id, event_type="ai_analysis", comment=_comment(assessment)))
+    db.add(
+        IncidentTimeline(
+            incident_id=current.id,
+            event_type="ai_analysis",
+            comment=_comment(
+                assessment,
+                effective_urgency=effective_urgency,
+                urgency_downgraded=urgency_downgraded,
+            ),
+        )
+    )
     if assessment.proposed_next_status not in (None, current.status):
         forecastIncidentService.require_incident_transition(current.status, assessment.proposed_next_status)
         previous_status = current.status

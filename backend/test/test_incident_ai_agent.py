@@ -79,6 +79,27 @@ def test_incident_output_exposes_the_latest_ai_review_state(db_session, monkeypa
     assert result.ai_review.started_at == datetime(2026, 7, 23, 6, 45, tzinfo=timezone.utc)
 
 
+def test_incident_output_supports_legacy_ai_assessment_without_confidence(db_session, monkeypatch):
+    from routers import forecast_incidents
+    from services import forecastIncidentService
+
+    incident = _incident()
+    incident.ai_assessment = {
+        "classification": "insufficient_evidence",
+        "urgency": "low",
+        "summary": "历史研判未记录置信度。",
+        "analyzed_at": "2026-07-23T06:38:13.272112+00:00",
+    }
+    db_session.add(incident)
+    db_session.commit()
+    monkeypatch.setattr(forecastIncidentService, "incident_capabilities", lambda *_args, **_kwargs: {})
+
+    result = forecast_incidents._incident_out(db_session, SimpleNamespace(), incident)
+
+    assert result.ai_assessment.confidence == "low"
+    assert result.ai_assessment.urgency_downgraded is False
+
+
 def test_lifecycle_review_candidates_only_include_critical_incidents(db_session):
     from crud import incidentAiAgentCrud
 
@@ -149,6 +170,7 @@ def test_agent_assessment_rejects_status_skips_and_accepts_a_single_next_step():
         IncidentAiAssessment(
             classification="normal_fluctuation",
             urgency="low",
+            confidence="high",
             summary="低负载 IOPS 短时波动，暂无服务影响证据。",
             evidence_basis=["绝对 IOPS 低于动态噪声门槛"],
             investigation_steps=["继续观察下一采集周期"],
@@ -185,6 +207,18 @@ def test_low_confidence_downgrades_ai_urgency_without_changing_the_incident_seve
 
     assert calibrated_ai_urgency(assessment) == ("high", True)
     assert assessment.urgency == "critical"
+
+
+def test_legacy_ai_assessment_defaults_to_low_confidence_for_safe_api_compatibility():
+    from schemas.forecastIncidentSchema import IncidentAiAssessmentOut
+
+    assessment = IncidentAiAssessmentOut(
+        classification="insufficient_evidence",
+        urgency="high",
+        summary="历史审查未记录置信度。",
+    )
+
+    assert assessment.confidence == "low"
 
 
 def test_incident_ai_settings_accept_enabled_models_in_explicit_priority_order(db_session):
@@ -332,7 +366,7 @@ def test_incident_ai_review_uses_ordered_fallback_and_persists_only_safe_context
         if model.id == primary.id:
             raise incidentAiAgentService.AIClientError("provider unavailable")
         return SimpleNamespace(text='''{
-            "classification":"actionable", "urgency":"high", "summary":"连续性能偏离，需要核查。",
+            "classification":"actionable", "urgency":"critical", "confidence":"low", "summary":"连续性能偏离，需要核查。",
             "investigation_steps":["核查关联指标"], "resolution_steps":["验证恢复趋势"],
             "proposed_next_status":"acknowledged", "transition_reason":"已完成初步研判"
         }''')
@@ -360,6 +394,9 @@ def test_incident_ai_review_uses_ordered_fallback_and_persists_only_safe_context
     assert "/private/path" not in str(run.input_snapshot)
     assert incident.severity == "warning"
     assert incident.ai_urgency == "high"
+    assert run.assessment["confidence"] == "low"
+    assert run.assessment["model_urgency"] == "critical"
+    assert run.assessment["urgency_downgraded"] is True
     assert incident.status == "acknowledged"
     assert [item.event_type for item in db_session.query(models.IncidentTimeline).order_by(models.IncidentTimeline.id)] == [
         "ai_analysis", "ai_status_changed"
@@ -453,7 +490,7 @@ def test_expired_evidence_snapshot_does_not_write_an_ai_comment_or_change_status
         db_session.get(models.Incident, incident.id).last_evidence_at = UTC_NOW.replace(minute=46)
         db_session.commit()
         return SimpleNamespace(text='''{
-            "classification":"actionable", "urgency":"high", "summary":"旧快照中的异常。",
+            "classification":"actionable", "urgency":"high", "confidence":"high", "summary":"旧快照中的异常。",
             "evidence_basis":["触发窗口"], "investigation_steps":["核查"], "resolution_steps":["验证"],
             "proposed_next_status":"acknowledged"
         }''')
@@ -495,7 +532,7 @@ def test_disabling_settings_during_completion_drops_the_generated_assessment(db_
         settings.enabled = False
         db_session.commit()
         return SimpleNamespace(text='''{
-            "classification":"actionable", "urgency":"high", "summary":"不应被写入。",
+            "classification":"actionable", "urgency":"high", "confidence":"high", "summary":"不应被写入。",
             "evidence_basis":["触发窗口"], "investigation_steps":["核查"], "resolution_steps":["验证"],
             "proposed_next_status":"acknowledged"
         }''')
@@ -538,6 +575,7 @@ def test_normal_fluctuation_advances_only_one_adjacent_status_per_review_until_r
         return SimpleNamespace(text=__import__("json").dumps({
             "classification": "normal_fluctuation",
             "urgency": "low",
+            "confidence": "high",
             "summary": "低绝对负载的短时波动，无持续影响证据。",
             "evidence_basis": ["绝对负载低且仅连续三个短时窗口波动"],
             "investigation_steps": ["下一周期复核"],

@@ -67,6 +67,8 @@ describe('IncidentDetailDrawer', () => {
       ai_assessment: {
         classification: 'normal_fluctuation',
         urgency: 'low',
+        confidence: 'low',
+        urgency_downgraded: false,
         summary: '低负载 IOPS 短时波动，暂无服务影响证据。',
         evidence_basis: ['绝对 IOPS 低于动态噪声门槛'],
         investigation_steps: ['继续观察下一采集周期'],
@@ -123,6 +125,31 @@ describe('IncidentDetailDrawer', () => {
     expect(wrapper.text()).toContain('AI 正在审查');
     expect(wrapper.text()).toContain('事件触发');
     expect(wrapper.text()).toContain('2026-07-23 14:45:00');
+  });
+
+  it('shows confidence and explains when low confidence downgraded the AI urgency', async () => {
+    incidentApi.fetchIncident.mockResolvedValueOnce({
+      ...incident,
+      evidence: [],
+      timeline: [],
+      diagnosis: null,
+      ai_assessment: {
+        classification: 'actionable',
+        urgency: 'high',
+        model_urgency: 'critical',
+        confidence: 'low',
+        urgency_downgraded: true,
+        summary: '证据需要继续核查。',
+        evidence_basis: ['只存在单一证据来源'],
+        investigation_steps: ['继续核查'],
+        resolution_steps: ['确认后处置'],
+      },
+    });
+
+    const wrapper = await mountDrawer();
+
+    expect(wrapper.text()).toContain('置信度：低');
+    expect(wrapper.text()).toContain('低置信度已降级');
   });
 
   it('only shows claim before assignment and only shows release when the current user can release it', async () => {

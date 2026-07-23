@@ -7,7 +7,7 @@
 
 两条接口均要求 `super_admin`。PATCH 接收完整设置：`enabled`、有序且不重复的 `model_ids`、`iops_absolute_floor` 和 `iops_baseline_ratio`。候选只能引用全局启用模型，且启用 Agent 时候选不能为空。
 
-`IncidentOut` 和 `IncidentDetailOut` 额外返回 `ai_urgency`、`ai_urgency_reason`、`ai_analyzed_at`、`ai_assessment`、`ai_review`；后者返回最近一次审查的触发类型、状态、开始/完成时间和安全错误码。`ai_review` 只反映已由 worker 开始持久化的运行，`running` 表示模型审查仍在进行。`ai_assessment` 只含分类、紧急度、摘要、依据、排查/解决步骤、状态建议、模型名和生成时间。
+`IncidentOut` 和 `IncidentDetailOut` 额外返回 `ai_urgency`、`ai_urgency_reason`、`ai_analyzed_at`、`ai_assessment`、`ai_review`；后者返回最近一次审查的触发类型、状态、开始/完成时间和安全错误码。`ai_review` 只反映已由 worker 开始持久化的运行，`running` 表示模型审查仍在进行。`ai_assessment` 额外包含必填 `confidence`、模型原始紧急度 `model_urgency` 与 `urgency_downgraded`；低置信度时 `ai_urgency` 是降一级后的保守结果，确定性 `severity` 不变。历史记录若尚未保存 `confidence`，响应层补为保守的 `low`，不回写历史 JSON，也不将其标记为已发生紧急度降级。
 
 ## 持久化和任务
 

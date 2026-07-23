@@ -16,9 +16,10 @@
 
 - `classification`：`actionable`、`normal_fluctuation` 或 `insufficient_evidence`。
 - `urgency`：`low`、`medium`、`high` 或 `critical`，它独立于确定性严重度。
+- `confidence`：`low`、`medium` 或 `high`，表示本次 AI 研判的证据把握程度。
 - `summary`、`evidence_basis`、`investigation_steps`、`resolution_steps`、可选的 `proposed_next_status` 和 `transition_reason`。
 
-`normal_fluctuation` 必须有明确的低负载、短时波动或证据不足依据；`actionable` 必须同时提供排查和解决建议。服务端拒绝未知字段、跳级状态和无效结构。状态建议只能保持当前状态或推进一个相邻步骤，写入前再次验证事件状态和最后证据时间；每次运行最多推进一步。成功运行追加 `ai_analysis` 评论，发生推进时追加 `ai_status_changed`，两者固定显示操作人为“AI 处置 Agent”。
+`normal_fluctuation` 必须有明确的低负载、短时波动或证据不足依据；`actionable` 必须同时提供排查和解决建议。服务端拒绝未知字段、跳级状态和无效结构。置信度为 `low` 时，服务端将 AI 紧急度降一级（最低保持 `low`），但绝不修改规则或设备事实确定的 Incident `severity`。状态建议只能保持当前状态或推进一个相邻步骤，写入前再次验证事件状态和最后证据时间；每次运行最多推进一步。成功运行追加 `ai_analysis` 评论，发生推进时追加 `ai_status_changed`，两者固定显示操作人为“AI 处置 Agent”。
 
 ## 生命周期
 
