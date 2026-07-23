@@ -183,4 +183,32 @@ describe('IncidentCenterPage', () => {
     });
     expect(wrapper.vm.aiSettingsVisible).toBe(false);
   });
+
+  it('allows a super administrator to disable the AI agent from the settings dialog', async () => {
+    incidentApi.fetchAiSettings.mockResolvedValue({
+      enabled: true,
+      model_ids: [3],
+      available_models: [{ id: 3, name: 'primary' }],
+      iops_absolute_floor: 10,
+      iops_baseline_ratio: 0.05,
+    });
+    incidentApi.updateAiSettings.mockResolvedValue({ enabled: false });
+    const wrapper = await mountPage();
+
+    await wrapper.vm.openAiSettings();
+    await nextTick();
+    await wrapper.findComponent({ name: 'IncidentAiSettingsDialog' }).vm.$emit('update:settings', {
+      ...wrapper.vm.aiSettings,
+      enabled: false,
+    });
+    await wrapper.vm.saveAiSettings();
+
+    expect(wrapper.vm.aiSettings.enabled).toBe(false);
+    expect(incidentApi.updateAiSettings).toHaveBeenLastCalledWith({
+      enabled: false,
+      model_ids: [3],
+      iops_absolute_floor: 10,
+      iops_baseline_ratio: 0.05,
+    });
+  });
 });
