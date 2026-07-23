@@ -233,11 +233,17 @@ const evidenceGroups = computed(() => {
 });
 
 function timelinePresentation(item) {
-  if (item.presentation) return item.presentation;
-  return {
+  const presentation = item.presentation || {
     action_label: timelineLabels[item.event_type] || '事件更新',
     summary: item.comment || '系统记录了一次事件更新。',
     actor_label: item.actor_user_id == null ? '系统' : `用户 #${item.actor_user_id}`,
+  };
+  const isLegacyGenericEvidence = item.event_type === 'evidence_added'
+    && /关联事件证据|待核查的事件证据/.test(presentation.summary || '');
+  if (!isLegacyGenericEvidence) return presentation;
+  return {
+    ...presentation,
+    summary: `系统新增一项${incidentThemeLabel.value}关联证据；具体类型、内容和影响范围见上方“关联证据”。`,
   };
 }
 

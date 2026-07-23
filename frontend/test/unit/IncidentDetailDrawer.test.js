@@ -177,7 +177,16 @@ describe('IncidentDetailDrawer', () => {
           technical_ref: 'anomaly:1204',
         },
       }],
-      timeline: [],
+      timeline: [{
+        id: 13,
+        event_type: 'evidence_added',
+        occurred_at: '2026-07-23T09:50:56Z',
+        presentation: {
+          action_label: '关联新证据',
+          summary: '关联关联事件证据：系统已关联一条待核查的事件证据。',
+          actor_label: '系统',
+        },
+      }],
       diagnosis: null,
     });
     const wrapper = await mountDrawer();
@@ -188,6 +197,8 @@ describe('IncidentDetailDrawer', () => {
     expect(wrapper.text()).toContain('性能异常 · /ifs/data/IC/tmpdata/project/SPA3610');
     expect(wrapper.text()).toContain('持续性能异常');
     expect(wrapper.text()).toContain('性能指标持续偏离历史基线，请核查延迟、IOPS、吞吐量及同期负载。');
+    expect(wrapper.text()).toContain('系统新增一项性能异常关联证据；具体类型、内容和影响范围见上方“关联证据”。');
+    expect(wrapper.text()).not.toContain('关联关联事件证据');
     const evidenceLabels = wrapper.findAll('.incident-detail__evidence-item dt')
       .map((item) => item.text());
     expect(evidenceLabels).toContain('关联类型');
