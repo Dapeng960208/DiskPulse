@@ -163,6 +163,16 @@ def _identifier(value: str) -> str:
     return value
 
 
+def build_repair_table_names(table_name: str, suffix: str) -> tuple[str, str]:
+    table_name = _identifier(table_name)
+    if not suffix:
+        raise ValueError("QuestDB repair suffix must not be empty")
+    return (
+        _identifier(f"{table_name}__utc_repair_{suffix}"),
+        _identifier(f"{table_name}__local_time_backup_{suffix}"),
+    )
+
+
 def build_create_statement(table: QuestDBTable, target_name: str) -> str:
     target_name = _identifier(target_name)
     columns = ", ".join(
@@ -297,12 +307,10 @@ def repair_tables(
     suffix: str,
 ) -> list[dict]:
     """Rebuild and swap tables, preserving each original as a backup."""
-    suffix = _identifier(suffix)
     results = []
     now_utc = to_utc_z(datetime.now(timezone.utc))
     for table in tables:
-        repair_name = f"{table.name}__utc_repair_{suffix}"
-        backup_name = f"{table.name}__local_time_backup_{suffix}"
+        repair_name, backup_name = build_repair_table_names(table.name, suffix)
         if _table_exists(session, repair_name) or _table_exists(session, backup_name):
             raise RuntimeError(
                 f"repair or backup table already exists for {table.name}: {suffix}"
