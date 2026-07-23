@@ -172,9 +172,21 @@ describe('IncidentDetailDrawer', () => {
           group_key: 'anomaly_observation',
           group_label: '性能异常',
           title: '持续性能异常',
-          summary: '性能指标持续偏离历史基线，请核查延迟、IOPS、吞吐量及同期负载。',
-          scope_label: '性能指标',
+          summary: 'P95 总延迟连续三个相邻 5 分钟窗口超出基于过去 28 天同星期同小时历史样本计算的正常参考范围。',
+          scope_label: 'P95 总延迟',
           technical_ref: 'anomaly:1204',
+          metric_key: 'latency',
+          metric_label: 'P95 总延迟',
+          metric_unit: 'ms',
+          window_start: '2026-07-23T09:35:00Z',
+          window_end: '2026-07-23T09:45:00Z',
+          observed_value: 24.5,
+          baseline_value: 10,
+          reference_lower: 0,
+          reference_upper: 20.38,
+          robust_z_score: 4.89,
+          reference_purpose: '该标识用于把事件证据与原始异常观测精确关联，支持去重、审计和回放；它本身不是异常结论。',
+          lookup_hint: 'anomaly:1204 中的数字部分是异常观测 ID 1204。可在性能异常接口按存储集群、metric=latency 和异常时间范围筛选后，以 id=1204 精确核对。',
         },
       }],
       timeline: [{
@@ -196,7 +208,18 @@ describe('IncidentDetailDrawer', () => {
       .map((item) => item.attributes('label'))).toContain('事件主题');
     expect(wrapper.text()).toContain('性能异常 · /ifs/data/IC/tmpdata/project/SPA3610');
     expect(wrapper.text()).toContain('持续性能异常');
-    expect(wrapper.text()).toContain('性能指标持续偏离历史基线，请核查延迟、IOPS、吞吐量及同期负载。');
+    expect(wrapper.text()).toContain('P95 总延迟连续三个相邻 5 分钟窗口超出基于过去 28 天同星期同小时历史样本计算的正常参考范围。');
+    expect(wrapper.text()).toContain('性能指标');
+    expect(wrapper.text()).toContain('P95 总延迟');
+    expect(wrapper.text()).toContain('异常时间范围');
+    expect(wrapper.text()).toContain('2026-07-23 17:35:00 至 2026-07-23 17:45:00');
+    expect(wrapper.text()).toContain('窗口末点 P95');
+    expect(wrapper.text()).toContain('24.50 ms');
+    expect(wrapper.text()).toContain('历史基线');
+    expect(wrapper.text()).toContain('10.00 ms');
+    expect(wrapper.text()).toContain('正常参考范围');
+    expect(wrapper.text()).toContain('0.00–20.38 ms');
+    expect(wrapper.text()).toContain('鲁棒 Z 分数 4.89');
     expect(wrapper.text()).toContain('系统新增一项性能异常关联证据；具体类型、内容和影响范围见上方“关联证据”。');
     expect(wrapper.text()).not.toContain('关联关联事件证据');
     const evidenceLabels = wrapper.findAll('.incident-detail__evidence-item dt')
@@ -204,6 +227,14 @@ describe('IncidentDetailDrawer', () => {
     expect(evidenceLabels).toContain('关联类型');
     expect(evidenceLabels).toContain('关联内容');
     expect(evidenceLabels).not.toContain('异常说明');
+    const technicalDetails = wrapper.find('details').text();
+    expect(technicalDetails).toContain('证据标识');
+    expect(technicalDetails).toContain('标识作用');
+    expect(technicalDetails).toContain('回查方式');
+    expect(technicalDetails).toContain('异常观测 ID 1204');
+    expect(technicalDetails).not.toContain('关联对象');
+    expect(technicalDetails).not.toContain('证据范围');
+    expect(technicalDetails).not.toContain('证据类型');
   });
 
   it('orders evidence and timeline from newest to oldest, and labels the technical association', async () => {
