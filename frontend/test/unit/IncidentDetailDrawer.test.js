@@ -156,6 +156,44 @@ describe('IncidentDetailDrawer', () => {
     expect(tooltipContents.join('')).not.toContain('遥测');
   });
 
+  it('states the performance anomaly theme and labels the actual association content', async () => {
+    incidentApi.fetchIncident.mockResolvedValueOnce({
+      ...incident,
+      category: 'performance_contention',
+      display_name: '/ifs/data/IC/tmpdata/project/SPA3610',
+      evidence: [{
+        id: 1204,
+        source: 'anomaly_observation',
+        source_ref: 'anomaly:1204',
+        evidence_type: 'continuous_performance_anomaly',
+        observed_at: '2026-07-23T09:45:00Z',
+        presentation: {
+          group_key: 'anomaly_observation',
+          group_label: '性能异常',
+          title: '持续性能异常',
+          summary: '性能指标持续偏离历史基线，请核查延迟、IOPS、吞吐量及同期负载。',
+          scope_label: '性能指标',
+          technical_ref: 'anomaly:1204',
+        },
+      }],
+      timeline: [],
+      diagnosis: null,
+    });
+    const wrapper = await mountDrawer();
+
+    expect(wrapper.findComponent({ name: 'ElDrawer' }).attributes('title')).toBe('性能异常 #9');
+    expect(wrapper.findAllComponents({ name: 'ElDescriptionsItem' })
+      .map((item) => item.attributes('label'))).toContain('事件主题');
+    expect(wrapper.text()).toContain('性能异常 · /ifs/data/IC/tmpdata/project/SPA3610');
+    expect(wrapper.text()).toContain('持续性能异常');
+    expect(wrapper.text()).toContain('性能指标持续偏离历史基线，请核查延迟、IOPS、吞吐量及同期负载。');
+    const evidenceLabels = wrapper.findAll('.incident-detail__evidence-item dt')
+      .map((item) => item.text());
+    expect(evidenceLabels).toContain('关联类型');
+    expect(evidenceLabels).toContain('关联内容');
+    expect(evidenceLabels).not.toContain('异常说明');
+  });
+
   it('orders evidence and timeline from newest to oldest, and labels the technical association', async () => {
     incidentApi.fetchIncident.mockResolvedValueOnce({
       ...incident,

@@ -27,6 +27,27 @@ def test_telemetry_quality_evidence_has_a_readable_presentation_without_exposing
     assert presentation["technical_ref"] == evidence.source_ref
 
 
+def test_performance_anomaly_evidence_has_an_explicit_theme_and_actual_association_content():
+    from services import forecastIncidentService as analytics
+
+    evidence = SimpleNamespace(
+        source="anomaly_observation",
+        source_ref="anomaly:1204",
+        evidence_type="continuous_performance_anomaly",
+        observed_at=UTC_NOW,
+        data_gaps=[],
+    )
+
+    presentation = analytics.build_evidence_presentation(evidence)
+
+    assert presentation["group_key"] == "anomaly_observation"
+    assert presentation["group_label"] == "性能异常"
+    assert presentation["title"] == "持续性能异常"
+    assert presentation["scope_label"] == "性能指标"
+    assert presentation["summary"] == "性能指标持续偏离历史基线，请核查延迟、IOPS、吞吐量及同期负载。"
+    assert presentation["technical_ref"] == evidence.source_ref
+
+
 def test_timeline_presentation_uses_chinese_actions_and_a_system_actor_for_automatic_records():
     from services import forecastIncidentService as analytics
 
