@@ -53,3 +53,23 @@
 - 禁止对已经混有新 UTC 行和旧上海墙钟行的表执行整体平移；两类行在切换附近存在重叠时间，单靠 timestamp 无法可靠区分。
 - 修复中断时不要删除任何 `__utc_repair_...` 或 `__local_time_backup_...` 表；先核对当前表名、行数与时间边界，再决定恢复或继续。
 - 原表备份的删除属于独立、不可恢复的运维动作，必须在业务验收和备份保留期结束后另行审批。
+
+## 开发门禁与提交提醒
+
+- 新增 QuestDB designated timestamp 表时，同时更新：
+  1. `backend/questdb/migrations/` 前向迁移；
+  2. `backend/questdb/time_contract.py` 的 `QUESTDB_TIME_CONTRACTS`；
+  3. `backend/scripts/repair_questdb_timestamps.py` 的历史修复表结构。
+- 写入时间只能通过 `questdb_write_timestamp(<实际表名>, value)`；该入口会拒绝未登记表，并把上海本地 naive 或 aware 时间统一转换为 UTC naive。
+- 查询边界必须使用 UTC `Z`，读取值必须先按 UTC 解释。禁止使用无参数 `astimezone()`、宿主机时区或直接 `replace(tzinfo=None)`。
+- 提交前运行：
+
+```powershell
+cd backend
+..\.venv\Scripts\python.exe -m pytest `
+  test/test_questdb_time_contract_guard.py `
+  test/test_datetime_utils.py `
+  test/test_questdb_timestamp_repair.py -q
+```
+
+契约测试会扫描业务代码；直接调用底层 `to_questdb_utc_naive`、迁移表未登记或修复注册表遗漏都会使测试失败。

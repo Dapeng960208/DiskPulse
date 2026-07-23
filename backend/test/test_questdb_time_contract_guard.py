@@ -33,27 +33,37 @@ def _migrated_timestamp_contracts() -> dict[str, str]:
     return contracts
 
 
-def _direct_datetime_utility_bypasses() -> list[str]:
+def _direct_datetime_utility_bypasses(
+    source_paths: list[Path] | None = None,
+) -> list[str]:
     violations: list[str] = []
     allowed_paths = {
         BACKEND_ROOT / "utils" / "datetime_utils.py",
         BACKEND_ROOT / "questdb" / "time_contract.py",
     }
-    for source_path in BACKEND_ROOT.rglob("*.py"):
+    paths = source_paths or list(BACKEND_ROOT.rglob("*.py"))
+    for source_path in paths:
         if source_path in allowed_paths or "test" in source_path.parts:
             continue
-        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=source_path)
+        try:
+            display_path = source_path.relative_to(REPOSITORY_ROOT)
+        except ValueError:
+            display_path = Path(source_path.name)
+        tree = ast.parse(
+            source_path.read_text(encoding="utf-8-sig"),
+            filename=source_path,
+        )
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module == "utils.datetime_utils":
                 if any(alias.name == "to_questdb_utc_naive" for alias in node.names):
                     violations.append(
-                        f"{source_path.relative_to(REPOSITORY_ROOT)}:{node.lineno}:import"
+                        f"{display_path}:{node.lineno}:import"
                     )
             if isinstance(node, ast.Call):
                 function = node.func
                 if isinstance(function, ast.Name) and function.id == "to_questdb_utc_naive":
                     violations.append(
-                        f"{source_path.relative_to(REPOSITORY_ROOT)}:{node.lineno}:call"
+                        f"{display_path}:{node.lineno}:call"
                     )
     return violations
 
@@ -86,6 +96,20 @@ def test_business_code_cannot_bypass_the_registered_write_guard():
     assert _direct_datetime_utility_bypasses() == []
 
 
+def test_guard_reports_a_direct_datetime_utility_bypass(tmp_path):
+    violating_writer = tmp_path / "violating_writer.py"
+    violating_writer.write_text(
+        "from utils.datetime_utils import to_questdb_utc_naive\n"
+        "timestamp = to_questdb_utc_naive('2026-07-23T14:30:00')\n",
+        encoding="utf-8",
+    )
+
+    assert _direct_datetime_utility_bypasses([violating_writer]) == [
+        "violating_writer.py:1:import",
+        "violating_writer.py:2:call",
+    ]
+
+
 def test_project_instructions_and_database_standard_repeat_the_hard_guardrail():
     agent_instructions = (REPOSITORY_ROOT / "AGENTS.md").read_text(encoding="utf-8")
     database_standard = (
@@ -100,3 +124,12 @@ def test_project_instructions_and_database_standard_repeat_the_hard_guardrail():
         assert "QuestDB 时间硬约束" in content
         assert "questdb_write_timestamp" in content
         assert "QUESTDB_TIME_CONTRACTS" in content
+
+
+def test_ci_runs_the_questdb_time_contract_guard_as_a_named_fail_fast_step():
+    workflow = (
+        REPOSITORY_ROOT / ".github" / "workflows" / "coverage-ci.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "Enforce QuestDB UTC time contract" in workflow
+    assert "test_questdb_time_contract_guard.py" in workflow

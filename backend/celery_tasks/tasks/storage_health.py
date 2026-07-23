@@ -15,9 +15,9 @@ from dependencies import QuestDBSession
 from models import StorageAlerts, StorageCluster, Volume
 from services.storageHealthAnalyticsService import normalize_severity
 from services import telemetryObservabilityService
+from questdb.time_contract import questdb_write_timestamp
 from utils.datetime_utils import (
     SYSTEM_TIMEZONE,
-    to_questdb_utc_naive,
     to_system_local_naive,
     to_utc_z,
 )
@@ -393,7 +393,8 @@ def _netapp_performance_rows(
                 "latency_total": latency_total,
                 "iops_total": _number(metrics.get("iops")),
                 "throughput_total": _number(metrics.get("throughput")),
-                "collected_at": to_questdb_utc_naive(
+                "collected_at": questdb_write_timestamp(
+                    "storage_performance_metrics",
                     _datetime(metrics.get("timestamp"), now)
                 ),
             }
@@ -456,7 +457,8 @@ def _isilon_performance_rows(
                 "latency_total": value,
                 "iops_total": _number(record.get("iops_total")),
                 "throughput_total": _number(record.get("throughput_total")),
-                "collected_at": to_questdb_utc_naive(
+                "collected_at": questdb_write_timestamp(
+                    "storage_performance_metrics",
                     _datetime(record.get("timestamp") or record.get("time"), now)
                 ),
             }

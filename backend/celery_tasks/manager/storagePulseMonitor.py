@@ -13,8 +13,8 @@ from models import Aggregate, Volume, Qtree, Group, StorageUsage, User, StorageC
 from services.project_access_service import ensure_reader_memberships
 from sqlalchemy import func, text, update
 from dependencies import QuestDBSession
+from questdb.time_contract import questdb_write_timestamp
 from typing import List, Dict, Any, Optional
-from utils.datetime_utils import to_questdb_utc_naive
 
 
 def _bytes_to_gb(value: Any) -> Optional[float]:
@@ -612,7 +612,10 @@ class StoragePulseMonitor:
                 data = [
                     {'storage_cluster_id': str(item.id), 'used': item.used,
                      'use_ratio': item.use_ratio,
-                     'updated_at': to_questdb_utc_naive(datetime.now())}
+                     'updated_at': questdb_write_timestamp(
+                         'storage_cluster_storage_usages',
+                         datetime.now(),
+                     )}
                     for item in items if item.used is not None
                 ]
                 table_name = 'storage_cluster_storage_usages'
@@ -625,7 +628,10 @@ class StoragePulseMonitor:
                         'used': item.used,
                         'used_ratio': item.use_ratio,
                         f'{table_name}_id': str(item.id),
-                        'updated_at': to_questdb_utc_naive(datetime.now()),
+                        'updated_at': questdb_write_timestamp(
+                            f'{table_name}_storage_usages',
+                            datetime.now(),
+                        ),
                     }
                     if hasattr(item, 'soft_limit'):
                         row.update(
@@ -639,7 +645,10 @@ class StoragePulseMonitor:
                     {'used': item.used, 'used_ratio': item.use_ratio, 'file_used': item.file_used,
                      'soft_limit': item.soft_limit, 'soft_use_ratio': item.soft_use_ratio,
                      f'{table_name[:-1]}_id': str(item.id),
-                     'updated_at': to_questdb_utc_naive(item.updated_at),
+                     'updated_at': questdb_write_timestamp(
+                         'storage_usages',
+                         item.updated_at,
+                     ),
                      'user_id': str(item.user_id)}
                     for item in items if item.used
                 ]

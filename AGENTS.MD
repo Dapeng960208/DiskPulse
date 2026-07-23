@@ -29,13 +29,22 @@
 - 任务修复或者新增行为必须使用 /tdd-workflow：先补失败测试，再实现，再验证。。
 - 小问题修复只跑改动文件或影响模块的聚焦测试，不把全量测试当作日常默认命令。
 
-## 5. Windows 中文 Markdown
+## 5. QuestDB 时间硬约束
+
+- 新增或修改 QuestDB designated timestamp 表时，必须在同一变更中更新 `backend/questdb/migrations/`、`backend/questdb/time_contract.py` 的 `QUESTDB_TIME_CONTRACTS`、历史修复注册表和契约测试；缺少任一项不得交付。
+- 业务代码写入 QuestDB designated timestamp 时，只能调用 `questdb_write_timestamp(<实际表名>, value)`。禁止直接调用 `to_questdb_utc_naive`、直接移除 `tzinfo`，或把 `datetime.now()`、上海本地 naive 时间直接交给 QuestDB 驱动。
+- 查询边界使用 `to_utc_z`，QuestDB 返回的 naive timestamp 先用 `from_questdb_utc` 按 UTC 解释；仅在 API 展示边界转换为 `Asia/Shanghai`。
+- 涉及 QuestDB 表、采集任务、写入或查询的改动，交付前必须运行：
+  `cd backend; ..\.venv\Scripts\python.exe -m pytest test/test_questdb_time_contract_guard.py test/test_datetime_utils.py -q`。
+- 历史修复必须停写、双重静态审计、保留备份并逐表核对；禁止对混有新旧时间契约的数据整体平移。
+
+## 6. Windows 中文 Markdown
 - 当前主要开发环境是 Windows + 中文 Markdown；读取中文 `.md` 文件时禁止裸用 `Get-Content`。
 - 必须使用 `Get-Content -Encoding UTF8 path\to\file.md`。
 - 如仍乱码，先设置 `[Console]::InputEncoding`、`[Console]::OutputEncoding` 和 `$OutputEncoding` 为 UTF-8。
 - 仍有问题时，使用 `[System.IO.File]::ReadAllText(<path>, [System.Text.UTF8Encoding]::new($false))`。
 
-## 6. 交付口径
+## 7. 交付口径
 
 - 最终说明列出改动文件、验证命令、未验证范围和风险。
 - 每个开发会话在 `docs/tracking/sessions/<session-id>/` 下维护 `delivery.md` 与 `errors.md`；会话目录名使用 `YYYY-MM-DD-<task-slug>`。
