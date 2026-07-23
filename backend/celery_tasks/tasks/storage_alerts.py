@@ -218,16 +218,19 @@ def _evaluate_one(
         return None
 
     feishu = base_config.get("feishu_notification", {}) or {}
-    group_cc = _usernames_for_ids(db, group.alert_cc_user_ids or []) if group else []
-    emergency = (result.level or result.previous_level) == "emergency"
-    recipients = resolve_recipient_usernames(
-        primary_usernames=primary_usernames,
-        group_cc_usernames=group_cc if target_type in {"storage_usage", "group"} else [],
-        global_cc_usernames=feishu.get("cc_usernames", []),
-        debug=bool(feishu.get("debug")),
-        emergency=emergency,
-        super_admin_usernames=base_config.get("super_admin_usernames", []),
-    )
+    if result.event_type == "recovery":
+        recipients = []
+    else:
+        group_cc = _usernames_for_ids(db, group.alert_cc_user_ids or []) if group else []
+        emergency = result.level == "emergency"
+        recipients = resolve_recipient_usernames(
+            primary_usernames=primary_usernames,
+            group_cc_usernames=group_cc if target_type in {"storage_usage", "group"} else [],
+            global_cc_usernames=feishu.get("cc_usernames", []),
+            debug=bool(feishu.get("debug")),
+            emergency=emergency,
+            super_admin_usernames=base_config.get("super_admin_usernames", []),
+        )
     if target_type == "storage_usage":
         target_name = f"Linux目录 {context.get('linux_path') or '-'}"
     else:
