@@ -633,8 +633,32 @@ def test_evaluator_uses_current_successful_samples_and_keeps_project_event_aggre
     assert "项目：project-a" in project_text
     assert "集群：cluster-a、cluster-b" in project_text
 
+    recovery_sample = second_sample + timedelta(minutes=1)
+    db_session.query(models.StorageUsage).filter_by(id=1).update(
+        {"use_ratio": 79, "updated_at": recovery_sample}
+    )
+    db_session.query(models.Group).filter_by(id=1).update(
+        {"use_ratio": 79, "updated_at": recovery_sample}
+    )
+    db_session.query(models.Project).filter_by(id=1).update({"use_ratio": 79})
+    db_session.commit()
 
-def test_feishu_recovery_notification_uses_hierarchical_rich_text_and_display_units():
+    assert tasks.evaluate_storage_alerts(
+        [1], [1], recovery_sample.isoformat(), [1], [1]
+    ) == []
+    recovery_events = (
+        db_session.query(models.StorageAlerts)
+        .filter_by(event_type="recovery")
+        .order_by(models.StorageAlerts.id)
+        .all()
+    )
+    assert len(recovery_events) == 3
+    assert all(event.delivery_status == "skipped" for event in recovery_events)
+    assert all(event.recipient_usernames == [] for event in recovery_events)
+    assert all(event.next_attempt_at is None for event in recovery_events)
+
+
+def test_recovery_event_details_use_hierarchical_rich_text_and_display_units():
     tasks = _module("celery_tasks.tasks.storage_alerts")
     target = SimpleNamespace(
         limit=3584,
