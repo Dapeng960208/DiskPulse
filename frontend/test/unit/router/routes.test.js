@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import { vi } from 'vitest';
 import App from '@/App.vue';
 import RouteMenu from '@/layouts/components/RouteMenu.vue';
+import RouteMenuItem from '@/layouts/components/RouteMenuItem.vue';
 import { commonStubs } from '../../helpers/mount';
 
 const hasRole = vi.hoisted(() => vi.fn(() => true));
@@ -301,6 +302,43 @@ describe('router/routes and app shell', () => {
       ['事件中心', '事件与审计'],
       ['厂商事件关联目录', '事件与审计'],
       ['统一操作审计', '事件与审计'],
+    ]);
+  });
+
+  it('renders each System Management classification as a single visual section label', () => {
+    const visible = () => true;
+    const wrapper = shallowMount(RouteMenuItem, {
+      props: {
+        option: {
+          index: '/admin',
+          label: '系统管理',
+          isVisible: visible,
+          children: [
+            { index: '/admin/storage-clusters', label: '存储集群', isVisible: visible },
+            { index: '/admin/group-tags', label: '项目组标签', section: '基础配置', isVisible: visible },
+            { index: '/admin/users', label: '用户信息管理', section: '基础配置', isVisible: visible },
+            { index: '/admin/ai-center', label: 'AI 中心', section: '智能治理', isVisible: visible },
+            { index: '/admin/incidents', label: '事件中心', section: '事件与审计', isVisible: visible },
+          ],
+        },
+      },
+      global: {
+        stubs: {
+          ElSubMenu: {
+            template: '<div class="sub-menu"><slot name="title" /><slot /></div>',
+          },
+          ElMenuItem: {
+            template: '<div class="leaf-menu-item"><slot name="title" /><slot /></div>',
+          },
+        },
+      },
+    });
+
+    expect(wrapper.findAll('[data-testid="menu-section"]')
+      .map((section) => section.text())).toEqual([
+      '基础配置',
+      '智能治理',
+      '事件与审计',
     ]);
   });
 
