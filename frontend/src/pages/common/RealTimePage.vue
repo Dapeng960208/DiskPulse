@@ -1,6 +1,7 @@
 <script setup>
-import { ElDatePicker, ElFormItem, ElOption, ElSelect, ElDescriptions, ElDescriptionsItem, ElCard, ElTable, ElTableColumn, ElTag } from 'element-plus';
+import { ElDatePicker, ElFormItem, ElOption, ElSelect, ElDescriptions, ElDescriptionsItem, ElCard, ElTableColumn, ElTag } from 'element-plus';
 import { ref, watch, computed } from 'vue';
+import DataTable from '@/components/data/DataTable.vue';
 import { useRoute } from 'vue-router';
 import StorageTrendChart from '@/components/dashboard/StorageTrendChart.vue';
 import FilterForm from '@/components/form/QueryForm.vue';
@@ -342,36 +343,34 @@ const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThre
       </div>
 
       <div class="real-time-page__alerts-panel basis-1/4">
-        <ElCard class="h-full">
-          <ElTable
-            :data="alertResult.content"
-            style="width: 100%; height: 100%;"
-            :loading="alertQuerying">
-            <ElTableColumn
-              label="告警紧急程度"
-              min-width="100"
-              align="center">
-              <template #default="{ row }">
-                <ElTag :type="alertLevelType(row.alert_level)">
-                  {{ alertLevelLabel(row.alert_level) }}
-                </ElTag>
-              </template>
-            </ElTableColumn>
-            <ElTableColumn
-              label="触发值"
-              min-width="60">
-              <template #default="{ row }">
-                <ElTag :type="alertLevelType(row.alert_level)">
-                  {{ row.avg_use_ratio }}
-                </ElTag>
-              </template>
-            </ElTableColumn>
-            <ElTableColumn
-              prop="updated_at"
-              label="时间"
-              min-width="130" />
-          </ElTable>
-        </ElCard>
+        <DataTable
+          :data="alertResult.content"
+          :loading="alertQuerying"
+          density="compact">
+          <ElTableColumn
+            label="告警紧急程度"
+            min-width="100"
+            align="center">
+            <template #default="{ row }">
+              <ElTag :type="alertLevelType(row.alert_level)">
+                {{ alertLevelLabel(row.alert_level) }}
+              </ElTag>
+            </template>
+          </ElTableColumn>
+          <ElTableColumn
+            label="触发值"
+            min-width="60">
+            <template #default="{ row }">
+              <ElTag :type="alertLevelType(row.alert_level)">
+                {{ row.avg_use_ratio }}
+              </ElTag>
+            </template>
+          </ElTableColumn>
+          <ElTableColumn
+            prop="updated_at"
+            label="时间"
+            min-width="130" />
+        </DataTable>
       </div>
     </div>
   </div>
@@ -381,7 +380,8 @@ const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThre
 @import '@/styles/variables.scss';
 @import '@/styles/mixins.scss';
 
-:deep(.el-card) {
+.real-time-page > :deep(.el-card),
+.real-time-page__chart-panel > :deep(.el-card) {
   @include card-base;
   border: 1px solid var(--border-color);
 
@@ -450,56 +450,6 @@ const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThre
         background: var(--bg-primary);
         color: var(--text-secondary);
       }
-    }
-  }
-}
-
-// 表格样式
-:deep(.el-table) {
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  font-size: var(--font-size-sm);
-
-  .el-table__header-wrapper {
-    .el-table__header {
-      thead {
-        tr {
-          th {
-            background: var(--bg-secondary);
-            color: var(--text-primary);
-            font-weight: var(--font-weight-semibold);
-            border-bottom: 1px solid var(--border-color);
-          }
-        }
-      }
-    }
-  }
-
-  .el-table__body-wrapper {
-    .el-table__body {
-      tbody {
-        tr {
-          transition: var(--transition-base);
-
-          &:hover {
-            background: var(--bg-hover) !important;
-          }
-
-          td {
-            border-bottom: 1px solid var(--border-light);
-            color: var(--text-secondary);
-          }
-        }
-      }
-    }
-  }
-
-  .el-table__empty-block {
-    padding: var(--spacing-4xl) 0;
-
-    .el-table__empty-text {
-      color: var(--text-tertiary);
-      font-size: var(--font-size-sm);
     }
   }
 }

@@ -216,7 +216,7 @@ const TableColumn = defineComponent({
 
 const DataTable = defineComponent({
   name: 'DataTable',
-  props: { pagination: Object, loading: Boolean, data: Array },
+  props: { pagination: Object, loading: Boolean, data: Array, density: String },
   emits: ['update:pagination'],
   setup(_, { slots }) {
     return () => h('section', { 'data-testid': 'data-table' }, slots.default?.());
@@ -668,6 +668,8 @@ describe('real-time page coverage gaps', () => {
     expect(realTimePageSource).not.toMatch(/<ElTable\b/);
     expect(realTimePageSource).not.toMatch(/:deep\(\.el-table\b/);
     expect(realTimePageSource).not.toMatch(/<(?:DataTable|ElTable)\b[^>]*\bstyle\s*=/s);
+    expect(realTimePageSource).not.toMatch(/<ElCard\b[^>]*>\s*<DataTable\b/s);
+    expect(realTimePageSource).not.toMatch(/^\s*:deep\(\.el-card\)\s*\{/m);
   });
 
   it('waits for a valid detail resource id before requesting real-time data or alerts', async () => {
@@ -725,10 +727,14 @@ describe('real-time page coverage gaps', () => {
       indicator: 'used',
       ariaLabel: '用户目录容量趋势',
     });
-    expect(wrapper.findComponent({ name: 'ElTable' }).props('data')).toEqual([
-      { updated_at: '2026-07-02', description: 'new' },
-      { updated_at: '2026-07-01', description: 'old' },
-    ]);
+    expect(wrapper.findComponent({ name: 'DataTable' }).props()).toMatchObject({
+      data: [
+        { updated_at: '2026-07-02', description: 'new' },
+        { updated_at: '2026-07-01', description: 'old' },
+      ],
+      loading: false,
+      density: 'compact',
+    });
 
     await wrapper.findComponent({ name: 'ElSelect' }).vm.$emit('update:modelValue', 'alert_ratio');
     await wrapper.findComponent({ name: 'StorageUsageSelect' }).vm.$emit('update:modelValue', [1, 2]);
