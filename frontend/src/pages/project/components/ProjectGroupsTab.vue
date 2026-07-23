@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, ref } from 'vue';
-import { ElFormItem, ElInput, ElTableColumn } from 'element-plus';
+import { ElFormItem, ElInput, ElTableColumn, ElTag } from 'element-plus';
 import groupApi from '@/api/group-api.js';
 import DataTable from '@/components/data/DataTable.vue';
 import AccessibleResourceLink from '@/components/basic/AccessibleResourceLink.vue';
@@ -10,7 +10,8 @@ import GroupTagSelect from '@/components/form/GroupTagSelect.vue';
 import QtreeSelect from '@/components/form/QtreeSelect.vue';
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import VolumeSelect from '@/components/form/VolumeSelect.vue';
-import { formatStorageTargetType } from '@/utils/storage-resource';
+import Progress from '@/components/form/Progress.vue';
+import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
 import { hasRole } from '@/utils/authorization';
 import GroupFormDialog from '@/pages/group/components/GroupFormDialog.vue';
 import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
@@ -197,13 +198,63 @@ query();
       <ElTableColumn
         label="存储目标"
         min-width="200">
-        <template #default="{ row }">{{ formatStorageTargetType(row.storage_target?.type) }} / {{ row.storage_target?.name || '-' }}</template>
+        <template #default="{ row }">{{ row.storage_target?.name || '-' }}</template>
       </ElTableColumn>
       <ElTableColumn
         label="Linux 路径"
         prop="linux_path"
         min-width="220"
         show-overflow-tooltip />
+      <ElTableColumn
+        label="硬限额"
+        min-width="110">
+        <template #default="{ row }">
+          <span v-if="row.limit">{{ formatQuotaLimit(row.capacity?.limit ?? row.limit) }}</span>
+          <ElTag
+            v-else
+            type="danger">无硬限额</ElTag>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="软限额"
+        min-width="110">
+        <template #default="{ row }">
+          <span v-if="row.soft_limit">{{ formatQuotaLimit(row.capacity?.soft_limit ?? row.soft_limit) }}</span>
+          <ElTag
+            v-else
+            type="warning">无软限额</ElTag>
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="使用量"
+        min-width="110">
+        <template #default="{ row }">{{ formatQuotaLimit(row.capacity?.used ?? row.used, { emptyText: '-' }) }}</template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="硬限额使用率(%)"
+        min-width="220">
+        <template #default="{ row }">
+          <Progress
+            v-if="canRenderQuotaProgress({ used: row.used, total: row.limit })"
+            :used="row.used"
+            :total="row.limit"
+            :show-numbers="false" />
+        </template>
+      </ElTableColumn>
+      <ElTableColumn
+        label="软限额使用率(%)"
+        min-width="220">
+        <template #default="{ row }">
+          <Progress
+            v-if="canRenderQuotaProgress({ used: row.used, total: row.soft_limit })"
+            :used="row.used"
+            :total="row.soft_limit"
+            :show-numbers="false" />
+          <ElTag
+            v-else
+            type="warning">无软限额</ElTag>
+        </template>
+      </ElTableColumn>
       <ElTableColumn
         label="操作"
         align="right"

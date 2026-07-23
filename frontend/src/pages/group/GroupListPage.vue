@@ -16,7 +16,6 @@ import GroupTagSelect from '@/components/form/GroupTagSelect.vue';
 import StorageClusterSelect from '@/components/form/StorageClusterSelect.vue';
 import GroupFormDialog from './components/GroupFormDialog.vue';
 import { canRenderQuotaProgress, formatQuotaLimit } from '@/utils/quota';
-import { formatStorageTargetType } from '@/utils/storage-resource';
 import QuotaAdjustmentDialog from '@/components/form/QuotaAdjustmentDialog.vue';
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';
 import StorageTypeTag from '@/components/data/StorageTypeTag.vue';
@@ -239,7 +238,7 @@ function canAdjustQuota(row) {
             :column="2">
             <ElDescriptionsItem label="存储目标">
               <ElTag>
-                {{ formatStorageTargetType(props.row.storage_target?.type) }} / {{ props.row.storage_target?.name || '-' }}
+                {{ props.row.storage_target?.name || '-' }}
               </ElTag>
             </ElDescriptionsItem>
             <ElDescriptionsItem label="Linux路径">

@@ -39,8 +39,12 @@ describe('cross-vendor storage resource terminology', () => {
     expect(groupForm).toContain('Qtree（NetApp）');
     expect(groupForm).toContain('单个存储目标关联多个项目组');
     expect(groupList).toContain('存储目标');
-    expect(groupDetail).toContain('info?.storage_target');
-    expect(projectGroups).toContain('formatStorageTargetType');
+    expect(groupList).toContain("props.row.storage_target?.name || '-'");
+    expect(groupDetail).toContain("info?.storage_target?.name || '-'");
+    expect(projectGroups).toContain("row.storage_target?.name || '-'");
+    expect(groupList).not.toContain('formatStorageTargetType');
+    expect(groupDetail).not.toContain('formatStorageTargetType');
+    expect(projectGroups).not.toContain('formatStorageTargetType');
     expect(usageList).toContain('label="存储类型"');
     expect(usageList).not.toContain('label="Volume"');
     expect(usageList).not.toContain('label="Qtree"');

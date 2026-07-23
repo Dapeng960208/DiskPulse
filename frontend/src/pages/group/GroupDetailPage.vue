@@ -3,7 +3,6 @@ import { ElDescriptionsItem, ElTabPane, ElTabs } from 'element-plus';
 import { defineAsyncComponent, onBeforeMount, ref } from 'vue';
 import RealTimePage from '@/pages/common/RealTimePage.vue';
 import { useRoute } from 'vue-router';
-import { formatStorageTargetType } from '@/utils/storage-resource';
 import groupApi from '@/api/group-api.js';
 import capacityPredictionApi from '@/api/capacity-prediction-api.js';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
@@ -54,6 +53,7 @@ onBeforeMount(() => {
       v-model="activeTab"
       class="detail-monitor-page__content">
       <ElTabPane
+        class="detail-monitor-page__capacity-tab"
         label="容量趋势"
         name="realtime">
         <RealTimePage
@@ -66,7 +66,7 @@ onBeforeMount(() => {
           <template #extra-descriptions="{ info }">
             <ElDescriptionsItem label="项目路径">{{ info?.linux_path }}</ElDescriptionsItem>
             <ElDescriptionsItem label="归属项目">{{ info?.project?.name }}</ElDescriptionsItem>
-            <ElDescriptionsItem label="存储目标">{{ formatStorageTargetType(info?.storage_target?.type) }} / {{ info?.storage_target?.name || '-' }}</ElDescriptionsItem>
+            <ElDescriptionsItem label="存储目标">{{ info?.storage_target?.name || '-' }}</ElDescriptionsItem>
             <ElDescriptionsItem
               v-if="false"
               label="备份路径">{{ info?.back_path }}</ElDescriptionsItem>
@@ -99,5 +99,19 @@ onBeforeMount(() => {
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
+}
+
+:deep(.detail-monitor-page__content .el-tabs__content) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+:deep(.detail-monitor-page__content .detail-monitor-page__capacity-tab) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
 }
 </style>
