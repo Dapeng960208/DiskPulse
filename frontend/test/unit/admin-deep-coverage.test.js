@@ -587,9 +587,16 @@ describe('storage cluster detail coverage', () => {
     await flushPromises();
     expect(mocks.storageClusterApi.fetchSystemEvents).toHaveBeenLastCalledWith(42, expect.objectContaining({ keyword: 'E1', severity: 'error' }));
 
-    const pagination = wrapper.findComponent({ name: 'ElPagination' });
-    await pagination.vm.$emit('current-change', 2);
-    await pagination.vm.$emit('size-change', 50);
+    const eventTable = wrapper.find('.system-events').findComponent({ name: 'DataTable' });
+    await eventTable.vm.$emit('update:pagination', {
+      ...eventTable.props('pagination'),
+      page: 2,
+    });
+    await eventTable.vm.$emit('update:pagination', {
+      ...eventTable.props('pagination'),
+      page: 2,
+      pageSize: 50,
+    });
     await flushPromises();
     await eventFilter.vm.$emit('reset');
     await flushPromises();
