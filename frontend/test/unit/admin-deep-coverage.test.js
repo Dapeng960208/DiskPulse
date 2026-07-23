@@ -250,6 +250,7 @@ const UserFormDialog = defineComponent({
 
 const stubs = {
   FilterForm,
+  QueryForm: FilterForm,
   DataTable,
   ElButton: Button,
   TableActionButton: Button,
@@ -481,7 +482,7 @@ describe('admin settings, AI and users coverage', () => {
     await flushPromises();
   });
 
-  it('covers AI model create, edit, test, delete, audit tab and row routing', async () => {
+  it('covers AI model create, edit, test, delete, audit table actions and pagination', async () => {
     globalThis.__adminCoverageRow = { id: 2, name: 'GPT', provider: 'openai', model: 'gpt', enabled: true, enable_chat: true, status: 'failed' };
     const { default: Page } = await import('@/pages/admin/ai/AiCenterPage.vue');
     const wrapper = await mountPage(Page);
@@ -508,11 +509,24 @@ describe('admin settings, AI and users coverage', () => {
     await wrapper.findComponent({ name: 'ElTabs' }).vm.$emit('update:modelValue', 'audit');
     await flushPromises();
     expect(mocks.aiApi.listAudits).toHaveBeenCalledWith(expect.objectContaining({ status: undefined }));
-    const auditTable = wrapper.findAllComponents({ name: 'ElTable' }).at(-1);
-    await auditTable.vm.$emit('row-click', { id: 5 });
-    expect(mocks.router.push).toHaveBeenCalledWith('/admin/ai-center/audits/5');
-    await button(wrapper, '刷新').trigger('click');
+    const dataTables = wrapper.findAllComponents({ name: 'DataTable' });
+    expect(dataTables).toHaveLength(2);
+    const auditTable = dataTables.at(-1);
+    expect(auditTable.props()).toMatchObject({
+      data: [{ id: 5, status: 'failed' }],
+      loading: false,
+      pagination: { page: 1, pageSize: 20, total: 1 },
+    });
+    await auditTable.vm.$emit('update:pagination', { page: 2, pageSize: 50, total: 1 });
     await flushPromises();
+    expect(mocks.aiApi.listAudits).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, size: 50 }));
+
+    await button(wrapper, '查看').trigger('click');
+    expect(mocks.router.push).toHaveBeenCalledWith('/admin/ai-center/audits/2');
+
+    await wrapper.findComponent({ name: 'FilterForm' }).vm.$emit('query');
+    await flushPromises();
+    expect(mocks.aiApi.listAudits).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, status: undefined }));
   });
 
   it('covers user query-from-route, delete confirmation and cancelled LDAP sync', async () => {
