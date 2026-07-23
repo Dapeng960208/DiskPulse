@@ -35,7 +35,10 @@ async function mountPage() {
         ElInput: passthrough('ElInput', 'input'),
         ElSelect: passthrough('ElSelect', 'select'),
         ElOption: passthrough('ElOption', 'option'),
-        ElTableColumn: { name: 'ElTableColumn', template: '<div />' },
+        ElTableColumn: {
+          name: 'ElTableColumn',
+          template: '<div><div v-if="$slots.header" data-testid="table-column-header"><slot name="header" /></div><slot :row="{}" /></div>',
+        },
         ElPagination: passthrough('ElPagination'),
         ElButton: passthrough('ElButton', 'button'),
         ElTag: passthrough('ElTag'),
@@ -68,7 +71,7 @@ describe('IncidentCenterPage', () => {
     const wrapper = await mountPage();
 
     expect(wrapper.text()).toContain('project-alpha');
-    expect(wrapper.text()).toContain('AI 处置设置');
+    expect(wrapper.get('[data-testid="table-column-header"]').text()).toContain('AI 处置设置');
     expect(incidentApi.fetchIncidents).toHaveBeenCalledWith(expect.objectContaining({ page: 1, size: 20 }));
   });
 

@@ -217,11 +217,6 @@ onMounted(query);
 
 <template>
   <section class="incident-center-page">
-    <div class="incident-center-page__actions">
-      <TableActionButton
-        action="edit"
-        @click="openAiSettings">AI 处置设置</TableActionButton>
-    </div>
     <QueryForm
       @query="{ queryParams.page = 1; query(); }"
       @reset="reset">
@@ -299,6 +294,11 @@ onMounted(query);
         align="right"
         width="150"
         fixed="right">
+        <template #header>
+          <TableActionButton
+            action="edit"
+            @click="openAiSettings">AI 处置设置</TableActionButton>
+        </template>
         <template #default="{ row }">
           <div class="list-row-actions">
             <TableActionButton
