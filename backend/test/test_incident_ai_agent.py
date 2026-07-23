@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import pytest
 from fastapi import HTTPException
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 
@@ -77,6 +77,69 @@ def test_incident_output_exposes_the_latest_ai_review_state(db_session, monkeypa
     assert result.ai_review.status == "running"
     assert result.ai_review.trigger == "lifecycle"
     assert result.ai_review.started_at == datetime(2026, 7, 23, 6, 45, tzinfo=timezone.utc)
+
+
+def test_lifecycle_review_candidates_only_include_critical_incidents(db_session):
+    from crud import incidentAiAgentCrud
+
+    critical = _incident()
+    critical.correlation_key = "critical-lifecycle"
+    critical.severity = "critical"
+    warning = _incident()
+    warning.correlation_key = "warning-lifecycle"
+    db_session.add_all([critical, warning])
+    db_session.commit()
+
+    candidates = incidentAiAgentCrud.list_lifecycle_review_candidates(
+        db_session,
+        incident_ids=[warning.id, critical.id],
+        freshest_after=UTC_NOW - timedelta(minutes=60),
+    )
+
+    assert [item.id for item in candidates] == [critical.id]
+
+
+def test_scheduled_review_candidates_prioritize_fresh_critical_items_and_cap_the_batch(db_session):
+    from crud import incidentAiAgentCrud
+
+    def add_incident(*, suffix, severity, evidence_at, analyzed_at=None):
+        item = _incident()
+        item.correlation_key = f"priority-{suffix}"
+        item.severity = severity
+        item.last_evidence_at = evidence_at
+        item.ai_analyzed_at = analyzed_at
+        db_session.add(item)
+        return item
+
+    critical_new = add_incident(suffix="critical-new", severity="critical", evidence_at=UTC_NOW)
+    critical_updated = add_incident(
+        suffix="critical-updated",
+        severity="critical",
+        evidence_at=UTC_NOW - timedelta(minutes=1),
+        analyzed_at=UTC_NOW - timedelta(minutes=31),
+    )
+    warning_new = add_incident(suffix="warning-new", severity="warning", evidence_at=UTC_NOW - timedelta(minutes=2))
+    stale = add_incident(suffix="stale", severity="critical", evidence_at=UTC_NOW - timedelta(minutes=61))
+    fillers = [
+        add_incident(suffix=f"critical-{index}", severity="critical", evidence_at=UTC_NOW - timedelta(minutes=index + 2))
+        for index in range(4)
+    ]
+    db_session.commit()
+
+    candidates = incidentAiAgentCrud.list_due_incidents(
+        db_session,
+        before=UTC_NOW - timedelta(minutes=30),
+        freshest_after=UTC_NOW - timedelta(minutes=60),
+        limit=5,
+    )
+
+    assert [item.id for item in candidates] == [
+        critical_new.id,
+        critical_updated.id,
+        *[item.id for item in fillers[:3]],
+    ]
+    assert warning_new.id not in [item.id for item in candidates]
+    assert stale.id not in [item.id for item in candidates]
 
 
 def test_agent_assessment_rejects_status_skips_and_accepts_a_single_next_step():
