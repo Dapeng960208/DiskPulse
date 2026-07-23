@@ -224,6 +224,48 @@ def test_unified_entrypoint_runs_migrations_before_initialization(monkeypatch):
     ]
 
 
+def test_markdown_renderer_rejects_unsupported_storage_type():
+    initializer = _initializer()
+
+    with pytest.raises(ValueError, match="Unsupported storage type"):
+        initializer.render_event_association_markdown("unsupported")
+
+
+def test_main_reports_initialization_summary(monkeypatch, capsys):
+    initializer = _initializer()
+    monkeypatch.setattr(
+        initializer,
+        "run_database_initialization",
+        lambda: initializer.InitializationResult(
+            catalog_size=730,
+            matched_existing=725,
+            inserted=5,
+            unmanaged=2,
+        ),
+    )
+
+    assert initializer.main() == 0
+    assert capsys.readouterr().out.strip() == (
+        "Vendor event definitions initialized: catalog=730, "
+        "matched_existing=725, inserted=5, unmanaged=2"
+    )
+
+
+def test_main_returns_nonzero_and_reports_failure(monkeypatch, capsys):
+    initializer = _initializer()
+
+    def fail():
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(initializer, "run_database_initialization", fail)
+
+    assert initializer.main() == 1
+    assert capsys.readouterr().err.strip() == (
+        "Vendor event definition initialization failed: "
+        "RuntimeError: database unavailable"
+    )
+
+
 @pytest.mark.parametrize(
     ("storage_type", "filename", "expected_count"),
     (
