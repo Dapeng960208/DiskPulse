@@ -20,6 +20,7 @@ import {
   ElTag,
   ElTabPane,
   ElTabs,
+  ElTooltip,
 } from 'element-plus';
 import { computed, defineAsyncComponent, onBeforeMount, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
@@ -161,6 +162,11 @@ function vendorEventDescription(event) {
     return '该事件代码尚未完成审核，不能根据候选定义推断系统问题；请结合规范化日志和厂商文档核查。';
   }
   return event.description_zh || '该代码尚未维护中文说明，请结合规范化日志核查。';
+}
+
+function vendorEventRecommendedSolution(event) {
+  if (!hasReviewedVendorSemantics(event)) return '暂无可核验官方方案';
+  return event.recommended_solution_zh || '暂无可核验官方方案';
 }
 
 const severityChartData = computed(() => [
@@ -837,16 +843,24 @@ onBeforeMount(() => {
                 </ElTableColumn>
                 <ElTableColumn
                   label="关联类型"
-                  min-width="170">
+                  min-width="120">
                   <template #default="{ row }">
-                    <div class="system-event-semantic-tags">
+                    <ElTooltip
+                      placement="top"
+                      effect="light"
+                      popper-class="system-event-association-tooltip">
+                      <template #content>
+                        <div class="system-event-association-guidance">
+                          <strong>关联提示</strong>
+                          <p>{{ vendorEventDescription(row) }}</p>
+                          <strong>采取措施</strong>
+                          <p>{{ vendorEventRecommendedSolution(row) }}</p>
+                        </div>
+                      </template>
                       <ElTag :type="vendorEventAssociationTagType(row)">
                         {{ vendorEventAssociationLabel(row) }}
                       </ElTag>
-                      <ElTag :type="hasReviewedVendorSemantics(row) ? 'success' : 'warning'">
-                        {{ vendorEventReviewLabel(row) }}
-                      </ElTag>
-                    </div>
+                    </ElTooltip>
                   </template>
                 </ElTableColumn>
                 <ElTableColumn
@@ -940,9 +954,7 @@ onBeforeMount(() => {
             :span="2">{{ vendorEventDescription(systemEventDetail) }}</ElDescriptionsItem>
           <ElDescriptionsItem
             label="推荐解决方案"
-            :span="2">{{ hasReviewedVendorSemantics(systemEventDetail) && systemEventDetail.recommended_solution_zh
-              ? systemEventDetail.recommended_solution_zh
-              : '暂无可核验官方方案' }}</ElDescriptionsItem>
+            :span="2">{{ vendorEventRecommendedSolution(systemEventDetail) }}</ElDescriptionsItem>
         </ElDescriptions>
         <details v-if="systemEventDetail?.fingerprint">
           <summary>技术关联信息</summary>
@@ -967,7 +979,9 @@ onBeforeMount(() => {
   height: 100%;
 }
 .repeated-event__code { margin-top: 2px; color: var(--text-secondary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-size-xs); }
-.system-event-semantic-tags { display: flex; flex-wrap: wrap; gap: var(--spacing-xs); }
+.system-event-association-guidance { max-width: 360px; line-height: 1.5; }
+.system-event-association-guidance p { margin: var(--spacing-xs) 0 var(--spacing-sm); }
+.system-event-association-guidance p:last-child { margin-bottom: 0; }
 .system-event-detail { display: grid; gap: var(--spacing-sm); min-height: 120px; }
 .system-event-detail pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-size-sm); }
 .system-event-detail details { color: var(--text-secondary); }

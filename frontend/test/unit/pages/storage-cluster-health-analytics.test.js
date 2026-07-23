@@ -667,7 +667,7 @@ describe('storage cluster health analytics page', () => {
     const eventSection = wrapper.get('.system-events');
     expect(eventSection.find('strong').text()).toBe('待审核 · 未分类厂商事件');
     expect(eventSection.findAllComponents({ name: 'ElTag' }).map((tag) => tag.text()))
-      .toEqual(expect.arrayContaining(['未分类厂商事件', '待审核']));
+      .toEqual(['未分类厂商事件']);
 
     await eventSection.findComponent({ name: 'TableActionButton' }).trigger('click');
     await flushPromises();
