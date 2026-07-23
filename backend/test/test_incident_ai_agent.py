@@ -40,6 +40,119 @@ def _incident(*, status="open"):
     )
 
 
+def test_performance_incident_snapshot_includes_hourly_24h_metric_context(db_session, monkeypatch):
+    from crud import storageHealthAnalyticsCrud
+    from services import incidentAiAgentService
+
+    incident = _incident()
+    incident.storage_cluster_id = 7
+    db_session.add(incident)
+    db_session.commit()
+    captured = {}
+
+    def hourly_context(_db, *, storage_cluster_id, asset_type, asset_id, start_time, end_time):
+        captured.update({
+            "storage_cluster_id": storage_cluster_id,
+            "asset_type": asset_type,
+            "asset_id": asset_id,
+            "start_time": start_time,
+            "end_time": end_time,
+        })
+        return [{
+            "hour_start": UTC_NOW - timedelta(hours=1),
+            "sample_count": 6,
+            "latency_read": 1.5,
+            "latency_write": 2.5,
+            "latency_total": 2.0,
+            "iops_total": 240.0,
+            "throughput_total": 4096.0,
+        }]
+
+    monkeypatch.setattr(
+        storageHealthAnalyticsCrud,
+        "get_hourly_asset_performance",
+        hourly_context,
+        raising=False,
+    )
+
+    snapshot = incidentAiAgentService._safe_snapshot(db_session, incident)
+
+    context = snapshot["category_context"]
+    assert captured == {
+        "storage_cluster_id": 7,
+        "asset_type": "volume",
+        "asset_id": "9",
+        "start_time": UTC_NOW - timedelta(hours=24),
+        "end_time": UTC_NOW,
+    }
+    assert context["data_status"] == "data"
+    assert context["window"] == {
+        "start_at": "2026-07-22T06:45:00Z",
+        "end_at": "2026-07-23T06:45:00Z",
+        "timezone": "UTC",
+    }
+    assert context["hourly_metrics"] == [{
+        "hour_start": "2026-07-23T05:45:00Z",
+        "sample_count": 6,
+        "latency_read": 1.5,
+        "latency_write": 2.5,
+        "latency_total": 2.0,
+        "iops_total": 240.0,
+        "throughput_total": 4096.0,
+    }]
+    assert context["metric_summary"]["latency_total"] == {
+        "unit": "ms",
+        "sample_count": 1,
+        "min": 2.0,
+        "max": 2.0,
+        "average": 2.0,
+    }
+
+
+def test_performance_incident_snapshot_marks_missing_or_unavailable_metrics(db_session, monkeypatch):
+    from crud import storageHealthAnalyticsCrud
+    from services import incidentAiAgentService
+
+    incident = _incident()
+    incident.storage_cluster_id = 7
+    db_session.add(incident)
+    db_session.commit()
+    monkeypatch.setattr(
+        storageHealthAnalyticsCrud,
+        "get_hourly_asset_performance",
+        lambda *_args, **_kwargs: [],
+        raising=False,
+    )
+
+    no_samples = incidentAiAgentService._safe_snapshot(db_session, incident)["category_context"]
+
+    assert no_samples["data_status"] == "no_samples"
+    assert no_samples["data_gaps"] == ["performance_metrics_unavailable"]
+
+    def query_failure(*_args, **_kwargs):
+        raise RuntimeError("QuestDB connection details must not reach the model")
+
+    monkeypatch.setattr(
+        storageHealthAnalyticsCrud,
+        "get_hourly_asset_performance",
+        query_failure,
+    )
+    unavailable = incidentAiAgentService._safe_snapshot(db_session, incident)["category_context"]
+
+    assert unavailable["data_status"] == "unavailable"
+    assert unavailable["data_gaps"] == ["performance_metrics_query_failed"]
+
+
+def test_agent_prompt_requires_category_context_facts_and_disallows_unprovided_signals():
+    from services.incidentAiAgentService import _messages
+
+    prompt = _messages({"category_context": {}})[0]["content"]
+
+    assert "category_context" in prompt
+    assert "CPU" in prompt
+    assert "进程" in prompt
+
+
 def test_incident_output_exposes_the_latest_ai_review_state(db_session, monkeypatch):
     import models
     from routers import forecast_incidents
