@@ -10,8 +10,15 @@ from sqlalchemy.orm import Session
 
 from crud import aiCrud, incidentAiAgentCrud
 from models import AIConfig, AIPlatformSetting
-from schemas.aiSchema import AIModelCreate, AIModelPatch
-from services.ai_client import AIClientError, _base_url, _headers, _timeout, chat_completion
+from schemas.aiSchema import AIModelCreate, AIModelDiscoveryRequest, AIModelPatch
+from services.ai_client import (
+    AIClientError,
+    _base_url,
+    _headers,
+    _timeout,
+    chat_completion,
+    list_provider_models,
+)
 from services.ai_reasoning_service import (
     control_from_model,
     failed_reasoning_control,
@@ -191,6 +198,36 @@ def _get_or_404(db: Session, model_id: int) -> AIConfig:
     return model
 
 
+def _discovery_config(
+    *,
+    provider: str,
+    base_url: str,
+    api_key_encrypted: str,
+) -> AIConfig:
+    return AIConfig(
+        name="model-discovery",
+        provider=provider,
+        base_url=base_url,
+        api_key_encrypted=api_key_encrypted,
+        model="",
+    )
+
+
+def _resolve_model_identifier(model: AIConfig) -> str:
+    configured = (model.model or "").strip()
+    return configured or list_provider_models(model)[0]
+
+
+def discover_models(payload: AIModelDiscoveryRequest) -> dict:
+    config = _discovery_config(
+        provider=payload.provider,
+        base_url=payload.base_url,
+        api_key_encrypted=encrypt_secret(payload.api_key),
+    )
+    models = list_provider_models(config)
+    return {"models": models, "default_model": models[0]}
+
+
 def _append_model_audit(
     db: Session,
     *,
@@ -249,9 +286,19 @@ def create_model(
     action = "ai.model.create"
     try:
         values = payload.model_dump(exclude={"api_key"})
+        api_key_encrypted = encrypt_secret(payload.api_key)
+        values["model"] = values["model"].strip()
+        if not values["model"]:
+            values["model"] = _resolve_model_identifier(
+                _discovery_config(
+                    provider=values["provider"],
+                    base_url=values["base_url"],
+                    api_key_encrypted=api_key_encrypted,
+                )
+            )
         model = AIConfig(
             **values,
-            api_key_encrypted=encrypt_secret(payload.api_key),
+            api_key_encrypted=api_key_encrypted,
             created_by=actor_id,
             updated_by=actor_id,
         )
@@ -299,6 +346,7 @@ def update_model(
     try:
         model = _get_or_404(db, model_id)
         values = payload.model_dump(exclude_unset=True, exclude={"api_key"})
+        requested_model = values.pop("model", None)
         disabling_default = (
             ("enabled" in values and not values["enabled"])
             or ("enable_chat" in values and not values["enable_chat"])
@@ -309,6 +357,9 @@ def update_model(
             setattr(model, key, value)
         if "api_key" in payload.model_fields_set:
             model.api_key_encrypted = encrypt_secret(payload.api_key or "")
+        if requested_model is not None:
+            model.model = requested_model
+            model.model = _resolve_model_identifier(model)
         model.updated_by = actor_id
         model.updated_at = datetime.now()
         if {"provider", "base_url", "model", "api_key"} & payload.model_fields_set:

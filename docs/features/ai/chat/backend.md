@@ -98,6 +98,14 @@
 
 `GET|PATCH /admin/ai-settings` 仅允许超级管理员读取和修改默认模型。默认模型必须同时满足 `enabled=true` 和 `enable_chat=true`；停用、取消聊天权限或删除当前默认模型返回 `409`，要求管理员先切换默认值。
 
+### 4.3 自动发现模型列表
+
+`AIModelCreate.model` 与 `AIModelPatch.model` 允许空字符串。手工提供非空标识时不会请求 Provider；空值仅在模型配置的创建或更新流程中触发自动发现，并采用 Provider 返回的第一个可用标识，数据库中不会持久化空模型标识。
+
+`POST /admin/ai-models/discover` 只允许超级管理员调用，接收 Provider、Base URL 与临时 API Key，返回 `{models, default_model}`。API Key 只用于当前服务端请求：先在内存中加密以复用统一认证头构造，不写入数据库、响应或审计；客户端错误只返回通用中文提示。模型目录最多保留 200 个非空、长度不超过 200 的去重标识。
+
+OpenAI 兼容 Provider 使用 `GET /models` 的 `data[].id`，Ollama 使用 `GET /api/tags` 的 `models[].name`，Anthropic 协议使用 `GET /v1/models`。Claude Code 没有可安全调用的模型目录接口，会返回受控的“不支持自动获取”错误。目录请求使用至多 10 秒超时；HTTP、超时和无效响应均不得回显上游地址、响应正文或密钥。
+
 ## 5. 动态工具与系统管理权限
 
 常规工具仍以业务路由为唯一参数契约：只有 `GET` 且显式设置 `openapi_extra.ai_exposed=true` 的路由才对登录用户注册。Path 和 Query 参数直接生成 Pydantic 模型，并使用 `extra="forbid"` 拒绝模型擅自增加的参数。

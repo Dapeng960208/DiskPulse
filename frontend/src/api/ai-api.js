@@ -164,6 +164,7 @@ export default {
   ),
   streamMessage: streamConversationMessage,
   listAdminModels: () => request('get', '/admin/ai-models'),
+  discoverModels: (payload) => request('post', '/admin/ai-models/discover', { data: payload }),
   createModel: (payload) => request('post', '/admin/ai-models', { data: payload }),
   updateModel: (id, payload) => request('patch', `/admin/ai-models/${id}`, { data: payload }),
   deleteModel: (id) => request('delete', `/admin/ai-models/${id}`),

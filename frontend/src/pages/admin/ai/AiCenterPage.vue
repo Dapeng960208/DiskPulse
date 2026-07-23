@@ -69,6 +69,9 @@ const form = reactive({
   system_prompt: '',
 });
 const modelSubmitting = ref(false);
+const discoveringModels = ref(false);
+const discoveredModels = ref([]);
+const modelDiscoveryStatus = ref('idle');
 const formSnapshot = ref(JSON.stringify(form));
 const isModelDirty = computed(() => JSON.stringify(form) !== formSnapshot.value);
 const availableDefaultModels = computed(() => models.value.filter(
@@ -150,12 +153,16 @@ function resetForm() {
     name: '', description: '', provider: defaultProvider.value, base_url: defaultProvider.baseUrl, api_key: '', model: '',
     enabled: false, enable_chat: true, temperature: 0.3, max_tokens: 2048, system_prompt: '',
   });
+  discoveredModels.value = [];
+  modelDiscoveryStatus.value = 'idle';
 }
 
 function applyProviderPreset(provider) {
   const preset = providerOptions.find((item) => item.value === provider);
   form.provider = provider;
   if (preset) form.base_url = preset.baseUrl;
+  discoveredModels.value = [];
+  modelDiscoveryStatus.value = 'idle';
 }
 
 function addModel() {
@@ -180,12 +187,18 @@ function editModel(model) {
     max_tokens: model.max_tokens,
     system_prompt: model.system_prompt || '',
   });
+  discoveredModels.value = model.model ? [model.model] : [];
+  modelDiscoveryStatus.value = 'idle';
   formSnapshot.value = JSON.stringify(form);
   openModelDialog();
 }
 
 async function saveModel() {
   if (modelSubmitting.value) return;
+  if (!form.model.trim() && (!editingId.value || form.api_key)) {
+    const discovered = await discoverModels();
+    if (!discovered) return;
+  }
   modelSubmitting.value = true;
   try {
     const payload = { ...form };
@@ -201,6 +214,37 @@ async function saveModel() {
   }
 }
 
+async function discoverModels({ quiet = false } = {}) {
+  if (discoveringModels.value) return false;
+  discoveringModels.value = true;
+  modelDiscoveryStatus.value = 'loading';
+  try {
+    const result = await aiApi.discoverModels({
+      provider: form.provider,
+      base_url: form.base_url.trim(),
+      api_key: form.api_key,
+    });
+    discoveredModels.value = Array.isArray(result.models)
+      ? result.models.filter((item) => typeof item === 'string' && item.trim())
+      : [];
+    const defaultModel = typeof result.default_model === 'string' ? result.default_model.trim() : '';
+    if (!form.model.trim() && defaultModel) form.model = defaultModel;
+    modelDiscoveryStatus.value = discoveredModels.value.length ? 'ready' : 'failed';
+    if (!discoveredModels.value.length) {
+      if (!quiet) ElMessage.error('未获取到可用模型，请手工填写模型标识');
+      return false;
+    }
+    if (!quiet) ElMessage.success(`已获取 ${discoveredModels.value.length} 个模型`);
+    return true;
+  } catch {
+    modelDiscoveryStatus.value = 'failed';
+    if (!quiet) ElMessage.error('模型列表获取失败，请检查连接或手工填写模型标识');
+    return false;
+  } finally {
+    discoveringModels.value = false;
+  }
+}
+
 async function testModel(model) {
   const result = await aiApi.testModel(model.id);
   ElMessage.success(`${result.message}：${result.reply || 'OK'}`);
@@ -212,6 +256,15 @@ function capabilitySourceText(value) {
     official_catalog: '官方能力目录',
     unknown: '未知',
   }[value] || '未知';
+}
+
+function modelDiscoveryStatusText(value) {
+  return {
+    idle: '待获取',
+    loading: '获取中',
+    ready: '已获取',
+    failed: '获取失败',
+  }[value] || '待获取';
 }
 
 function capabilityStatusText(value) {
@@ -536,9 +589,34 @@ onMounted(async () => {
           type="password"
           show-password
           :placeholder="editingId ? '留空表示不修改' : 'Ollama 可留空'" /></ElFormItem>
-        <ElFormItem
-          label="模型标识"
-          required><ElInput v-model="form.model" /></ElFormItem>
+        <ElFormItem label="模型标识">
+          <div class="model-discovery">
+            <ElSelect
+              v-model="form.model"
+              class="model-discovery__select"
+              filterable
+              allow-create
+              clearable
+              :loading="discoveringModels"
+              placeholder="留空时保存后自动获取">
+              <ElOption
+                v-for="modelId in discoveredModels"
+                :key="modelId"
+                :label="modelId"
+                :value="modelId" />
+            </ElSelect>
+            <ElButton
+              :loading="discoveringModels"
+              @click="discoverModels">
+              获取模型
+            </ElButton>
+            <div
+              class="model-discovery__hint"
+              aria-live="polite">
+              填写时直接作为默认模型；留空时自动获取。模型列表状态：{{ modelDiscoveryStatusText(modelDiscoveryStatus) }}
+            </div>
+          </div>
+        </ElFormItem>
         <ElFormItem label="描述"><ElInput v-model="form.description" /></ElFormItem>
         <div class="write-form-section">生成参数</div>
         <ElFormItem label="Temperature"><ElInputNumber
@@ -593,6 +671,20 @@ onMounted(async () => {
 .ai-default-model span {
   color: var(--text-tertiary);
   font-size: 12px;
+}
+.model-discovery {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.model-discovery__select {
+  min-width: 0;
+}
+.model-discovery__hint {
+  grid-column: 1 / -1;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .ai-default-model__select {
   width: min(320px, 40vw);

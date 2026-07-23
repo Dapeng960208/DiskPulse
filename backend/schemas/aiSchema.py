@@ -40,7 +40,7 @@ class AIModelCreate(BaseModel):
     provider: AIProvider = "openai"
     base_url: str = Field(default="", max_length=500)
     api_key: str = Field(default="", max_length=500)
-    model: str = Field(min_length=1, max_length=200)
+    model: str = Field(default="", max_length=200)
     enabled: bool = False
     enable_chat: bool = True
     temperature: float = Field(default=0.3, ge=0, le=2)
@@ -54,12 +54,18 @@ class AIModelPatch(BaseModel):
     provider: AIProvider | None = None
     base_url: str | None = Field(default=None, max_length=500)
     api_key: str | None = Field(default=None, max_length=500)
-    model: str | None = Field(default=None, min_length=1, max_length=200)
+    model: str | None = Field(default=None, max_length=200)
     enabled: bool | None = None
     enable_chat: bool | None = None
     temperature: float | None = Field(default=None, ge=0, le=2)
     max_tokens: int | None = Field(default=None, ge=1, le=128000)
     system_prompt: str | None = Field(default=None, max_length=8000)
+
+
+class AIModelDiscoveryRequest(BaseModel):
+    provider: AIProvider = "openai"
+    base_url: str = Field(default="", max_length=500)
+    api_key: str = Field(default="", max_length=500)
 
 
 class AIModelOut(BaseModel):

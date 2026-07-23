@@ -43,6 +43,7 @@ describe('AI API and SSE stream', () => {
     await aiApi.getConversation(3);
     await aiApi.deleteConversation(3);
     await aiApi.listAdminModels();
+    await aiApi.discoverModels({ provider: 'openai', base_url: 'https://api.example.com/v1', api_key: '' });
     await aiApi.createModel({ name: 'model' });
     await aiApi.updateModel(4, { enabled: true });
     await aiApi.deleteModel(4);
@@ -62,6 +63,11 @@ describe('AI API and SSE stream', () => {
     expect(request.patch).toHaveBeenCalledWith(
       '/admin/ai-settings',
       { default_chat_model_id: 4 },
+      { params: undefined },
+    );
+    expect(request.post).toHaveBeenCalledWith(
+      '/admin/ai-models/discover',
+      { provider: 'openai', base_url: 'https://api.example.com/v1', api_key: '' },
       { params: undefined },
     );
     expect(request.post).toHaveBeenCalledWith(

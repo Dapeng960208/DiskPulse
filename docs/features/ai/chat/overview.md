@@ -86,6 +86,7 @@ API Key 使用 `cryptography` 的 Fernet 加密，密钥由独立的 `ai.config_
 ## 7. 管理 API
 
 - `GET|POST /admin/ai-models`
+- `POST /admin/ai-models/discover`
 - `PATCH|DELETE /admin/ai-models/{id}`
 - `POST /admin/ai-models/{id}/test`
 - `POST /admin/ai-models/{id}/capabilities/refresh`
@@ -95,6 +96,8 @@ API Key 使用 `cryptography` 的 Fernet 加密，密钥由独立的 `ai.config_
 - `GET /admin/ai-audits/conversations/{conversation_id}`
 
 超级管理员通过 `PATCH /admin/ai-settings` 设置全局默认聊天模型。默认模型必须启用且允许聊天；停用或删除当前默认模型会返回 `409`，必须先更换默认模型。创建模型、修改 Provider/Base URL/API Key/模型标识或连接测试成功时会刷新能力，也可以手动调用刷新接口。刷新失败不阻止保存配置，但该模型只能使用 `auto`。
+
+模型标识可以留空。手工填写时直接作为该配置的默认模型标识；留空时服务端通过 `POST /admin/ai-models/discover` 获取 Provider 模型列表，并使用返回的第一个可用标识创建或更新配置。发现接口只向超级管理员开放，返回去重、限量后的 `models` 和 `default_model`，不回显 API Key 或 Provider 原始元数据。
 
 前端入口为 `/admin/ai-center?tab=models|audit`，隐藏审计详情路由为 `/admin/ai-center/audits/:id`。
 

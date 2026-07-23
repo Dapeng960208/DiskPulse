@@ -295,6 +295,51 @@ def _raise_provider_error(error: httpx.HTTPError) -> None:
     raise AIClientError("AI 服务请求失败") from error
 
 
+def list_provider_models(config: AIConfig) -> list[str]:
+    """Return a bounded, provider-normalized list without exposing upstream metadata."""
+    if config.provider == "claude_code":
+        raise AIClientError("Claude Code 不支持自动获取模型列表")
+
+    base = _base_url(config)
+    if not base:
+        raise AIClientError("AI base_url 未配置")
+    if provider_protocol(config) == "claude":
+        url = f"{base.rstrip('/')}/v1/models"
+        field = "data"
+    elif config.provider == "ollama":
+        url = f"{_ollama_root(config).rstrip('/')}/api/tags"
+        field = "models"
+    else:
+        url = f"{base.rstrip('/')}/models"
+        field = "data"
+
+    try:
+        response = httpx.get(url, headers=_headers(config), timeout=min(_timeout(), 10))
+        response.raise_for_status()
+        rows = response.json().get(field)
+    except httpx.HTTPError as error:
+        _raise_provider_error(error)
+    except (AttributeError, ValueError, json.JSONDecodeError) as error:
+        raise AIClientError("模型列表响应无效") from error
+
+    if not isinstance(rows, list):
+        raise AIClientError("模型列表响应无效")
+    model_ids: list[str] = []
+    for item in rows:
+        raw_id = item.get("id") or item.get("name") if isinstance(item, dict) else item
+        if not isinstance(raw_id, str):
+            continue
+        model_id = raw_id.strip()
+        if not model_id or len(model_id) > 200 or model_id in model_ids:
+            continue
+        model_ids.append(model_id)
+        if len(model_ids) == 200:
+            break
+    if not model_ids:
+        raise AIClientError("未获取到可用模型")
+    return model_ids
+
+
 def chat_completion(
     config: AIConfig,
     messages: list[dict[str, Any]],

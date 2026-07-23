@@ -32,7 +32,7 @@ from routers import (
     users,
     volumes,
 )
-from schemas.aiSchema import AIModelCreate
+from schemas.aiSchema import AIModelCreate, AIModelPatch
 from services import ai_chat_service
 from services import ai_config_service
 from services import quotaService
@@ -793,6 +793,37 @@ def test_blank_model_identifier_uses_the_first_discovered_provider_model(db_sess
     assert decrypt_secret(requested_models[0].api_key_encrypted) == "secret-key-1234"
 
 
+def test_manual_model_identifier_skips_discovery_and_blank_updates_discover_again(
+    db_session,
+    monkeypatch,
+):
+    base_config.set("ai.config_secret_key", "test-ai-config-secret-key")
+    _seed_user(db_session)
+    calls = []
+
+    def discovered_models(config):
+        calls.append(config.model)
+        return ["gpt-5.6-sol"]
+
+    monkeypatch.setattr(ai_config_service, "list_provider_models", discovered_models)
+    manual = ai_config_service.create_model(
+        db_session,
+        AIModelCreate(name="手工模型", model="manual-model"),
+        actor_id=1,
+    )
+
+    updated = ai_config_service.update_model(
+        db_session,
+        manual["id"],
+        AIModelPatch(model=""),
+        actor_id=1,
+    )
+
+    assert manual["model"] == "manual-model"
+    assert updated["model"] == "gpt-5.6-sol"
+    assert calls == [""]
+
+
 def test_super_admin_can_discover_a_sanitized_provider_model_catalog(
     api_client_factory,
     db_session,
@@ -826,6 +857,81 @@ def test_super_admin_can_discover_a_sanitized_provider_model_catalog(
     assert len(captured) == 1
     assert decrypt_secret(captured[0].api_key_encrypted) == "secret-key-1234"
     assert "secret-key-1234" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("provider", "base_url", "response_payload", "expected_url", "expected_models"),
+    [
+        (
+            "openai",
+            "https://ai.example.com/v1",
+            {"data": [{"id": "gpt-5.6-sol"}, {"id": "gpt-5.6-sol"}, {"id": "gpt-5.6-mini"}]},
+            "https://ai.example.com/v1/models",
+            ["gpt-5.6-sol", "gpt-5.6-mini"],
+        ),
+        (
+            "ollama",
+            "http://localhost:11434/v1",
+            {"models": [{"name": "llama3.3"}, {"name": "qwen3"}]},
+            "http://localhost:11434/api/tags",
+            ["llama3.3", "qwen3"],
+        ),
+    ],
+)
+def test_provider_model_listing_normalizes_supported_catalog_envelopes(
+    db_session,
+    monkeypatch,
+    provider,
+    base_url,
+    response_payload,
+    expected_url,
+    expected_models,
+):
+    from services import ai_client
+
+    base_config.set("ai.config_secret_key", "test-ai-config-secret-key")
+    model = _seed_model(db_session)
+    model.provider = provider
+    model.base_url = base_url
+    captured = {}
+
+    class Response:
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return response_payload
+
+    def request_catalog(url, *, headers, timeout):
+        captured.update(url=url, headers=headers, timeout=timeout)
+        return Response()
+
+    monkeypatch.setattr(ai_client.httpx, "get", request_catalog)
+
+    assert ai_client.list_provider_models(model) == expected_models
+    assert captured["url"] == expected_url
+    assert captured["timeout"] <= 10
+    assert captured["headers"].get("Authorization") == "Bearer secret-key-1234"
+
+
+def test_provider_model_listing_keeps_upstream_errors_sanitized(db_session, monkeypatch):
+    from services import ai_client
+
+    base_config.set("ai.config_secret_key", "test-ai-config-secret-key")
+    model = _seed_model(db_session)
+
+    def failed_request(*_args, **_kwargs):
+        raise ai_client.httpx.ReadTimeout("secret-key-1234 at internal.example")
+
+    monkeypatch.setattr(ai_client.httpx, "get", failed_request)
+
+    with pytest.raises(AIClientError, match="AI 服务请求超时") as error:
+        ai_client.list_provider_models(model)
+
+    assert "secret-key-1234" not in str(error.value)
+    assert "internal.example" not in str(error.value)
 
 
 def test_chat_stream_persists_messages_and_isolates_conversations(

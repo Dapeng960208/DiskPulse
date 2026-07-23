@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from dependencies import CurrentUserDep, get_db, require_super_admin
-from schemas.aiSchema import AIModelCreate, AIModelPatch, AIPlatformSettingsPatch
+from schemas.aiSchema import AIModelCreate, AIModelDiscoveryRequest, AIModelPatch, AIPlatformSettingsPatch
 from services import ai_audit_service, ai_config_service, audit_service
 
 
@@ -72,6 +72,14 @@ def create_model(
             actor_user_id=current_user.id,
         ),
     )
+
+
+@router.post("/ai-models/discover")
+def discover_models(payload: AIModelDiscoveryRequest, _current_user: CurrentUserDep):
+    try:
+        return ai_config_service.discover_models(payload)
+    except ai_config_service.AIClientError as error:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(error)) from error
 
 
 @router.patch(
