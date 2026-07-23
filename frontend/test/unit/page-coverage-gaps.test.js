@@ -1,6 +1,8 @@
 import { defineComponent, h } from 'vue';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -76,6 +78,8 @@ const { default: RealTimePage } = await import('@/pages/common/RealTimePage.vue'
 const { default: AlertListPage } = await import('@/pages/alert/AlertListPage.vue');
 const { default: StorageClusterDetailPage } = await import('@/pages/admin/storage-cluster/StorageClusterDetailPage.vue');
 const { default: UserListPage } = await import('@/pages/admin/user/UserListPage.vue');
+
+const realTimePageSource = readFileSync(resolve('src/pages/common/RealTimePage.vue'), 'utf8');
 
 const row = {
   id: 9,
@@ -655,6 +659,17 @@ describe('alert and user page coverage gaps', () => {
 });
 
 describe('real-time page coverage gaps', () => {
+  it('uses one shared data table for async alerts without page-level table styling', () => {
+    const dataTableTags = realTimePageSource.match(/<DataTable\b[^>]*>/gs) ?? [];
+
+    expect(dataTableTags).toHaveLength(1);
+    expect(dataTableTags[0]).toContain(':data="alertResult.content"');
+    expect(dataTableTags[0]).toContain(':loading="alertQuerying"');
+    expect(realTimePageSource).not.toMatch(/<ElTable\b/);
+    expect(realTimePageSource).not.toMatch(/:deep\(\.el-table\b/);
+    expect(realTimePageSource).not.toMatch(/<(?:DataTable|ElTable)\b[^>]*\bstyle\s*=/s);
+  });
+
   it('waits for a valid detail resource id before requesting real-time data or alerts', async () => {
     mocks.storageUsageApi.fetchStorageRealTimeDataById.mockClear();
     mocks.alertApi.fetch.mockClear();
