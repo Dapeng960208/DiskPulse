@@ -78,6 +78,7 @@ describe('IncidentDetailDrawer', () => {
     const wrapper = await mountDrawer();
 
     expect(incidentApi.fetchIncident).toHaveBeenCalledWith(9);
+    expect(wrapper.findComponent({ name: 'ElDrawer' }).attributes('title')).toBe('设备健康风险 #9');
     expect(wrapper.text()).toContain('确定性诊断');
     const diagnosisTooltip = wrapper.findAllComponents({ name: 'ElTooltip' })
       .find((tooltip) => tooltip.text().includes('确定性诊断'));
@@ -317,6 +318,7 @@ describe('IncidentDetailDrawer', () => {
     });
     const wrapper = await mountDrawer();
 
+    expect(wrapper.findComponent({ name: 'ElDrawer' }).attributes('title')).toBe('系统故障事件 #9');
     expect(wrapper.text()).toContain('厂商系统事件与故障日志');
     expect(wrapper.text()).toContain('故障日志');
     expect(wrapper.text()).toContain('认证服务查询失败');

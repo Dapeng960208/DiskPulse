@@ -515,6 +515,10 @@ _EVIDENCE_PRESENTATIONS = {
     "hard_limit_alert": ("硬限额告警", "资源使用率已达到当前有效硬限额告警阈值。"),
     "soft_limit_alert": ("软限额告警", "资源使用率已达到当前有效软限额告警阈值。"),
     "severe_vendor_event": ("厂商严重系统事件", "厂商系统报告了需要优先核查的严重事件。"),
+    "continuous_performance_anomaly": (
+        "持续性能异常",
+        "性能指标持续偏离历史基线，请核查延迟、IOPS、吞吐量及同期负载。",
+    ),
     "repeated_fault": ("重复故障事件", "同一故障指纹在短时间内重复出现。"),
     "collection_error": ("采集异常", "监控采集任务未能成功完成。"),
 }
@@ -849,15 +853,21 @@ def build_evidence_presentation(
     )
     group_key = source or evidence_type or "other"
     group_label = {
-        "forecast": "容量预测依据",
-        "storage_alert": "DiskPulse 告警依据",
-        "vendor_event": "厂商系统事件依据",
-        "telemetry": "监控采集依据",
+        "forecast": "容量预测",
+        "capacity_forecast": "容量预测",
+        "storage_alert": "容量告警",
+        "diskpulse_alert": "容量告警",
+        "vendor_event": "厂商系统事件",
+        "anomaly_observation": "性能异常",
+        "telemetry": "监控异常",
     }.get(source, "其他关联依据")
     scope_label = {
         "forecast": "容量预测",
+        "capacity_forecast": "容量预测",
         "storage_alert": "DiskPulse 存储告警",
+        "diskpulse_alert": "DiskPulse 存储告警",
         "vendor_event": "厂商系统事件",
+        "anomaly_observation": "性能指标",
         "telemetry": "监控采集",
     }.get(source, "关联记录")
     return {

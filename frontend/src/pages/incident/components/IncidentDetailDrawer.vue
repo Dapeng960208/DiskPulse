@@ -65,6 +65,12 @@ const categoryLabels = {
   performance_contention: '性能争用',
   telemetry_blindspot: '监控盲区',
 };
+const incidentThemeLabels = {
+  capacity_pressure: '容量告警',
+  device_fault: '设备健康风险',
+  performance_contention: '性能异常',
+  telemetry_blindspot: '监控异常',
+};
 const categoryDescriptions = {
   capacity_pressure: '容量预测显示可能耗尽，或当前资源的有效告警规则达到阈值。默认按硬限额 80%/90%/95%；用户目录优先采用项目组规则，其次项目规则，最后系统规则。',
   device_fault: 'NetApp EMS 或 PowerScale（Isilon）厂商系统事件达到严重级别时进入处置队列。关联类型会进一步说明它属于故障日志、性能异常、容量阈值或系统运行事件；故障指纹只用于重复归组，不能单独作为故障结论。',
@@ -135,6 +141,17 @@ const statusDescriptions = {
 const nextStatusTooltip = computed(() => nextStatus.value
   ? `仅允许相邻推进至“${statusLabels[nextStatus.value]}”，${statusDescriptions[nextStatus.value]}`
   : '事件已解决，不能继续推进状态。');
+const incidentThemeLabel = computed(() => {
+  const hasConfirmedFaultLog = (current.value.evidence || []).some((evidence) => (
+    evidence.presentation?.association_type === 'fault_log'
+    || evidence.evidence_summary?.association_type === 'fault_log'
+  ));
+  if (current.value.category === 'device_fault' && hasConfirmedFaultLog) {
+    return '系统故障事件';
+  }
+  return incidentThemeLabels[current.value.category] || '关联事件';
+});
+const drawerTitle = computed(() => `${incidentThemeLabel.value} #${current.value.id || '-'}`);
 
 function evidencePresentation(evidence) {
   if (evidence.presentation) return evidence.presentation;
@@ -158,6 +175,27 @@ function evidenceAssociationLabel(evidence) {
 
 function evidenceLogExcerpt(evidence) {
   return evidence.presentation?.log_excerpt || null;
+}
+
+function evidenceKindLabel(evidence) {
+  const associationType = evidence.presentation?.association_type
+    || evidence.evidence_summary?.association_type;
+  if (associationType === 'fault_log') return '系统故障事件';
+  if (
+    evidence.source === 'anomaly_observation'
+    || evidence.evidence_type === 'continuous_performance_anomaly'
+  ) return '性能异常';
+  if (
+    ['storage_alert', 'diskpulse_alert'].includes(evidence.source)
+    || ['hard_limit_alert', 'soft_limit_alert'].includes(evidence.evidence_type)
+  ) return '容量告警';
+  if (
+    ['forecast', 'capacity_forecast'].includes(evidence.source)
+    || evidence.evidence_type === 'forecast_exhaustion'
+  ) return '容量预测';
+  if (evidence.source === 'vendor_event') return '厂商系统事件';
+  if (['telemetry', 'telemetry_quality'].includes(evidence.source)) return '监控异常';
+  return evidence.presentation?.group_label || '其他关联信息';
 }
 
 function diagnosisGapDetails(codes = []) {
@@ -282,7 +320,7 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
   <ElDrawer
     v-model="visible"
     size="min(720px, 100%)"
-    :title="`事件 #${current.id || '-'}`">
+    :title="drawerTitle">
     <p
       v-if="error"
       class="incident-detail__error">{{ error }}</p>
@@ -293,6 +331,7 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
       <ElDescriptions
         :column="2"
         border>
+        <ElDescriptionsItem label="事件主题">{{ incidentThemeLabel }} · {{ current.display_name }}</ElDescriptionsItem>
         <ElDescriptionsItem label="受影响对象">{{ current.display_name }}</ElDescriptionsItem>
         <ElDescriptionsItem label="事件类型"><ElTooltip :content="categoryDescriptions[current.category] || '未知事件类型。'"><span>{{ categoryLabels[current.category] || current.category }}</span></ElTooltip></ElDescriptionsItem>
         <ElDescriptionsItem label="处置状态"><ElTooltip :content="statusDescriptions[current.status] || '未知处置状态。'"><span>{{ statusLabels[current.status] || current.status }}</span></ElTooltip></ElDescriptionsItem>
@@ -410,7 +449,10 @@ watch(() => [props.incident?.id, props.modelValue], load, { immediate: true });
                 :type="evidence.presentation?.association_type === 'fault_log' || evidence.evidence_summary?.association_type === 'fault_log' ? 'danger' : 'info'"
                 size="small">{{ evidenceAssociationLabel(evidence) }}</ElTag>
               <dl>
-                <div><dt>异常说明</dt><dd>{{ evidence.presentation.summary }}</dd></div>
+                <div><dt>关联类型</dt><dd><ElTag
+                  type="info"
+                  size="small">{{ evidenceKindLabel(evidence) }}</ElTag></dd></div>
+                <div><dt>关联内容</dt><dd>{{ evidence.presentation.summary }}</dd></div>
                 <div><dt>影响范围</dt><dd>{{ current.display_name || '当前对象' }} · {{ evidence.presentation.scope_label }}</dd></div>
                 <div><dt>发现时间</dt><dd>{{ formatLocalDateTime(evidence.observed_at) }}</dd></div>
                 <div v-if="evidenceLogExcerpt(evidence)"><dt>日志报错</dt><dd><pre>{{ evidenceLogExcerpt(evidence) }}</pre></dd></div>
