@@ -30,19 +30,22 @@
 
 1. 停止全部会写 QuestDB 的 Celery worker 和定时任务，并确认没有手工采集。
 2. 对 QuestDB 和 PostgreSQL 建立可恢复备份；确认所选 QuestDB 表尚未混入新 UTC 写入。
-3. 先部署数据库迁移和新代码，但不要启动采集 worker。Alembic `000000000019` 会把既有性能异常、事件证据和性能争用 Incident 的派生时间减去 8 小时，并重算 30 分钟 UTC 归并桶。
+3. 先部署数据库迁移和新代码，但不要启动采集 worker。Alembic `000000000019` 会把既有性能异常、事件证据和性能争用 Incident 的派生时间减去 8 小时，并重算 30 分钟 UTC 归并桶。Alembic `000000000020` 会按 `storage_alerts.updated_at` 的上海墙上时间契约修复 DiskPulse 容量告警证据和事件。
 4. 执行 QuestDB 表重建：
 
 ```powershell
 ..\.venv\Scripts\python.exe -m scripts.repair_questdb_timestamps `
   --apply `
   --confirm-writes-stopped `
-  --confirm-all-rows-are-legacy-local-time
+  --confirm-all-rows-are-legacy-local-time `
+  --suffix 20260723141953
 ```
 
 5. 工具对每张表建立 UTC 修复表，将 designated timestamp 通过 `dateadd('h', -8, timestamp)` 转换，核对行数和最小/最大时间，再交换表名。原表保留为带执行时间后缀的 `__local_time_backup_...` 备份，不会自动删除。
 6. 再次运行只读审计，确认非空表的最大时间不晚于当前 UTC，随后启动采集 worker 并观察新写入。
 7. 重跑容量预测和遥测质量派生任务。它们的历史结果不能仅靠平移保证日桶和覆盖率正确，必须从修复后的原始 QuestDB 点重新计算。
+
+脚本支持重复 `--table <name>` 仅处理指定表。若逐表修复在中途失败，必须先审计当前表、`__local_time_backup_...` 和 `__utc_repair_...` 状态，再只续跑尚未完成的表；严禁对已经完成平移的表再次执行减 8 小时。
 
 ## 安全边界
 
