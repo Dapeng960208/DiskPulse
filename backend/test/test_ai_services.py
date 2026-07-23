@@ -559,6 +559,44 @@ def test_tool_trace_keeps_only_safe_failure_reasons_visible():
     assert hidden == {"ok": False, "error": "工具请求失败，请稍后重试"}
 
 
+def test_stream_instructs_the_provider_to_clarify_ambiguous_goals_before_using_tools(
+    db_session, monkeypatch
+):
+    seed_user(db_session)
+    configured = seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, title="澄清目标")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    def provider_stream(_model, messages, **_kwargs):
+        system_prompt = messages[0]["content"]
+        assert "澄清问题" in system_prompt
+        assert "不要调用工具" in system_prompt
+        yield AICompletionStreamEvent(kind="delta", text="请问需要分析哪个集群和时间范围？")
+        yield AICompletionStreamEvent(
+            kind="completed",
+            text="请问需要分析哪个集群和时间范围？",
+            tool_calls=[],
+            stop_reason="final",
+        )
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    events = list(
+        ai_chat_service.stream_message(
+            app=FastAPI(),
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=1,
+            content="帮我处理一下存储问题",
+        )
+    )
+
+    assert not [event for event, _data in events if event == "tool_call_started"]
+    completed = next(data for event, data in events if event == "completed")
+    assert completed["message"]["content"] == "请问需要分析哪个集群和时间范围？"
+
+
 def test_stream_history_replaces_unattributed_assistant_turn_with_safe_placeholder(db_session, monkeypatch):
     seed_user(db_session)
     configured = seed_model(db_session)

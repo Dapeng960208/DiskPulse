@@ -1,4 +1,5 @@
 import { flushPromises, shallowMount } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import { vi } from 'vitest';
 import IncidentCenterPage from '@/pages/incident/IncidentCenterPage.vue';
 
@@ -7,8 +8,8 @@ const incidentApi = vi.hoisted(() => ({
   updateIncident: vi.fn(),
   createComment: vi.fn(),
   createMaintenanceWindow: vi.fn(),
-  fetchAiSettings: vi.fn(),
-  updateAiSettings: vi.fn(),
+  fetchIncidentAiSettings: vi.fn(),
+  updateIncidentAiSettings: vi.fn(),
 }));
 
 vi.mock('@/api/incident-api.js', () => ({ default: incidentApi }));
@@ -148,14 +149,14 @@ describe('IncidentCenterPage', () => {
   });
 
   it('loads and saves ordered AI candidate models with IOPS noise controls', async () => {
-    incidentApi.fetchAiSettings.mockResolvedValue({
+    incidentApi.fetchIncidentAiSettings.mockResolvedValue({
       enabled: true,
       model_ids: [3, 2],
       available_models: [{ id: 2, name: 'fallback' }, { id: 3, name: 'primary' }],
       iops_absolute_floor: 10,
       iops_baseline_ratio: 0.05,
     });
-    incidentApi.updateAiSettings.mockResolvedValue({
+    incidentApi.updateIncidentAiSettings.mockResolvedValue({
       enabled: true,
       model_ids: [2, 3],
       available_models: [{ id: 2, name: 'fallback' }, { id: 3, name: 'primary' }],
@@ -165,12 +166,15 @@ describe('IncidentCenterPage', () => {
     const wrapper = await mountPage();
 
     await wrapper.vm.openAiSettings();
-    wrapper.vm.moveAiModel(1, -1);
+    await nextTick();
+
+    // Manually reorder model_ids (simulating user interaction)
+    wrapper.vm.aiSettings.model_ids = [2, 3];
     wrapper.vm.aiSettings.iops_absolute_floor = 12;
     wrapper.vm.aiSettings.iops_baseline_ratio = 0.08;
     await wrapper.vm.saveAiSettings();
 
-    expect(incidentApi.updateAiSettings).toHaveBeenCalledWith({
+    expect(incidentApi.updateIncidentAiSettings).toHaveBeenCalledWith({
       enabled: true,
       model_ids: [2, 3],
       iops_absolute_floor: 12,

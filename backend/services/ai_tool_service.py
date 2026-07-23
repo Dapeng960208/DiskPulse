@@ -39,6 +39,10 @@ class AIToolDefinition:
 
 _READ_ONLY_METHODS = {"GET"}
 _SYSTEM_MANAGEMENT_METHODS = {"GET", "POST", "PATCH", "PUT", "DELETE"}
+_QUERY_FIELD_LABELS = {
+    "start_time": "开始时间",
+    "end_time": "结束时间",
+}
 
 
 def _field_alias(field) -> str:
@@ -58,18 +62,43 @@ def _body_input_field(route: APIRoute) -> tuple[Any, Field] | None:
     return annotation, Field(default=default)
 
 
+def _tool_parameter_fields(route: APIRoute) -> list[tuple[object, bool]]:
+    """Collect route parameters, including query fields declared by dependencies."""
+    collected: list[tuple[object, bool]] = []
+    seen_names: set[str] = set()
+
+    def add(field: object, *, in_path: bool) -> None:
+        name = getattr(field, "name", None)
+        if not isinstance(name, str) or name in seen_names:
+            return
+        seen_names.add(name)
+        collected.append((field, in_path))
+
+    for field in route.dependant.path_params:
+        add(field, in_path=True)
+
+    def visit(dependant: object) -> None:
+        for field in getattr(dependant, "query_params", ()):
+            add(field, in_path=False)
+        for dependency in getattr(dependant, "dependencies", ()):
+            visit(dependency)
+
+    visit(route.dependant)
+    return collected
+
+
 def _input_model(name: str, route: APIRoute) -> tuple[type[_ToolInput], tuple[ToolParameter, ...]]:
     # The route remains the single source of truth for aliases, defaults and validation.
     fields: dict[str, tuple[Any, Any]] = {}
     parameters: list[ToolParameter] = []
-    for field in [*route.dependant.path_params, *route.dependant.query_params]:
+    for field, in_path in _tool_parameter_fields(route):
         info = copy(field.field_info)
         fields[field.name] = (info.annotation, info)
         parameters.append(
             ToolParameter(
                 name=field.name,
                 alias=_field_alias(field),
-                in_path=field in route.dependant.path_params,
+                in_path=in_path,
             )
         )
     body_field = _body_input_field(route)
@@ -171,6 +200,35 @@ def _unwrap(body: object) -> object:
     return body.get("data", body)
 
 
+def _safe_http_error(status_code: int, body: object) -> str:
+    detail = body.get("detail") if isinstance(body, dict) else None
+    if status_code == 422:
+        missing_fields = []
+        if isinstance(detail, list):
+            for item in detail:
+                if not isinstance(item, dict) or item.get("type") != "missing":
+                    continue
+                location = item.get("loc")
+                field_name = location[-1] if isinstance(location, (list, tuple)) and location else None
+                label = _QUERY_FIELD_LABELS.get(field_name)
+                if label and label not in missing_fields:
+                    missing_fields.append(label)
+        if missing_fields:
+            return f"查询参数不完整：缺少{'、'.join(missing_fields)}"
+        return "查询参数无效，请检查输入后重试"
+    if status_code == 401:
+        return "认证状态已失效，请重新登录后重试"
+    if status_code == 403:
+        return "当前账号无权执行此查询"
+    if status_code == 404:
+        return "查询资源不存在或已被删除"
+    if status_code == 429:
+        return "请求过于频繁，请稍后重试"
+    if status_code in {502, 503, 504}:
+        return "数据源暂时不可用，请稍后重试"
+    return f"工具请求失败（HTTP {status_code}）"
+
+
 async def _execute(
     *,
     app: FastAPI,
@@ -197,8 +255,7 @@ async def _execute(
     except ValueError:
         return {"ok": False, "error": "工具返回了非 JSON 响应"}
     if response.status_code >= 400:
-        message = body.get("detail") if isinstance(body, dict) else None
-        return {"ok": False, "error": str(message or f"工具请求失败 ({response.status_code})")}
+        return {"ok": False, "error": _safe_http_error(response.status_code, body)}
     return {"ok": True, "data": _unwrap(body)}
 
 

@@ -629,8 +629,8 @@ onMounted(loadInitial);
           <section
             v-if="message.role === 'assistant' && message.tool_calls?.length"
             class="tool-trace"
-            aria-label="工具调用">
-            <span class="tool-trace__title">工具调用</span>
+            aria-label="执行轨迹">
+            <span class="tool-trace__title">执行轨迹</span>
             <div
               v-for="tool in message.tool_calls"
               :key="tool.call_id"
@@ -660,7 +660,7 @@ onMounted(loadInitial);
                   <pre>{{ formatToolPayload(tool.arguments) }}</pre>
                 </div>
                 <div v-if="hasToolPayload(tool.result)">
-                  <strong>返回内容</strong>
+                  <strong>{{ tool.status === 'failed' ? '失败原因' : '返回内容' }}</strong>
                   <pre>{{ formatToolPayload(tool.result) }}</pre>
                 </div>
               </div>

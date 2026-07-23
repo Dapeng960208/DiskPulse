@@ -125,7 +125,9 @@ describe('AI pages interactions', () => {
   });
 
   it('labels a safe failed tool result as the failure reason in the execution trace', async () => {
-    const wrapper = shallowMount(AiChatPage);
+    const wrapper = shallowMount(AiChatPage, {
+      global: { stubs: { ElScrollbar: passthrough('ElScrollbar') } },
+    });
     await flushPromises();
     wrapper.vm.messages = [{
       id: 90,

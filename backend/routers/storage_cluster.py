@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import io
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from datetime import datetime
 from schemas import (
     commonSchema,
     storageClusterSchema,
@@ -37,10 +37,22 @@ router = APIRouter(
 )
 
 
+def _analytics_default_end() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def _analytics_time_range(
-    start_time: Annotated[datetime, Query()],
-    end_time: Annotated[datetime, Query()],
+    start_time: Annotated[
+        datetime | None,
+        Query(description="分析开始时间；未提供时默认使用截至结束时间的最近 24 小时"),
+    ] = None,
+    end_time: Annotated[
+        datetime | None,
+        Query(description="分析结束时间；未提供时默认为当前 UTC 时间（最近 24 小时）"),
+    ] = None,
 ) -> tuple[datetime, datetime]:
+    end_time = end_time or _analytics_default_end()
+    start_time = start_time or end_time - timedelta(hours=24)
     try:
         validate_time_range(start_time, end_time)
     except ValueError as exc:

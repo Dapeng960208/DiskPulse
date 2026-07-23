@@ -5,7 +5,6 @@ import {
   ElDialog,
   ElForm,
   ElFormItem,
-  ElInputNumber,
   ElMessage,
   ElOption,
   ElSelect,
@@ -16,7 +15,9 @@ import DataTable from '@/components/data/DataTable.vue';
 import QueryForm from '@/components/form/QueryForm.vue';
 import incidentApi from '@/api/incident-api.js';
 import IncidentDetailDrawer from './components/IncidentDetailDrawer.vue';
+import IncidentAiSettingsDialog from './components/IncidentAiSettingsDialog.vue';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
+import { useIncidentAiSettings } from '@/composables/useIncidentAiSettings.js';
 
 const queryParams = reactive({ page: 1, size: 20, status: '', category: '' });
 const incidents = ref([]);
@@ -29,17 +30,19 @@ const editingIncident = ref(null);
 const editVisible = ref(false);
 const savingEdit = ref(false);
 const editForm = reactive({ severity: 'warning', status: 'open' });
-const aiSettingsVisible = ref(false);
-const aiSettingsLoading = ref(false);
-const aiSettingsSaving = ref(false);
-const aiSettingsError = ref('');
-const aiSettings = reactive({
-  enabled: false,
-  model_ids: [],
-  available_models: [],
-  iops_absolute_floor: 10,
-  iops_baseline_ratio: 0.05,
-});
+
+// Use AI settings composable
+const {
+  aiSettingsVisible,
+  aiSettingsLoading,
+  aiSettingsSaving,
+  aiSettingsError,
+  aiSettings,
+  selectedAiModels,
+  saveAiSettings,
+  openAiSettings,
+  closeAiSettings,
+} = useIncidentAiSettings();
 
 function formatLocalDateTime(value) {
   const date = new Date(value);
@@ -73,10 +76,6 @@ const categoryLabels = {
   telemetry_blindspot: '监控盲区',
 };
 const aiUrgencyLabels = { low: '低', medium: '中', high: '高', critical: '紧急' };
-
-const selectedAiModels = computed(() => aiSettings.model_ids
-  .map((id) => aiSettings.available_models.find((model) => model.id === id))
-  .filter(Boolean));
 
 const editableStatusOptions = computed(() => {
   const currentStatus = editingIncident.value?.status;
@@ -156,59 +155,6 @@ async function saveEdit() {
     error.value = '更新事件失败，请稍后重试';
   } finally {
     savingEdit.value = false;
-  }
-}
-
-async function openAiSettings() {
-  aiSettingsVisible.value = true;
-  aiSettingsLoading.value = true;
-  aiSettingsError.value = '';
-  try {
-    const settings = await incidentApi.fetchAiSettings();
-    aiSettings.enabled = settings.enabled;
-    aiSettings.model_ids = [...(settings.model_ids || [])];
-    aiSettings.available_models = settings.available_models || [];
-    aiSettings.iops_absolute_floor = Number(settings.iops_absolute_floor ?? 10);
-    aiSettings.iops_baseline_ratio = Number(settings.iops_baseline_ratio ?? 0.05);
-  } catch {
-    aiSettingsError.value = '加载 AI 处置设置失败，请确认超级管理员权限后重试';
-  } finally {
-    aiSettingsLoading.value = false;
-  }
-}
-
-function moveAiModel(index, offset) {
-  const target = index + offset;
-  if (target < 0 || target >= aiSettings.model_ids.length) return;
-  const next = [...aiSettings.model_ids];
-  [next[index], next[target]] = [next[target], next[index]];
-  aiSettings.model_ids = next;
-}
-
-async function saveAiSettings() {
-  if (aiSettings.enabled && aiSettings.model_ids.length === 0) {
-    aiSettingsError.value = '启用 AI 处置前，请至少选择一个已启用的模型';
-    return;
-  }
-  aiSettingsSaving.value = true;
-  aiSettingsError.value = '';
-  try {
-    const saved = await incidentApi.updateAiSettings({
-      enabled: aiSettings.enabled,
-      model_ids: aiSettings.model_ids,
-      iops_absolute_floor: aiSettings.iops_absolute_floor,
-      iops_baseline_ratio: aiSettings.iops_baseline_ratio,
-    });
-    aiSettings.enabled = saved.enabled;
-    aiSettings.model_ids = [...saved.model_ids];
-    aiSettings.iops_absolute_floor = Number(saved.iops_absolute_floor);
-    aiSettings.iops_baseline_ratio = Number(saved.iops_baseline_ratio);
-    aiSettingsVisible.value = false;
-    ElMessage.success('AI 处置设置已保存');
-  } catch {
-    aiSettingsError.value = '保存 AI 处置设置失败，请检查模型和参数后重试';
-  } finally {
-    aiSettingsSaving.value = false;
   }
 }
 
@@ -349,85 +295,16 @@ onMounted(query);
           @click="saveEdit">保存</ElButton>
       </template>
     </ElDialog>
-    <ElDialog
-      v-model="aiSettingsVisible"
-      title="AI 处置设置"
-      width="min(560px, calc(100% - 32px))"
-      :close-on-click-modal="false">
-      <ElForm
-        v-loading="aiSettingsLoading"
-        label-position="top">
-        <p
-          v-if="aiSettingsError"
-          class="incident-center-page__error">{{ aiSettingsError }}</p>
-        <ElFormItem label="启用 AI 处置">
-          <ElSelect v-model="aiSettings.enabled">
-            <ElOption
-              label="启用"
-              :value="true" />
-            <ElOption
-              label="关闭"
-              :value="false" />
-          </ElSelect>
-        </ElFormItem>
-        <ElFormItem label="候选模型（按优先级排序）">
-          <ElSelect
-            v-model="aiSettings.model_ids"
-            multiple
-            collapse-tags
-            placeholder="选择全局已启用模型">
-            <ElOption
-              v-for="model in aiSettings.available_models"
-              :key="model.id"
-              :label="model.name"
-              :value="model.id" />
-          </ElSelect>
-          <ol
-            v-if="selectedAiModels.length"
-            class="incident-center-page__model-priority">
-            <li
-              v-for="(model, index) in selectedAiModels"
-              :key="model.id">
-              <span>{{ index + 1 }}. {{ model.name }}</span>
-              <span class="list-row-actions">
-                <TableActionButton
-                  action="detail"
-                  :disabled="index === 0"
-                  @click="moveAiModel(index, -1)">上移</TableActionButton>
-                <TableActionButton
-                  action="detail"
-                  :disabled="index === selectedAiModels.length - 1"
-                  @click="moveAiModel(index, 1)">下移</TableActionButton>
-              </span>
-            </li>
-          </ol>
-        </ElFormItem>
-        <ElFormItem label="IOPS 绝对下限">
-          <ElInputNumber
-            v-model="aiSettings.iops_absolute_floor"
-            :min="0"
-            :precision="2"
-            :step="1" />
-        </ElFormItem>
-        <ElFormItem label="IOPS 基线比例">
-          <ElInputNumber
-            v-model="aiSettings.iops_baseline_ratio"
-            :min="0"
-            :max="1"
-            :precision="3"
-            :step="0.01" />
-        </ElFormItem>
-        <p class="incident-center-page__hint">低于 max(绝对下限，历史基线 × 比例) 的连续短时 IOPS 波动，不创建性能异常事件。</p>
-      </ElForm>
-      <template #footer>
-        <ElButton @click="aiSettingsVisible = false">取消</ElButton>
-        <ElButton
-          type="primary"
-          :loading="aiSettingsSaving"
-          :disabled="aiSettingsLoading"
-          @click="saveAiSettings">保存</ElButton>
-      </template>
-    </ElDialog>
+    <IncidentAiSettingsDialog
+      v-model:visible="aiSettingsVisible"
+      :loading="aiSettingsLoading"
+      :saving="aiSettingsSaving"
+      :error="aiSettingsError"
+      :settings="aiSettings"
+      :selected-models="selectedAiModels"
+      @save="saveAiSettings"
+      @close="closeAiSettings"
+    />
   </section>
 </template>
 
@@ -437,6 +314,4 @@ onMounted(query);
 .incident-center-page__table { min-height: 420px; }
 .incident-center-page__error { margin: 0 0 var(--spacing-sm); color: var(--danger-color); }
 .incident-center-page__hint { margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
-.incident-center-page__model-priority { display: grid; gap: 6px; width: 100%; margin: 8px 0 0; padding-left: 20px; }
-.incident-center-page__model-priority li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 </style>
