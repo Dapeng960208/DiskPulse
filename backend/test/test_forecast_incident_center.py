@@ -27,6 +27,9 @@ def test_questdb_utc_contract_migration_repairs_existing_performance_incident_ti
     assert "regexp_replace" in sql
     assert "correlation_bucket_at" in sql
     assert "last_evidence_at" in sql
+    assert "performance_incident_ids" in sql
+    assert "1900-01-01 00:00:00+00" in sql
+    assert "interval '1 microsecond'" in sql
 
 
 def _asset(project_id: int | None = 1):
