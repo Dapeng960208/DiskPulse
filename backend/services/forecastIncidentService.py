@@ -38,6 +38,8 @@ MIN_VALID_DAYS = 30
 MIN_COVERAGE = 0.80
 ROBUST_Z_THRESHOLD = 3.5
 ZERO_MAD_SCORE = 100.0
+DEFAULT_IOPS_ABSOLUTE_FLOOR = 10.0
+DEFAULT_IOPS_BASELINE_RATIO = 0.05
 INCIDENT_STATES = ("open", "acknowledged", "investigating", "mitigated", "resolved")
 INCIDENT_CATEGORIES = (
     "capacity_pressure",
@@ -328,6 +330,38 @@ def robust_z_score(*, value: float, median: float, mad: float) -> float:
 
 def qualifies_performance_anomaly(scores: list[float]) -> bool:
     return len(scores) >= 3 and all(abs(score) >= ROBUST_Z_THRESHOLD for score in scores[-3:])
+
+
+def performance_iops_noise_threshold(
+    *,
+    resource_baseline: float | None,
+    cluster_baseline: float | None,
+    absolute_floor: float = DEFAULT_IOPS_ABSOLUTE_FLOOR,
+    baseline_ratio: float = DEFAULT_IOPS_BASELINE_RATIO,
+) -> float:
+    """Return the bounded IOPS floor for zero-MAD low-load suppression."""
+    baseline = resource_baseline if resource_baseline is not None else cluster_baseline
+    baseline = max(0.0, float(baseline or 0.0))
+    return max(float(absolute_floor), baseline * float(baseline_ratio))
+
+
+def should_suppress_zero_mad_iops(
+    values: list[float],
+    *,
+    resource_baseline: float | None,
+    cluster_baseline: float | None,
+    absolute_floor: float = DEFAULT_IOPS_ABSOLUTE_FLOOR,
+    baseline_ratio: float = DEFAULT_IOPS_BASELINE_RATIO,
+) -> bool:
+    if len(values) < 3:
+        return False
+    threshold = performance_iops_noise_threshold(
+        resource_baseline=resource_baseline,
+        cluster_baseline=cluster_baseline,
+        absolute_floor=absolute_floor,
+        baseline_ratio=baseline_ratio,
+    )
+    return all(0.0 <= float(value) <= threshold for value in values[-3:])
 
 
 def build_diagnosis(
