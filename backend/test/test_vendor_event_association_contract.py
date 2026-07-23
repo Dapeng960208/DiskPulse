@@ -371,20 +371,8 @@ def test_runtime_seed_does_not_restore_pre_017_powerscale_semantics():
         "migrate.versions.000000000016_vendor_event_definitions"
     )
     service = _contract_module("services.vendorEventDefinitionService")
-    fields = (
-        "storage_type",
-        "event_code",
-        "association_type",
-        "title_zh",
-        "description_zh",
-        "official_reference_url",
-        "default_severity",
-        "version_scope",
-        "review_status",
-    )
-    migration_seeds = [dict(zip(fields, row)) for row in migration._COMMON_SEEDS]
 
-    assert migration_seeds == list(service._LEGACY_COMMON_DEFINITIONS)
+    assert not hasattr(migration, "_COMMON_SEEDS")
     assert all(
         seed["association_type"] == "unknown"
         and seed["review_status"] == "pending"

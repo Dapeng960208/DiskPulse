@@ -11,9 +11,6 @@ from alembic import command
 from alembic.config import Config
 
 from appConfig import base_config
-from models import VendorEventDefinition
-
-
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = BACKEND_ROOT.parent
 ALEMBIC_CONFIG = Config(str(BACKEND_ROOT / "alembic.ini"))
@@ -23,8 +20,36 @@ def _initializer():
     return importlib.import_module("scripts.initialize_vendor_event_definitions")
 
 
-def _create_definition_table(engine: sa.Engine) -> None:
-    VendorEventDefinition.__table__.create(engine)
+def _create_definition_table(engine: sa.Engine) -> sa.Table:
+    metadata = sa.MetaData()
+    table = sa.Table(
+        "vendor_event_definitions",
+        metadata,
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("storage_type", sa.String(32), nullable=False),
+        sa.Column("event_code", sa.String(255), nullable=False),
+        sa.Column("association_type", sa.String(32), nullable=False),
+        sa.Column("title_zh", sa.String(255), nullable=False),
+        sa.Column("description_zh", sa.Text(), nullable=False),
+        sa.Column("official_reference_url", sa.String(1000)),
+        sa.Column("default_severity", sa.String(16)),
+        sa.Column("version_scope", sa.String(255)),
+        sa.Column("review_status", sa.String(16), nullable=False),
+        sa.Column("recommended_solution_zh", sa.Text()),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column(
+            "created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()
+        ),
+        sa.CheckConstraint(
+            "review_status <> 'reviewed' OR recommended_solution_zh IS NOT NULL"
+        ),
+        sa.UniqueConstraint("storage_type", "event_code"),
+    )
+    metadata.create_all(engine)
+    return table
 
 
 def test_catalog_is_unique_complete_and_reviewed_rows_have_evidence():
@@ -83,24 +108,24 @@ def test_initializer_preserves_existing_and_unmanaged_rows(tmp_path):
     engine = sa.create_engine(
         f"sqlite:///{(tmp_path / 'preserve-existing.sqlite').as_posix()}"
     )
-    _create_definition_table(engine)
+    table = _create_definition_table(engine)
     first = initializer.CATALOG_DEFINITIONS[0]
     try:
         with engine.begin() as connection:
             connection.execute(
-                sa.insert(VendorEventDefinition.__table__),
-                [
-                    {**first, "title_zh": "管理员保留标题"},
-                    {
-                        "storage_type": "netapp",
-                        "event_code": "administrator.custom.event",
-                        "association_type": "unknown",
-                        "title_zh": "管理员自定义事件",
-                        "description_zh": "不属于内置目录。",
-                        "review_status": "pending",
-                        "is_active": True,
-                    },
-                ],
+                sa.insert(table), {**first, "title_zh": "管理员保留标题"}
+            )
+            connection.execute(
+                sa.insert(table),
+                {
+                    "storage_type": "netapp",
+                    "event_code": "administrator.custom.event",
+                    "association_type": "unknown",
+                    "title_zh": "管理员自定义事件",
+                    "description_zh": "不属于内置目录。",
+                    "review_status": "pending",
+                    "is_active": True,
+                },
             )
             result = initializer.initialize_vendor_event_definitions(connection)
 

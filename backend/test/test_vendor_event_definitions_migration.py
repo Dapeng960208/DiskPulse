@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import importlib.util
 import io
-from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -25,7 +24,7 @@ MIGRATION_PATH = (
 BASE_REVISION = "000000000015"
 PREVIOUS_REVISION = "000000000016"
 REVISION = "000000000017"
-EXPECTED_CATALOG_SIZE = 68
+HEAD_REVISION = "000000000018"
 
 
 def _alembic_config() -> Config:
@@ -40,20 +39,19 @@ def _migration_module():
     return migration
 
 
-def test_vendor_event_association_revision_is_the_current_alembic_head():
+def test_vendor_event_association_revision_precedes_the_compatibility_head():
     scripts = ScriptDirectory.from_config(_alembic_config())
 
-    assert scripts.get_heads() == [REVISION]
+    assert scripts.get_heads() == [HEAD_REVISION]
     assert scripts.get_revision(REVISION).down_revision == PREVIOUS_REVISION
+    assert scripts.get_revision(HEAD_REVISION).down_revision == REVISION
 
 
 @pytest.mark.parametrize("dialect_name", ("sqlite", "postgresql", "mysql"))
 def test_vendor_event_association_migration_compiles_for_supported_dialects(
     dialect_name,
-    monkeypatch,
 ):
     migration = _migration_module()
-    monkeypatch.setattr(migration, "_upsert_catalog_rows", lambda bind, rows: None)
     output = io.StringIO()
     migration.op = Operations(
         MigrationContext.configure(
@@ -68,13 +66,16 @@ def test_vendor_event_association_migration_compiles_for_supported_dialects(
     sql = output.getvalue().lower()
     assert "recommended_solution_zh" in sql
     assert "ck_vendor_event_definition_reviewed_evidence" in sql
+    assert "insert into vendor_event_definitions" not in sql
+    assert "update vendor_event_definitions" not in sql
 
 
-def test_sqlite_upgrade_catalog_is_complete_and_replays_from_016(monkeypatch, tmp_path):
+def test_sqlite_upgrade_changes_only_structure_and_replays_from_016(
+    monkeypatch, tmp_path
+):
     database_url = f"sqlite:///{(tmp_path / 'vendor-event-definitions.sqlite').as_posix()}"
     alembic_config = _alembic_config()
     monkeypatch.setattr(base_config, "get_sqlalchemy_database_url", lambda: database_url)
-    migration = _migration_module()
 
     command.stamp(alembic_config, BASE_REVISION)
     command.upgrade(alembic_config, REVISION)
@@ -83,44 +84,14 @@ def test_sqlite_upgrade_catalog_is_complete_and_replays_from_016(monkeypatch, tm
         with engine.connect() as connection:
             inspector = sa.inspect(connection)
             assert "vendor_event_definitions" in inspector.get_table_names()
-            columns = {column["name"] for column in inspector.get_columns("vendor_event_definitions")}
+            columns = {
+                column["name"]
+                for column in inspector.get_columns("vendor_event_definitions")
+            }
             assert "recommended_solution_zh" in columns
-            rows = connection.execute(
-                sa.text(
-                    "SELECT storage_type, event_code, association_type, "
-                    "official_reference_url, version_scope, review_status, "
-                    "recommended_solution_zh FROM vendor_event_definitions"
-                )
-            ).mappings().all()
-            assert len(rows) == EXPECTED_CATALOG_SIZE
-            assert {(row["storage_type"], row["event_code"]) for row in rows} == {
-                (row["storage_type"], row["event_code"])
-                for row in migration.CATALOG_DEFINITIONS
-            }
-            reviewed = [row for row in rows if row["review_status"] == "reviewed"]
-            pending = [row for row in rows if row["review_status"] == "pending"]
-            assert Counter(
-                (row["storage_type"], row["review_status"]) for row in rows
-            ) == {
-                ("netapp", "reviewed"): 33,
-                ("netapp", "pending"): 10,
-                ("isilon", "pending"): 25,
-            }
-            assert reviewed and pending
-            assert all(
-                row["association_type"] != "unknown"
-                and row["official_reference_url"]
-                and row["version_scope"]
-                and row["recommended_solution_zh"]
-                for row in reviewed
-            )
-            assert all(
-                row["association_type"] == "unknown"
-                and row["official_reference_url"] is None
-                and row["version_scope"] is None
-                and row["recommended_solution_zh"] is None
-                for row in pending
-            )
+            assert connection.execute(
+                sa.text("SELECT COUNT(*) FROM vendor_event_definitions")
+            ).scalar_one() == 0
 
         with engine.begin() as connection:
             with pytest.raises(sa.exc.IntegrityError):
@@ -149,6 +120,9 @@ def test_sqlite_upgrade_catalog_is_complete_and_replays_from_016(monkeypatch, tm
                 )
             }
             assert "recommended_solution_zh" not in columns
+            assert connection.execute(
+                sa.text("SELECT COUNT(*) FROM vendor_event_definitions")
+            ).scalar_one() == 0
     finally:
         engine.dispose()
 
@@ -158,16 +132,13 @@ def test_sqlite_upgrade_catalog_is_complete_and_replays_from_016(monkeypatch, tm
         with engine.connect() as connection:
             assert connection.execute(
                 sa.text("SELECT COUNT(*) FROM vendor_event_definitions")
-            ).scalar_one() == EXPECTED_CATALOG_SIZE
+            ).scalar_one() == 0
     finally:
         engine.dispose()
 
     command.downgrade(alembic_config, BASE_REVISION)
     engine = sa.create_engine(database_url)
     try:
-        with engine.connect() as connection:
-            assert "vendor_event_definitions" not in sa.inspect(
-                connection
-            ).get_table_names()
+        assert "vendor_event_definitions" not in sa.inspect(engine).get_table_names()
     finally:
         engine.dispose()
