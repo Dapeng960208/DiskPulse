@@ -11,9 +11,9 @@
 ## 备注
 
 - 分类：`frontend`
-- 出现次数：13
+- 出现次数：14
 - 首次出现：2026-07-20 导航信息架构会话
-- 最近出现：2026-07-24 Main 分支代码审查问题修复会话
+- 最近出现：2026-07-24 `2026-07-24-router-transactions-startup-security` 主线组件化同步
 - 出现记录：`sessions/2026-07-20-navigation-information-architecture/errors.md`
 - 出现记录：`sessions/2026-07-20-project-usage-reader-default/errors.md`
 - 出现记录：`sessions/2026-07-20-realtime-layout-audit/errors.md`；`detail-capacity-prediction-navigation.test.js` 在收集阶段经由 `AppHeader.vue -> users-api.js` 报 `CrudApi` 基类为 `undefined`，与本次实时布局变更无关。
@@ -28,3 +28,4 @@
 - 出现记录：`sessions/2026-07-24-merge-duplicate-routes/errors.md`；`pnpm run test:coverage` 仍被页面矩阵 27/30、列表操作权限、AI 审计交互、存储集群健康分析断言及 `CrudApi extends BaseApi` 异步 rejection 阻断；路由聚焦测试与构建均通过。
 - 出现记录：`sessions/2026-07-24-router-transactions-startup-security/errors.md`；全量 `pnpm test` 的页面矩阵、列表菜单、AI 表单与系统事件窄屏契约均已同步当前实现；另将 inactive lazy tab 显式 stub，消除卸载后的异步 API 导入，`pnpm test` 和 `pnpm test:coverage` 均恢复通过。
 - 出现记录：`sessions/2026-07-24-router-transactions-startup-security/errors.md`；最终同步 UTC 时间主线后，`auth-login.test.js` 的用户 API mock 缺少 `updateCurrentProfile`，`page-coverage-gaps.test.js` 仍传递旧格式时间范围，造成 1 个失败与 1 个未处理 rejection；按用户指示暂不在本任务处理。
+- 出现记录：`sessions/2026-07-24-router-transactions-startup-security/errors.md`；同步 `625a57b` 的存储集群详情页组件化后，旧的父页面健康分析测试仍断言已迁移到子组件的 DOM 和 API 调用，19 项中 15 项失败；按用户指示暂不在本任务处理。

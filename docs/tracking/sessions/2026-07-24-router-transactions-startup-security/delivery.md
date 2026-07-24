@@ -23,7 +23,8 @@
 - `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest test/test_questdb_time_contract_guard.py test/test_datetime_utils.py -q`（`backend/`）：18 passed。
 - `D:\dev\DiskPulse\.venv\Scripts\python.exe -m compileall -q .`（`backend/`）：通过。
 - 合并主线 `efd8504` 的冲突后，`test/test_dashboard_overview.py`：9 passed。
-- `pnpm lint`（最终合并主线后，`frontend/`）：通过。
+- `pnpm lint`（同步主线 `625a57b` 后，`frontend/`）：通过。
+- `pnpm test -- test/unit/storage-cluster-resource-tab-scroll.test.js test/unit/pages/storage-cluster-health-analytics.test.js`：4 passed、15 failed；失败项为组件化后未同步的旧父页面测试。
 - 初始功能分支的 `pnpm test`（107 个测试文件、737 项测试）、`pnpm test:coverage` 与 `pnpm build:prod`：均通过。
 - `git diff --check`：通过。
 
@@ -33,3 +34,4 @@
 - 未跟踪的本地 `backend/config.yml` 不随提交修改；部署前必须由配置所有者替换为至少 32 个字符的非占位 JWT 密钥。
 - 最终同步 UTC 时间主线后，前端全量 `pnpm test` 仍有 1 个失败（登录 API mock 未实现 `updateCurrentProfile`）和 1 个未处理 rejection（实时页夹具时间格式过时）；用户已明确要求本任务不继续处理，覆盖率与生产构建未在该最终合并状态重跑。
 - 同一主线同步新增的 `test/test_utc_time_contract.py` 还暴露 2 个 PostgreSQL 迁移安全契约失败（DDL 前数据检查与锁超时）；用户已明确要求本任务不继续处理。
+- 同步 `625a57b` 后，存储集群详情页已将健康分析迁移到子组件，而旧父页面测试仍断言内联实现，聚焦运行产生 15 项失败；用户已明确要求本任务不继续处理。
