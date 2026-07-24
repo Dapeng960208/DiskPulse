@@ -109,7 +109,7 @@ OpenAI 兼容 Provider 使用 `GET /models` 的 `data[].id`，Ollama 使用 `GET
 
 ## 5. 动态工具与系统管理权限
 
-常规工具仍以业务路由为唯一参数契约：只有 `GET` 且显式设置 `openapi_extra.ai_exposed=true` 的路由才对登录用户注册。路由自身及其 `Depends` 依赖链中的 Path、Query 参数都会生成 Pydantic 模型，并使用 `extra="forbid"` 拒绝模型擅自增加的参数；可选 Query 参数保留路由的默认行为。存储集群健康分析的 `start_time`、`end_time` 会明确暴露给模型，任一缺省时在服务端按请求时刻补足最近 24 小时范围。
+常规工具仍以业务路由为唯一参数契约：只有 `GET` 且显式设置 `openapi_extra.ai_exposed=true` 的路由才对登录用户注册。路由自身及其 `Depends` 依赖链中的 Path、Query 参数都会生成 Pydantic 模型，并使用 `extra="forbid"` 拒绝模型擅自增加的参数；可选 Query 参数保留路由的默认行为。执行前会将无歧义的展示式参数名归一到路由字段名，例如 `use ratio min` 和 `use_max` 分别映射为 `use_ratio_min` 和 `use_ratio_max`；无法匹配的 `null` 占位参数会忽略，非空未知参数仍被拒绝。存储集群健康分析的 `start_time`、`end_time` 会明确暴露给模型，任一缺省时在服务端按请求时刻补足最近 24 小时范围。
 
 AI 暴露路由可在 `openapi_extra` 通过 `ai_blacklist_fields` 声明响应字段黑名单。该配置必须是非空字符串字段名的列表；工具注册时校验配置，执行成功响应在归一化后递归过滤黑名单字段，随后才会写入 Provider 上下文。用户工具将用户响应模型中除 `rd_username` 外的全部字段加入黑名单；项目和项目组查询工具分别移除负责人、负责人 ID、收件人及项目组通知关联字段。用户目录工具移除用户对象、用户 ID、目录与底层文件系统标识及嵌套项目组用户关联；审计工具移除操作者、资源展示对象和可自由承载用户字段的摘要；告警、Incident、存储配置、存储集群和 AI 模型工具移除相应的目录、用户 ID、联系方式、内部连接信息、掩码密钥和系统提示。黑名单配置错误会阻止工具注册，不能静默降级为返回原始响应。
 
