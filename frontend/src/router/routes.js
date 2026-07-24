@@ -27,12 +27,6 @@ export default [
           icon: 'i-ri-dashboard-2-line',
         },
       },
-    ],
-  },
-  {
-    path: '/',
-    component: AppLayout,
-    children: [
       {
         path: 'usage',
         name: 'Usages',
@@ -63,12 +57,6 @@ export default [
           breadcrumb: ['用户目录', '容量预测'],
         },
       },
-    ],
-  },
-  {
-    path: '/',
-    component: AppLayout,
-    children: [
       {
         path: 'capacity-predictions',
         name: 'CapacityPredictions',
@@ -78,12 +66,6 @@ export default [
           isHidden: true,
         },
       },
-    ],
-  },
-  {
-    path: '/',
-    component: AppLayout,
-    children: [
       {
         path: '/projects',
         name: 'Projects',
@@ -105,12 +87,6 @@ export default [
           breadcrumb: ['项目', '项目详情'],
         },
       },
-    ],
-  },
-  {
-    path: '/',
-    component: AppLayout,
-    children: [
       {
         path: 'groups',
         name: 'Groups',
@@ -141,12 +117,6 @@ export default [
           breadcrumb: ['项目组', '容量预测'],
         },
       },
-    ],
-  },
-  {
-    path: '/',
-    component: AppLayout,
-    children: [
       {
         path: 'alerts',
         name: 'Alerts',
