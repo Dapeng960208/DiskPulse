@@ -26,6 +26,7 @@ from routers import (
     forecast_incidents,
     group,
     group_tag,
+    projects,
     qtrees,
     storage_back_up_records,
     storage_cluster,
@@ -34,6 +35,7 @@ from routers import (
     volumes,
 )
 from schemas.aiSchema import AIModelCreate, AIModelPatch
+from schemas import usersSchema
 from services import ai_chat_service
 from services import ai_config_service
 from services import quotaService
@@ -162,6 +164,90 @@ def test_dynamic_tool_registry_only_exposes_marked_get_routes():
         tool_name="get_visible",
         arguments={"item_id": "not-an-integer"},
     )["error"] == "工具参数无效"
+
+
+def test_dynamic_tool_registry_filters_route_configured_response_fields():
+    app = FastAPI()
+    router = APIRouter()
+    blacklist_fields = frozenset({"id", "username", "email", "department", "in_charge_user"})
+
+    @router.get(
+        "/users",
+        openapi_extra={
+            "ai_exposed": True,
+            "ai_name": "list_safe_users",
+            "ai_blacklist_fields": list(blacklist_fields),
+        },
+    )
+    def list_safe_users():
+        return {
+            "content": [
+                {
+                    "id": 1,
+                    "rd_username": "developer-a",
+                    "username": "private-name",
+                    "email": "developer-a@example.com",
+                    "department": "private-department",
+                    "profile": {
+                        "id": 2,
+                        "rd_username": "developer-b",
+                        "username": "private-name-b",
+                        "email": "developer-b@example.com",
+                    },
+                    "in_charge_user": {
+                        "rd_username": "project-owner",
+                        "username": "private-owner-name",
+                    },
+                }
+            ],
+            "total": 1,
+        }
+
+    app.include_router(router)
+    registry = build_tool_registry(app)
+
+    assert registry["list_safe_users"].blacklist_fields == blacklist_fields
+    assert execute_tool(app=app, registry=registry, tool_name="list_safe_users", arguments={}) == {
+        "ok": True,
+        "data": {
+            "items": [
+                {
+                    "rd_username": "developer-a",
+                    "profile": {"rd_username": "developer-b"},
+                }
+            ],
+            "total": 1,
+        },
+    }
+
+
+def test_user_project_and_group_tools_configure_privacy_blacklists(monkeypatch):
+    app = FastAPI()
+    for router in (users.router, projects.router, group.router):
+        app.include_router(router)
+
+    original_get = base_config.get
+
+    def configured_get(key, default=None):
+        return ["ai-admin"] if key == "super_admin_usernames" else original_get(key, default)
+
+    monkeypatch.setattr(base_config, "get", configured_get)
+    admin = User(id=101, username="ai-admin", rd_username="ai-admin")
+    registry = build_tool_registry(app, current_user=admin)
+
+    user_response_fields = set(usersSchema.User.model_fields) | set(usersSchema.User.model_computed_fields)
+    expected_user_blacklist = frozenset(user_response_fields - {"rd_username"})
+    assert registry["list_users"].blacklist_fields == expected_user_blacklist
+    assert registry["get_user"].blacklist_fields == expected_user_blacklist
+    assert registry["update_user"].blacklist_fields == expected_user_blacklist
+
+    expected_project_blacklist = frozenset({"in_charge_user", "in_charge_user_id", "recipients", "recipient_ids"})
+    for tool_name in ("list_projects", "get_project"):
+        assert registry[tool_name].blacklist_fields == expected_project_blacklist
+
+    expected_group_blacklist = expected_project_blacklist | {"alert_cc_user_ids", "associated_mail_groups"}
+    for tool_name in ("list_groups", "get_group", "get_group_realtime"):
+        assert registry[tool_name].blacklist_fields == expected_group_blacklist
 
 
 def test_cluster_analysis_tools_are_super_admin_only_at_registration_and_execution(monkeypatch):
