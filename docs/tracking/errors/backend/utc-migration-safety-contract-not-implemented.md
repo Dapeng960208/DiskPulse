@@ -11,8 +11,8 @@
 ## 备注
 
 - 分类：`backend`
-- 出现次数：1
+- 出现次数：2
 - 首次出现：2026-07-24 `2026-07-24-router-transactions-startup-security` 主线同步
-- 最近出现：2026-07-24 `2026-07-24-router-transactions-startup-security` 主线同步
-- 出现记录：`sessions/2026-07-24-router-transactions-startup-security/errors.md`
-- 本会话按用户指示不扩展处理该主线基线问题。
+- 最近出现：2026-07-24 `2026-07-24-utc-time-contract` UTC 整改自查
+- 出现记录：`sessions/2026-07-24-router-transactions-startup-security/errors.md`、`sessions/2026-07-24-utc-time-contract/errors.md`
+- 本会话已实现空库前置检查与 PostgreSQL 锁/语句超时；非空数据库必须清空并重建后才能执行此迁移。

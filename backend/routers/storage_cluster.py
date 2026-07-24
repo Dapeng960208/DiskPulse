@@ -2,7 +2,7 @@
 import io
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal, Optional
-from utils.datetime_utils import utc_now
+from utils.datetime_utils import serialize_utc_datetimes, utc_now
 
 from fastapi import Depends, HTTPException, Path, Query, Request
 from fastapi.responses import StreamingResponse
@@ -257,14 +257,14 @@ def read_capacity_change(
     if db_cluster is None:
         raise HTTPException(status_code=404, detail="StorageCluster not found")
     result = get_capacity_change(db, storage_cluster_id, *time_range)
-    return {
+    return serialize_utc_datetimes({
         **result,
         "trend_meta": build_storage_trend_meta(
             db,
             target_type="storage_cluster",
             target=db_cluster,
         ).model_dump(),
-    }
+    })
 
 
 @router.get(
@@ -283,7 +283,7 @@ def read_error_severity(
     db: Session = Depends(get_db),
 ) -> dict:
     _require_storage_cluster(db, storage_cluster_id)
-    return get_error_severity(db, storage_cluster_id, *time_range)
+    return serialize_utc_datetimes(get_error_severity(db, storage_cluster_id, *time_range))
 
 
 @router.get(
@@ -307,12 +307,14 @@ def read_top_latency(
     db: Session = Depends(get_db),
 ) -> dict | list:
     _require_storage_cluster(db, storage_cluster_id)
-    return get_top_latency(
-        db,
-        storage_cluster_id,
-        *time_range,
-        limit=limit,
-        object_type=object_type,
+    return serialize_utc_datetimes(
+        get_top_latency(
+            db,
+            storage_cluster_id,
+            *time_range,
+            limit=limit,
+            object_type=object_type,
+        )
     )
 
 
@@ -402,6 +404,7 @@ def read_system_event_detail(
 def export_analytics(
     storage_cluster_id: int,
     time_range: AnalyticsTimeRange,
+    current_user: CurrentUserDep,
     export_format: Annotated[
         Literal["csv", "excel", "pdf"],
         Query(alias="format"),
@@ -419,6 +422,7 @@ def export_analytics(
         *time_range,
         export_format=export_format,
         section=section,
+        time_zone=current_user.time_zone,
     )
     return StreamingResponse(
         io.BytesIO(content),

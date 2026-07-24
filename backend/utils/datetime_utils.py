@@ -72,6 +72,19 @@ def to_utc_z(value: datetime | str) -> str:
     return normalize_utc(value).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def serialize_utc_datetimes(value):
+    """Recursively serialize API response instants as UTC RFC 3339 ``Z`` strings."""
+    if isinstance(value, datetime):
+        return to_utc_z(value)
+    if isinstance(value, dict):
+        return {key: serialize_utc_datetimes(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [serialize_utc_datetimes(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(serialize_utc_datetimes(item) for item in value)
+    return value
+
+
 def to_questdb_utc_naive(value: datetime | str) -> datetime:
     """Convert an aware instant to QuestDB driver's UTC-naive representation."""
     return normalize_utc(value).replace(tzinfo=None)

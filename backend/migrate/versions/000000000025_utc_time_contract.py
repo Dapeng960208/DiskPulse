@@ -104,6 +104,37 @@ LEGACY_INSTANT_COLUMNS = (
 )
 
 
+def _require_empty_development_database() -> None:
+    """Refuse the intentionally destructive type migration when data exists."""
+    context = op.get_context()
+    if context.as_sql:
+        return
+
+    bind = op.get_bind()
+    populated_tables = []
+    for table_name in dict.fromkeys(table for table, _column in LEGACY_INSTANT_COLUMNS):
+        has_rows = bind.execute(
+            sa.text(f'SELECT EXISTS (SELECT 1 FROM "{table_name}" LIMIT 1)')
+        ).scalar()
+        if has_rows:
+            populated_tables.append(table_name)
+
+    if populated_tables:
+        sample = ", ".join(populated_tables[:5])
+        raise RuntimeError(
+            "UTC time contract migration requires an empty development database; "
+            f"found rows in: {sample}. Clear and rebuild the development database first."
+        )
+
+
+def _configure_postgresql_ddl_timeouts() -> None:
+    """Bound lock waits so a development migration cannot appear indefinitely hung."""
+    if op.get_bind().dialect.name != "postgresql":
+        return
+    op.execute("SET LOCAL lock_timeout = '5s'")
+    op.execute("SET LOCAL statement_timeout = '5min'")
+
+
 def _alter_instants(*, timezone: bool) -> None:
     bind = op.get_bind()
     target_type = sa.DateTime(timezone=timezone)
@@ -143,10 +174,14 @@ def _alter_instants(*, timezone: bool) -> None:
 
 
 def upgrade() -> None:
+    _configure_postgresql_ddl_timeouts()
+    _require_empty_development_database()
     op.add_column("users", sa.Column("time_zone", sa.String(length=64), nullable=True))
     _alter_instants(timezone=True)
 
 
 def downgrade() -> None:
+    _configure_postgresql_ddl_timeouts()
+    _require_empty_development_database()
     _alter_instants(timezone=False)
     op.drop_column("users", "time_zone")

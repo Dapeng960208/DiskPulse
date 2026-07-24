@@ -16,6 +16,7 @@ from appConfig import base_config
 from crud import storageHealthAnalyticsCrud, vendorEventDefinitionCrud
 from models import Volume
 from services import vendorEventDefinitionService
+from utils.datetime_utils import format_for_user_time_zone
 from utils.pdf.pdfReporter import PDFReportGenerator
 
 
@@ -43,8 +44,13 @@ def normalize_severity(value: Any) -> str:
 
 
 def validate_time_range(start_time: datetime, end_time: datetime) -> None:
-    if (start_time.utcoffset() is None) != (end_time.utcoffset() is None):
-        raise ValueError("start_time and end_time must use the same timezone awareness")
+    if (
+        start_time.tzinfo is None
+        or start_time.utcoffset() is None
+        or end_time.tzinfo is None
+        or end_time.utcoffset() is None
+    ):
+        raise ValueError("start_time and end_time must be timezone-aware")
     if start_time >= end_time:
         raise ValueError("start_time must be before end_time")
     if end_time - start_time > timedelta(days=180):
@@ -414,6 +420,22 @@ def _safe_rows(rows: list[dict]) -> list[dict]:
     ]
 
 
+def _format_for_export(value, time_zone: str | None):
+    if isinstance(value, datetime):
+        return format_for_user_time_zone(value, time_zone)
+    if isinstance(value, dict):
+        return {key: _format_for_export(item, time_zone) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_format_for_export(item, time_zone) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_format_for_export(item, time_zone) for item in value)
+    return value
+
+
+def _presentation_rows(rows: list[dict], time_zone: str | None) -> list[dict]:
+    return [_format_for_export(row, time_zone) for row in rows]
+
+
 def _csv_bytes(rows: list[dict]) -> bytes:
     rows = _safe_rows(rows)
     output = io.StringIO(newline="")
@@ -424,27 +446,33 @@ def _csv_bytes(rows: list[dict]) -> bytes:
     return ("\ufeff" + output.getvalue()).encode("utf-8")
 
 
-def _excel_bytes(sections: list[str], report: dict[str, dict]) -> bytes:
+def _excel_bytes(
+    sections: list[str], report: dict[str, dict], time_zone: str | None = None
+) -> bytes:
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         for section in sections:
-            pd.DataFrame(_safe_rows(_section_rows(section, report))).to_excel(
+            rows = _presentation_rows(_section_rows(section, report), time_zone)
+            pd.DataFrame(_safe_rows(rows)).to_excel(
                 writer, sheet_name=section, index=False
             )
     return output.getvalue()
 
 
-def _pdf_bytes(sections: list[str], report: dict[str, dict]) -> bytes:
+def _pdf_bytes(
+    sections: list[str], report: dict[str, dict], time_zone: str | None = None
+) -> bytes:
     logo_path = base_config.app_logo_path
     generator = PDFReportGenerator(
         company_name=base_config.get("application.company_name") or "DiskPulse",
         logo_path=str(logo_path) if logo_path.exists() else None,
         title="存储健康分析报告",
         app="DiskPulse",
+        time_zone=time_zone,
     )
     generator.create_cover_page()
     for section in sections:
-        rows = _section_rows(section, report)
+        rows = _presentation_rows(_section_rows(section, report), time_zone)
         headers = list(rows[0]) if rows else ["data"]
         values = [[row.get(header) for header in headers] for row in rows]
         generator.add_table([headers, *values], section)
@@ -460,12 +488,14 @@ def export_storage_health(
     end_time: datetime,
     export_format: str,
     section: str,
+    *,
+    time_zone: str | None,
 ) -> tuple[bytes, str, str]:
     report = _report_data(db, storage_cluster_id, start_time, end_time)
     sections = list(report) if section == "all" else [section]
     if export_format == "csv" and section != "all":
         return (
-            _csv_bytes(_section_rows(section, report)),
+            _csv_bytes(_presentation_rows(_section_rows(section, report), time_zone)),
             "text/csv",
             f"storage-health-{section}.csv",
         )
@@ -475,15 +505,17 @@ def export_storage_health(
             for name in sections:
                 archive.writestr(
                     f"storage-health-{name}.csv",
-                    _csv_bytes(_section_rows(name, report)),
+                    _csv_bytes(
+                        _presentation_rows(_section_rows(name, report), time_zone)
+                    ),
                 )
         return output.getvalue(), "application/zip", "storage-health-csv.zip"
     if export_format == "excel":
         return (
-            _excel_bytes(sections, report),
+            _excel_bytes(sections, report, time_zone),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "storage-health.xlsx",
         )
     if export_format == "pdf":
-        return _pdf_bytes(sections, report), "application/pdf", "storage-health.pdf"
+        return _pdf_bytes(sections, report, time_zone), "application/pdf", "storage-health.pdf"
     raise ValueError("unsupported export format")

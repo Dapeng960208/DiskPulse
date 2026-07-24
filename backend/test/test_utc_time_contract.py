@@ -133,6 +133,9 @@ def test_utc_time_migration_refuses_nonempty_postgresql_before_any_ddl():
         def get_context(self):
             return SimpleNamespace(as_sql=False)
 
+        def execute(self, statement):
+            statements.append(str(statement))
+
         def add_column(self, *_args, **_kwargs):
             raise AssertionError("the migration must validate data before DDL")
 
