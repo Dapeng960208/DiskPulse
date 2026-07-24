@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from types import SimpleNamespace
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import Mock
 
 
@@ -180,7 +180,7 @@ def test_realtime_api_validates_indicator_and_uses_effective_soft_history(
                 used=81,
                 use_ratio=81,
                 soft_use_ratio=90,
-                updated_at=datetime(2026, 7, 17, 10, 0),
+                updated_at=datetime(2026, 7, 17, 10, 0, tzinfo=timezone.utc),
             ),
         ]
     )

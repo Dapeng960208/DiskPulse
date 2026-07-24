@@ -8,3 +8,4 @@
 - [已审核厂商事件测试夹具缺少必填处置方案](../../errors/backend/reviewed-vendor-event-fixture-missing-solution.md)：为两个已审核夹具补充处置方案。
 - [Vue 模板属性未按仓库 ESLint 换行规则书写](../../errors/frontend/vue-attribute-line-lint.md)：修复全量 lint 发现的既有模板格式问题。
 - [前端全量与覆盖率曾保留既有失败](../../errors/frontend/baseline-test-debt.md)：同步当前路由、列表菜单、AI 表单和系统事件窄屏契约；显式 stub inactive lazy tab，避免卸载后的异步 API 导入。
+- [前端全量与覆盖率曾保留既有失败](../../errors/frontend/baseline-test-debt.md)：最终同步 UTC 时间主线后，登录 mock 和实时页时间范围夹具仍未同步；按用户指示暂不在本任务处理。

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -30,7 +30,7 @@ def test_notification_task_commits_attempt_before_external_delivery_and_keeps_co
             related_info={"title": "存储容量告警", "paragraphs": []},
             recipient_usernames=["alice"],
             delivery_status="pending",
-            next_attempt_at=datetime.now(),
+            next_attempt_at=datetime.now(timezone.utc),
         )
     )
     db_session.commit()

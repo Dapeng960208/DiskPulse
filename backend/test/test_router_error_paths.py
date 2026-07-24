@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from fastapi import HTTPException, BackgroundTasks
@@ -13,7 +13,7 @@ from schemas.storageUsageSchema import BackUp, StorageUsageUpdate
 from schemas.volumeSchema import VolumeUpdate
 
 
-NOW = datetime(2026, 7, 15, 10, 0)
+NOW = datetime(2026, 7, 15, 10, 0, tzinfo=timezone.utc)
 
 
 def assert_not_found(call, detail):

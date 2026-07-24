@@ -4,7 +4,7 @@ import importlib.util
 import inspect
 import io
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
@@ -24,7 +24,7 @@ DEFAULT_RULE = {
     "serious": {"threshold": 90, "repeat_hours": 6},
     "emergency": {"threshold": 95, "repeat_hours": 1},
 }
-NOW = datetime(2026, 7, 16, 10, 0, 0)
+NOW = datetime(2026, 7, 16, 10, 0, 0, tzinfo=timezone.utc)
 
 
 def _module(name):
@@ -780,7 +780,7 @@ def test_delivery_lease_prevents_duplicate_claims_and_recovers_after_expiry(
         quota_basis="hard",
         delivery_status="pending",
         recipient_usernames=["alice"],
-        next_attempt_at=datetime.now() - timedelta(seconds=1),
+        next_attempt_at=datetime.now(timezone.utc) - timedelta(seconds=1),
         related_info={"title": "告警", "paragraphs": []},
     )
     db_session.add(event)
@@ -796,7 +796,7 @@ def test_delivery_lease_prevents_duplicate_claims_and_recovers_after_expiry(
     assert second is None
     assert (event.delivery_status, event.delivery_attempts) == ("delivering", 1)
 
-    event.next_attempt_at = datetime.now() - timedelta(seconds=1)
+    event.next_attempt_at = datetime.now(timezone.utc) - timedelta(seconds=1)
     db_session.commit()
 
     recovered = tasks._prepare_delivery_attempt(event.id, context=context, config=config)
@@ -847,7 +847,7 @@ def test_delivery_marks_failed_after_initial_attempt_and_three_retries(
             # Simulate the scheduler picking up the event after its backoff lease
             # window elapsed; the scheduler only re-dispatches when next_attempt_at <= now.
             if event.next_attempt_at is not None:
-                event.next_attempt_at = datetime.now() - timedelta(seconds=1)
+                event.next_attempt_at = datetime.now(timezone.utc) - timedelta(seconds=1)
                 db_session.commit()
             tasks.deliver_storage_alert_task.run(event.id)
             db_session.refresh(event)

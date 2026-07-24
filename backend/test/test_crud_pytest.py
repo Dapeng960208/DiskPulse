@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -12,7 +12,7 @@ from schemas import aggregateSchema, groupSchema, projectsSchema, qtreeSchema, u
 from utils.query import get_sort_column, require_allowed
 
 
-NOW = datetime(2026, 6, 30, 10, 0, 0)
+NOW = datetime(2026, 6, 30, 10, 0, 0, tzinfo=timezone.utc)
 
 
 def seed_storage_tree(db_session):

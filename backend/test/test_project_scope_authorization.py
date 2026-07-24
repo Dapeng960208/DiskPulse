@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 
 import models
@@ -56,7 +56,7 @@ def _seed_scoped_resources(session):
                 user_id=1,
                 group_id=1,
                 linux_path="/data/allowed/reader",
-                updated_at=datetime.now(),
+                updated_at=datetime.now(timezone.utc),
             ),
             models.StorageUsage(
                 id=2,
@@ -64,7 +64,7 @@ def _seed_scoped_resources(session):
                 user_id=2,
                 group_id=2,
                 linux_path="/data/forbidden/other",
-                updated_at=datetime.now(),
+                updated_at=datetime.now(timezone.utc),
             ),
             models.LargeFiles(
                 id=1,
@@ -72,8 +72,8 @@ def _seed_scoped_resources(session):
                 group_id=1,
                 linux_path="/data/allowed/reader/large.bin",
                 size=100,
-                updated_at=datetime.now(),
-                created_at=datetime.now(),
+                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(timezone.utc),
             ),
             models.LargeFiles(
                 id=2,
@@ -81,8 +81,8 @@ def _seed_scoped_resources(session):
                 group_id=2,
                 linux_path="/data/forbidden/other/secret.bin",
                 size=200,
-                updated_at=datetime.now(),
-                created_at=datetime.now(),
+                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(timezone.utc),
             ),
             models.StorageAlerts(
                 id=1,
@@ -93,7 +93,7 @@ def _seed_scoped_resources(session):
                 avg_use_ratio=81,
                 related_type="Group",
                 related_id=1,
-                updated_at=datetime.now(),
+                updated_at=datetime.now(timezone.utc),
             ),
             models.StorageAlerts(
                 id=2,
@@ -104,7 +104,7 @@ def _seed_scoped_resources(session):
                 avg_use_ratio=91,
                 related_type="Group",
                 related_id=2,
-                updated_at=datetime.now(),
+                updated_at=datetime.now(timezone.utc),
             ),
             models.StorageAlerts(
                 id=3,
@@ -115,7 +115,7 @@ def _seed_scoped_resources(session):
                 avg_use_ratio=0,
                 related_type="node",
                 related_id=99,
-                updated_at=datetime.now(),
+                updated_at=datetime.now(timezone.utc),
             ),
         ]
     )
@@ -269,8 +269,8 @@ def test_project_reader_cannot_list_storage_backup_records(
                     user_id=1,
                     source_path="/data/reader",
                     destination_path="/backup/reader",
-                    start_time=datetime.now(),
-                    end_time=datetime.now(),
+                    start_time=datetime.now(timezone.utc),
+                    end_time=datetime.now(timezone.utc),
                     status=2,
                 ),
             ]

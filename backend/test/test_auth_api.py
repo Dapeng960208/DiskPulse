@@ -54,7 +54,7 @@ def test_login_issues_frontend_compatible_token_and_upserts_user(api_client_fact
 
 
 def test_current_user_can_save_a_valid_iana_timezone_but_cannot_submit_invalid_values(api_client_factory):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     client = api_client_factory([users.router], authenticated=False)
 
     with patch("utils.auth_service.ldap_authenticate", return_value=_profile()):
@@ -83,7 +83,7 @@ def test_current_user_can_save_a_valid_iana_timezone_but_cannot_submit_invalid_v
 
 
 def test_authenticated_user_can_list_supported_iana_timezones(api_client_factory):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     client = api_client_factory([users.router], authenticated=False)
     current_user = models.User(id=7, rd_username="alice", username="Alice Zhang")
     token = issue_token(current_user.id)

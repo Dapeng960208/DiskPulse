@@ -25,7 +25,7 @@ from utils.security import issue_token
 from middleware.correlation import CorrelationIdMiddleware
 
 
-NOW = "2026-06-30T10:00:00"
+NOW = "2026-06-30T10:00:00+00:00"
 
 
 class TestCoreApi:

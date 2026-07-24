@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
+from datetime import datetime, timezone
 
 import models
 
@@ -100,7 +100,7 @@ def test_ai_accessible_storage_usage_endpoint_dynamically_filters_current_user_p
                     user_id=1,
                     group_id=1,
                     linux_path="/data/allowed/reader",
-                    updated_at=datetime.now(),
+                    updated_at=datetime.now(timezone.utc),
                 ),
                 models.StorageUsage(
                     id=2,
@@ -108,7 +108,7 @@ def test_ai_accessible_storage_usage_endpoint_dynamically_filters_current_user_p
                     user_id=2,
                     group_id=2,
                     linux_path="/data/forbidden/other",
-                    updated_at=datetime.now(),
+                    updated_at=datetime.now(timezone.utc),
                 ),
             ]
         )
@@ -167,7 +167,7 @@ def test_project_owner_can_adjust_only_project_user_directories(
                     user_id=1,
                     group_id=1,
                     linux_path="/data/owned/owner",
-                    updated_at=datetime.now(),
+                    updated_at=datetime.now(timezone.utc),
                 ),
             ]
         )

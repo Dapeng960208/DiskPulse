@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -12,7 +12,7 @@ from celery_tasks.tasks.storages import finalize_project_totals
 from utils.isilonClient import IsilonClient
 
 
-NOW = datetime(2026, 7, 14, 10, 0, 0)
+NOW = datetime(2026, 7, 14, 10, 0, 0, tzinfo=timezone.utc)
 GB = 1024**3
 
 
@@ -457,7 +457,7 @@ def test_project_totals_are_written_to_project_trend_after_aggregation(db_sessio
         metric.soft_limit,
         metric.soft_use_ratio,
         metric.updated_at,
-    ) == ("1", 25, 25, 80, 31.25, NOW - timedelta(hours=8))
+        ) == ("1", 25, 25, 80, 31.25, NOW.replace(tzinfo=None))
 
 
 def test_project_totals_dedupe_by_target_type_and_id(db_session):

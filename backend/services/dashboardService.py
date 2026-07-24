@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -25,7 +25,12 @@ def _number(value) -> float:
 
 def _time_range():
     end_time = utc_now()
-    start_time = datetime.combine(end_time.date() - timedelta(days=29), time.min)
+    # Alert timestamps use UTCDateTime, so both query bounds must be aware UTC.
+    start_time = datetime.combine(
+        end_time.date() - timedelta(days=29),
+        time.min,
+        tzinfo=timezone.utc,
+    )
     return start_time, end_time
 
 

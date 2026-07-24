@@ -19,15 +19,15 @@
 
 ## 验证
 
-- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest -q`（`backend/`）：960 passed。
+- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest -q`（最终合并主线后，`backend/`）：974 passed。
+- `D:\dev\DiskPulse\.venv\Scripts\python.exe -m pytest test/test_questdb_time_contract_guard.py test/test_datetime_utils.py -q`（`backend/`）：18 passed。
 - `D:\dev\DiskPulse\.venv\Scripts\python.exe -m compileall -q .`（`backend/`）：通过。
-- `pnpm lint`（`frontend/`）：通过。
-- `pnpm test`（`frontend/`）：107 个测试文件、737 项测试通过。
-- `pnpm test:coverage`（`frontend/`）：通过。
-- `pnpm build:prod`（`frontend/`）：通过。
+- `pnpm lint`（最终合并主线后，`frontend/`）：通过。
+- 初始功能分支的 `pnpm test`（107 个测试文件、737 项测试）、`pnpm test:coverage` 与 `pnpm build:prod`：均通过。
 - `git diff --check`：通过。
 
 ## 未验证范围与风险
 
 - 未执行真实 LDAP、Redis、存储设备和 AI Provider 的外部集成调用；现有测试以模拟替身覆盖调用边界。
 - 未跟踪的本地 `backend/config.yml` 不随提交修改；部署前必须由配置所有者替换为至少 32 个字符的非占位 JWT 密钥。
+- 最终同步 UTC 时间主线后，前端全量 `pnpm test` 仍有 1 个失败（登录 API mock 未实现 `updateCurrentProfile`）和 1 个未处理 rejection（实时页夹具时间格式过时）；用户已明确要求本任务不继续处理，覆盖率与生产构建未在该最终合并状态重跑。
