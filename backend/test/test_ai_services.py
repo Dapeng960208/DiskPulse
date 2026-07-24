@@ -439,7 +439,12 @@ def test_stream_disables_tools_after_non_retryable_server_error(db_session, monk
                         tool_id="capacity-1",
                         name="list_capacity",
                         arguments={"project_id": 9},
-                    )
+                    ),
+                    AIClientToolCall(
+                        tool_id="capacity-2",
+                        name="list_capacity",
+                        arguments={"project_id": 10},
+                    ),
                 ],
                 stop_reason="tool_calls",
             )
@@ -468,8 +473,14 @@ def test_stream_disables_tools_after_non_retryable_server_error(db_session, monk
     assert invocations == [9]
     assert provider_tools[0]
     assert provider_tools[1] == []
+    tool_results = [
+        json.loads(message["content"])
+        for message in provider_messages[1]
+        if message.get("role") == "tool"
+    ]
+    assert tool_results
+    assert all(result["retryable"] is False for result in tool_results)
     provider_context = json.dumps(provider_messages[1], ensure_ascii=False)
-    assert '"retryable": false' in provider_context
     assert "本轮不要再次调用" in provider_context
 
 
