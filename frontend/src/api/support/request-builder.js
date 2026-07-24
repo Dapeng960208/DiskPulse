@@ -2,8 +2,20 @@ import axios from 'axios';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import router from '@/router';
 import { toLoginPage } from '@/utils';
-import { getToken } from '@/utils/authorization';
+import { getToken, removeToken } from '@/utils/authorization';
 import { mockAxiosAdapter, mockEnabled } from '@/mocks/runtime';
+
+// 防抖登出重定向，避免并发 401 触发多次跳转
+let redirecting = false;
+function debouncedLoginRedirect() {
+  if (redirecting) return;
+  redirecting = true;
+  removeToken();
+  setTimeout(() => {
+    toLoginPage();
+    redirecting = false;
+  }, 100);
+}
 
 class RequestBuilder {
   constructor(options) {
@@ -60,8 +72,9 @@ class RequestBuilder {
                   router.push('/401');
                   break;
                 }
-                // to re-login
-                // toLoginPage();
+                // Session 过期或未授权，清除 token 并重定向到登录页
+                ElMessage.warning('登录已过期，请重新登录');
+                debouncedLoginRedirect();
                 break;
               }
               case 403: {
@@ -93,9 +106,9 @@ class RequestBuilder {
                 break;
             }
           }
-        } else {
-          console.error('Error: ', error.message);
-          // toLoginPage();
+        } else if (error.response?.status === 401) {
+          // errorHandlerDisabled 路径下的 401 也需要处理
+          debouncedLoginRedirect();
         }
         return Promise.reject(error);
       },

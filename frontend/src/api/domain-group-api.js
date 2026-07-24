@@ -8,4 +8,4 @@ class DomainGroup extends CrudApi {
 
 }
 
-export default new DomainGroup('groups', authRequest);
+export default new DomainGroup('/groups', authRequest);

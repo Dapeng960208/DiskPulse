@@ -25,18 +25,30 @@ export function useQueryParams(defaultProvider) {
 export function useQuery(request, initialValue = []) {
   const result = ref(initialValue);
   const querying = ref(false);
+  const error = ref(null);
 
   function query() {
     querying.value = true;
+    error.value = null;
 
-    return request().then((res) => {
-      result.value = res;
-    }).finally(() => (querying.value = false));
+    return request()
+      .then((res) => {
+        result.value = res;
+        return res;
+      })
+      .catch((err) => {
+        error.value = err;
+        throw err;
+      })
+      .finally(() => {
+        querying.value = false;
+      });
   }
 
   return {
     result,
     querying,
+    error,
     query,
   };
 }

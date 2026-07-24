@@ -7,6 +7,8 @@ export const TOKEN_KEY = 'Authorization';
 
 const cookieAttributes = {
   sameSite: 'Lax',
+  // 生产环境强制 HTTPS，开发环境允许 HTTP（本地开发可能没有证书）
+  ...(import.meta.env.PROD ? { secure: true } : {}),
 };
 
 export function hasToken() {
