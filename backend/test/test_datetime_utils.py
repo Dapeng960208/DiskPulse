@@ -8,6 +8,7 @@ from utils.datetime_utils import (
     from_questdb_utc,
     parse_source_datetime,
     questdb_to_system_local_naive,
+    serialize_utc_datetimes,
     to_questdb_utc_naive,
     to_system_local_naive,
     to_utc_z,
@@ -83,3 +84,15 @@ def test_questdb_read_converts_utc_timestamp_to_system_wall_time():
     assert questdb_to_system_local_naive(datetime(2026, 7, 15, 2, 0)) == datetime(
         2026, 7, 15, 10, 0
     )
+
+
+def test_recursive_api_datetime_serialization_uses_utc_z():
+    value = {
+        "updated_at": datetime(2026, 7, 15, 10, 0, tzinfo=timezone(timedelta(hours=8))),
+        "points": [datetime(2026, 7, 15, 2, 0, tzinfo=timezone.utc)],
+    }
+
+    assert serialize_utc_datetimes(value) == {
+        "updated_at": "2026-07-15T02:00:00Z",
+        "points": ["2026-07-15T02:00:00Z"],
+    }

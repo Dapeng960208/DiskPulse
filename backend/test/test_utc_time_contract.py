@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import importlib.util
 import io
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from alembic.migration import MigrationContext
@@ -110,6 +111,40 @@ def test_utc_time_migration_covers_every_utc_model_column_once():
     assert set(migration.LEGACY_INSTANT_COLUMNS) == model_columns
 
 
+def test_utc_time_migration_refuses_nonempty_postgresql_before_any_ddl():
+    migration = _utc_time_contract_migration()
+    statements: list[str] = []
+
+    class ExistingRows:
+        def scalar(self):
+            return True
+
+    class PostgreSQLBind:
+        dialect = SimpleNamespace(name="postgresql")
+
+        def execute(self, statement):
+            statements.append(str(statement))
+            return ExistingRows()
+
+    class MigrationOp:
+        def get_bind(self):
+            return PostgreSQLBind()
+
+        def get_context(self):
+            return SimpleNamespace(as_sql=False)
+
+        def add_column(self, *_args, **_kwargs):
+            raise AssertionError("the migration must validate data before DDL")
+
+    migration.op = MigrationOp()
+
+    with pytest.raises(RuntimeError, match="empty development database"):
+        migration.upgrade()
+
+    assert statements
+    assert not any("ALTER TABLE" in statement for statement in statements)
+
+
 @pytest.mark.parametrize("dialect_name", ("sqlite", "postgresql", "mysql"))
 def test_utc_time_migration_compiles_for_supported_dialects(dialect_name):
     migration = _utc_time_contract_migration()
@@ -125,6 +160,8 @@ def test_utc_time_migration_compiles_for_supported_dialects(dialect_name):
     migration.downgrade()
 
     assert "time_zone" in output.getvalue().lower()
+    if dialect_name == "postgresql":
+        assert "SET LOCAL lock_timeout" in output.getvalue()
 
 
 def test_postgresql_model_round_trip_normalizes_an_aware_instant_to_utc(session_factory):

@@ -641,6 +641,14 @@ def test_analytics_time_range_rejects_mixed_timezone_awareness_as_value_error():
         _analytics().validate_time_range(START, END.replace(tzinfo=None))
 
 
+def test_analytics_time_range_rejects_two_naive_values_as_value_error():
+    with pytest.raises(ValueError, match="timezone-aware"):
+        _analytics().validate_time_range(
+            START.replace(tzinfo=None),
+            END.replace(tzinfo=None),
+        )
+
+
 @pytest.fixture
 def analytics_client(api_client_factory, auth_headers, db_session):
     db_session.add_all(
@@ -808,7 +816,7 @@ def test_storage_health_export_media_contract(
     with patch(
         "routers.storage_cluster.export_storage_health",
         return_value=(b"report", media_type, filename),
-    ):
+    ) as export_service:
         response = analytics_client.get(
             "/storage-pulse/api/storage-clusters/1/analytics/export",
             params=_query_params(format=export_format, section=section),
@@ -817,6 +825,64 @@ def test_storage_health_export_media_contract(
     assert response.status_code == 200
     assert response.headers["content-type"].startswith(media_type)
     assert filename in response.headers["content-disposition"]
+    assert export_service.call_args.kwargs["time_zone"] is None
+
+
+def test_storage_health_csv_export_formats_instants_in_the_current_user_timezone(monkeypatch):
+    analytics = _analytics()
+    report = {
+        "capacity": {
+            "start_used": 100.0,
+            "end_used": 125.0,
+            "change": 25.0,
+            "change_percent": 25.0,
+            "data_unit": "GB",
+            "data": [{"updated_at": START, "used": 100.0}],
+        }
+    }
+    monkeypatch.setattr(analytics, "_report_data", lambda *_args: report)
+
+    content, _media_type, _filename = analytics.export_storage_health(
+        None,
+        1,
+        START,
+        END,
+        export_format="csv",
+        section="capacity",
+        time_zone="America/Los_Angeles",
+    )
+
+    rows = list(csv.DictReader(io.StringIO(content.decode("utf-8-sig"))))
+    assert rows[0]["updated_at"] == "2026-06-30 17:00:00"
+
+
+def test_capacity_change_response_serializes_instants_as_utc_z(analytics_client):
+    payload = {
+        "data": [
+            {
+                "updated_at": datetime(
+                    2026,
+                    7,
+                    1,
+                    8,
+                    tzinfo=timezone(timedelta(hours=8)),
+                ),
+                "used": 100.0,
+            }
+        ],
+        "start_used": 100.0,
+        "end_used": 100.0,
+        "change": 0.0,
+        "change_percent": 0.0,
+    }
+    with patch("routers.storage_cluster.get_capacity_change", return_value=payload):
+        response = analytics_client.get(
+            "/storage-pulse/api/storage-clusters/1/analytics/capacity-change",
+            params=_query_params(),
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"][0]["updated_at"] == "2026-07-01T00:00:00Z"
 
 
 def test_pdf_export_succeeds_when_backend_logo_is_missing(monkeypatch, tmp_path):
