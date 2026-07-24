@@ -30,6 +30,39 @@ def upgrade() -> None:
         ["incident_id"],
         unique=False,
     )
+    # The rolling cursor becomes authoritative immediately after this revision.
+    # Seed it from legacy incidents so the first post-upgrade observation keeps
+    # correlating with the latest incident instead of creating a duplicate.
+    op.execute(
+        sa.text(
+            """
+            INSERT INTO incident_correlation_states (
+                correlation_key,
+                incident_id,
+                last_evidence_at,
+                updated_at
+            )
+            SELECT
+                candidate.correlation_key,
+                candidate.id,
+                candidate.last_evidence_at,
+                candidate.last_evidence_at
+            FROM incidents AS candidate
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM incidents AS newer
+                WHERE newer.correlation_key = candidate.correlation_key
+                  AND (
+                      newer.last_evidence_at > candidate.last_evidence_at
+                      OR (
+                          newer.last_evidence_at = candidate.last_evidence_at
+                          AND newer.id > candidate.id
+                      )
+                  )
+            )
+            """
+        )
+    )
 
 
 def downgrade() -> None:

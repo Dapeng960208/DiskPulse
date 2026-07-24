@@ -13,11 +13,14 @@
 ## 已完成
 
 - 恢复备份记录和大文件生产 API 路由，并增加真实 `main.app` 路由契约测试。
+- 为滚动事件关联状态迁移回填每个关联键的最新历史 Incident，并覆盖同时间证据按 ID 稳定决胜。
 
 ## 验证
 
 - `cd backend; ..\.venv\Scripts\python.exe -m pytest test/test_main_route_contract.py test/test_core_api.py test/test_project_scope_authorization.py -q`
   - 结果：36 passed。
+- `cd backend; ..\.venv\Scripts\python.exe -m pytest test/test_forecast_incident_center.py test/test_backend_schema_contract.py -q`
+  - 结果：56 passed。
 
 ## 未验证范围与风险
 

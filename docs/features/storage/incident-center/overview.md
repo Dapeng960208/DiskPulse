@@ -18,7 +18,7 @@
 
 ## 事件与诊断
 
-`incident_correlation_states` 以 `storage_cluster + AssetRef + category` 保存部署后新证据的权威滚动关联游标；`incidents.correlation_bucket_at` 继续保留作历史兼容字段，但不再决定归并。新证据距该游标最近证据不超过 `incident_analytics.correlation_window_hours`（默认 `4`）小时则关联同一 Incident，跨越旧 30 分钟桶也不拆分；超过窗口才新建。已解决 Incident 仅在这个窗口内收到同类证据时由系统重开，不合并、删除、回算或自动关闭历史 Incident。游标行在事务内锁定并按关联键唯一，重复或并发投递在来源引用唯一键与游标锁的共同约束下保持幂等。人工状态只允许 `open → acknowledged → investigating → mitigated → resolved` 的相邻迁移。Incident 是紧急处置队列，而不是原始告警镜像：DiskPulse 容量告警仅在 `critical` 时准入；性能异常仅在满足上述延迟建单资格时准入；P90 容量耗尽日期仅在未来 7 天内准入；监控质量快照和采集失败不创建 Incident。
+`incident_correlation_states` 以 `storage_cluster + AssetRef + category` 保存部署后新证据的权威滚动关联游标；启用该表的迁移会按 `last_evidence_at DESC, id DESC` 为每个关联键回填最新历史 Incident，避免升级后的第一条证据重复建单。`incidents.correlation_bucket_at` 继续保留作历史兼容字段，但不再决定归并。新证据距该游标最近证据不超过 `incident_analytics.correlation_window_hours`（默认 `4`）小时则关联同一 Incident，跨越旧 30 分钟桶也不拆分；超过窗口才新建。已解决 Incident 仅在这个窗口内收到同类证据时由系统重开，不合并、删除、回算或自动关闭历史 Incident。游标行在事务内锁定并按关联键唯一，重复或并发投递在来源引用唯一键与游标锁的共同约束下保持幂等。人工状态只允许 `open → acknowledged → investigating → mitigated → resolved` 的相邻迁移。Incident 是紧急处置队列，而不是原始告警镜像：DiskPulse 容量告警仅在 `critical` 时准入；性能异常仅在满足上述延迟建单资格时准入；P90 容量耗尽日期仅在未来 7 天内准入；监控质量快照和采集失败不创建 Incident。
 
 厂商事件还需同时考虑事件实例严重级别和目录语义：已启用且已审核的 `fault_log` 只在实例为 `critical` 时准入内部 `device_fault`；已启用且已审核的 `system_activity`、`performance_anomaly`、`capacity_threshold` 或 `telemetry_degradation` 不得因严重级别或指纹重复进入 `device_fault`。目录缺失、待审核或停用时，`critical` 原始事件可保守进入该内部类别，但用户可见名称统一为“设备健康风险”，关联类型仍是 `unknown`，不得表述为已确认故障。被拦截的记录仍完整保留在告警、系统事件、健康分析、预测和采集账本中。历史版本曾把非 `critical` 厂商系统运行事件或性能提示派生为 `device_fault`；兼容修复会幂等关闭这些旧 Incident，但保留原始事件、证据和诊断用于审计。
 

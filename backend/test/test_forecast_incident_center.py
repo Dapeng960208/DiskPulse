@@ -645,6 +645,70 @@ def test_incident_event_ordering_migration_replaces_updated_at_indexes():
         assert "ix_incident_cluster_asset_updated" not in index_names
 
 
+def test_incident_correlation_state_migration_backfills_latest_incident_per_key():
+    import importlib.util
+
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "migrate"
+        / "versions"
+        / "000000000023_incident_correlation_state.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "incident_correlation_state_migration",
+        migration_path,
+    )
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    with sa.create_engine("sqlite://").begin() as connection:
+        connection.execute(
+            sa.text(
+                """
+                CREATE TABLE incidents (
+                    id INTEGER PRIMARY KEY,
+                    correlation_key VARCHAR(512) NOT NULL,
+                    last_evidence_at DATETIME NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            sa.text(
+                """
+                INSERT INTO incidents (id, correlation_key, last_evidence_at)
+                VALUES
+                    (1, 'asset-a:device_fault', '2026-07-24 01:00:00'),
+                    (2, 'asset-a:device_fault', '2026-07-24 02:00:00'),
+                    (3, 'asset-b:capacity_pressure', '2026-07-24 03:00:00'),
+                    (4, 'asset-b:capacity_pressure', '2026-07-24 03:00:00')
+                """
+            )
+        )
+        migration.op = Operations(MigrationContext.configure(connection))
+
+        migration.upgrade()
+
+        rows = connection.execute(
+            sa.text(
+                """
+                SELECT correlation_key, incident_id, last_evidence_at
+                FROM incident_correlation_states
+                ORDER BY correlation_key
+                """
+            )
+        ).mappings().all()
+        assert [(row["correlation_key"], row["incident_id"]) for row in rows] == [
+            ("asset-a:device_fault", 2),
+            ("asset-b:capacity_pressure", 4),
+        ]
+        assert str(rows[0]["last_evidence_at"]).startswith("2026-07-24 02:00:00")
+
+
 def test_forecast_incident_migration_compiles_and_upgrades_sqlite():
     import importlib.util
     import io
