@@ -2,7 +2,6 @@
 import {
   ElButton,
   ElCard,
-  ElDatePicker,
   ElDescriptions,
   ElDescriptionsItem,
   ElDialog,
@@ -23,6 +22,7 @@ import {
 import { computed, defineAsyncComponent, onBeforeMount, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import FilterForm from '@/components/form/QueryForm.vue';
+import TimeRangePicker from '@/components/form/TimeRangePicker.vue';
 import StorageTrendChart from '@/components/dashboard/StorageTrendChart.vue';
 import PieCharts from '@/common/charts/PieCharts.vue';
 import BarStackChart from '@/common/charts/BarStackChart.vue';
@@ -66,13 +66,6 @@ const loading = reactive({
   systemEvents: false,
   systemEventDetail: false,
 });
-
-const shortcuts = [
-  { text: '一天内', value: () => getDefaultTime(8) },
-  { text: '一周内', value: () => getDefaultTime(24 * 7) },
-  { text: '一月内', value: () => getDefaultTime(24 * 30) },
-  { text: '三月内', value: () => getDefaultTime(24 * 90) },
-];
 
 const performanceMetricOptions = [
   { key: 'p95_latency', label: 'P95 延迟', unit: 'ms' },
@@ -433,15 +426,7 @@ onBeforeMount(() => {
             <ElFormItem
               label="时间范围"
               class="analytics-date-range query-form-field--date-range">
-              <ElDatePicker
-                v-model="dateRange"
-                type="datetimerange"
-                range-separator="至"
-                format="YYYY-MM-DD HH:mm:ss"
-                value-format="YYYY-MM-DD HH:mm:ss"
-                start-placeholder="开始日期时间"
-                end-placeholder="结束日期时间"
-                :shortcuts="shortcuts" />
+              <TimeRangePicker v-model="dateRange" />
             </ElFormItem>
             <template #actions>
               <ElDropdown @command="handleExport">
@@ -545,15 +530,7 @@ onBeforeMount(() => {
             <ElFormItem
               label="时间范围"
               class="analytics-date-range query-form-field--date-range">
-              <ElDatePicker
-                v-model="dateRange"
-                type="datetimerange"
-                range-separator="至"
-                format="YYYY-MM-DD HH:mm:ss"
-                value-format="YYYY-MM-DD HH:mm:ss"
-                start-placeholder="开始日期时间"
-                end-placeholder="结束日期时间"
-                :shortcuts="shortcuts" />
+              <TimeRangePicker v-model="dateRange" />
             </ElFormItem>
             <ElFormItem
               label="展示条数"
@@ -671,15 +648,7 @@ onBeforeMount(() => {
             <ElFormItem
               label="时间范围"
               class="analytics-date-range query-form-field--date-range">
-              <ElDatePicker
-                v-model="dateRange"
-                type="datetimerange"
-                range-separator="至"
-                format="YYYY-MM-DD HH:mm:ss"
-                value-format="YYYY-MM-DD HH:mm:ss"
-                start-placeholder="开始日期时间"
-                end-placeholder="结束日期时间"
-                :shortcuts="shortcuts" />
+              <TimeRangePicker v-model="dateRange" />
             </ElFormItem>
             <template #actions>
               <ElDropdown @command="handleExport">

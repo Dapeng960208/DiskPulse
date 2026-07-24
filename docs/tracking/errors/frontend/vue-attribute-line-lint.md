@@ -2,7 +2,7 @@
 
 ## 错误内容
 
-`vue/max-attributes-per-line` 拒绝同一行中含多个 `ElOption` 或 `TableActionButton` 属性的事件中心 AI 设置模板。
+`vue/max-attributes-per-line` 或 `vue/first-attribute-linebreak` 拒绝事件中心 AI 设置模板中未按仓库规则换行的组件属性。
 
 ## 解决方案
 
@@ -10,5 +10,6 @@
 
 ## 备注
 
-- 出现次数：1
+- 出现次数：2
 - 2026-07-23，`2026-07-23-incident-ai-agent`：新增 AI 设置对话框时出现；已按属性换行修复，`pnpm lint` 通过。
+- 2026-07-24，`2026-07-24-unified-time-range-picker`：`IncidentAiSettingsDialog.vue:28` 仍触发 `vue/first-attribute-linebreak`；该文件不属于本次范围选择器改动，未跨范围修改。

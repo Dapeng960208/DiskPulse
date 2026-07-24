@@ -170,8 +170,8 @@ const Select = defineComponent({
   },
 });
 
-const DatePicker = defineComponent({
-  name: 'ElDatePicker',
+const TimeRangePicker = defineComponent({
+  name: 'TimeRangePicker',
   props: { modelValue: { type: Array, default: () => [] } },
   emits: ['update:modelValue'],
   setup() {
@@ -313,7 +313,7 @@ const commonStubs = {
   ElTag: Tag,
   ElTableColumn: TableColumn,
   ElTable: Table,
-  ElDatePicker: DatePicker,
+  TimeRangePicker,
   ElCard: passthrough('ElCard'),
   ElDescriptions: passthrough('ElDescriptions'),
   ElDescriptionsItem: passthrough('ElDescriptionsItem'),
@@ -740,7 +740,7 @@ describe('real-time page coverage gaps', () => {
     await wrapper.findComponent({ name: 'StorageUsageSelect' }).vm.$emit('update:modelValue', [1, 2]);
     await wrapper.findComponent({ name: 'FilterForm' }).vm.$emit('query');
     await wrapper.findComponent({ name: 'FilterForm' }).vm.$emit('reset');
-    await wrapper.findComponent({ name: 'ElDatePicker' }).vm.$emit('update:modelValue', ['2026-07-03', '2026-07-04']);
+    await wrapper.findComponent({ name: 'TimeRangePicker' }).vm.$emit('update:modelValue', ['2026-07-03', '2026-07-04']);
     await flushPromises();
     expect(mocks.storageUsageApi.fetchStorageRealTimeDataById).toHaveBeenCalledWith(2, expect.objectContaining({ indicator: 'used' }));
     expect(mocks.storageUsageApi.fetchStorageRealTimeDataById).toHaveBeenCalledWith(1, expect.objectContaining({ indicator: 'alert_ratio' }));

@@ -46,8 +46,8 @@ const passthrough = (name, tag = 'div') => defineComponent({
   },
 });
 
-const DatePicker = defineComponent({
-  name: 'ElDatePicker',
+const TimeRangePicker = defineComponent({
+  name: 'TimeRangePicker',
   props: { modelValue: { type: Array, default: () => [] } },
   emits: ['update:modelValue'],
   setup() {
@@ -183,7 +183,7 @@ async function mountPage() {
         ElDescriptionsItem: passthrough('ElDescriptionsItem'),
         ElDialog: passthrough('ElDialog'),
         ElFormItem: passthrough('ElFormItem'),
-        ElDatePicker: DatePicker,
+        TimeRangePicker,
         ElInput: Input,
         ElSelect: Select,
         ElOption: passthrough('ElOption', 'option'),
@@ -267,7 +267,7 @@ describe('storage cluster health analytics page', () => {
     expect(wrapper.text()).toContain('Qtree（NetApp）');
     expect(wrapper.text()).toContain('性能分析');
     expect(wrapper.text()).toContain('故障分析');
-    expect(wrapper.findAllComponents({ name: 'ElDatePicker' })).toHaveLength(1);
+    expect(wrapper.findAllComponents({ name: 'TimeRangePicker' })).toHaveLength(1);
     expect(wrapper.get('[data-testid="filter-actions"] [data-testid="analytics-export"]').exists()).toBe(true);
     expect(storageClusterApi.fetchCapacityChange).toHaveBeenCalledWith(42, {
       start_time: initialRange[0],
@@ -323,13 +323,10 @@ describe('storage cluster health analytics page', () => {
     const wrapper = await mountPage();
     const tabs = wrapper.get('[data-testid="analytics-tabs"]');
     const filter = wrapper.get('[data-tab="capacity"] .storage-health-filter');
-    const datePicker = filter.findComponent({ name: 'ElDatePicker' });
+    const datePicker = filter.findComponent({ name: 'TimeRangePicker' });
 
     expect(tabs.find('.storage-health-filter').exists()).toBe(true);
     expect(filter.exists()).toBe(true);
-    expect(datePicker.attributes('format')).toBe('YYYY-MM-DD HH:mm:ss');
-    expect(datePicker.attributes('start-placeholder')).toBe('开始日期时间');
-    expect(datePicker.attributes('end-placeholder')).toBe('结束日期时间');
     expect(wrapper.findComponent({ name: 'StorageTrendChart' }).props()).toMatchObject({
       indicator: 'used',
       unit: 'TB',
@@ -376,7 +373,7 @@ describe('storage cluster health analytics page', () => {
     expect(storageClusterApi.fetchErrorSeverity).not.toHaveBeenCalled();
 
     const nextRange = ['2026-07-03 00:00:00', '2026-07-04 00:00:00'];
-    await wrapper.findComponent({ name: 'ElDatePicker' }).vm.$emit('update:modelValue', nextRange);
+    await wrapper.findComponent({ name: 'TimeRangePicker' }).vm.$emit('update:modelValue', nextRange);
     await flushPromises();
     expect(storageClusterApi.fetchTopLatency).toHaveBeenLastCalledWith(42, {
       start_time: nextRange[0],

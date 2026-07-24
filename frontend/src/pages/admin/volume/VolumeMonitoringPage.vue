@@ -1,8 +1,9 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { ElDatePicker, ElFormItem, ElOption, ElSelect, ElTag } from 'element-plus';
+import { ElFormItem, ElOption, ElSelect, ElTag } from 'element-plus';
 import { useRoute } from 'vue-router';
 import FilterForm from '@/components/form/QueryForm.vue';
+import TimeRangePicker from '@/components/form/TimeRangePicker.vue';
 import LoadingCharts from '@/common/charts/LoadingCharts.vue';
 import AnimatedTextChart from '@/common/charts/AnimatedTextChart.vue';
 import StorageTrendChart from '@/components/dashboard/StorageTrendChart.vue';
@@ -77,11 +78,7 @@ onMounted(load);
       <ElFormItem
         label="时间范围"
         class="query-form-field--date-range">
-        <ElDatePicker
-          v-model="dateRange"
-          type="datetimerange"
-          range-separator="至"
-          value-format="YYYY-MM-DD HH:mm:ss" />
+        <TimeRangePicker v-model="dateRange" />
       </ElFormItem>
       <ElFormItem label="性能指标">
         <ElSelect

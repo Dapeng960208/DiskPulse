@@ -11,9 +11,9 @@
 ## 备注
 
 - 分类：`frontend`
-- 出现次数：8
+- 出现次数：9
 - 首次出现：2026-07-20 导航信息架构会话
-- 最近出现：2026-07-23 AI 模型推理强度自动适配会话
+- 最近出现：2026-07-24 统一时间范围选择器会话
 - 出现记录：`sessions/2026-07-20-navigation-information-architecture/errors.md`
 - 出现记录：`sessions/2026-07-20-project-usage-reader-default/errors.md`
 - 出现记录：`sessions/2026-07-20-realtime-layout-audit/errors.md`；`detail-capacity-prediction-navigation.test.js` 在收集阶段经由 `AppHeader.vue -> users-api.js` 报 `CrudApi` 基类为 `undefined`，与本次实时布局变更无关。
@@ -22,3 +22,4 @@
 - 出现记录：`sessions/2026-07-23-incident-association-clarity/errors.md`；Incident 抽屉浏览器冒烟期间，Vite 热更新经 `users-api.js` 再次出现 `CrudApi` 初始化顺序错误，完整刷新后恢复。
 - 出现记录：`sessions/2026-07-23-global-table-style-audit/errors.md`；全量 `pnpm test` 出现 10 项失败，其中 3 项表格迁移旧断言已修复并由 22 项聚焦测试验证，剩余 7 项为路由数量基线、列表操作权限断言及用户未提交的存储集群详情列宽与响应式类变更。
 - 出现记录：`sessions/2026-07-23-ai-model-reasoning-effort/errors.md`；`pnpm run test:coverage` 再次被非 AI 基线失败阻断，包括页面矩阵 27/30、列表动作权限 4 个断言、存储集群健康分析 2 个断言，以及 `CrudApi extends BaseApi` 异步 rejection。
+- 出现记录：`sessions/2026-07-24-unified-time-range-picker/errors.md`；`storage-cluster-health-analytics.test.js` 的两项既有断言仍与页面当前实现不一致：关联类型列最小宽度期望为 120、实际为 50，且系统事件低频列缺少期望的响应式 class。与统一时间范围选择器无关。

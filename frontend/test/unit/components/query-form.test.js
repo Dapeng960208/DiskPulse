@@ -62,8 +62,8 @@ describe('QueryForm progressive filter toolbar', () => {
     const realtime = readFileSync(resolve(process.cwd(), 'src/pages/common/RealTimePage.vue'), 'utf8');
     const storageHealth = readFileSync(resolve(process.cwd(), 'src/pages/admin/storage-cluster/StorageClusterDetailPage.vue'), 'utf8');
 
-    expect(realtime).toMatch(/label="时间范围"\s+class="query-form-field--date-range"[\s\S]*?format="YYYY-MM-DD HH:mm:ss"/);
-    expect(storageHealth).toMatch(/label="时间范围"\s+class="analytics-date-range query-form-field--date-range"[\s\S]*?format="YYYY-MM-DD HH:mm:ss"/);
+    expect(realtime).toMatch(/label="时间范围"\s+class="query-form-field--date-range"[\s\S]*?<TimeRangePicker/);
+    expect(storageHealth).toMatch(/label="时间范围"\s+class="analytics-date-range query-form-field--date-range"[\s\S]*?<TimeRangePicker/);
   });
 
   it('keeps primary fields visible and toggles advanced fields against active chips', async () => {

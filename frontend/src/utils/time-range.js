@@ -20,10 +20,12 @@ export function getDefaultTime(hour) {
 
 export function getShortcuts() {
   return [
-    { text: '8小时内', value: () => getDefaultTime(8) },
     { text: '1天内', value: () => getDefaultTime(24) },
+    { text: '3天内', value: () => getDefaultTime(24 * 3) },
     { text: '1周内', value: () => getDefaultTime(24 * 7) },
     { text: '1个月内', value: () => getDefaultTime(24 * 30) },
     { text: '3个月内', value: () => getDefaultTime(24 * 90) },
+    { text: '6个月内', value: () => getDefaultTime(24 * 180) },
+    { text: '1年内', value: () => getDefaultTime(24 * 365) },
   ];
 }

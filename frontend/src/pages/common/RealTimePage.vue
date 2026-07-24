@@ -1,10 +1,11 @@
 <script setup>
-import { ElDatePicker, ElFormItem, ElOption, ElSelect, ElDescriptions, ElDescriptionsItem, ElCard, ElTableColumn, ElTag } from 'element-plus';
+import { ElFormItem, ElOption, ElSelect, ElDescriptions, ElDescriptionsItem, ElCard, ElTableColumn, ElTag } from 'element-plus';
 import { ref, watch, computed } from 'vue';
 import DataTable from '@/components/data/DataTable.vue';
 import { useRoute } from 'vue-router';
 import StorageTrendChart from '@/components/dashboard/StorageTrendChart.vue';
 import FilterForm from '@/components/form/QueryForm.vue';
+import TimeRangePicker from '@/components/form/TimeRangePicker.vue';
 import LoadingCharts from '@/common/charts/LoadingCharts.vue';
 import QtreeSelect from '@/components/form/QtreeSelect.vue';
 import VolumeSelect from '@/components/form/VolumeSelect.vue';
@@ -205,13 +206,6 @@ const { result: alertResult, querying: alertQuerying, query: alertQuery } = useQ
   content: []
 });
 
-const shortcuts = [
-  { text: '一天内', value: () => getDefaultTime(8) },
-  { text: '一周内', value: () => getDefaultTime(24 * 7) },
-  { text: '一月内', value: () => getDefaultTime(24 * 30) },
-  { text: '三月内', value: () => getDefaultTime(24 * 90) },
-];
-
 watch(dateRange, (newVal) => {
   queryParams.value.start_time = newVal[0];
   queryParams.value.end_time = newVal[1];
@@ -266,16 +260,7 @@ const systemThresholds = computed(() => resourceIds.value.length > 1 ? alertThre
       <ElFormItem
         label="时间范围"
         class="query-form-field--date-range">
-        <ElDatePicker
-          v-model="dateRange"
-          type="datetimerange"
-          range-separator="至"
-          format="YYYY-MM-DD HH:mm:ss"
-          value-format="YYYY-MM-DD HH:mm:ss"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          :shortcuts="shortcuts"
-        />
+        <TimeRangePicker v-model="dateRange" />
       </ElFormItem>
       <ElFormItem label="指标">
         <ElSelect

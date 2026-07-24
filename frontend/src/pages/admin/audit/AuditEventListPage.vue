@@ -1,11 +1,12 @@
 <script setup>
 import { onMounted, ref } from 'vue';
-import { ElDatePicker, ElFormItem, ElInput, ElOption, ElSelect } from 'element-plus';
+import { ElFormItem, ElInput, ElOption, ElSelect } from 'element-plus';
 import auditEventsApi from '@/api/audit-events-api.js';
 import AuditEventTable from '@/components/audit/AuditEventTable.vue';
 import ProjectSelect from '@/components/form/ProjectSelect.vue';
 import QueryForm from '@/components/form/QueryForm.vue';
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
+import TimeRangePicker from '@/components/form/TimeRangePicker.vue';
 import { useQueryParams } from '@/composables/query';
 import AuditEventDetailDrawer from './components/AuditEventDetailDrawer.vue';
 
@@ -105,12 +106,7 @@ onMounted(query);
       <ElFormItem
         class="query-form-field--date-range"
         label="发生时间">
-        <ElDatePicker
-          v-model="timeRange"
-          type="datetimerange"
-          value-format="YYYY-MM-DD HH:mm:ss"
-          start-placeholder="开始时间"
-          end-placeholder="结束时间" />
+        <TimeRangePicker v-model="timeRange" />
       </ElFormItem>
     </QueryForm>
     <AuditEventTable
