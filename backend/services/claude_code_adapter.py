@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import Future
 from dataclasses import dataclass
 import json
 from queue import Empty, Queue
@@ -175,14 +176,29 @@ class _ClientState:
             client = self._client
         if loop is None or client is None or loop.is_closed():
             return
-        future = asyncio.run_coroutine_threadsafe(
-            self._cancel_client(client),
-            loop,
-        )
+
+        completion = Future()
+
+        def schedule_cancellation() -> None:
+            task = loop.create_task(self._cancel_client(client))
+
+            def mark_complete(_task) -> None:
+                if not completion.done():
+                    completion.set_result(None)
+
+            task.add_done_callback(mark_complete)
+
         try:
-            future.result(timeout=2)
+            # Create the coroutine only after the loop accepts and runs this
+            # callback. A shutdown race therefore cannot leave an unowned
+            # coroutine in the caller thread.
+            loop.call_soon_threadsafe(schedule_cancellation)
         except Exception:
-            future.cancel()
+            return
+        try:
+            completion.result(timeout=2)
+        except Exception:
+            completion.cancel()
 
 
 async def _run_sdk(

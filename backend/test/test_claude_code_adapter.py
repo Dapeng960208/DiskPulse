@@ -137,6 +137,23 @@ def test_claude_code_adapter_cancellation_mechanism():
     assert state.cancelled.is_set()
 
 
+def test_claude_code_cancel_does_not_create_coroutine_when_scheduling_fails():
+    from services import claude_code_adapter
+
+    state = claude_code_adapter._ClientState()
+    loop = MagicMock()
+    loop.is_closed.return_value = False
+    loop.call_soon_threadsafe.side_effect = RuntimeError("loop closed")
+    state.bind(loop, object())
+    cancel_factory = MagicMock()
+
+    with patch.object(state, "_cancel_client", new=cancel_factory):
+        state.cancel()
+
+    cancel_factory.assert_not_called()
+    assert state.cancelled.is_set()
+
+
 def test_claude_code_adapter_text_extraction_from_partial_deltas():
     """Verify partial text deltas are correctly extracted from SDK events."""
     from services.claude_code_adapter import _partial_text
