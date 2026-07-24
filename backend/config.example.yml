@@ -39,6 +39,7 @@ observability:
 ai:
   # 使用独立随机密钥加密数据库中的 AI API Key，不要复用生产 JWT 密钥。
   config_secret_key: change-me-with-an-independent-random-secret
+  # 以下三项只约束 AI 对话的 Provider 请求、工具循环和聊天入口限流，不复用事件审计配置。
   request_timeout_seconds: 60
   chat_tool_max_iterations: 4
   chat_rate_limit_per_minute: 10

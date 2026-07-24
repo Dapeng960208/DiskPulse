@@ -226,6 +226,11 @@ def _safe_http_error(status_code: int, body: object) -> str:
         return "请求过于频繁，请稍后重试"
     if status_code in {502, 503, 504}:
         return "数据源暂时不可用，请稍后重试"
+    if 500 <= status_code <= 599:
+        return (
+            f"查询服务内部错误（HTTP {status_code}）：参数已通过接口校验，"
+            "无法通过调整参数修复，请稍后重试或联系管理员。"
+        )
     return f"工具请求失败（HTTP {status_code}）"
 
 

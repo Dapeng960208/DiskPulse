@@ -52,7 +52,7 @@ _MAX_TOOL_ARGUMENT_REPAIRS = 2
 _MAX_TOOL_CALL_FAILURE_REPAIRS = 2
 _REDACTED = "[REDACTED]"
 _HIDDEN_HISTORY_CONTENT = "该历史回复关联的项目权限已失效，内容已隐藏。"
-_SAFE_TOOL_ERROR_PREFIXES = ("查询参数不完整：",)
+_SAFE_TOOL_ERROR_PREFIXES = ("查询参数不完整：", "查询服务内部错误（HTTP ")
 _SAFE_TOOL_ERRORS = {
     "查询参数无效，请检查输入后重试",
     "认证状态已失效，请重新登录后重试",
@@ -1000,7 +1000,7 @@ def stream_message(
             system_messages.append({"role": "system", "content": _SYSTEM_MANAGEMENT_PROMPT})
         messages = [*system_messages, *_history(db, conversation.id, current_user=current_user)]
         # Bound recursive model/tool turns independently of the number of tools per turn.
-        max_iterations = int(base_config.get("ai.max_tool_iterations", 4))
+        max_iterations = int(base_config.get("ai.chat_tool_max_iterations", 4))
         for iteration in range(1, max_iterations + 1):
             completion = None
             repair_attempts = 0
