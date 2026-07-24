@@ -93,3 +93,4 @@ incident_notifications:
 # 仅在固定历史回放验收完成后由部署人员显式开启高置信度标签。
 incident_analytics:
   replay_gate_verified: false
+  correlation_window_hours: 4

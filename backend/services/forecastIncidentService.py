@@ -13,6 +13,7 @@ import numpy as np
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from appConfig import base_config
 from crud import (
     forecastIncidentCrud,
     storageHealthAnalyticsCrud,
@@ -31,7 +32,7 @@ from services import audit_service, project_access_service, vendorEventDefinitio
 from utils.auth_service import is_super_admin
 
 
-ALGORITHM_VERSION = "forecast-incident-v1"
+ALGORITHM_VERSION = "forecast-incident-v2"
 FORECAST_DAYS = 30
 FORECAST_TRAINING_DAYS = 45
 MIN_VALID_DAYS = 30
@@ -41,6 +42,10 @@ ZERO_MAD_SCORE = 100.0
 DEFAULT_IOPS_ABSOLUTE_FLOOR = 10.0
 DEFAULT_IOPS_BASELINE_RATIO = 0.05
 IOPS_BASELINE_MIN_SAMPLES = 12
+PERFORMANCE_MIN_SEASONAL_SAMPLES = 12
+PERFORMANCE_MIN_LATENCY_DELTA_MS = 5.0
+PERFORMANCE_MIN_LATENCY_INCREASE_RATIO = 0.50
+DEFAULT_INCIDENT_CORRELATION_WINDOW_HOURS = 4
 INCIDENT_STATES = ("open", "acknowledged", "investigating", "mitigated", "resolved")
 INCIDENT_CATEGORIES = (
     "capacity_pressure",
@@ -333,6 +338,41 @@ def qualifies_performance_anomaly(scores: list[float]) -> bool:
     return len(scores) >= 3 and all(abs(score) >= ROBUST_Z_THRESHOLD for score in scores[-3:])
 
 
+def qualifies_latency_incident(
+    *,
+    scores: list[float],
+    values: list[float],
+    baselines: list[float],
+    seasonal_sample_counts: list[int],
+) -> bool:
+    """Require sustained, material, positive latency degradation before creating an Incident."""
+    if not all(len(items) >= 3 for items in (scores, values, baselines, seasonal_sample_counts)):
+        return False
+    for score, value, baseline, sample_count in zip(
+        scores[-3:], values[-3:], baselines[-3:], seasonal_sample_counts[-3:]
+    ):
+        baseline = float(baseline)
+        if (
+            int(sample_count) < PERFORMANCE_MIN_SEASONAL_SAMPLES
+            or float(score) < ROBUST_Z_THRESHOLD
+            or float(value) - baseline
+            < max(PERFORMANCE_MIN_LATENCY_DELTA_MS, baseline * PERFORMANCE_MIN_LATENCY_INCREASE_RATIO)
+        ):
+            return False
+    return True
+
+
+def incident_correlation_window() -> timedelta:
+    analytics = base_config.get("incident_analytics", {}) or {}
+    try:
+        hours = float(analytics.get("correlation_window_hours", DEFAULT_INCIDENT_CORRELATION_WINDOW_HOURS))
+    except (TypeError, ValueError):
+        hours = DEFAULT_INCIDENT_CORRELATION_WINDOW_HOURS
+    if hours <= 0:
+        hours = DEFAULT_INCIDENT_CORRELATION_WINDOW_HOURS
+    return timedelta(hours=hours)
+
+
 def performance_iops_noise_threshold(
     *,
     resource_baseline: float | None,
@@ -524,7 +564,13 @@ def should_admit_incident(
             and association_type in {"fault_log", "unknown", None}
         )
     if category == "performance_contention":
-        return envelope.source == "anomaly_observation" and severity == "critical"
+        return (
+            envelope.source == "anomaly_observation"
+            and severity == "critical"
+            and isinstance(envelope.value, dict)
+            and envelope.value.get("metric") == "latency"
+            and envelope.value.get("incident_eligible") is True
+        )
     if category == "telemetry_blindspot":
         return False
     if category != "capacity_pressure":
@@ -1151,24 +1197,28 @@ def correlate_incident(db, envelope: TelemetryEnvelope, *, category: str) -> Cor
             suppressed=True,
         )
     correlation_key = _correlation_key(asset, category)
-    incident = forecastIncidentCrud.get_incident_by_correlation_bucket(
+    state = forecastIncidentCrud.lock_incident_correlation_state(
         db,
         correlation_key=correlation_key,
-        correlation_bucket_at=_bucket_start(observed_at),
     )
+    # Re-check after acquiring the per-key cursor so concurrent delivery of the
+    # same source reference remains idempotent.
+    existing_evidence = forecastIncidentCrud.get_incident_evidence_by_source_ref(
+        db, source=envelope.source, source_ref=envelope.source_ref
+    )
+    if existing_evidence is not None:
+        incident = forecastIncidentCrud.get_incident(db, existing_evidence.incident_id)
+        return CorrelationResult(incident=incident, created=False, reopened=False)
+
+    incident = None
+    if state.incident_id is not None and state.last_evidence_at is not None:
+        state_last_evidence_at = _utc(state.last_evidence_at)
+        if abs(observed_at - state_last_evidence_at) <= incident_correlation_window():
+            incident = forecastIncidentCrud.get_incident(db, state.incident_id)
     created = False
     reopened = False
     severity_escalated = False
-    if incident is None:
-        incident = forecastIncidentCrud.get_recent_resolved_incident(
-            db,
-            correlation_key=correlation_key,
-            resolved_since=observed_at - timedelta(hours=24),
-        )
 
-    # Review source: a resolved incident found in the current bucket skipped the
-    # old reopen branch. Resolution: apply one status-based reopen path to both
-    # same-bucket matches and the 24-hour resolved-incident lookup.
     if incident is not None and incident.status == "resolved":
         require_incident_transition("resolved", "open", system_reopen=True)
         incident.status = "open"
@@ -1213,6 +1263,12 @@ def correlate_incident(db, envelope: TelemetryEnvelope, *, category: str) -> Cor
             incident.severity = "critical"
             severity_escalated = True
     _append_evidence(db, incident, envelope)
+    state.incident_id = incident.id
+    state.last_evidence_at = (
+        observed_at
+        if state.last_evidence_at is None
+        else max(_utc(state.last_evidence_at), observed_at)
+    )
     db.flush()
     return CorrelationResult(
         incident=incident,

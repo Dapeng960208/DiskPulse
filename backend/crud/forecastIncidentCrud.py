@@ -2,6 +2,7 @@
 from datetime import datetime
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models import (
@@ -9,6 +10,7 @@ from models import (
     CapacityForecast,
     Diagnosis,
     Incident,
+    IncidentCorrelationState,
     IncidentEvidence,
     IncidentTimeline,
     MaintenanceWindow,
@@ -117,6 +119,34 @@ def get_recent_resolved_incident(
         .order_by(Incident.resolved_at.desc(), Incident.id.desc())
         .limit(1)
     ).scalar_one_or_none()
+
+
+def lock_incident_correlation_state(
+    db: Session,
+    *,
+    correlation_key: str,
+) -> IncidentCorrelationState:
+    """Get the rolling correlation cursor, creating and locking it transaction-safely."""
+    statement = (
+        select(IncidentCorrelationState)
+        .where(IncidentCorrelationState.correlation_key == correlation_key)
+        .with_for_update()
+    )
+    state = db.execute(statement).scalar_one_or_none()
+    if state is not None:
+        return state
+    try:
+        with db.begin_nested():
+            db.add(IncidentCorrelationState(correlation_key=correlation_key))
+            db.flush()
+    except IntegrityError:
+        # A concurrent transaction created the cursor first. Re-read it under
+        # the row lock before choosing an Incident.
+        pass
+    state = db.execute(statement).scalar_one_or_none()
+    if state is None:
+        raise RuntimeError("failed to create incident correlation state")
+    return state
 
 
 def add_incident(db: Session, incident: Incident) -> Incident:

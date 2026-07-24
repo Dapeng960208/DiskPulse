@@ -820,6 +820,18 @@ class Incident(Base):
     updated_at = Column(UTCDateTime(), nullable=False, default=utc_now, onupdate=utc_now)
 
 
+class IncidentCorrelationState(Base):
+    """Authoritative rolling-window cursor for newly correlated Incidents."""
+
+    __tablename__ = "incident_correlation_states"
+    __table_args__ = (Index("ix_incident_correlation_state_incident", "incident_id"),)
+
+    correlation_key = Column(String(512), primary_key=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id", ondelete="SET NULL"), nullable=True)
+    last_evidence_at = Column(UTCDateTime(), nullable=True)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utc_now, onupdate=utc_now)
+
+
 class IncidentEvidence(Base):
     __tablename__ = "incident_evidence"
     __table_args__ = (

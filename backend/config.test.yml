@@ -44,6 +44,7 @@ incident_notifications:
 
 incident_analytics:
   replay_gate_verified: false
+  correlation_window_hours: 4
 
 ai:
   config_secret_key: test-ai-config-secret-key

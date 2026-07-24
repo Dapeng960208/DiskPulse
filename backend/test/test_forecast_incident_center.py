@@ -1107,6 +1107,20 @@ def test_performance_task_writes_only_after_three_consecutive_five_minute_anomal
                 "collected_at": observed_at,
             }
         )
+        if offset in {7, 14, 21, 28}:
+            for minutes in (5, 10):
+                rows.append(
+                    {
+                        "storage_cluster_id": "7",
+                        "object_type": "volume",
+                        "object_id": "volume-a",
+                        "object_name": "volume-a",
+                        "latency_total": 1.0,
+                        "iops_total": 1.0,
+                        "throughput_total": 1.0,
+                        "collected_at": observed_at + timedelta(minutes=minutes),
+                    }
+                )
     for minutes in (0, 5, 10):
         rows.append(
             {
@@ -1124,6 +1138,10 @@ def test_performance_task_writes_only_after_three_consecutive_five_minute_anomal
     findings = forecast_incidents._performance_findings(rows, now=UTC_NOW + timedelta(minutes=10))
 
     assert {item["metric"] for item in findings} == {"latency", "iops", "throughput"}
+    assert {
+        item["metric"]: item["incident_eligible"]
+        for item in findings
+    } == {"latency": True, "iops": False, "throughput": False}
     assert all(item["window_start"] == UTC_NOW for item in findings)
     iops_context = next(item["ai_performance_context"] for item in findings if item["metric"] == "iops")
     assert iops_context["trigger_three_bucket_p95"] == [100.0, 100.0, 100.0]

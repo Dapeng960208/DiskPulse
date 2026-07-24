@@ -818,7 +818,7 @@ def _performance_findings(
         cluster_id, object_type, object_id, metric = series_key
         identity = (cluster_id, object_type, object_id)
         values.sort(key=lambda item: item[0])
-        scored: list[tuple[datetime, float, float, float, float]] = []
+        scored: list[tuple[datetime, float, float, float, float, int]] = []
         for observed_at, value in values:
             historical = [
                 item_value
@@ -833,7 +833,7 @@ def _performance_findings(
             median = float(np.median(historical))
             mad = float(np.median(np.abs(np.asarray(historical) - median)))
             score = forecastIncidentService.robust_z_score(value=value, median=median, mad=mad)
-            scored.append((observed_at, value, median, mad, score))
+            scored.append((observed_at, value, median, mad, score, len(historical)))
         if len(scored) < 3:
             continue
         last_three = scored[-3:]
@@ -842,9 +842,15 @@ def _performance_findings(
             for left, right in zip(last_three, last_three[1:])
         ):
             continue
-        if not forecastIncidentService.qualifies_performance_anomaly([item[-1] for item in last_three]):
+        if not forecastIncidentService.qualifies_performance_anomaly([item[4] for item in last_three]):
             continue
-        observed_at, value, baseline, mad, score = last_three[-1]
+        observed_at, value, baseline, mad, score, seasonal_sample_count = last_three[-1]
+        incident_eligible = metric == "latency" and forecastIncidentService.qualifies_latency_incident(
+            scores=[item[4] for item in last_three],
+            values=[item[1] for item in last_three],
+            baselines=[item[2] for item in last_three],
+            seasonal_sample_counts=[item[5] for item in last_three],
+        )
         if metric == "iops" and all(item[3] == 0 for item in last_three):
             resource_history = [
                 item_value
@@ -888,6 +894,8 @@ def _performance_findings(
                 "baseline": baseline,
                 "mad": mad,
                 "score": score,
+                "seasonal_sample_count": seasonal_sample_count,
+                "incident_eligible": incident_eligible,
                 "window_start": last_three[0][0],
                 "window_end": observed_at,
                 "ai_performance_context": _safe_performance_ai_context(
@@ -959,13 +967,19 @@ def run_performance_anomalies(*, now: datetime | None = None) -> int:
                         seasonal_baseline=finding["baseline"],
                         mad=finding["mad"],
                         robust_z_score=finding["score"],
-                        severity="critical" if abs(finding["score"]) >= 7 else "warning",
+                        severity=(
+                            "critical"
+                            if finding["incident_eligible"] or abs(finding["score"]) >= 7
+                            else "warning"
+                        ),
                         evidence_window_start=finding["window_start"],
                         evidence_window_end=finding["window_end"],
                         source="questdb_performance",
                         source_ref=source_ref,
                         input_quality={
                             "asset_mapping": quality == "good",
+                            "seasonal_sample_count": finding["seasonal_sample_count"],
+                            "incident_eligible": finding["incident_eligible"],
                             "ai_performance_context": finding["ai_performance_context"],
                         },
                         algorithm_version=forecastIncidentService.ALGORITHM_VERSION,
@@ -981,7 +995,11 @@ def run_performance_anomalies(*, now: datetime | None = None) -> int:
                         observed_at=finding["observed_at"],
                         collected_at=now,
                         metric_or_event="continuous_performance_anomaly",
-                        value={"severity": observation.severity, "metric": finding["metric"]},
+                        value={
+                            "severity": observation.severity,
+                            "metric": finding["metric"],
+                            "incident_eligible": finding["incident_eligible"],
+                        },
                         quality=quality,
                     ),
                     category="performance_contention",
