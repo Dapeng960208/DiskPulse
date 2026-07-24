@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import asyncio
+import re
 from copy import copy
 from dataclasses import dataclass
 from typing import Any
@@ -182,6 +183,38 @@ def tool_definitions(registry: dict[str, AIToolDefinition], provider: str) -> li
     ]
 
 
+def _canonical_argument_name(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", name.casefold())
+
+
+def _normalize_tool_arguments(
+    definition: AIToolDefinition,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    """Accept unambiguous provider display names without relaxing value validation."""
+    accepted_names = set(definition.input_model.model_fields)
+    aliases: dict[str, set[str]] = {}
+    for parameter in definition.parameters:
+        accepted_names.add(parameter.alias)
+        for name in (parameter.name, parameter.alias):
+            variants = {name, name.replace("_ratio_", "_")}
+            for variant in variants:
+                aliases.setdefault(_canonical_argument_name(variant), set()).add(parameter.alias)
+
+    normalized = {name: value for name, value in arguments.items() if name in accepted_names}
+    for name, value in arguments.items():
+        if name in accepted_names:
+            continue
+        targets = aliases.get(_canonical_argument_name(name), set())
+        if len(targets) == 1:
+            target = next(iter(targets))
+            normalized.setdefault(target, value)
+        elif value is not None:
+            # Preserve non-empty unknown keys so Pydantic continues to reject them.
+            normalized[name] = value
+    return normalized
+
+
 def _request_parts(definition: AIToolDefinition, payload: _ToolInput) -> tuple[str, dict[str, Any], object | None]:
     raw = payload.model_dump(mode="json", exclude_none=True, exclude_computed_fields=True)
     aliased = payload.model_dump(
@@ -308,7 +341,9 @@ def execute_tool(
     if definition.system_management and (current_user is None or not is_super_admin(current_user)):
         return {"ok": False, "error": "系统管理工具仅限超级管理员"}
     try:
-        payload = definition.input_model.model_validate(arguments)
+        payload = definition.input_model.model_validate(
+            _normalize_tool_arguments(definition, arguments)
+        )
     except ValidationError as error:
         return {"ok": False, "error": "工具参数无效", "details": error.errors()}
     try:
