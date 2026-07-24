@@ -2,7 +2,7 @@
 
 ## 范围
 
-- 统一审计只读 AI 工具、不可覆盖的审计研判提示与审计页面跳转草稿。
+- 统一审计只读 AI 工具、仅在实际调用后激活的不可覆盖审计研判提示与审计页面跳转草稿。
 - 同一资产和类别的 4 小时滚动 Incident 关联状态、已解决窗口内重开与并发幂等。
 - 仅持续正向 P95 延迟退化可建立性能争用 Incident；IOPS/吞吐保留诊断观察。
 
@@ -17,6 +17,7 @@
 - `cd frontend; pnpm exec vitest run test/unit/ai-pages.test.js test/unit/incident-and-audit-list-layout.test.js test/unit/project-detail-table-scroll.test.js`：36 passed。
 - `cd frontend; pnpm exec eslint src/pages/ai/AiChatPage.vue src/pages/admin/audit/AuditEventListPage.vue src/pages/admin/audit/AuditEventDetailPage.vue src/pages/admin/audit/components/AuditEventDetailDrawer.vue src/pages/project/components/ProjectAuditTab.vue src/pages/incident/components/IncidentDetailDrawer.vue`：通过。
 - `cd frontend; pnpm run build:test`：通过；仅有既有环境变量和大体积 bundle 警告。
+- `cd backend; ..\\..\\..\\.venv\\Scripts\\python.exe -m pytest test\\test_ai_services.py test\\test_ai_platform.py test\\test_unified_audit.py -q`：75 passed（普通对话与审计研判提示隔离）。
 - `git diff --check`：交付前执行。
 
 ## 未覆盖与风险

@@ -559,11 +559,11 @@ def test_tool_trace_keeps_only_safe_failure_reasons_visible():
     assert hidden == {"ok": False, "error": "工具请求失败，请稍后重试"}
 
 
-def test_stream_appends_audit_analysis_contract_after_custom_model_prompt(db_session, monkeypatch):
+def test_stream_keeps_audit_analysis_contract_out_of_normal_chat(db_session, monkeypatch):
     seed_user(db_session)
     configured = seed_model(db_session)
     configured.system_prompt = "custom model instruction"
-    conversation = AIConversation(user_id=1, model_id=configured.id, title="audit analysis")
+    conversation = AIConversation(user_id=1, model_id=configured.id, title="normal chat")
     db_session.add(conversation)
     db_session.commit()
     db_session.refresh(conversation)
@@ -581,13 +581,9 @@ def test_stream_appends_audit_analysis_contract_after_custom_model_prompt(db_ses
     def provider_stream(_model, messages, **_kwargs):
         system_prompt = messages[0]["content"]
         assert "custom model instruction" in system_prompt
-        assert "list_audit_events" in system_prompt
-        assert "get_audit_event" in system_prompt
-        assert "operation_id" in system_prompt
-        assert "研判依据" in system_prompt
-        assert "限制与数据缺口" in system_prompt
-        yield AICompletionStreamEvent(kind="delta", text="analysis")
-        yield AICompletionStreamEvent(kind="completed", text="analysis", tool_calls=[], stop_reason="final")
+        assert "审计研判约束" not in system_prompt
+        yield AICompletionStreamEvent(kind="delta", text="normal answer")
+        yield AICompletionStreamEvent(kind="completed", text="normal answer", tool_calls=[], stop_reason="final")
 
     monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
 
@@ -597,11 +593,11 @@ def test_stream_appends_audit_analysis_contract_after_custom_model_prompt(db_ses
             db=db_session,
             conversation_id=conversation.id,
             user_id=1,
-            content="analyze audit event",
+            content="explain capacity pressure",
         )
     )
 
-    assert next(data for event, data in events if event == "completed")["message"]["content"] == "analysis"
+    assert next(data for event, data in events if event == "completed")["message"]["content"] == "normal answer"
 
 
 def test_stream_can_collect_audit_list_then_event_detail_in_multiple_tool_rounds(db_session, monkeypatch):
@@ -634,9 +630,15 @@ def test_stream_can_collect_audit_list_then_event_detail_in_multiple_tool_rounds
     app.include_router(router)
     rounds = {"count": 0}
 
-    def provider_stream(_model, _messages, **_kwargs):
+    def provider_stream(_model, messages, **_kwargs):
         rounds["count"] += 1
+        system_prompt = "\n".join(
+            str(message["content"])
+            for message in messages
+            if message.get("role") == "system"
+        )
         if rounds["count"] == 1:
+            assert "审计研判约束" not in system_prompt
             yield AICompletionStreamEvent(
                 kind="completed",
                 tool_calls=[AIClientToolCall(
@@ -647,6 +649,9 @@ def test_stream_can_collect_audit_list_then_event_detail_in_multiple_tool_rounds
                 stop_reason="tool_calls",
             )
         elif rounds["count"] == 2:
+            assert "审计研判约束" in system_prompt
+            assert "operation_id" in system_prompt
+            assert "限制与数据缺口" in system_prompt
             yield AICompletionStreamEvent(
                 kind="completed",
                 tool_calls=[AIClientToolCall(
@@ -657,6 +662,7 @@ def test_stream_can_collect_audit_list_then_event_detail_in_multiple_tool_rounds
                 stop_reason="tool_calls",
             )
         else:
+            assert "审计研判约束" in system_prompt
             yield AICompletionStreamEvent(kind="delta", text="audit analysis")
             yield AICompletionStreamEvent(kind="completed", text="audit analysis", tool_calls=[], stop_reason="final")
 

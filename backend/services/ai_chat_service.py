@@ -1006,13 +1006,11 @@ def stream_message(
             )
             _persist_running_audit(db, audit, tool_trace)
 
-        system_prompt = model.system_prompt or SYSTEM_PROMPT
-        if _AUDIT_TOOL_NAMES & set(registry):
-            system_prompt = f"{system_prompt}\n\n{_AUDIT_ANALYSIS_PROMPT}"
-        system_messages = [{"role": "system", "content": system_prompt}]
+        system_messages = [{"role": "system", "content": model.system_prompt or SYSTEM_PROMPT}]
         if any(item.system_management for item in registry.values()):
             system_messages.append({"role": "system", "content": _SYSTEM_MANAGEMENT_PROMPT})
         messages = [*system_messages, *_history(db, conversation.id, current_user=current_user)]
+        audit_analysis_prompt_added = False
         # Bound recursive model/tool turns independently of the number of tools per turn.
         max_iterations = int(base_config.get("ai.max_tool_iterations", 4))
         for iteration in range(1, max_iterations + 1):
@@ -1090,7 +1088,9 @@ def stream_message(
                 break
             failed_tool_names: list[str] = []
             reused_successful_result = False
+            audit_tool_called = False
             for sequence, call in enumerate(calls, start=1):
+                audit_tool_called = audit_tool_called or call.name in _AUDIT_TOOL_NAMES
                 audit.tool_call_count += 1
                 call_id = f"{audit.id}:{iteration}:{sequence}"
                 trace_entry = {
@@ -1213,6 +1213,15 @@ def stream_message(
                     )
             if confirmation_pending is not None:
                 break
+            if audit_tool_called and not audit_analysis_prompt_added:
+                # Keep audit-specific output requirements out of ordinary conversations.
+                # Once an audit tool is actually used, insert the non-overridable constraint
+                # before the next provider turn, which includes the returned audit evidence.
+                messages.insert(
+                    len(system_messages),
+                    {"role": "system", "content": _AUDIT_ANALYSIS_PROMPT},
+                )
+                audit_analysis_prompt_added = True
             if failed_tool_names:
                 tool_failure_repairs += 1
                 if tool_failure_repairs > _MAX_TOOL_CALL_FAILURE_REPAIRS:

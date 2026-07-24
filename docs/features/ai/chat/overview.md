@@ -73,7 +73,7 @@ API Key 使用 `cryptography` 的 Fernet 加密，密钥由独立的 `ai.config_
 
 常规 AI 工具必须是 FastAPI `GET` 路由且显式声明 `openapi_extra.ai_exposed=true`；它们对所有登录用户保持只读。
 
-统一审计的 `GET /v1/audit-events` 与 `GET /v1/audit-events/{event_id}` 分别以 `list_audit_events`、`get_audit_event` 注册为常规只读工具，不标记为系统管理工具。它们继续走原 API 的项目隔离：超级管理员可查全局，项目管理员只能读取已授权项目范围。当前注册表含任一审计工具时，聊天系统提示会强制审计研判约束：先按范围查询再按事件下钻、优先使用 `operation_id`/Trace/Request 标识配对尝试与结果、区分事实/推断/数据缺口，并以“研判依据、排查建议、解决方案、限制与数据缺口”四个标题回答。自定义模型系统提示只能补充，不能移除该约束。
+统一审计的 `GET /v1/audit-events` 与 `GET /v1/audit-events/{event_id}` 分别以 `list_audit_events`、`get_audit_event` 注册为常规只读工具，不标记为系统管理工具。它们继续走原 API 的项目隔离：超级管理员可查全局，项目管理员只能读取已授权项目范围。审计工具的描述自身要求范围检索、事件下钻和事实/数据缺口区分；只有本回合实际调用任一审计工具后，后续 Provider 轮次才会追加不可覆盖的审计研判约束：优先使用 `operation_id`/Trace/Request 标识配对尝试与结果，并以“研判依据、排查建议、解决方案、限制与数据缺口”四个标题回答。仅注册审计工具不会改变普通对话的系统提示或输出限制；自定义模型系统提示不能移除已激活的审计约束。
 
 系统管理工具必须额外声明 `openapi_extra.ai_system_management=true`，并且当前用户命中 `backend/config.yml` 的 `super_admin_usernames`。只有超级管理员可见这组 `GET`、`POST`、`PUT`、`PATCH`、`DELETE` 工具；普通用户不会从工具定义中获知它们。
 
