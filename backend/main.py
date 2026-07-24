@@ -66,8 +66,10 @@ storage_router.include_router(volumes.router)
 storage_router.include_router(qtrees.router)
 storage_router.include_router(storage_usage.router)
 storage_router.include_router(storage_alerts.router)
-# storage_router.include_router(storage_back_up_records.router)
-# storage_router.include_router(large_files.router)
+# These routes remain part of the frontend and external API contract; route
+# usage cannot be inferred only from imports inside the backend package.
+storage_router.include_router(storage_back_up_records.router)
+storage_router.include_router(large_files.router)
 app.include_router(storage_router)
 app.include_router(observability.router, prefix="/storage-pulse/api")
 v1_authenticated_router = APIRouter(
