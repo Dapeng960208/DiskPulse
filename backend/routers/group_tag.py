@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from dependencies import CurrentUserDep, get_db, require_super_admin
+from routers.transactional import TransactionalAPIRouter
 from schemas import groupTagSchema
 from services import groupTagService
 
 
-router = APIRouter(prefix="/group-tags", tags=["group-tags"])
+router = TransactionalAPIRouter(prefix="/group-tags", tags=["group-tags"])
 DBDep = Annotated[Session, Depends(get_db)]
 AdminDep = Annotated[None, Depends(require_super_admin)]
 

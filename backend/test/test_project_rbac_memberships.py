@@ -175,7 +175,7 @@ def test_membership_api_enforces_local_user_and_project_admin_role_boundary(
     api_client_factory,
     session_factory,
 ):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["super-admin"])
     session = session_factory()
     try:

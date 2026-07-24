@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import Depends, HTTPException, Query
+from routers.transactional import TransactionalAPIRouter
 from sqlalchemy.orm import Session
 
 from crud import projectsCrud
@@ -10,7 +11,7 @@ from schemas import commonSchema, projectsSchema, storageTrendSchema
 from services import project_access_service
 from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
 
-router = APIRouter(
+router = TransactionalAPIRouter(
     prefix="/projects",
     tags=["projects"],
     responses={404: {"description": "Not found"}},

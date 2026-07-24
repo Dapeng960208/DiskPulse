@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from dependencies import (
@@ -11,12 +11,13 @@ from dependencies import (
     require_authenticated_request,
     require_super_admin,
 )
+from routers.transactional import TransactionalAPIRouter
 from schemas import commonSchema, usersSchema
 from services import audit_service, usersService
 from utils.auth_service import build_frontend_profile, login_user
 from utils.security import decode_token, revoke_token
 
-router = APIRouter(
+router = TransactionalAPIRouter(
     prefix="/users",
     tags=["users"],
     responses={404: {"description": "Not found"}},
@@ -63,7 +64,6 @@ def login(payload: usersSchema.LoginIn, request: Request, db: DBDep) -> dict:
         resource_id=actor_user_id,
         outcome="success",
     )
-    db.commit()
     return {"result": result}
 
 
@@ -79,7 +79,6 @@ def logout(token: CurrentTokenDep, request: Request, current_user: CurrentUserDe
         resource_id=current_user.id,
         outcome="success",
     )
-    db.commit()
     return {"result": None}
 
 

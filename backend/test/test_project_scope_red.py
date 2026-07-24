@@ -24,7 +24,7 @@ def test_ai_conversation_is_owner_scoped_without_project_binding(
 ):
     from routers import ai
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     session = session_factory()
     try:
         session.add_all(
@@ -66,7 +66,7 @@ def test_ai_accessible_storage_usage_endpoint_dynamically_filters_current_user_p
 ):
     from routers import storage_usage
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     session = session_factory()
     try:
         session.add_all(
@@ -132,7 +132,7 @@ def test_project_owner_can_adjust_only_project_user_directories(
     from routers import group, storage_usage
     from services import quotaService
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", [])
     session = session_factory()
     try:

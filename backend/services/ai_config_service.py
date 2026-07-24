@@ -128,7 +128,7 @@ def update_platform_settings(
         settings.name_obfuscation_enabled = enabled
     settings.updated_by = actor_id
     settings.updated_at = datetime.now()
-    db.commit()
+    db.flush()
     db.refresh(settings)
     return get_platform_settings(db)
 
@@ -192,7 +192,7 @@ def refresh_model_capabilities(db: Session, model: AIConfig) -> dict:
         model.capability_status = "failed"
         model.capability_error = "模型能力获取失败"
     model.capability_updated_at = datetime.now()
-    db.commit()
+    db.flush()
     db.refresh(model)
     return serialize_model(model, is_default=_default_model_id(db) == model.id)
 
@@ -335,7 +335,7 @@ def create_model(
             outcome="success",
             model_id=model.id,
         )
-        db.commit()
+        db.flush()
         db.refresh(model)
     except IntegrityError as error:
         _record_model_failure(
@@ -395,7 +395,7 @@ def update_model(
             outcome="success",
             model_id=model.id,
         )
-        db.commit()
+        db.flush()
         db.refresh(model)
     except IntegrityError as error:
         _record_model_failure(
@@ -449,7 +449,7 @@ def delete_model(
             outcome="success",
             model_id=model_id,
         )
-        db.commit()
+        db.flush()
     except IntegrityError as error:
         _record_model_failure(
             db,
@@ -540,6 +540,6 @@ def test_model(
         outcome="success",
         model_id=model.id,
     )
-    db.commit()
+    db.flush()
     _refresh_dynamic_capability(db, model)
     return {"ok": True, "message": "连接成功", "reply": result_text[:500]}

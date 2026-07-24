@@ -637,7 +637,7 @@ def create_definition(
             definition_id=definition.id,
             after_summary=_audit_summary(definition),
         )
-        db.commit()
+        db.flush()
         db.refresh(definition)
     except IntegrityError as error:
         _record_failure(
@@ -721,7 +721,7 @@ def update_definition(
             before_summary=before_summary,
             after_summary=_audit_summary(definition),
         )
-        db.commit()
+        db.flush()
         db.refresh(definition)
     except IntegrityError as error:
         _record_failure(
@@ -787,7 +787,7 @@ def delete_definition(
             definition_id=definition_id,
             before_summary=before_summary,
         )
-        db.commit()
+        db.flush()
     except HTTPException:
         _record_failure(
             db,
@@ -872,7 +872,7 @@ def discover(
             outcome="success",
             after_summary=result,
         )
-        db.commit()
+        db.flush()
     except Exception:
         _record_failure(
             db,

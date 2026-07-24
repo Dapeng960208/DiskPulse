@@ -490,7 +490,7 @@ def create_conversation(
             outcome="success",
             after_summary={"model_id": selected_model_id},
         )
-    db.commit()
+    db.flush()
     db.refresh(conversation)
     return serialize_conversation(conversation)
 
@@ -538,7 +538,7 @@ def delete_conversation(
             before_summary={"model_id": conversation.model_id},
         )
     db.delete(conversation)
-    db.commit()
+    db.flush()
 
 
 def _conversation_or_404(db: Session, conversation_id: int, user_id: int) -> AIConversation:

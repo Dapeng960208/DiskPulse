@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import Depends, HTTPException, Query
+from routers.transactional import TransactionalAPIRouter
 from sqlalchemy.orm import Session
 from typing import Annotated, List
 from datetime import datetime
@@ -17,7 +18,7 @@ AI_STORAGE_CLUSTER_BLACKLIST_FIELDS = (
     "storage_user",
     "tls_verify",
 )
-router = APIRouter(
+router = TransactionalAPIRouter(
     prefix="/volumes",
     tags=["volumes"],
     responses={404: {"description": "Not found"}},

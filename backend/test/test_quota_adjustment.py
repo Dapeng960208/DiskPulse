@@ -936,7 +936,7 @@ def test_isilon_client_updates_existing_quota_with_mutable_fields_only():
 def quota_api(api_client_factory, session_factory, monkeypatch):
     from routers import group, storage_usage
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     session = session_factory()
     try:

@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from dependencies import CurrentUserDep, get_db
+from routers.transactional import TransactionalAPIRouter
 from schemas import projectMembershipSchema
 from services import audit_service, project_membership_service
 
 
-router = APIRouter(prefix="/projects", tags=["project-memberships"])
+router = TransactionalAPIRouter(prefix="/projects", tags=["project-memberships"])
 DBDep = Annotated[Session, Depends(get_db)]
 
 

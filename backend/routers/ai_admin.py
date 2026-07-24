@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from dependencies import CurrentUserDep, get_db, require_super_admin
+from routers.transactional import TransactionalAPIRouter
 from schemas.aiSchema import AIModelCreate, AIModelDiscoveryRequest, AIModelPatch, AIPlatformSettingsPatch
 from services import ai_audit_service, ai_config_service, audit_service
 
@@ -18,7 +19,7 @@ AI_MODEL_RESPONSE_BLACKLIST_FIELDS = (
     "updated_by",
 )
 
-router = APIRouter(
+router = TransactionalAPIRouter(
     prefix="/admin",
     tags=["ai-admin"],
     dependencies=[Depends(require_super_admin)],

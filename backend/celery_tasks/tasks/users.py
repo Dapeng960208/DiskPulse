@@ -27,6 +27,7 @@ def ldap_users_sync_schedule_task():
         try:
             db = SessionLocal()
             result = usersService.sync_ldap_users(db)
+            db.commit()
             serialized = result.model_dump()
             logger.info(
                 "LDAP user synchronization task completed: "
@@ -41,6 +42,8 @@ def ldap_users_sync_schedule_task():
             )
             return serialized
         except Exception:
+            if db is not None:
+                db.rollback()
             logger.exception(
                 "LDAP user synchronization task failed: duration_seconds=%.3f",
                 time.monotonic() - started_at,

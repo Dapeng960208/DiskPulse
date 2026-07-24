@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from fastapi import HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
 from appConfig import base_config
@@ -20,8 +20,7 @@ class RecordingSession:
 
 
 def _client_for(router: TransactionalAPIRouter, session: RecordingSession) -> TestClient:
-    app = create_app()
-    app.router.routes.clear()
+    app = FastAPI()
     app.include_router(router)
 
     @app.middleware("http")

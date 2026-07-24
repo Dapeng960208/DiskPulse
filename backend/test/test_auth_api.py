@@ -24,7 +24,7 @@ def _profile(username="alice", display_name="Alice Zhang", email="alice@example.
 
 
 def test_login_issues_frontend_compatible_token_and_upserts_user(api_client_factory):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["alice"])
     client = api_client_factory([users.router, projects.router], authenticated=False)
 
@@ -98,7 +98,7 @@ def test_authentication_fails_closed_when_redis_is_unavailable(token_redis, monk
 
 
 def test_login_rejects_invalid_credentials_without_echoing_password(api_client_factory):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     client = api_client_factory([users.router, projects.router], authenticated=False)
 
     with patch("utils.auth_service.ldap_authenticate", return_value=None):
@@ -112,7 +112,7 @@ def test_login_rejects_invalid_credentials_without_echoing_password(api_client_f
 
 
 def test_profile_and_business_api_require_token(api_client_factory):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     client = api_client_factory([users.router, projects.router], authenticated=False)
 
     profile_response = client.get("/storage-pulse/api/users/current/profile")
@@ -128,7 +128,7 @@ def test_profile_and_business_api_require_token(api_client_factory):
 
 
 def test_profile_reuses_authenticated_user_within_request(api_client_factory):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     client = api_client_factory([users.router], authenticated=False)
     current_user = models.User(id=7, rd_username="alice", username="Alice Zhang")
     token = issue_token(current_user.id)
@@ -147,7 +147,7 @@ def test_profile_reuses_authenticated_user_within_request(api_client_factory):
 
 
 def test_business_api_accepts_bearer_token_and_logout_returns_null_result(api_client_factory):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     client = api_client_factory([users.router, projects.router], authenticated=False)
 
     with patch("utils.auth_service.ldap_authenticate", return_value=_profile("bob", "Bob Li", "bob@example.com")):
@@ -177,7 +177,7 @@ def test_business_api_accepts_bearer_token_and_logout_returns_null_result(api_cl
 
 
 def test_logout_revokes_current_access_token(api_client_factory):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     client = api_client_factory([users.router, projects.router], authenticated=False)
 
     with patch("utils.auth_service.ldap_authenticate", return_value=_profile("bob", "Bob Li", "bob@example.com")):
@@ -209,7 +209,7 @@ def test_logout_revokes_current_access_token(api_client_factory):
 
 
 def test_login_and_logout_append_safe_unified_audit_results(api_client_factory, session_factory):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     client = api_client_factory([users.router], authenticated=False)
 
     with patch("utils.auth_service.ldap_authenticate", return_value=_profile("bob", "Bob Li", "bob@example.com")):

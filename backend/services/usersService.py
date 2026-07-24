@@ -31,10 +31,8 @@ def sync_ldap_users(db: Session) -> usersSchema.UserSyncResult:
     try:
         directory_users = ldap_directory.list_ldap_directory_users()
     except Exception as error:
-        db.rollback()
         raise _snapshot_unavailable() from error
     if not directory_users:
-        db.rollback()
         raise _snapshot_unavailable()
 
     try:
@@ -99,18 +97,15 @@ def sync_ldap_users(db: Session) -> usersSchema.UserSyncResult:
                 usersCrud.set_ldap_lifecycle(user, user_type=0)
                 marked_inactive_users += 1
 
-        db.commit()
+        db.flush()
     except HTTPException:
-        db.rollback()
         raise
     except IntegrityError as error:
-        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=USERNAME_CONFLICT_DETAIL,
         ) from error
     except Exception:
-        db.rollback()
         logger.error("LDAP user synchronization failed")
         raise
 
@@ -127,9 +122,10 @@ def create_user(db: Session, data: usersSchema.UserCreate):
     if usersCrud.get_user_by_rd_username_case_insensitive(db, data.rd_username):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The user exists")
     try:
-        return usersCrud.create_user(db, data)
+        user = usersCrud.create_user(db, data)
+        db.flush()
+        return user
     except IntegrityError as error:
-        db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The user exists") from error
 
 

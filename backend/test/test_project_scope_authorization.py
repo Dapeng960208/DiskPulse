@@ -136,7 +136,7 @@ def test_project_reader_cannot_bypass_scope_through_group_or_storage_usage_route
 ):
     from routers import group, storage_usage
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     session = session_factory()
     try:
@@ -181,7 +181,7 @@ def test_project_reader_filters_large_files_alerts_and_dashboard_before_paginati
 ):
     from routers import dashboard, large_files, storage_alerts
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     session = session_factory()
     try:
@@ -219,7 +219,7 @@ def test_project_reader_cannot_read_another_projects_storage_trend(
 ):
     from routers import projects
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     session = session_factory()
     try:
@@ -257,7 +257,7 @@ def test_project_reader_cannot_list_storage_backup_records(
 ):
     from routers import storage_back_up_records
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     session = session_factory()
     try:
@@ -290,7 +290,7 @@ def test_project_reader_cannot_list_system_users_or_group_tags(
 ):
     from routers import group_tag, users
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     session = session_factory()
     try:
@@ -319,7 +319,7 @@ def test_unscoped_device_resource_routes_are_limited_to_super_admin(
 ):
     from routers import storage_cluster
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     session = session_factory()
     try:
@@ -340,7 +340,7 @@ def test_project_capabilities_are_calculated_from_the_current_user_role(
 ):
     from routers import projects
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     session = session_factory()
     try:
@@ -375,7 +375,7 @@ def test_quota_capabilities_follow_group_and_project_role_boundaries(
 ):
     from routers import group, storage_usage
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     session = session_factory()
     try:

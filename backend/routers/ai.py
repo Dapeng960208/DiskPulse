@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
 import json
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import Depends, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from dependencies import CurrentUserDep, get_db
+from routers.transactional import TransactionalAPIRouter
 from schemas.aiSchema import ConversationCreate, MessageCreate, QuotaConfirmationDecision
 from services import ai_chat_service, ai_quota_confirmation_service, audit_service
 from services.ai_rate_limit import enforce_ai_rate_limit
 from services.ai_tool_service import build_tool_registry
 
 
-router = APIRouter(prefix="/ai", tags=["ai"])
+router = TransactionalAPIRouter(prefix="/ai", tags=["ai"])
 
 
 @router.get("/models")

@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
-from fastapi import APIRouter, Depends
+from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from crud import configCrud
 from dependencies import get_db, require_super_admin
+from routers.transactional import TransactionalAPIRouter
 from schemas import configSchemas
 
-router = APIRouter(
+router = TransactionalAPIRouter(
     prefix="/config",
     tags=["config"],
     responses={404: {"description": "Not found"}},

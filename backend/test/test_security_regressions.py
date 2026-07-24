@@ -79,7 +79,7 @@ def security_route_setup(storage_router: APIRouter):
 
 @pytest.fixture
 def security_client(api_client_factory, session_factory):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["secadmin"])
     seed_security_data(session_factory)
     client = api_client_factory(
@@ -131,12 +131,12 @@ def test_exception_handler_does_not_return_internal_exception_text(security_clie
 
 
 def test_jwt_decoder_rejects_unexpected_header_algorithm():
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     token = issue_token(1)
     _header, encoded_payload, _signature = token.split(".")
     encoded_header = _b64encode(json.dumps({"alg": "none", "typ": "JWT"}).encode("utf-8"))
     message = f"{encoded_header}.{encoded_payload}".encode("ascii")
-    signature = _b64encode(hmac.new(b"test-secret", message, "sha256").digest())
+    signature = _b64encode(hmac.new(b"test-jwt-secret-key-for-unit-tests-32", message, "sha256").digest())
 
     with pytest.raises(Exception):
         decode_token(f"{encoded_header}.{encoded_payload}.{signature}")
@@ -328,7 +328,7 @@ def test_remote_file_manager_quotes_shell_path_arguments():
 
 
 def test_bare_authorization_token_is_rejected(security_client):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     admin_token = issue_token(1)
     response = security_client.get(
         "/storage-pulse/api/storage-clusters/1",

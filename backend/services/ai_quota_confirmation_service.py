@@ -263,7 +263,7 @@ def prepare_confirmation(
     audit.status = "awaiting_confirmation"
     audit.detail_payload = json.dumps(detail, ensure_ascii=False)
     audit.updated_at = datetime.now()
-    db.commit()
+    db.flush()
     return pending
 
 
@@ -303,7 +303,7 @@ def decide_confirmation(
             decision="cancel",
             status_value="cancelled",
         )
-        db.commit()
+        db.flush()
         return {"decision": "cancel", "confirmation_id": confirmation_id}
     definition = registry.get(record["tool_name"])
     if definition is None or not is_quota_write_tool(definition.name):
@@ -317,7 +317,7 @@ def decide_confirmation(
             result={"ok": False, "error": error_message},
             error_message=error_message,
         )
-        db.commit()
+        db.flush()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="quota tool is no longer available")
     # Revalidate the Redis-bound, normalized arguments immediately before execution.
     result = execute_tool(
@@ -336,5 +336,5 @@ def decide_confirmation(
         result=result,
         error_message=result.get("error") if not result.get("ok") else None,
     )
-    db.commit()
+    db.flush()
     return {"decision": "confirm", "confirmation_id": confirmation_id, "result": result}

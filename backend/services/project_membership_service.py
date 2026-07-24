@@ -100,7 +100,7 @@ def create_membership(
             outcome="success",
             after_summary={"role": role},
         )
-    db.commit()
+    db.flush()
     db.refresh(membership)
     return _serialize(membership, db.get(User, user_id))
 
@@ -139,7 +139,7 @@ def update_membership(
             before_summary={"role": previous_role},
             after_summary={"role": role},
         )
-    db.commit()
+    db.flush()
     db.refresh(membership)
     return _serialize(membership, db.get(User, user_id))
 
@@ -189,4 +189,4 @@ def delete_membership(
             before_summary={"role": membership.role},
         )
     db.delete(membership)
-    db.commit()
+    db.flush()
