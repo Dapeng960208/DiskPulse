@@ -6,6 +6,9 @@ from schemas.capacitySchema import CapacityResponseBase
 from schemas.storageClusterSchema import StorageCluster
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class AggregateBase(BaseModel):
     name: str
     limit: float

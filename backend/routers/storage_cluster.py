@@ -2,6 +2,7 @@
 import io
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal, Optional
+from utils.datetime_utils import utc_now
 
 from fastapi import Depends, HTTPException, Path, Query, Request
 from fastapi.responses import StreamingResponse
@@ -48,7 +49,7 @@ router = TransactionalAPIRouter(
 
 
 def _analytics_default_end() -> datetime:
-    return datetime.now(timezone.utc)
+    return utc_now()
 
 
 def _analytics_time_range(

@@ -6,6 +6,7 @@ from schemas import largeFileSchema
 from io import BytesIO
 import pandas as pd
 from utils.query import get_sort_column
+from utils.datetime_utils import format_for_user_time_zone
 
 
 def get_large_files(db: Session, page: int | None = None, size: int | None = None, nameLike: str | None = None,
@@ -41,7 +42,8 @@ def get_large_files(db: Session, page: int | None = None, size: int | None = Non
 
 def export_large_files(db: Session, nameLike: str | None = None, user_id: int | None = None,
                        group_id: int | None = None,
-                       accessible_project_ids: set[int] | None = None):
+                       accessible_project_ids: set[int] | None = None,
+                       time_zone: str | None = None):
     large_files_dbs, _ = get_large_files(db=db, nameLike=nameLike, user_id=user_id,
                                          group_id=group_id,
                                          accessible_project_ids=accessible_project_ids)
@@ -56,7 +58,7 @@ def export_large_files(db: Session, nameLike: str | None = None, user_id: int | 
             "linux_path": item.linux_path,
             "size": item.size,
             "file_type": item.file_type,
-            "updated_at": item.updated_at,
+            "updated_at": format_for_user_time_zone(item.updated_at, time_zone),
             "rd_username": item.user.rd_username if item.user else None,
             "group_name": item.group.name if item.group else None,
         }

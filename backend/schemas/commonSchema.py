@@ -9,6 +9,9 @@ from schemas.storageTrendSchema import StorageTrendMeta
 T = TypeVar('T')
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class ResponseModel(BaseModel, Generic[T]):
     content: List[T]
     total: int

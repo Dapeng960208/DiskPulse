@@ -30,6 +30,7 @@ from services.storageAlertRuleService import (
     resolve_storage_alert_rule,
     transition_alert_state,
 )
+from utils.datetime_utils import utc_now
 
 
 logger = get_task_logger(__name__)
@@ -276,7 +277,7 @@ def evaluate_storage_alerts(
     refreshed_group_ids=(),
     observed_at=None,
 ):
-    observed_at = observed_at or sample_identity or datetime.now()
+    observed_at = observed_at or sample_identity or utc_now()
     if isinstance(observed_at, str):
         observed_at = datetime.fromisoformat(observed_at)
     delivery_ids = []
@@ -488,11 +489,11 @@ def _prepare_delivery_attempt(event_id, *, context: AuditContext, config):
         event = db.query(StorageAlerts).filter_by(id=event_id).with_for_update().first()
         if event is None or event.delivery_status not in {"pending", "retrying", "delivering"}:
             return None
-        now = datetime.now()
+        now = utc_now()
         if event.next_attempt_at is None or event.next_attempt_at > now:
             return None
         # Enforce lease: skip if another worker holds the delivery attempt
-        now = datetime.now()
+        now = utc_now()
         if event.next_attempt_at is not None and event.next_attempt_at > now:
             return None
         if not event.recipient_usernames:
@@ -536,7 +537,7 @@ def _record_delivery_result(event_id, *, context: AuditContext, attempt: int, er
                 event.next_attempt_at = None
             else:
                 event.delivery_status = "retrying"
-                event.next_attempt_at = datetime.now() + timedelta(
+                event.next_attempt_at = utc_now() + timedelta(
                     seconds=RETRY_DELAYS_SECONDS[event.delivery_attempts - 1]
                 )
             append_audit_event(
@@ -555,7 +556,7 @@ def _record_delivery_result(event_id, *, context: AuditContext, attempt: int, er
             )
         else:
             event.delivery_status = "sent"
-            event.notified_at = datetime.now()
+            event.notified_at = utc_now()
             event.next_attempt_at = None
             event.delivery_error = None
             append_audit_event(
@@ -604,7 +605,7 @@ def deliver_storage_alert_task(event_id, audit_context_payload=None):
 
 @diskpulse_app.task(soft_time_limit=50, time_limit=55)
 def retry_storage_alerts_task():
-    now = datetime.now()
+    now = utc_now()
     with SessionLocal() as db:
         event_ids = [
             row.id

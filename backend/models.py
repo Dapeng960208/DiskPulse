@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime, timezone
+from datetime import timezone
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -23,14 +23,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import backref, relationship
 
 from database import Base
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+from utils.datetime_utils import normalize_utc, utc_now
 
 
 class UTCDateTime(TypeDecorator):
-    """Persist telemetry ledger timestamps as UTC-aware datetimes."""
+    """Persist every business instant as an aware UTC datetime."""
 
     impl = DateTime(timezone=True)
     cache_ok = True
@@ -38,16 +35,14 @@ class UTCDateTime(TypeDecorator):
     def process_bind_param(self, value, dialect):
         if value is None:
             return None
-        if value.tzinfo is None:
-            raise ValueError("Telemetry timestamps must include a timezone")
-        return value.astimezone(timezone.utc)
+        return normalize_utc(value)
 
     def process_result_value(self, value, dialect):
         if value is None:
             return None
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
+        return normalize_utc(value)
 
 
 class StorageConf(Base):
@@ -95,7 +90,8 @@ class User(Base):
     user_type = Column(Integer, default=2)
     storage_used = Column(Float, default=0)
     quit_days = Column(Integer, default=0)
-    updated_at = Column(DateTime, default=datetime.now)
+    time_zone = Column(String(64), nullable=True)
+    updated_at = Column(UTCDateTime(), default=utc_now)
 
     storage_usages = relationship("StorageUsage", back_populates="user", passive_deletes=True)
 
@@ -126,7 +122,7 @@ class Project(Base):
     used = Column(Float, default=0)
     use_ratio = Column(Float, default=0)
     soft_use_ratio = Column(Float, nullable=True)
-    updated_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(UTCDateTime(), default=utc_now)
 
     groups = relationship("Group", back_populates="project", lazy=True)
     in_charge_user = relationship("User", foreign_keys=[in_charge_user_id], lazy=True)
@@ -150,8 +146,8 @@ class ProjectMembership(Base):
     role = Column(String(16), nullable=False, default="reader")
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=datetime.now, nullable=False)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+    created_at = Column(UTCDateTime(), default=utc_now, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class AuditEvent(Base):
@@ -167,7 +163,7 @@ class AuditEvent(Base):
     id = Column(String(36), primary_key=True)
     operation_id = Column(String(36), nullable=False)
     phase = Column(String(16), nullable=False)
-    occurred_at = Column(DateTime, nullable=False, default=datetime.now)
+    occurred_at = Column(UTCDateTime(), nullable=False, default=utc_now)
     actor_type = Column(String(32), nullable=False)
     # Audit rows retain historical logical IDs even after the referenced subject is removed.
     # Foreign-key SET NULL would mutate this append-only table and be rejected by its trigger.
@@ -204,8 +200,8 @@ class StorageCluster(Base):
     limit = Column(Float)
     used = Column(Float)
     use_ratio = Column(Float, default=0)
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now)
+    created_at = Column(UTCDateTime(), default=utc_now)
+    updated_at = Column(UTCDateTime(), default=utc_now)
 
     aggregates = relationship("Aggregate", back_populates="storage_cluster", lazy=True)
     volumes = relationship("Volume", back_populates="storage_cluster", lazy=True)
@@ -292,7 +288,7 @@ class Aggregate(Base):
     limit = Column(Float, default=0)
     used = Column(Float, default=0)
     use_ratio = Column(Float, default=0)
-    updated_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(UTCDateTime(), default=utc_now)
 
     storage_cluster = relationship("StorageCluster", back_populates="aggregates", lazy=True)
 
@@ -314,7 +310,7 @@ class Volume(Base):
     soft_use_ratio = Column(Float, nullable=True)
     allocated = Column(Float, default=0)
     performance_object_id = Column(String(255), nullable=True)
-    updated_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(UTCDateTime(), default=utc_now)
 
     qtrees = relationship("Qtree", back_populates="volume", lazy=True)
     storage_cluster = relationship("StorageCluster", back_populates="volumes", lazy=True)
@@ -335,7 +331,7 @@ class Qtree(Base):
     style = Column(String)
     oplocks = Column(String)
     status = Column(String)
-    updated_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(UTCDateTime(), default=utc_now)
 
     volume = relationship("Volume", back_populates="qtrees", lazy=True)
     groups = relationship("Group", back_populates="qtree", lazy=True)
@@ -407,7 +403,7 @@ class Group(Base):
     back_up_enabled = Column(Boolean, default=True)
     storage_alert_rule = Column(JSON, nullable=True)
     alert_cc_user_ids = Column(JSON, nullable=False, default=list)
-    updated_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(UTCDateTime(), default=utc_now)
 
     qtree = relationship("Qtree", back_populates="groups", lazy=True)
     project = relationship("Project", back_populates="groups", lazy=True)
@@ -442,11 +438,11 @@ class StorageUsage(Base):
     links = Column(Integer, default=0)
     access = Column(String, default="")
     gid = Column(String, default="")
-    access_time = Column(DateTime)
-    modify_time = Column(DateTime)
-    change_time = Column(DateTime)
-    birth_time = Column(DateTime)
-    updated_at = Column(DateTime, default=datetime.now)
+    access_time = Column(UTCDateTime())
+    modify_time = Column(UTCDateTime())
+    change_time = Column(UTCDateTime())
+    birth_time = Column(UTCDateTime())
+    updated_at = Column(UTCDateTime(), default=utc_now)
 
     group = relationship("Group", back_populates="storage_usages", lazy=True)
     user = relationship("User", back_populates="storage_usages", lazy=True)
@@ -495,10 +491,10 @@ class StorageAlerts(Base):
     delivery_status = Column(String(16), nullable=False, default="legacy")
     recipient_usernames = Column(JSON, nullable=True)
     delivery_attempts = Column(Integer, nullable=False, default=0)
-    next_attempt_at = Column(DateTime, nullable=True)
-    notified_at = Column(DateTime, nullable=True)
+    next_attempt_at = Column(UTCDateTime(), nullable=True)
+    notified_at = Column(UTCDateTime(), nullable=True)
     delivery_error = Column(String(512), nullable=True)
-    updated_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(UTCDateTime(), default=utc_now)
 
     storage_cluster = relationship("StorageCluster", lazy=True)
 
@@ -576,12 +572,12 @@ class VendorEventDefinition(Base):
     review_status = Column(String(16), nullable=False, default="pending")
     recommended_solution_zh = Column(Text, nullable=True, comment="推荐解决方案（中文）")
     is_active = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
     updated_at = Column(
-        DateTime,
+        UTCDateTime(),
         nullable=False,
-        default=datetime.now,
-        onupdate=datetime.now,
+        default=utc_now,
+        onupdate=utc_now,
     )
 
 
@@ -966,8 +962,8 @@ class StorageAlertState(Base):
     consecutive_breach_count = Column(Integer, nullable=False, default=0)
     current_level = Column(String(16), nullable=True)
     last_use_ratio = Column(Float, nullable=True)
-    last_observed_at = Column(DateTime, nullable=True)
-    last_notified_at = Column(DateTime, nullable=True)
+    last_observed_at = Column(UTCDateTime(), nullable=True)
+    last_notified_at = Column(UTCDateTime(), nullable=True)
 
 
 class StorageBackUpRecord(Base):
@@ -977,8 +973,8 @@ class StorageBackUpRecord(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     source_path = Column(String)
     destination_path = Column(String)
-    start_time = Column(DateTime, default=datetime.now)
-    end_time = Column(DateTime, default=datetime.now)
+    start_time = Column(UTCDateTime(), default=utc_now)
+    end_time = Column(UTCDateTime(), default=utc_now)
     status = Column(Integer, default=1)
     process_uid = Column(String, nullable=True)
 
@@ -994,8 +990,8 @@ class LargeFiles(Base):
     linux_path = Column(String, index=True)
     size = Column(Float, default=0)
     file_type = Column(String, default="other")
-    updated_at = Column(DateTime, default=datetime.now)
-    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(UTCDateTime(), default=utc_now)
+    created_at = Column(UTCDateTime(), default=utc_now)
 
     user = relationship("User")
     group = relationship("Group")
@@ -1019,11 +1015,11 @@ class AIConfig(Base):
     capability_cache = Column(Text, nullable=False, default="{}")
     capability_status = Column(String(20), nullable=False, default="unknown")
     capability_error = Column(Text, nullable=True)
-    capability_updated_at = Column(DateTime, nullable=True)
+    capability_updated_at = Column(UTCDateTime(), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.now)
-    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utc_now, onupdate=utc_now)
 
 
 class AIConversation(Base):
@@ -1035,8 +1031,8 @@ class AIConversation(Base):
     title = Column(String(255), nullable=False, default="新对话")
     name_obfuscation_epoch = Column(Integer, nullable=True)
     name_obfuscation_from_message_id = Column(Integer, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.now)
-    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utc_now, onupdate=utc_now)
 
     messages = relationship(
         "AIMessage",
@@ -1060,8 +1056,8 @@ class AIMessage(Base):
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
     reasoning = Column(String(20), nullable=False, default="auto")
-    created_at = Column(DateTime, nullable=False, default=datetime.now)
-    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utc_now, onupdate=utc_now)
 
     conversation = relationship("AIConversation", back_populates="messages")
 
@@ -1079,8 +1075,8 @@ class AIPlatformSetting(Base):
     name_obfuscation_enabled = Column(Boolean, nullable=False, default=True)
     name_obfuscation_epoch = Column(Integer, nullable=False, default=1)
     updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.now)
-    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utc_now, onupdate=utc_now)
 
     default_chat_model = relationship("AIConfig", foreign_keys=[default_chat_model_id])
 
@@ -1112,8 +1108,8 @@ class AIConversationNameAlias(Base):
     alias = Column(String(64), nullable=False)
     entity_kind = Column(String(32), nullable=False)
     original_value_encrypted = Column(Text, nullable=False)
-    created_at = Column(DateTime, nullable=False, default=datetime.now)
-    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utc_now, onupdate=utc_now)
 
     conversation = relationship("AIConversation", foreign_keys=[conversation_id])
 
@@ -1141,10 +1137,10 @@ class AIAuditLog(Base):
     status = Column(String(50), nullable=False, index=True)
     error_message = Column(Text, nullable=True)
     trace_id = Column(String(64), nullable=True, index=True)
-    started_at = Column(DateTime, nullable=False, default=datetime.now)
-    finished_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.now)
-    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    started_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+    finished_at = Column(UTCDateTime(), nullable=True)
+    created_at = Column(UTCDateTime(), nullable=False, default=utc_now)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utc_now, onupdate=utc_now)
 
     model = relationship("AIConfig", foreign_keys=[model_id])
     conversation = relationship("AIConversation", foreign_keys=[conversation_id])

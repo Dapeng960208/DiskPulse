@@ -10,6 +10,9 @@ from schemas.capacitySchema import CapacityResponseBase
 PredictionAssetType = Literal["storage_cluster", "project", "group", "storage_usage"]
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class CapacityExhaustionRiskOut(BaseModel):
     level: Literal["insufficient", "critical", "high", "watch", "none"]
     label: str

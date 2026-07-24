@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from crud.configCrud import get_storage_config
 from sqlalchemy import  text
-from utils.datetime_utils import questdb_to_system_local_naive, to_utc_z
+from utils.datetime_utils import from_questdb_utc, to_utc_z, utc_now
 from utils.query import require_allowed
 
 
@@ -73,9 +73,7 @@ def process_result_data(result: List[Any], columns: List[str]) -> Dict[str, List
         source = []
         for item in result:
             row = [
-                questdb_to_system_local_naive(item[-1]).strftime(
-                    "%Y-%m-%d %H:%M:00"
-                ),
+                to_utc_z(from_questdb_utc(item[-1])),
                 item[i],
             ]
             source.append(row)
@@ -87,7 +85,7 @@ def get_real_time_data_by_id(db: Session, attribute_id: int, start_time: datetim
                              end_time: datetime | None = None, indicator: str = 'used',
                              table_prefix: str = 'storage_usage'):
     if start_time is None and end_time is None:
-        end_time = datetime.now()
+        end_time = utc_now()
         start_time = end_time - timedelta(hours=24)
     storage_config = get_storage_config(db=db)
     indicator = _normalize_indicator(indicator)
@@ -104,7 +102,7 @@ def get_real_time_data_by_ids(db: Session, attribute_ids: list[int], start_time:
                               table_prefix: str = 'storage_usage'):
     ids_list = []
     if start_time is None and end_time is None:
-        end_time = datetime.now()
+        end_time = utc_now()
         start_time = end_time - timedelta(hours=24)
     storage_config = get_storage_config(db=db)
     indicator = _normalize_indicator(indicator)
@@ -119,8 +117,9 @@ def get_real_time_data_by_ids(db: Session, attribute_ids: list[int], start_time:
     return ids_list
 
 
-def get_high_avg_usage(table_prefix: str, storage_config: Any, end_time: datetime = datetime.now() - timedelta(hours=1),
+def get_high_avg_usage(table_prefix: str, storage_config: Any, end_time: datetime | None = None,
                        threshold: int = 90):
+    end_time = end_time or utc_now() - timedelta(hours=1)
     attribute, table_name = _table_info(table_prefix)
     select_command = f"""
         SELECT {attribute}_id,avg_use_ratio
@@ -222,7 +221,7 @@ def get_storage_cluster_real_time(db: Session, storage_cluster_id: int, start_ti
                                   end_time: datetime | None = None, indicator: str = 'used'):
     indicator = "use_ratio" if indicator in {"use_ratio", "used_ratio"} else _normalize_indicator(indicator)
     if start_time is None and end_time is None:
-        end_time = datetime.now()
+        end_time = utc_now()
         start_time = end_time - timedelta(hours=24)
     if isinstance(start_time, str):
         start_time = datetime.fromisoformat(start_time)
@@ -257,7 +256,7 @@ def get_storage_cluster_real_time(db: Session, storage_cluster_id: int, start_ti
 
     return [
         [
-            questdb_to_system_local_naive(item[1]).strftime("%Y-%m-%d %H:%M:00"),
+            to_utc_z(from_questdb_utc(item[1])),
             item[0],
         ]
         for item in result

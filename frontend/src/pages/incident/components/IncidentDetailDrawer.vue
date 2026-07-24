@@ -15,6 +15,7 @@ import {
   ElTooltip,
 } from 'element-plus';
 import incidentApi from '@/api/incident-api.js';
+import { formatDateTime } from '@/utils/datetime.js';
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -53,10 +54,7 @@ const nextStatus = computed(() => ({
 const isUpdating = computed(() => Boolean(activeAction.value));
 
 function formatLocalDateTime(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  const pad = (part) => String(part).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return formatDateTime(value).replaceAll('/', '-');
 }
 
 const categoryLabels = {

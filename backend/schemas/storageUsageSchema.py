@@ -3,6 +3,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from datetime import datetime
 from schemas import usersSchema, groupSchema
 from schemas.capacitySchema import CapacityResponseBase
+from utils.datetime_utils import to_utc_z
+
+from schemas.base import UTCBaseModel as BaseModel
+
 
 class StorageUsageBase(BaseModel):
     user_id: int
@@ -81,7 +85,7 @@ class StorageUsage(CapacityResponseBase, StorageUsageBase):
         when_used="json",
     )
     def serialize_datetime(self, value: datetime | None) -> str | None:
-        return value.strftime("%Y-%m-%d %H:%M:%S") if value else None
+        return to_utc_z(value) if value else None
 
 
 StorageUsage.model_rebuild()

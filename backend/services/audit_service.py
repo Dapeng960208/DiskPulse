@@ -13,6 +13,7 @@ from crud import auditCrud
 from models import AuditEvent
 from services.project_access_service import require_project_permission
 from utils.auth_service import is_super_admin
+from utils.datetime_utils import utc_now
 
 
 _SENSITIVE_KEY_PARTS = (
@@ -136,7 +137,7 @@ def append_audit_event(
         id=str(uuid4()),
         operation_id=context.operation_id,
         phase=phase,
-        occurred_at=datetime.now(),
+        occurred_at=utc_now(),
         actor_type=context.actor_type,
         actor_user_id=context.actor_user_id,
         action=action,

@@ -25,6 +25,7 @@ from services.ai_reasoning_service import (
     failed_reasoning_control,
     resolve_reasoning_control,
 )
+from utils.datetime_utils import utc_now
 from services.audit_service import AuditContext, append_audit_event
 from services.ai_security import decrypt_secret, encrypt_secret, mask_secret
 
@@ -128,7 +129,7 @@ def update_platform_settings(
             settings.name_obfuscation_epoch = max(1, int(settings.name_obfuscation_epoch or 1)) + 1
         settings.name_obfuscation_enabled = enabled
     settings.updated_by = actor_id
-    settings.updated_at = datetime.now()
+    settings.updated_at = utc_now()
     db.flush()
     db.refresh(settings)
     return get_platform_settings(db)
@@ -192,7 +193,7 @@ def refresh_model_capabilities(db: Session, model: AIConfig) -> dict:
         model.capability_cache = json.dumps(control, ensure_ascii=False)
         model.capability_status = "failed"
         model.capability_error = "模型能力获取失败"
-    model.capability_updated_at = datetime.now()
+    model.capability_updated_at = utc_now()
     db.flush()
     db.refresh(model)
     return serialize_model(model, is_default=_default_model_id(db) == model.id)
@@ -207,7 +208,7 @@ def _prime_official_capability(model: AIConfig) -> None:
     model.capability_cache = json.dumps(control, ensure_ascii=False)
     model.capability_status = control["status"]
     model.capability_error = None
-    model.capability_updated_at = datetime.now()
+    model.capability_updated_at = utc_now()
 
 
 def _refresh_dynamic_capability(db: Session, model: AIConfig) -> dict:
@@ -388,7 +389,7 @@ def update_model(
             model.model = requested_model
             model.model = _resolve_model_identifier(model)
         model.updated_by = actor_id
-        model.updated_at = datetime.now()
+        model.updated_at = utc_now()
         if {"provider", "base_url", "model", "api_key"} & payload.model_fields_set:
             _prime_official_capability(model)
         _append_model_audit(

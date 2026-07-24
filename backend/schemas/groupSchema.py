@@ -9,6 +9,9 @@ from schemas.capacitySchema import CapacityResponseBase
 from schemas.storageAlertRuleSchema import StorageAlertRule
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class GroupDiskBase(BaseModel):
     id: int
     limit: float | None = None

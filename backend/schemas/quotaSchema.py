@@ -8,6 +8,9 @@ _SPACE_MULTIPLIERS = {"GiB": 1024 ** 3, "TiB": 1024 ** 4}
 _GRACE_MULTIPLIERS = {"minutes": 60, "hours": 3600, "days": 86400}
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class QuotaAdjustmentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 

@@ -2,6 +2,7 @@
 import os
 import platform
 from datetime import datetime
+from utils.datetime_utils import utc_now
 from appConfig import base_config
 from typing import Any
 from multiprocessing import Process
@@ -75,7 +76,7 @@ def generate_plot(data: list | None, model_db: Any, message: str, image_path: st
 
 def plot_real_time_line(data: list, model_db: Any, role: str, message: str | None = None,
                         logger: logging.Logger | None = None):
-    today_str = datetime.now().strftime("%Y%m%d")
+    today_str = utc_now().strftime("%Y%m%d")
 
     root_path = base_config.app_root_path
     image_dir = os.path.join(root_path, 'static', 'generate_images')

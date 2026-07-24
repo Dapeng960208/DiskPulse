@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from crud import incidentAiAgentCrud
 from models import IncidentAiRun, IncidentTimeline
 from services.ai_client import AIClientError, chat_completion
-from utils.datetime_utils import from_questdb_utc
+from utils.datetime_utils import from_questdb_utc, utc_now
 
 
 IncidentAiClassification = Literal["actionable", "normal_fluctuation", "insufficient_evidence"]
@@ -125,7 +125,7 @@ def settings_out(db, settings) -> dict:
 
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return utc_now()
 
 
 def _utc_z(value: datetime) -> str:

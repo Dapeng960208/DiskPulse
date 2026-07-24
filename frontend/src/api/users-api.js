@@ -24,6 +24,14 @@ class UsersApi extends CrudApi {
     });
   }
 
+  updateCurrentProfile(data) {
+    return super.patch('/current/profile', data);
+  }
+
+  fetchTimeZones() {
+    return super.get('/current/time-zones');
+  }
+
   syncLdap() {
     return super.post('/sync-ldap');
   }

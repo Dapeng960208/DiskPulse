@@ -34,6 +34,9 @@ ReasoningValue = Literal[
 ]
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class AIModelCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=500)

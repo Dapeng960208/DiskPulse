@@ -136,13 +136,12 @@ def test_severity_summary_normalizes_and_merges_alert_sources():
     }
 
 
-def test_alert_crud_converts_aware_utc_bounds_to_system_local_naive():
+def test_alert_crud_preserves_aware_utc_bounds_for_postgresql_queries():
     assert storageHealthAnalyticsCrud._naive(
         datetime(2026, 7, 15, 2, 0, tzinfo=timezone.utc)
-    ) == datetime(2026, 7, 15, 10, 0)
-    assert storageHealthAnalyticsCrud._naive(
-        datetime(2026, 7, 15, 10, 0)
-    ) == datetime(2026, 7, 15, 10, 0)
+    ) == datetime(2026, 7, 15, 2, 0, tzinfo=timezone.utc)
+    with pytest.raises(ValueError, match="timezone-aware"):
+        storageHealthAnalyticsCrud._naive(datetime(2026, 7, 15, 10, 0))
 
 
 def test_error_severity_window_matches_the_vendor_system_event_scope(db_session):
@@ -163,7 +162,7 @@ def test_error_severity_window_matches_the_vendor_system_event_scope(db_session)
                 external_event_id="vendor-1",
                 severity="error",
                 alert_level="error",
-                updated_at=datetime(2026, 7, 15, 10, 15),
+                updated_at=datetime(2026, 7, 15, 2, 15, tzinfo=timezone.utc),
             ),
             models.StorageAlerts(
                 storage_cluster_id=9,
@@ -171,7 +170,7 @@ def test_error_severity_window_matches_the_vendor_system_event_scope(db_session)
                 external_event_id="diskpulse-1",
                 severity="warning",
                 alert_level="medium",
-                updated_at=datetime(2026, 7, 15, 10, 30),
+                updated_at=datetime(2026, 7, 15, 2, 30, tzinfo=timezone.utc),
             ),
         ]
     )
@@ -205,7 +204,7 @@ def test_error_severity_crud_allows_only_vendor_system_event_sources(db_session)
                 external_event_id=f"severity-{index}",
                 severity="error",
                 alert_level="error",
-                updated_at=datetime(2026, 7, 15, 10, index),
+                updated_at=datetime(2026, 7, 15, 2, index, tzinfo=timezone.utc),
             )
         )
     db_session.commit()
@@ -213,8 +212,8 @@ def test_error_severity_crud_allows_only_vendor_system_event_sources(db_session)
     rows = storageHealthAnalyticsCrud.get_alert_severities(
         db_session,
         10,
-        datetime(2026, 7, 15, 10, 0),
-        datetime(2026, 7, 15, 11, 0),
+        datetime(2026, 7, 15, 2, 0, tzinfo=timezone.utc),
+        datetime(2026, 7, 15, 3, 0, tzinfo=timezone.utc),
     )
 
     assert {row["source"] for row in rows} == {"netapp", "isilon"}
@@ -230,7 +229,7 @@ def test_general_alert_query_excludes_vendor_system_events(db_session):
                 alert_level="warning",
                 alert_type="vendor_event" if source != "diskpulse" else "alert",
                 description=source,
-                updated_at=datetime(2026, 7, 15, 10, index),
+                updated_at=datetime(2026, 7, 15, 10, index, tzinfo=timezone.utc),
             )
         )
     db_session.commit()
@@ -266,7 +265,7 @@ def test_system_events_return_only_vendor_rows_for_the_selected_cluster(db_sessi
                     "object_id": f"object-{index}",
                     "raw": {"node": {"name": "node-a"}},
                 },
-                updated_at=datetime(2026, 7, 15, 10, index),
+                updated_at=datetime(2026, 7, 15, 10, index, tzinfo=timezone.utc),
             )
         )
     db_session.commit()
@@ -274,8 +273,8 @@ def test_system_events_return_only_vendor_rows_for_the_selected_cluster(db_sessi
     total, rows = storageHealthAnalyticsCrud.get_system_event_rows(
         db_session,
         7,
-        datetime(2026, 7, 15, 10, 0),
-        datetime(2026, 7, 15, 11, 0),
+            datetime(2026, 7, 15, 10, 0, tzinfo=timezone.utc),
+            datetime(2026, 7, 15, 11, 0, tzinfo=timezone.utc),
     )
 
     assert total == 1
@@ -288,7 +287,7 @@ def test_system_events_return_only_vendor_rows_for_the_selected_cluster(db_sessi
             "object_name": "node-a",
             "object_type": "node",
             "description": "netapp-message",
-            "occurred_at": datetime(2026, 7, 15, 10, 1),
+                "occurred_at": datetime(2026, 7, 15, 10, 1, tzinfo=timezone.utc),
         }
     ]
 
@@ -310,7 +309,7 @@ def test_system_events_filter_before_database_pagination(db_session):
                 description=f"Quota threshold event {index}",
                 related_type="node",
                 related_info={"event_code": f"QUOTA_{index}", "object_id": "6"},
-                updated_at=datetime(2026, 7, 15, 10, index),
+                updated_at=datetime(2026, 7, 15, 10, index, tzinfo=timezone.utc),
             )
             for index in range(1, 5)
         ]
@@ -320,8 +319,8 @@ def test_system_events_filter_before_database_pagination(db_session):
     total, rows = storageHealthAnalyticsCrud.get_system_event_rows(
         db_session,
         11,
-        datetime(2026, 7, 15, 10, 0),
-        datetime(2026, 7, 15, 11, 0),
+            datetime(2026, 7, 15, 10, 0, tzinfo=timezone.utc),
+            datetime(2026, 7, 15, 11, 0, tzinfo=timezone.utc),
         keyword="quota",
         severity="warning",
         page=2,
@@ -530,7 +529,7 @@ def test_repeated_fault_crud_allows_only_netapp_and_isilon(db_session):
                     fingerprint=f"{source}:disk.offline:node:node-1",
                     severity="error",
                     alert_level="error",
-                    updated_at=occurred_at.astimezone(SYSTEM_TIMEZONE).replace(tzinfo=None),
+                    updated_at=occurred_at,
                 )
             )
     db_session.commit()
@@ -1456,10 +1455,14 @@ def test_storage_event_window_uses_24_hours_then_five_minute_overlap():
     ) == datetime(2026, 7, 15, 11, 25, 0)
 
 
-def test_netapp_since_converts_system_local_naive_to_utc_z():
+def test_netapp_since_requires_an_aware_utc_query_boundary():
     storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
 
-    assert storage_health._utc_z(datetime(2026, 7, 15, 10, 0)) == "2026-07-15T02:00:00Z"
+    with pytest.raises(ValueError, match="timezone-aware"):
+        storage_health._utc_z(datetime(2026, 7, 15, 10, 0))
+    assert storage_health._utc_z(
+        datetime(2026, 7, 15, 2, 0, tzinfo=timezone.utc)
+    ) == "2026-07-15T02:00:00Z"
 
 
 def test_netapp_first_event_collection_converts_local_now_to_utc_z(monkeypatch):
@@ -1516,13 +1519,17 @@ def test_netapp_first_event_collection_converts_local_now_to_utc_z(monkeypatch):
     monkeypatch.setattr(storage_health, "SessionLocal", SessionContext)
     monkeypatch.setattr(storage_health, "StoragePulseMonitor", Monitor)
     monkeypatch.setattr(storage_health, "_persist_vendor_events", Mock(return_value=0))
-    monkeypatch.setattr(storage_health, "datetime", LocalDatetime)
+    monkeypatch.setattr(
+        storage_health,
+        "utc_now",
+        lambda: datetime(2026, 7, 15, 2, 0, 0, tzinfo=timezone.utc),
+    )
 
     assert storage_health._collect_events(7) == 0
     client.get_ems_events.assert_called_once_with("2026-07-14T02:00:00Z")
 
 
-def test_vendor_event_offset_timestamp_is_converted_to_system_local_naive():
+def test_vendor_event_offset_timestamp_is_normalized_to_aware_utc():
     storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
     rows = storage_health.normalize_vendor_events(
         7,
@@ -1537,7 +1544,7 @@ def test_vendor_event_offset_timestamp_is_converted_to_system_local_naive():
         ],
     )
 
-    assert rows[0]["updated_at"] == datetime(2026, 7, 15, 10, 0, 0)
+    assert rows[0]["updated_at"] == datetime(2026, 7, 15, 2, 0, 0, tzinfo=timezone.utc)
 
 
 def test_vendor_event_parser_normalizes_identity_severity_and_fingerprint():
@@ -1591,11 +1598,7 @@ def test_isilon_event_group_uses_last_event_and_cause_details():
     assert rows[0]["external_event_id"] == "724916"
     assert rows[0]["fingerprint"] == "isilon:QUOTA_THRESHOLD_VIOLATION:node:6"
     assert rows[0]["description"] == "SmartQuotas threshold violation"
-    assert rows[0]["updated_at"] == (
-        datetime.fromtimestamp(last_event, timezone.utc)
-        .astimezone(SYSTEM_TIMEZONE)
-        .replace(tzinfo=None)
-    )
+    assert rows[0]["updated_at"] == datetime.fromtimestamp(last_event, timezone.utc)
 
 
 def test_isilon_event_list_normalizes_nested_events():
@@ -1626,19 +1629,15 @@ def test_isilon_event_list_normalizes_nested_events():
     assert rows[0]["external_event_id"] == "6.346657"
     assert rows[0]["fingerprint"] == "isilon:600010001:node:6"
     assert rows[0]["description"] == "Snapshot creation failed"
-    assert rows[0]["updated_at"] == (
-        datetime.fromtimestamp(event_time, timezone.utc)
-        .astimezone(SYSTEM_TIMEZONE)
-        .replace(tzinfo=None)
-    )
+    assert rows[0]["updated_at"] == datetime.fromtimestamp(event_time, timezone.utc)
 
 
 def test_storage_health_parser_boundary_values():
     storage_health = importlib.import_module("celery_tasks.tasks.storage_health")
-    now = datetime(2026, 7, 16, 10, 30)
+    now = datetime(2026, 7, 16, 10, 30, tzinfo=timezone.utc)
 
-    assert storage_health._datetime(now) is now
-    assert storage_health._datetime(None, now) is now
+    assert storage_health._datetime(now) == now
+    assert storage_health._datetime(None, now) == now
     assert storage_health._number("invalid") is None
     assert storage_health._netapp_performance_rows(7, [{"metric": {}}], now) == []
     assert storage_health._isilon_performance_rows(7, [{"key": "ifs.ops"}], now) == []
@@ -1736,7 +1735,7 @@ def test_vendor_event_batch_deduplicates_external_event_id_before_insert(db_sess
     inserted = storage_health._persist_vendor_events(
         db_session,
         rows,
-        datetime(2026, 7, 15, 9, 55, 0),
+        datetime(2026, 7, 15, 9, 55, 0, tzinfo=timezone.utc),
     )
     db_session.commit()
 

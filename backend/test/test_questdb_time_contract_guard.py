@@ -78,15 +78,14 @@ def test_repair_registry_uses_the_same_designated_timestamp_contract():
     } == dict(QUESTDB_TIME_CONTRACTS)
 
 
-def test_registered_write_guard_normalizes_local_wall_time_and_rejects_unknown_tables():
-    assert questdb_write_timestamp(
-        "storage_usages",
-        datetime(2026, 7, 23, 14, 30),
-    ) == datetime(2026, 7, 23, 6, 30)
+def test_registered_write_guard_accepts_only_aware_utc_instants_and_rejects_unknown_tables():
     assert questdb_write_timestamp(
         "storage_performance_metrics",
         datetime(2026, 7, 23, 6, 30, tzinfo=timezone.utc),
     ) == datetime(2026, 7, 23, 6, 30)
+
+    with pytest.raises(ValueError, match="aware UTC"):
+        questdb_write_timestamp("storage_usages", datetime(2026, 7, 23, 14, 30))
 
     with pytest.raises(ValueError, match="unregistered QuestDB timestamp table"):
         questdb_write_timestamp("new_unregistered_metrics", datetime.now())

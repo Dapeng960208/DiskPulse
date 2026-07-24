@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from typing import Annotated
+from zoneinfo import available_timezones
 
 from fastapi import Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
@@ -86,6 +87,25 @@ def logout(token: CurrentTokenDep, request: Request, current_user: CurrentUserDe
 @router.get("/current/profile")
 def current_profile(current_user: CurrentUserDep) -> dict:
     return {"result": build_frontend_profile(current_user)}
+
+
+@router.patch("/current/profile")
+def update_current_profile(
+    payload: usersSchema.CurrentUserProfileUpdate,
+    current_user: CurrentUserDep,
+    db: DBDep,
+) -> dict:
+    """Update the authenticated user's presentation setting only."""
+    current_user.time_zone = payload.time_zone
+    db.commit()
+    db.refresh(current_user)
+    return {"result": build_frontend_profile(current_user)}
+
+
+@router.get("/current/time-zones")
+def current_user_time_zones(_current_user: CurrentUserDep) -> dict:
+    """Return server-validated IANA identifiers for the timezone picker."""
+    return {"result": sorted(available_timezones())}
 
 
 @router.post("/sync-ldap", response_model=usersSchema.UserSyncResult)

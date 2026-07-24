@@ -6,6 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from schemas.capacitySchema import CapacityResponseBase
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class AssetRefOut(BaseModel):
     asset_type: str
     asset_id: str

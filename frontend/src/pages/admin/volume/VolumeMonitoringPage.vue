@@ -10,6 +10,7 @@ import StorageTrendChart from '@/components/dashboard/StorageTrendChart.vue';
 import { getDefaultTime } from '@/composables/common';
 import volumeApi from '@/api/volume-api.js';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
+import { toUtcRange } from '@/utils/datetime.js';
 
 const route = useRoute();
 const breadcrumbs = useBreadcrumbs();
@@ -44,9 +45,10 @@ async function load() {
   if (!Number.isInteger(volumeId.value) || volumeId.value <= 0) return;
   loading.value = true;
   try {
+    const [startTime, endTime] = toUtcRange(dateRange.value);
     const result = await volumeApi.fetchMonitoring(volumeId.value, {
-      start_time: dateRange.value?.[0],
-      end_time: dateRange.value?.[1],
+      start_time: startTime,
+      end_time: endTime,
       metrics: selectedMetrics.value,
     });
     monitoring.value = {

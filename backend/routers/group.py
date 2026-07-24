@@ -11,6 +11,7 @@ from services import project_access_service
 from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
 import logging
 from utils.common import convert_timestamp_to_datetime
+from utils.datetime_utils import utc_now
 from utils.plot import plot_real_time_line
 from utils.storageTarget import resolve_group_storage_target
 from utils.auth_service import is_super_admin
@@ -191,7 +192,7 @@ def delete_group(
 def get_storage_usage_image_by_id(group_id: int, end_time: str | None = None, role: str = 'manager',
                                   current_user: CurrentUserDep = None, db: Session = Depends(get_db)):
     if end_time is None:
-        end_time = datetime.now()
+        end_time = utc_now()
     else:
         end_time = convert_timestamp_to_datetime(end_time)
     group_db = project_access_service.require_group_permission(db, current_user, group_id)

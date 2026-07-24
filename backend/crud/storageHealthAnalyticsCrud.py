@@ -8,15 +8,11 @@ from sqlalchemy.orm import Session
 from crud.configCrud import get_storage_config
 from dependencies import QuestDBSession
 from models import StorageAlerts
-from utils.datetime_utils import (
-    questdb_to_system_local_naive,
-    to_system_local_naive,
-    to_utc_z,
-)
+from utils.datetime_utils import from_questdb_utc, normalize_utc, to_utc_z
 
 
 def _naive(value: datetime) -> datetime:
-    return to_system_local_naive(value)
+    return normalize_utc(value)
 
 
 def get_capacity_points(
@@ -49,7 +45,7 @@ def get_capacity_points(
         ).all()
     return [
         {
-            "updated_at": questdb_to_system_local_naive(row[1]),
+            "updated_at": from_questdb_utc(row[1]),
             "used": row[0],
         }
         for row in rows

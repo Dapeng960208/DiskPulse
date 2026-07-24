@@ -9,6 +9,9 @@ AuditPhase = Literal["attempt", "result"]
 AuditOutcome = Literal["success", "denied", "failure"]
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class AuditActorRef(BaseModel):
     id: int
     display_name: str

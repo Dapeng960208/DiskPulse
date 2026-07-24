@@ -15,6 +15,9 @@ AssociationType = Literal[
 ]
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class VendorEventSemantics(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Literal
 from types import SimpleNamespace
+from utils.datetime_utils import utc_now
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -417,7 +418,7 @@ def _risk_datetime(value: Any) -> datetime | None:
 
 def build_exhaustion_risk_summary(forecast, *, now: datetime | None = None) -> dict[str, Any]:
     """Return the single server-authoritative 30-day exhaustion-risk conclusion."""
-    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    now = (now or utc_now()).astimezone(timezone.utc)
     quality_status = (forecast.input_quality or {}).get("status")
     exhaustion_dates = forecast.exhaustion_dates or {}
     p50 = _risk_datetime(exhaustion_dates.get("p50"))

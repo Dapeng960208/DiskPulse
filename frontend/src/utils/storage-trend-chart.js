@@ -81,8 +81,8 @@ function formatValue(value, unit) {
 }
 
 function formatTime(value) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN', { hour12: false });
+  const formatted = formatDateTime(value);
+  return formatted === '-' ? String(value) : formatted;
 }
 
 function visualPieces(values, palette) {
@@ -228,3 +228,4 @@ export function buildStorageTrendOption({
   }
   return option;
 }
+import { formatDateTime } from './datetime.js';

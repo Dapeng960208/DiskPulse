@@ -4,13 +4,14 @@ import hashlib
 import hmac
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 import redis
 from fastapi import HTTPException, status
 
 from appConfig import base_config
+from utils.datetime_utils import utc_now
 
 
 DEFAULT_ACCESS_TTL_MINUTES = 7 * 24 * 60
@@ -110,7 +111,7 @@ def _token_signature(message: bytes, secret: str) -> str:
 
 
 def issue_token(user_id: int, token_type: str = "access") -> str:
-    now = datetime.now(UTC)
+    now = utc_now()
     ttl_seconds = _access_ttl_seconds()
     payload = {
         "sub": user_id,
@@ -149,7 +150,7 @@ def decode_token(token: str, expected_type: str = "access", *, verify_session: b
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token header")
     if payload.get("type") != expected_type:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token type")
-    if int(payload.get("exp", 0)) <= int(datetime.now(UTC).timestamp()):
+    if int(payload.get("exp", 0)) <= int(utc_now().timestamp()):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="token expired")
     if verify_session:
         _require_cached_token(token, payload)

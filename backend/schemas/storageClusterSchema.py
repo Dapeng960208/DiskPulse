@@ -5,6 +5,9 @@ from typing import Literal, Optional
 from schemas.capacitySchema import CapacityResponseBase
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class StorageClusterBase(BaseModel):
     name: str
     storage_type: str  # 'netapp' or 'isilon'

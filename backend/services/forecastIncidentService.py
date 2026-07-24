@@ -8,6 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Literal
+from utils.datetime_utils import utc_now
 
 import numpy as np
 from fastapi import HTTPException, status
@@ -1457,7 +1458,7 @@ def update_incident(
         require_incident_transition(incident.status, target_status)
         old_status = incident.status
         incident.status = target_status
-        incident.resolved_at = _utc(datetime.now(timezone.utc)) if target_status == "resolved" else None
+        incident.resolved_at = utc_now() if target_status == "resolved" else None
         db.add(IncidentTimeline(
             incident_id=incident.id,
             event_type="status_changed",

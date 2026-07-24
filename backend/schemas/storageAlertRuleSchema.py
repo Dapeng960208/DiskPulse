@@ -12,6 +12,9 @@ DEFAULT_STORAGE_ALERT_RULE = {
 }
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class StorageAlertLevelRule(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

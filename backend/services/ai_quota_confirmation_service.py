@@ -13,6 +13,7 @@ from models import AIAuditLog, Group, StorageUsage
 from services.ai_tool_service import AIToolDefinition, execute_tool
 from services.quotaService import _quota_redis_client
 from utils.auth_service import is_super_admin
+from utils.datetime_utils import utc_now
 
 
 _QUOTA_TOOL_NAMES = frozenset({"adjust_group_quota", "adjust_storage_usage_quota"})
@@ -87,7 +88,7 @@ def pending_confirmation_from_audit(
         return None
     if not isinstance(detail, list):
         return None
-    current_epoch = int((now or datetime.now()).timestamp())
+    current_epoch = int((now or utc_now()).timestamp())
     for entry in reversed(detail):
         if not isinstance(entry, dict) or entry.get("status") != "awaiting_confirmation":
             continue
@@ -219,8 +220,8 @@ def _complete_confirmation(
     audit.status = status_value
     audit.detail_payload = json.dumps(detail, ensure_ascii=False)
     audit.error_message = error_message
-    audit.finished_at = datetime.now()
-    audit.updated_at = datetime.now()
+    audit.finished_at = utc_now()
+    audit.updated_at = utc_now()
 
 
 def prepare_confirmation(
@@ -237,7 +238,7 @@ def prepare_confirmation(
     normalized = _normalise(definition, arguments)
     confirmation_id = str(uuid4())
     preview = _preview(db, tool_name=definition.name, normalized=normalized)
-    expires_at = int(datetime.now().timestamp()) + _TTL_SECONDS
+    expires_at = int(utc_now().timestamp()) + _TTL_SECONDS
     record = {
         "confirmation_id": confirmation_id,
         "user_id": user_id,
@@ -262,7 +263,7 @@ def prepare_confirmation(
     detail.append({"status": "awaiting_confirmation", **pending})
     audit.status = "awaiting_confirmation"
     audit.detail_payload = json.dumps(detail, ensure_ascii=False)
-    audit.updated_at = datetime.now()
+    audit.updated_at = utc_now()
     db.flush()
     return pending
 

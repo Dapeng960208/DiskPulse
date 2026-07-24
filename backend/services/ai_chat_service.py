@@ -17,6 +17,7 @@ from models import AIConversation, AIAuditLog, AIMessage, Group, StorageUsage, U
 from router_transaction import commit_checkpoint, rollback_checkpoint
 from services.audit_service import AuditContext, append_audit_event, redact_audit_payload
 from services import ai_quota_confirmation_service
+from utils.datetime_utils import utc_now
 from services.ai_client import (
     AIClientError,
     AIClientToolArgumentsError,
@@ -665,14 +666,14 @@ def _finish_audit(
     audit.response_payload = json.dumps(response_payload, ensure_ascii=False)
     audit.detail_payload = json.dumps(detail or [], ensure_ascii=False)
     audit.error_message = error_message
-    audit.finished_at = datetime.now()
-    audit.updated_at = datetime.now()
+    audit.finished_at = utc_now()
+    audit.updated_at = utc_now()
     commit_checkpoint(db)
 
 
 def _persist_running_audit(db: Session, audit: AIAuditLog, detail: list[dict]) -> None:
     audit.detail_payload = json.dumps(detail, ensure_ascii=False)
-    audit.updated_at = datetime.now()
+    audit.updated_at = utc_now()
     commit_checkpoint(db)
 
 
@@ -690,8 +691,8 @@ def _terminal_message(
     visibility: dict | None = None,
 ) -> tuple[dict, dict]:
     assistant.content = text
-    assistant.updated_at = datetime.now()
-    conversation.updated_at = datetime.now()
+    assistant.updated_at = utc_now()
+    conversation.updated_at = utc_now()
     db.flush()
     response = {"message_id": assistant.id, "length": len(assistant.content), "status": status_value}
     if recovery is not None:
@@ -880,7 +881,7 @@ def stream_message(
     )
     if conversation.title == "新对话":
         conversation.title = content.strip().replace("\n", " ")[:32] or "新对话"
-    conversation.updated_at = datetime.now()
+    conversation.updated_at = utc_now()
     audit = aiCrud.add_audit(
         db,
         AIAuditLog(

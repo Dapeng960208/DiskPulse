@@ -148,6 +148,7 @@ import ThemeSwitch from '@/components/basic/ThemeSwitch.vue';
 import brandLogo from '@/assets/logo.png';
 import storageClusterBackground from '@/assets/images/storage-cluster-login.webp';
 import { DEMO_PASSWORD, DEMO_USERS, mockEnabled } from '@/mocks/runtime';
+import { getBrowserTimeZone } from '@/utils/datetime.js';
 
 const appTitle = import.meta.env.VITE_APP_TITLE || 'DiskPulse 管理后台';
 
@@ -193,7 +194,13 @@ const handleLogin = async () => {
       setToken(result.token);
     }
 
-    const { result: userProfile } = await usersApi.fetchProfile();
+    let { result: userProfile } = await usersApi.fetchProfile();
+    if (!userProfile.time_zone) {
+      const { result: updatedProfile } = await usersApi.updateCurrentProfile({
+        time_zone: getBrowserTimeZone(),
+      });
+      userProfile = updatedProfile;
+    }
     currentUser.setCurrentUser(userProfile);
 
     ElMessage.success('登录成功');

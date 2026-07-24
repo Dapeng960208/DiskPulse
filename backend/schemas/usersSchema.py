@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 from typing import Annotated, List, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
     BaseModel,
@@ -10,8 +11,10 @@ from pydantic import (
     StrictBool,
     StringConstraints,
     field_serializer,
+    field_validator,
 )
 from schemas.capacitySchema import CapacityResponseBase
+from utils.datetime_utils import to_utc_z, utc_now
 
 
 UserType = Literal[0, 1, 2]
@@ -19,6 +22,9 @@ RdUsername = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
 ]
+
+
+from schemas.base import UTCBaseModel as BaseModel
 
 
 class UserBase(BaseModel):
@@ -32,7 +38,8 @@ class UserBase(BaseModel):
     user_type: int | None = 2
     storage_used: float | None = 0
     quit_days: int | None = 0
-    updated_at: datetime | None = Field(default_factory=datetime.now)
+    time_zone: str | None = None
+    updated_at: datetime | None = Field(default_factory=utc_now)
 
 class OnlyUser(BaseModel):
     id: int
@@ -56,7 +63,7 @@ class User(CapacityResponseBase, UserBase):
 
     @field_serializer("updated_at", when_used="json")
     def serialize_updated_at(self, value: datetime | None) -> str | None:
-        return value.strftime("%Y-%m-%d %H:%M:%S") if value else None
+        return to_utc_z(value) if value else None
 
 
 class UserCreate(BaseModel):
@@ -78,6 +85,25 @@ class UserUpdate(BaseModel):
     department: str | None = None
     user_type: UserType = 2
     is_alert: StrictBool = True
+
+
+class CurrentUserProfileUpdate(BaseModel):
+    """The authenticated user may only update their IANA presentation timezone."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    time_zone: str | None = Field(default=None, max_length=64)
+
+    @field_validator("time_zone")
+    @classmethod
+    def validate_time_zone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as error:
+            raise ValueError("time_zone must be a valid IANA timezone") from error
+        return value
 
 
 class UserSyncResult(BaseModel):

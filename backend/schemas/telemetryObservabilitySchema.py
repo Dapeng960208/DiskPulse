@@ -6,6 +6,9 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class HealthStatus(BaseModel):
     status: Literal["ok", "ready", "degraded", "not_ready"]
 

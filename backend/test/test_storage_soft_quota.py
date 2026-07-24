@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import models
@@ -7,7 +7,7 @@ from celery_tasks.manager.storagePulseMonitor import StoragePulseMonitor
 from crud.storageUsageCrud import get_export_data
 
 
-NOW = datetime(2026, 6, 30, 10, 0, 0)
+NOW = datetime(2026, 6, 30, 10, 0, 0, tzinfo=timezone.utc)
 GB = 1024**3
 
 
@@ -215,26 +215,23 @@ def test_storage_usage_export_includes_soft_quota_columns(db_session):
             soft_use_ratio=25,
             file_used=10,
             file_limit=1000,
+            access_time=datetime(2026, 6, 30, 2, 0, tzinfo=timezone.utc),
             updated_at=NOW,
         )
     )
     db_session.commit()
 
-    df = get_export_data(db_session)
+    df = get_export_data(db_session, time_zone="Asia/Shanghai")
 
     assert "软限额" in df.columns
     assert "软使用率" in df.columns
     assert df.iloc[0]["软限额"] == 80
     assert df.iloc[0]["软使用率"] == 25
+    assert df.iloc[0]["访问时间"] == "2026-06-30 10:00:00"
 
 
 def test_aggregate_questdb_metrics_omit_soft_quota_columns(monkeypatch):
     captured = {}
-
-    class FixedDatetime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return NOW
 
     class FakeTransaction:
         def commit(self):
@@ -257,10 +254,7 @@ def test_aggregate_questdb_metrics_omit_soft_quota_columns(monkeypatch):
         "celery_tasks.manager.storagePulseMonitor.QuestDBSession",
         FakeConnection,
     )
-    monkeypatch.setattr(
-        "celery_tasks.manager.storagePulseMonitor.datetime",
-        FixedDatetime,
-    )
+    monkeypatch.setattr("celery_tasks.manager.storagePulseMonitor.utc_now", lambda: NOW)
     monitor = object.__new__(StoragePulseMonitor)
     monitor.logger = DummyLogger()
     monitor.storage_type = "netapp"
@@ -273,4 +267,4 @@ def test_aggregate_questdb_metrics_omit_soft_quota_columns(monkeypatch):
 
     assert "soft_limit" not in captured["parameters"][0]
     assert "soft_use_ratio" not in captured["parameters"][0]
-    assert captured["parameters"][0]["updated_at"] == NOW - timedelta(hours=8)
+    assert captured["parameters"][0]["updated_at"] == NOW.replace(tzinfo=None)
