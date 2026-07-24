@@ -83,6 +83,24 @@ def test_incident_admission_keeps_only_urgent_cluster_evidence():
         now=UTC_NOW,
     ) is False
     assert analytics.should_admit_incident(
+        _envelope(
+            source="anomaly_observation",
+            severity="critical",
+            value={"severity": "critical", "metric": "iops", "incident_eligible": True},
+        ),
+        category="performance_contention",
+        now=UTC_NOW,
+    ) is False
+    assert analytics.should_admit_incident(
+        _envelope(
+            source="anomaly_observation",
+            severity="critical",
+            value={"severity": "critical", "metric": "latency", "incident_eligible": True},
+        ),
+        category="performance_contention",
+        now=UTC_NOW,
+    ) is True
+    assert analytics.should_admit_incident(
         _envelope(source="telemetry_quality", severity="critical"),
         category="telemetry_blindspot",
         now=UTC_NOW,
@@ -125,6 +143,12 @@ class _VendorEventSession:
 
     def rollback(self):
         return None
+
+
+def test_incident_ai_review_queue_drain_tolerates_session_adapter_without_info():
+    from celery_tasks.tasks import forecast_incidents as tasks
+
+    assert tasks._drain_incident_ai_review_ids(SimpleNamespace()) == set()
 
 
 def test_vendor_info_and_warning_events_stay_in_system_events_without_creating_incidents(monkeypatch):

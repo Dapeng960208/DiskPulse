@@ -140,6 +140,35 @@ def test_performance_requires_three_consecutive_robust_z_scores_and_ignores_isol
     assert analytics.robust_z_score(value=9.0, median=1.0, mad=0.0) == 100.0
 
 
+def test_performance_incident_requires_sustained_positive_latency_impact_and_history():
+    from services import forecastIncidentService as analytics
+
+    assert analytics.qualifies_latency_incident(
+        scores=[3.5, 4.0, 4.5],
+        values=[15.0, 16.0, 17.0],
+        baselines=[10.0, 10.0, 10.0],
+        seasonal_sample_counts=[12, 12, 12],
+    ) is True
+    assert analytics.qualifies_latency_incident(
+        scores=[3.5, 4.0, 4.5],
+        values=[15.0, 16.0, 17.0],
+        baselines=[10.0, 10.0, 10.0],
+        seasonal_sample_counts=[12, 11, 12],
+    ) is False
+    assert analytics.qualifies_latency_incident(
+        scores=[-3.5, -4.0, -4.5],
+        values=[1.0, 1.0, 1.0],
+        baselines=[10.0, 10.0, 10.0],
+        seasonal_sample_counts=[12, 12, 12],
+    ) is False
+    assert analytics.qualifies_latency_incident(
+        scores=[3.5, 4.0, 4.5],
+        values=[14.9, 16.0, 17.0],
+        baselines=[10.0, 10.0, 10.0],
+        seasonal_sample_counts=[12, 12, 12],
+    ) is False
+
+
 def test_zero_mad_low_iops_uses_resource_baseline_then_cluster_fallback_for_noise_suppression():
     from services import forecastIncidentService as analytics
 
@@ -176,7 +205,7 @@ def test_incident_state_machine_rejects_skips_and_allows_system_reopen():
     assert analytics.can_transition_incident("resolved", "open", system_reopen=True) is True
 
 
-def test_incident_evidence_deduplicates_and_resolved_incident_reopens_within_24_hours(db_session):
+def test_incident_evidence_deduplicates_and_resolved_incident_reopens_within_four_hours(db_session):
     import models
     from services import forecastIncidentService as analytics
 
@@ -214,6 +243,125 @@ def test_incident_evidence_deduplicates_and_resolved_incident_reopens_within_24_
     )
     assert reopened.reopened is True
     assert reopened.incident.status == "open"
+
+
+def test_incident_correlation_uses_a_rolling_four_hour_window_across_legacy_buckets(db_session):
+    import models
+    from services import forecastIncidentService as analytics
+
+    db_session.add_all([
+        models.StorageCluster(id=7, name="cluster-7", storage_type="netapp"),
+        models.Project(id=1, name="project-alpha"),
+    ])
+    db_session.commit()
+    first = analytics.correlate_incident(
+        db_session,
+        analytics.TelemetryEnvelope(
+            asset_ref=_asset(),
+            source="storage_alert",
+            source_ref="rolling-window:1",
+            observed_at=UTC_NOW,
+            collected_at=UTC_NOW,
+            metric_or_event="vendor_event",
+            value={"severity": "warning"},
+            quality="good",
+        ),
+        category="device_fault",
+    )
+    second_at = UTC_NOW + timedelta(hours=3, minutes=59)
+    second = analytics.correlate_incident(
+        db_session,
+        analytics.TelemetryEnvelope(
+            asset_ref=_asset(),
+            source="storage_alert",
+            source_ref="rolling-window:2",
+            observed_at=second_at,
+            collected_at=second_at,
+            metric_or_event="vendor_event",
+            value={"severity": "warning"},
+            quality="good",
+        ),
+        category="device_fault",
+    )
+
+    assert second.created is False
+    assert second.incident.id == first.incident.id
+    state = db_session.get(models.IncidentCorrelationState, first.incident.correlation_key)
+    assert state.incident_id == first.incident.id
+    assert state.last_evidence_at == second_at
+
+
+def test_incident_correlation_starts_new_incident_after_four_hour_gap(db_session):
+    import models
+    from services import forecastIncidentService as analytics
+
+    db_session.add_all([
+        models.StorageCluster(id=7, name="cluster-7", storage_type="netapp"),
+        models.Project(id=1, name="project-alpha"),
+    ])
+    db_session.commit()
+    first = analytics.correlate_incident(
+        db_session,
+        analytics.TelemetryEnvelope(
+            asset_ref=_asset(), source="storage_alert", source_ref="four-hour-gap:1",
+            observed_at=UTC_NOW, collected_at=UTC_NOW, metric_or_event="vendor_event",
+            value={"severity": "warning"}, quality="good",
+        ),
+        category="device_fault",
+    )
+    later_at = UTC_NOW + timedelta(hours=4, minutes=1)
+    later = analytics.correlate_incident(
+        db_session,
+        analytics.TelemetryEnvelope(
+            asset_ref=_asset(), source="storage_alert", source_ref="four-hour-gap:2",
+            observed_at=later_at, collected_at=later_at, metric_or_event="vendor_event",
+            value={"severity": "warning"}, quality="good",
+        ),
+        category="device_fault",
+    )
+
+    assert later.created is True
+    assert later.incident.id != first.incident.id
+    state = db_session.get(models.IncidentCorrelationState, first.incident.correlation_key)
+    assert state.incident_id == later.incident.id
+
+
+def test_resolved_incident_does_not_reopen_after_four_hour_gap(db_session):
+    import models
+    from services import forecastIncidentService as analytics
+
+    db_session.add_all([
+        models.StorageCluster(id=7, name="cluster-7", storage_type="netapp"),
+        models.Project(id=1, name="project-alpha"),
+    ])
+    db_session.commit()
+    first = analytics.correlate_incident(
+        db_session,
+        analytics.TelemetryEnvelope(
+            asset_ref=_asset(), source="storage_alert", source_ref="resolved-gap:1",
+            observed_at=UTC_NOW, collected_at=UTC_NOW, metric_or_event="vendor_event",
+            value={"severity": "warning"}, quality="good",
+        ),
+        category="device_fault",
+    )
+    first.incident.status = "resolved"
+    first.incident.resolved_at = UTC_NOW + timedelta(minutes=1)
+    db_session.commit()
+
+    later = analytics.correlate_incident(
+        db_session,
+        analytics.TelemetryEnvelope(
+            asset_ref=_asset(), source="storage_alert", source_ref="resolved-gap:2",
+            observed_at=UTC_NOW + timedelta(hours=4, minutes=1),
+            collected_at=UTC_NOW + timedelta(hours=4, minutes=1), metric_or_event="vendor_event",
+            value={"severity": "warning"}, quality="good",
+        ),
+        category="device_fault",
+    )
+
+    assert later.created is True
+    assert later.reopened is False
+    assert later.incident.id != first.incident.id
 
 
 def test_resolved_incident_reopens_when_new_evidence_stays_in_same_bucket(db_session):
@@ -959,6 +1107,20 @@ def test_performance_task_writes_only_after_three_consecutive_five_minute_anomal
                 "collected_at": observed_at,
             }
         )
+        if offset in {7, 14, 21, 28}:
+            for minutes in (5, 10):
+                rows.append(
+                    {
+                        "storage_cluster_id": "7",
+                        "object_type": "volume",
+                        "object_id": "volume-a",
+                        "object_name": "volume-a",
+                        "latency_total": 1.0,
+                        "iops_total": 1.0,
+                        "throughput_total": 1.0,
+                        "collected_at": observed_at + timedelta(minutes=minutes),
+                    }
+                )
     for minutes in (0, 5, 10):
         rows.append(
             {
@@ -976,6 +1138,10 @@ def test_performance_task_writes_only_after_three_consecutive_five_minute_anomal
     findings = forecast_incidents._performance_findings(rows, now=UTC_NOW + timedelta(minutes=10))
 
     assert {item["metric"] for item in findings} == {"latency", "iops", "throughput"}
+    assert {
+        item["metric"]: item["incident_eligible"]
+        for item in findings
+    } == {"latency": True, "iops": False, "throughput": False}
     assert all(item["window_start"] == UTC_NOW for item in findings)
     iops_context = next(item["ai_performance_context"] for item in findings if item["metric"] == "iops")
     assert iops_context["trigger_three_bucket_p95"] == [100.0, 100.0, 100.0]

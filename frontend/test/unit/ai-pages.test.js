@@ -5,13 +5,14 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { commonDirectives } from '../helpers/mount';
 
-const { aiApi, currentUser, router } = vi.hoisted(() => ({
+const { aiApi, currentUser, route, router } = vi.hoisted(() => ({
   currentUser: {
     avatarUrl: 'https://example.test/current-user.png',
     displayName: '当前用户',
     username: 'current-user',
   },
   router: { push: vi.fn(), replace: vi.fn() },
+  route: { query: {}, params: { id: '9' } },
   aiApi: {
     listModels: vi.fn(),
     listConversations: vi.fn(),
@@ -32,7 +33,7 @@ const { aiApi, currentUser, router } = vi.hoisted(() => ({
 
 vi.mock('@/api/ai-api', () => ({ default: aiApi }));
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ query: {}, params: { id: '9' } }),
+  useRoute: () => route,
   useRouter: () => router,
 }));
 vi.mock('@/stores/current-user', () => ({
@@ -79,6 +80,7 @@ const mountAiCenter = () => shallowMount(AiCenterPage, {
 describe('AI pages interactions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    route.query = {};
     aiApi.streamMessage.mockReset();
     aiApi.streamMessage.mockResolvedValue();
     aiApi.listModels.mockResolvedValue([{ id: 1, name: 'Primary' }]);
@@ -93,6 +95,54 @@ describe('AI pages interactions', () => {
     aiApi.updateModel.mockResolvedValue({});
     aiApi.deleteModel.mockResolvedValue();
     aiApi.testModel.mockResolvedValue({ message: '连接成功', reply: 'OK' });
+  });
+
+  it('consumes a valid audit handoff into an editable draft without creating or sending a conversation', async () => {
+    route.query = { audit_event_id: '0f8fad5b-d9cb-469f-a165-70867728950e' };
+    aiApi.listConversations.mockResolvedValue([{ id: 10, model_id: 1, title: '旧会话' }]);
+    const wrapper = shallowMount(AiChatPage);
+    await flushPromises();
+
+    expect(wrapper.vm.activeConversationId).toBeNull();
+    expect(wrapper.vm.content).toContain('0f8fad5b-d9cb-469f-a165-70867728950e');
+    expect(aiApi.getConversation).not.toHaveBeenCalled();
+    expect(aiApi.createConversation).not.toHaveBeenCalled();
+    expect(aiApi.streamMessage).not.toHaveBeenCalled();
+    expect(router.replace).toHaveBeenCalledWith({ name: 'AIChat', query: {} });
+
+    await wrapper.vm.send();
+    expect(aiApi.createConversation).toHaveBeenCalledOnce();
+    expect(aiApi.streamMessage).toHaveBeenCalledWith(
+      10,
+      expect.stringContaining('0f8fad5b-d9cb-469f-a165-70867728950e'),
+      expect.objectContaining({ onEvent: expect.any(Function) }),
+    );
+  });
+
+  it('clears invalid audit handoff parameters without pre-filling or sending a request', async () => {
+    route.query = { audit_event_id: 'not-a-uuid' };
+    const wrapper = shallowMount(AiChatPage);
+    await flushPromises();
+
+    expect(wrapper.vm.content).toBe('');
+    expect(aiApi.createConversation).not.toHaveBeenCalled();
+    expect(aiApi.streamMessage).not.toHaveBeenCalled();
+    expect(router.replace).toHaveBeenCalledWith({ name: 'AIChat', query: {} });
+  });
+
+  it('rejects impossible audit filter dates instead of creating a list-analysis draft', async () => {
+    route.query = {
+      audit_project_id: '7',
+      audit_start_time: '2026-02-30 17:00:00',
+      audit_end_time: '2026-02-30 18:00:00',
+    };
+    const wrapper = shallowMount(AiChatPage);
+    await flushPromises();
+
+    expect(wrapper.vm.content).toBe('');
+    expect(aiApi.createConversation).not.toHaveBeenCalled();
+    expect(aiApi.streamMessage).not.toHaveBeenCalled();
+    expect(router.replace).toHaveBeenCalledWith({ name: 'AIChat', query: {} });
   });
 
   it('ignores stale events, deletes conversations, and retries failures', async () => {

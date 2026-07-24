@@ -23,3 +23,4 @@
 - 出现记录：`sessions/2026-07-23-global-table-style-audit/errors.md`；全量 `pnpm test` 出现 10 项失败，其中 3 项表格迁移旧断言已修复并由 22 项聚焦测试验证，剩余 7 项为路由数量基线、列表操作权限断言及用户未提交的存储集群详情列宽与响应式类变更。
 - 出现记录：`sessions/2026-07-23-ai-model-reasoning-effort/errors.md`；`pnpm run test:coverage` 再次被非 AI 基线失败阻断，包括页面矩阵 27/30、列表动作权限 4 个断言、存储集群健康分析 2 个断言，以及 `CrudApi extends BaseApi` 异步 rejection。
 - 出现记录：`sessions/2026-07-24-unified-time-range-picker/errors.md`；`storage-cluster-health-analytics.test.js` 的两项既有断言仍与页面当前实现不一致：关联类型列最小宽度期望为 120、实际为 50，且系统事件低频列缺少期望的响应式 class。与统一时间范围选择器无关。
+- 出现记录：`sessions/2026-07-24-event-audit-incident-noise/errors.md`；扩展 Vitest 的 `content-spacing-contract.test.js` 仍以既有页面矩阵 `27/30` 失败，审计研判跳转、项目滚动和布局用例均通过，与本次变更无关。

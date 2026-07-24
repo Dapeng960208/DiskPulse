@@ -12,13 +12,13 @@
 
 - `telemetry_quality_snapshots` 从 `telemetry_collection_runs` 和 QuestDB 覆盖率派生，不会写回或替代账本中的最后成功时间。
 - `capacity_forecasts` 保存存储集群、项目、卷、Qtree、项目组和用户目录的后台预测结果；面向用户的四维预测范围与基线算法以[四维容量耗尽风险](../../ai/capacity-prediction/overview.md)为准。卷和 Qtree 预测继续只作为内部分析事实，不增加详情风险入口。
-- `anomaly_observations` 对 QuestDB 性能样本按 5 分钟桶计算 P95 延迟、IOPS、吞吐量；以过去 28 天同星期/小时中位数与 MAD 建模，绝对鲁棒 Z 分数至少 3.5 且连续三个相邻 5 分钟点才写入。零 MAD 只在数值不同于基线时使用有界高分，孤立尖峰或存在采样空档的三点均不写入。IOPS 的零 MAD 三桶还要经过独立降噪：连续三个 P95 均不超过 `max(绝对下限, 28 天 IOPS 基线 × 比例)` 时不写入异常观察、不创建 Incident、也不触发 Incident 通知；默认下限为 `10 IOPS`、比例为 `5%`。基线优先使用资源至少 12 个近 28 天样本的中位数，资源样本不足时使用所属集群至少 12 个样本的中位数，否则仅使用绝对下限。该确定性规则不依赖 AI 是否启用。
+- `anomaly_observations` 对 QuestDB 性能样本按 5 分钟桶计算 P95 延迟、IOPS、吞吐量；以过去 28 天同星期/小时中位数与 MAD 建模，绝对鲁棒 Z 分数至少 3.5 且连续三个相邻 5 分钟点才写入。零 MAD 只在数值不同于基线时使用有界高分，孤立尖峰或存在采样空档的三点均不写入。IOPS 的零 MAD 三桶还要经过独立降噪：连续三个 P95 均不超过 `max(绝对下限, 28 天 IOPS 基线 × 比例)` 时不写入异常观察；默认下限为 `10 IOPS`、比例为 `5%`。基线优先使用资源至少 12 个近 28 天样本的中位数，资源样本不足时使用所属集群至少 12 个样本的中位数，否则仅使用绝对下限。IOPS 与吞吐量偏离始终只作为异常观察和 AI 上下文，不单独建立 `performance_contention`。延迟也只有连续三点均为正向退化、每点鲁棒 Z 不低于 `3.5`、每点至少有 12 个季节性样本，且每点增加至少 `max(5 ms, 基线 × 50%)` 时才具备建单资格。该确定性规则不依赖 AI 是否启用。
 - `incident_evidence` 的唯一键是 `(source, source_ref)`，只保存引用、类型、时间、缺口和哈希。回放或重算不覆盖原始事实；同算法版本的分析结果以各自唯一键幂等。
 - 事件至少已归属存储集群、但节点/卷/Qtree/项目的稳定映射链路不完整时，使用当前可确认的 `AssetRef` 并记录 `asset_mapping_missing`。该代码的用户语义是“资产映射不完整”；厂商事件已有稳定节点身份时节点级归属已经完成，不记录该缺口。它不表示事件代码或厂商日志缺失，也不影响查看规范化日志和发生时间。
 
 ## 事件与诊断
 
-事件按 `storage_cluster + AssetRef + category + 30 分钟 UTC 桶` 归并；同键已解决事件在 24 小时内有新证据时由系统重开。人工状态只允许 `open → acknowledged → investigating → mitigated → resolved` 的相邻迁移。Incident 是紧急处置队列，而不是原始告警镜像：DiskPulse 容量告警仅在 `critical` 时准入；性能异常仅在 `critical` 时准入；P90 容量耗尽日期仅在未来 7 天内准入；监控质量快照和采集失败不创建 Incident。
+`incident_correlation_states` 以 `storage_cluster + AssetRef + category` 保存部署后新证据的权威滚动关联游标；`incidents.correlation_bucket_at` 继续保留作历史兼容字段，但不再决定归并。新证据距该游标最近证据不超过 `incident_analytics.correlation_window_hours`（默认 `4`）小时则关联同一 Incident，跨越旧 30 分钟桶也不拆分；超过窗口才新建。已解决 Incident 仅在这个窗口内收到同类证据时由系统重开，不合并、删除、回算或自动关闭历史 Incident。游标行在事务内锁定并按关联键唯一，重复或并发投递在来源引用唯一键与游标锁的共同约束下保持幂等。人工状态只允许 `open → acknowledged → investigating → mitigated → resolved` 的相邻迁移。Incident 是紧急处置队列，而不是原始告警镜像：DiskPulse 容量告警仅在 `critical` 时准入；性能异常仅在满足上述延迟建单资格时准入；P90 容量耗尽日期仅在未来 7 天内准入；监控质量快照和采集失败不创建 Incident。
 
 厂商事件还需同时考虑事件实例严重级别和目录语义：已启用且已审核的 `fault_log` 只在实例为 `critical` 时准入内部 `device_fault`；已启用且已审核的 `system_activity`、`performance_anomaly`、`capacity_threshold` 或 `telemetry_degradation` 不得因严重级别或指纹重复进入 `device_fault`。目录缺失、待审核或停用时，`critical` 原始事件可保守进入该内部类别，但用户可见名称统一为“设备健康风险”，关联类型仍是 `unknown`，不得表述为已确认故障。被拦截的记录仍完整保留在告警、系统事件、健康分析、预测和采集账本中。历史版本曾把非 `critical` 厂商系统运行事件或性能提示派生为 `device_fault`；兼容修复会幂等关闭这些旧 Incident，但保留原始事件、证据和诊断用于审计。
 
