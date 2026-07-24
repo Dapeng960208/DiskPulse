@@ -9,6 +9,9 @@ TrendIndicator = Literal["used", "use_ratio", "alert_ratio"]
 StorageUsageTrendIndicator = Literal["used", "use_ratio", "alert_ratio", "file_used"]
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class StorageTrendThresholds(BaseModel):
     important: int
     serious: int

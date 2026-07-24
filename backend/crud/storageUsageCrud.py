@@ -13,6 +13,7 @@ import pandas as pd
 from utils.pdf.pdfReporter import PDFReportGenerator
 from utils.query import apply_use_ratio_range, get_sort_column
 from utils.storageTarget import resolve_group_storage_target
+from utils.datetime_utils import format_for_user_time_zone, utc_now
 
 
 def get_storage_usage_by_id(db: Session, storage_usage_id: int):
@@ -104,7 +105,7 @@ def create_storage_usage(
             group.storage_cluster_id if group is not None else None
         ),
         linux_path=linux_path,
-        updated_at=datetime.now(),
+        updated_at=utc_now(),
     )
     db.add(db_storage_usage)
     db.commit()
@@ -177,7 +178,8 @@ def get_export_data(db: Session, nameLike: str | None = None, prop: str | None =
                     storage_cluster_id: int | None = None, project_id: int | None = None,
                     group_tag_id: int | None = None,
                     accessible_project_ids: set[int] | None = None,
-                    use_ratio_min: float | None = None, use_ratio_max: float | None = None):
+                    use_ratio_min: float | None = None, use_ratio_max: float | None = None,
+                    time_zone: str | None = None):
     storage_usage_dbs, _ = get_storage_usages(db=db, nameLike=nameLike, prop=prop, order=order, user_id=user_id,
                                               group_id=group_id, storage_cluster_id=storage_cluster_id,
                                               project_id=project_id,
@@ -217,8 +219,14 @@ def get_export_data(db: Session, nameLike: str | None = None, prop: str | None =
             "硬使用率": storage_usage.use_ratio,
             "软使用率": storage_usage.soft_use_ratio,
             "文件数": storage_usage.file_used,
-            "访问时间": storage_usage.access_time,
-            "修改时间": storage_usage.modify_time,
+            "访问时间": (
+                format_for_user_time_zone(storage_usage.access_time, time_zone)
+                if storage_usage.access_time else ""
+            ),
+            "修改时间": (
+                format_for_user_time_zone(storage_usage.modify_time, time_zone)
+                if storage_usage.modify_time else ""
+            ),
         })
     columns = [
         "项目", "项目组标签", "存储集群", "存储类型", "项目组", "Volume", "Qtree", "路径",
@@ -232,10 +240,11 @@ def export_storage_usage_to_excel(db: Session, nameLike: str | None = None, prop
                                   storage_cluster_id: int | None = None, project_id: int | None = None,
                                   group_tag_id: int | None = None,
                                   accessible_project_ids: set[int] | None = None,
-                                  use_ratio_min: float | None = None, use_ratio_max: float | None = None):
+                                  use_ratio_min: float | None = None, use_ratio_max: float | None = None,
+                                  time_zone: str | None = None):
     df_storage_usage = get_export_data(db, nameLike, prop, order, user_id, group_id, storage_cluster_id,
                                        project_id, group_tag_id, accessible_project_ids,
-                                       use_ratio_min, use_ratio_max)
+                                       use_ratio_min, use_ratio_max, time_zone)
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_storage_usage.to_excel(writer, sheet_name='存储使用明细', index=False)
@@ -248,15 +257,16 @@ def export_storage_usage_to_pdf(db: Session, nameLike: str | None = None, prop: 
                                 storage_cluster_id: int | None = None, project_id: int | None = None,
                                 group_tag_id: int | None = None,
                                 accessible_project_ids: set[int] | None = None,
-                                use_ratio_min: float | None = None, use_ratio_max: float | None = None):
+                                use_ratio_min: float | None = None, use_ratio_max: float | None = None,
+                                time_zone: str | None = None):
     from appConfig import base_config
     df_storage_usage = get_export_data(db, nameLike, prop, order, user_id, group_id, storage_cluster_id,
                                        project_id, group_tag_id, accessible_project_ids,
-                                       use_ratio_min, use_ratio_max)
+                                       use_ratio_min, use_ratio_max, time_zone)
     company_name = base_config.get('application.company_name')
     logo_path = str(base_config.app_logo_path)
     pdf_generator = PDFReportGenerator(company_name=company_name, logo_path=logo_path, title='存储使用明细报告',
-                                       app='DiskPulse')
+                                       app='DiskPulse', time_zone=time_zone)
     pdf_generator.create_cover_page()
     resource_quota_col_width_ratios = [1 / len(df_storage_usage.columns)] * len(df_storage_usage.columns)
     pdf_generator.add_table([df_storage_usage.columns.tolist()] + df_storage_usage.values.tolist(), '存储使用明细',

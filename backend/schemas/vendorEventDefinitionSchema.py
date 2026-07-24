@@ -115,6 +115,9 @@ def validate_reviewed_definition_values(
         raise ValueError("已审核定义必须填写推荐解决方案")
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class VendorEventDefinitionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 

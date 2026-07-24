@@ -22,6 +22,7 @@ from utils.mailTools.emailNotification import EmailNotification
 from utils.netAppClient import NetAppClient
 from utils.storageDeviceHttp import device_error_response
 from utils.storageTarget import resolve_group_storage_target
+from utils.datetime_utils import utc_now
 
 
 logger = logging.getLogger("app:quota-adjustment")
@@ -194,7 +195,7 @@ def _sync_local_quota(*, resource, resource_type: str, target, device_result: di
         if device_result.get("soft_limit") not in (None, -1)
         else None
     )
-    now = datetime.now()
+    now = utc_now()
     resource.limit = hard_limit
     resource.soft_limit = soft_limit
     resource.use_ratio = _ratio(resource.used, hard_limit)
@@ -321,8 +322,8 @@ def _record_adjustment(
         delivery_status="pending" if recipients else "skipped",
         recipient_usernames=recipients,
         delivery_attempts=0,
-        next_attempt_at=datetime.now() if recipients else None,
-        updated_at=datetime.now(),
+        next_attempt_at=utc_now() if recipients else None,
+        updated_at=utc_now(),
     )
     db.add(alert)
     return alert

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime, timezone
 from importlib import import_module
+from utils.datetime_utils import utc_now
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -820,7 +821,7 @@ def _reconcile_legacy_incidents(db: Session) -> int:
     result = reconciliation_service.reconcile_legacy_vendor_incidents(
         db,
         dry_run=False,
-        now=datetime.now(timezone.utc),
+        now=utc_now(),
     )
     return int(result.get("closed", 0))
 

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from utils.datetime_utils import (
+    format_for_user_time_zone,
     from_questdb_utc,
     parse_source_datetime,
     questdb_to_system_local_naive,
@@ -52,6 +53,13 @@ def test_source_datetime_requires_the_declared_source_timezone_for_naive_device_
         datetime(2026, 7, 15, 10, 0),
         "Asia/Shanghai",
     ) == datetime(2026, 7, 15, 2, 0, tzinfo=timezone.utc)
+
+
+def test_user_timezone_formatting_is_only_applied_at_the_presentation_boundary():
+    instant = datetime(2026, 7, 15, 2, 0, tzinfo=timezone.utc)
+
+    assert format_for_user_time_zone(instant, "Asia/Shanghai") == "2026-07-15 10:00:00"
+    assert format_for_user_time_zone(instant, "America/Los_Angeles") == "2026-07-14 19:00:00"
 
 
 def test_questdb_write_rejects_naive_values():

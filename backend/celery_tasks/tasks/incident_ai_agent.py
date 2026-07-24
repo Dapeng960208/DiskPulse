@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 from celery.utils.log import get_task_logger
+from utils.datetime_utils import utc_now
 
 from celery_worker import diskpulse_app
 from celery_tasks.tasks.redis_lock import redis_lock
@@ -36,7 +37,7 @@ def review_incident_ai_task(incident_id: int, trigger: str = "lifecycle") -> int
             key = (
                 f"lifecycle:{incident.id}:{incident.status}:{incident.last_evidence_at.isoformat()}"
                 if trigger == "lifecycle"
-                else _scheduled_key(incident.id, datetime.now(timezone.utc))
+                else _scheduled_key(incident.id, utc_now())
             )
             try:
                 run = incidentAiAgentService.review_incident(
@@ -70,7 +71,7 @@ def review_incident_ai_task(incident_id: int, trigger: str = "lifecycle") -> int
 
 @diskpulse_app.task(soft_time_limit=300, time_limit=360, expires=480)
 def review_due_incidents_ai_task() -> int:
-    now = datetime.now(timezone.utc)
+    now = utc_now()
     with redis_lock("incident_ai_due_review_lock", expires=480) as have_lock:
         if not have_lock:
             return 0

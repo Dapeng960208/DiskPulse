@@ -8,6 +8,9 @@ from schemas.capacitySchema import CapacityResponseBase
 from schemas.storageAlertRuleSchema import StorageAlertRule
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class ProjectBaseInfo(CapacityResponseBase):
     id: int
     name: str

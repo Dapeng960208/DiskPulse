@@ -23,6 +23,7 @@ from utils.storageTarget import resolve_group_storage_target
 from fastapi.responses import StreamingResponse
 import urllib.parse
 from routers.common import create_user_folder_by_storage_usage_id, back_up_user_storage_usage_by_storage_usage_id
+from utils.datetime_utils import format_for_user_time_zone, utc_now
 
 logger = logging.getLogger('app:storage-usages')
 AI_STORAGE_USAGE_BLACKLIST_FIELDS = (
@@ -152,8 +153,9 @@ def export_storage_usages(export_type: str = 'pdf', nameLike: str | None = None,
             project_id=project_id, group_tag_id=group_tag_id,
             accessible_project_ids=accessible_project_ids,
             use_ratio_min=use_ratio_min, use_ratio_max=use_ratio_max,
+            time_zone=current_user.time_zone,
         )
-        file_name = f"存储使用明细报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        file_name = f"存储使用明细报告_{format_for_user_time_zone(utc_now(), current_user.time_zone, format_string='%Y%m%d_%H%M%S')}.pdf"
         media_type = "application/pdf"
     elif export_type == 'excel':
         content = storageUsageCrud.export_storage_usage_to_excel(
@@ -162,8 +164,9 @@ def export_storage_usages(export_type: str = 'pdf', nameLike: str | None = None,
             project_id=project_id, group_tag_id=group_tag_id,
             accessible_project_ids=accessible_project_ids,
             use_ratio_min=use_ratio_min, use_ratio_max=use_ratio_max,
+            time_zone=current_user.time_zone,
         )
-        file_name = f"存储使用明细报表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        file_name = f"存储使用明细报表_{format_for_user_time_zone(utc_now(), current_user.time_zone, format_string='%Y%m%d_%H%M%S')}.xlsx"
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     else:
         raise HTTPException(status_code=400, detail=f"No export type like {export_type}")
@@ -298,7 +301,7 @@ def get_storage_usage_image_by_id(storage_usage_id: int, end_time: str | None = 
     )
     try:
         if end_time is None:
-            end_time = datetime.now()
+            end_time = utc_now()
         else:
             end_time = convert_timestamp_to_datetime(end_time)
         start_time = end_time - timedelta(days=31)

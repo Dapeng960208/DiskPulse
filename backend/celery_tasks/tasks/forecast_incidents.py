@@ -44,7 +44,7 @@ from services import (
 )
 from crud import capacityPredictionCrud, vendorEventDefinitionCrud
 from services.forecastIncidentService import AssetRef, TelemetryEnvelope
-from utils.datetime_utils import from_questdb_utc
+from utils.datetime_utils import from_questdb_utc, utc_now
 
 
 logger = get_task_logger(__name__)
@@ -128,7 +128,7 @@ def _agent_reviews_after_commit(db, incident_ids: Iterable[int]) -> None:
     candidates = incidentAiAgentCrud.list_lifecycle_review_candidates(
         db,
         incident_ids=source_ids,
-        freshest_after=datetime.now(timezone.utc) - timedelta(minutes=60),
+        freshest_after=utc_now() - timedelta(minutes=60),
     )
     logger.info(
         "Incident AI lifecycle review selection: received=%s selected=%s reason=critical_fresh_only",
@@ -472,7 +472,7 @@ def _record_rolling_candidate_evaluations(db, *, now: datetime) -> None:
 
 
 def run_capacity_forecasts(*, now: datetime | None = None) -> int:
-    now = _utc(now or datetime.now(timezone.utc))
+    now = _utc(now or utc_now())
     notifications: list[tuple[int, str]] = []
     committed = False
     with SessionLocal() as db:
@@ -521,7 +521,7 @@ def _raw_point_count(cluster_id: int, component: str, *, started_at: datetime) -
                 select(StorageAlerts.updated_at).where(
                     StorageAlerts.storage_cluster_id == cluster_id,
                     StorageAlerts.source != "diskpulse",
-                    StorageAlerts.updated_at >= started_at.replace(tzinfo=None),
+                    StorageAlerts.updated_at >= _utc(started_at),
                 )
             ).scalars().all()
         latest = max((_utc(value) for value in timestamps), default=None)
@@ -549,7 +549,7 @@ def _quality_asset(cluster: StorageCluster) -> AssetRef:
 
 
 def run_telemetry_quality_snapshots(*, now: datetime | None = None) -> int:
-    now = _utc(now or datetime.now(timezone.utc))
+    now = _utc(now or utc_now())
     started_at = now - QUALITY_PERIOD
     notifications: list[tuple[int, str]] = []
     created = 0
@@ -910,7 +910,7 @@ def _performance_findings(
 
 
 def run_performance_anomalies(*, now: datetime | None = None) -> int:
-    now = _utc(now or datetime.now(timezone.utc))
+    now = _utc(now or utc_now())
     notifications: list[tuple[int, str]] = []
     committed = False
     with SessionLocal() as db:
@@ -1139,7 +1139,7 @@ def process_diskpulse_alert_evidence(*, alert_ids: Iterable[int]) -> int:
                     source="diskpulse_alert",
                     source_ref=f"diskpulse:{event.id}",
                     observed_at=_vendor_event_utc(event.updated_at),
-                    collected_at=datetime.now(timezone.utc),
+                    collected_at=utc_now(),
                     metric_or_event=(
                         "hard_limit_alert" if event.quota_basis == "hard" else "soft_limit_alert"
                     ),
@@ -1229,7 +1229,7 @@ def process_vendor_event_evidence(*, storage_cluster_id: int, source: str | None
                     source="vendor_event",
                     source_ref=current_ref,
                     observed_at=_vendor_event_utc(event.updated_at),
-                    collected_at=datetime.now(timezone.utc),
+                    collected_at=utc_now(),
                     metric_or_event="severe_vendor_event" if event.severity == "critical" else "vendor_event",
                     value={
                         "severity": event.severity,

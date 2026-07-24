@@ -4,7 +4,6 @@
 import csv
 import tempfile
 import os
-from datetime import datetime
 from typing import Dict, List, Tuple, Optional, Any
 from sqlalchemy.orm import Session
 from models import StorageAlerts, User, LargeFiles, Group
@@ -12,6 +11,7 @@ from crud.configCrud import get_storage_config
 from utils.mailTools.emailNotification import EmailNotification
 from schemas import largeFileSchema
 from appConfig import base_config
+from utils.datetime_utils import utc_now
 
 
 class LargeFileAlert:
@@ -80,7 +80,7 @@ class LargeFileAlert:
                     avg_use_ratio=threshold,
                     related_id=file.id,
                     related_type=LargeFiles.__name__,
-                    updated_at=datetime.now()
+                    updated_at=utc_now()
                 )
                 for file in files
             ]
@@ -306,7 +306,7 @@ class LargeFileAlert:
             'threshold': threshold_gb,
             'cc_emails': list(cc_emails) if cc_emails else [],
             'has_attachment': True,  # 标记有附件
-            'attachment_info': f"{dept_key.upper()}_department_large_files_{datetime.now().strftime('%Y%m%d')}.csv"
+            'attachment_info': f"{dept_key.upper()}_department_large_files_{utc_now().strftime('%Y%m%d')}.csv"
         }
 
     def _rename_file_with_timestamp(self, file_path, prefix_name):
@@ -315,7 +315,7 @@ class LargeFileAlert:
         _, ext = os.path.splitext(file_path)
 
         # 生成当前时间戳（年月日时分秒）
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        timestamp = utc_now().strftime("%Y%m%d%H%M%S")
 
         # 构造新文件名
         new_file_name = f"{prefix_name}_{timestamp}{ext}"
@@ -356,7 +356,7 @@ class LargeFileAlert:
 
             # 5. 生成邮件主题
             subject_prefix = "[DEV] " if self.environment == 'dev' else ""
-            current_date = datetime.now().strftime('%Y-%m-%d')
+            current_date = utc_now().strftime('%Y-%m-%d')
             subject = f"{subject_prefix}{dept_key.upper()}部门大文件清理提醒 - {current_date}"
 
             # 6. 添加环境信息

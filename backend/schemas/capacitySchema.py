@@ -10,6 +10,9 @@ _GB_PER_TB = 1024
 _GB_PER_PB = _GB_PER_TB * _GB_PER_TB
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class CapacityDisplay(BaseModel):
     value: int | float
     unit: CapacityUnit

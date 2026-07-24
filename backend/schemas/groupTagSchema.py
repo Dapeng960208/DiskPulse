@@ -2,6 +2,9 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class GroupTagWrite(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 

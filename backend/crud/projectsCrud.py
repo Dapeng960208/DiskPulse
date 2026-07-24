@@ -15,6 +15,7 @@ from models import (
 from schemas import projectsSchema
 from services.project_access_service import ensure_project_owner_membership
 from utils.common import convert_GB_to_TB
+from utils.datetime_utils import utc_now
 from utils.query import apply_use_ratio_range, filter_tree_by_use_ratio, get_sort_column, require_allowed
 
 
@@ -80,7 +81,7 @@ def update_project(db: Session, project_id: int, project: projectsSchema.Project
         )
         project_db.in_charge_user_id = project.in_charge_user_id
         project_db.project_process_code = project.project_process_code
-        project_db.updated_at = datetime.now()
+        project_db.updated_at = utc_now()
         db.flush()
         ensure_project_owner_membership(
             db,

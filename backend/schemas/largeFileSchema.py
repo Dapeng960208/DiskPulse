@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 from pydantic import BaseModel, ConfigDict, field_serializer
+from utils.datetime_utils import to_utc_z
 from datetime import datetime
 from schemas import usersSchema, groupSchema
 from schemas.capacitySchema import CapacityResponseBase
 from typing import ClassVar, List, Optional
+
+
+from schemas.base import UTCBaseModel as BaseModel
 
 
 class LargeFileBase(BaseModel):
@@ -19,7 +23,7 @@ class LargeFileBase(BaseModel):
 
     @field_serializer("updated_at", "created_at", when_used="json")
     def serialize_datetime(self, value: datetime | None) -> str | None:
-        return value.strftime("%Y-%m-%d %H:%M:%S") if value else None
+        return to_utc_z(value) if value else None
 
 
 class LargeFileList(CapacityResponseBase, LargeFileBase):

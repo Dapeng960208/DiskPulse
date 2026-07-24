@@ -5,6 +5,9 @@ from schemas.volumeSchema import VolumeBase,VolumeName
 from schemas.capacitySchema import CapacityResponseBase
 from schemas.storageClusterSchema import StorageCluster
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class QtreeVolume(CapacityResponseBase):
     name: str
     volume_name: str

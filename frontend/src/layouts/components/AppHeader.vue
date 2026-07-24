@@ -1,5 +1,6 @@
 <script setup>
-import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElHeader, ElMessageBox, ElSpace } from 'element-plus';
+import { ref } from 'vue';
+import { ElButton, ElDialog, ElDropdown, ElDropdownItem, ElDropdownMenu, ElHeader, ElMessage, ElMessageBox, ElOption, ElSelect, ElSpace } from 'element-plus';
 import { useCurrentUser } from '@/stores/current-user';
 import { isAuthenticated, removeToken } from '@/utils/authorization';
 import usersApi from '@/api/users-api';
@@ -16,6 +17,29 @@ defineProps({
 });
 const title = import.meta.env.VITE_APP_TITLE;
 const currentUser = useCurrentUser();
+const timeZoneDialogVisible = ref(false);
+const timeZoneDraft = ref('Asia/Shanghai');
+const timeZones = ref([]);
+const savingTimeZone = ref(false);
+
+async function openTimeZoneSettings() {
+  const { result } = await usersApi.fetchTimeZones();
+  timeZones.value = result;
+  timeZoneDraft.value = currentUser.timeZone;
+  timeZoneDialogVisible.value = true;
+}
+
+async function saveTimeZone() {
+  savingTimeZone.value = true;
+  try {
+    const { result } = await usersApi.updateCurrentProfile({ time_zone: timeZoneDraft.value });
+    currentUser.setCurrentUser(result);
+    timeZoneDialogVisible.value = false;
+    ElMessage.success('时区已更新');
+  } finally {
+    savingTimeZone.value = false;
+  }
+}
 
 function handleMenuClick(command) {
   if (command === 'logout') {
@@ -28,6 +52,8 @@ function handleMenuClick(command) {
       currentUser.$reset();
       toLoginPage();
     })).catch(() => {});
+  } else if (command === 'time-zone') {
+    openTimeZoneSettings().catch(() => ElMessage.error('时区列表加载失败'));
   }
 }
 </script>
@@ -68,6 +94,10 @@ function handleMenuClick(command) {
           </div>
           <template #dropdown>
             <ElDropdownMenu class="user-dropdown-menu">
+              <ElDropdownItem command="time-zone">
+                <i class="i-ri-time-zone-line"></i>
+                <span>时区设置</span>
+              </ElDropdownItem>
               <ElDropdownItem
                 class="logout-item"
                 command="logout">
@@ -84,6 +114,31 @@ function handleMenuClick(command) {
           @click="toLoginPage">
           登录
         </ElButton>
+
+        <ElDialog
+          v-model="timeZoneDialogVisible"
+          title="时区设置"
+          width="min(92vw, 420px)">
+          <p class="time-zone-description">网页时间和手动导出将按此 IANA 时区展示。</p>
+          <ElSelect
+            v-model="timeZoneDraft"
+            filterable
+            placeholder="搜索时区"
+            style="width: 100%">
+            <ElOption
+              v-for="timeZone in timeZones"
+              :key="timeZone"
+              :label="timeZone"
+              :value="timeZone" />
+          </ElSelect>
+          <template #footer>
+            <ElButton @click="timeZoneDialogVisible = false">取消</ElButton>
+            <ElButton
+              type="primary"
+              :loading="savingTimeZone"
+              @click="saveTimeZone">保存</ElButton>
+          </template>
+        </ElDialog>
       </div>
     </div>
   </ElHeader>
@@ -244,6 +299,12 @@ function handleMenuClick(command) {
       color: var(--text-secondary);
       transform: rotate(180deg);
     }
+  }
+
+  .time-zone-description {
+    margin: 0 0 var(--spacing-lg);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
   }
 }
 

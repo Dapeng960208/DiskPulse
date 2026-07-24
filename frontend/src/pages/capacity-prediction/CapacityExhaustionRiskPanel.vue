@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import capacityPredictionApi from '@/api/capacity-prediction-api.js';
+import { formatDate } from '@/utils/datetime.js';
 
 const props = defineProps({
   assetType: { type: String, required: true },
@@ -20,18 +21,15 @@ const tagType = computed(() => ({
   insufficient: 'info',
 }[risk.value?.level] || 'info'));
 
-function formatDate(value) {
+function formatPredictionDate(value) {
   if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  const pad = (part) => String(part).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return formatDate(value).replaceAll('/', '-');
 }
 
 const expectedExhaustion = computed(() => {
   if (!risk.value) return '-';
-  if (risk.value.p50_exhaustion_at) return `P50：${formatDate(risk.value.p50_exhaustion_at)}`;
-  if (risk.value.p90_exhaustion_at) return `P90：${formatDate(risk.value.p90_exhaustion_at)}`;
+  if (risk.value.p50_exhaustion_at) return `P50：${formatPredictionDate(risk.value.p50_exhaustion_at)}`;
+  if (risk.value.p90_exhaustion_at) return `P90：${formatPredictionDate(risk.value.p90_exhaustion_at)}`;
   return risk.value.level === 'none' ? '未来 30 日内不会触碰硬限额' : '-';
 });
 

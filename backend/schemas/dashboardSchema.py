@@ -8,6 +8,9 @@ from schemas.capacitySchema import CapacityResponseBase
 from schemas.storageTrendSchema import StorageTrendMeta
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class DashboardScope(BaseModel):
     mode: Literal["global", "project"]
     project_id: int | None = None

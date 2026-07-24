@@ -27,6 +27,7 @@ import { useQuery, useQueryParams } from '@/composables/query';
 import { useStorageAlertThresholds } from '@/stores/storage-alert-thresholds';
 import { useBreadcrumbs } from '@/stores/breadcrumbs';
 import { formatCapacity } from '@/utils/capacity';
+import { toUtcRange } from '@/utils/datetime.js';
 
 const props = defineProps({
   apiType: {
@@ -130,8 +131,8 @@ const resourceIds = computed(() => attributeId.value
 const alertThresholds = useStorageAlertThresholds();
 alertThresholds.load();
 const { queryParams, reset } = useQueryParams(() => ({
-  start_time: dateRange.value[0],
-  end_time: dateRange.value[1],
+  start_time: toUtcRange(dateRange.value)[0],
+  end_time: toUtcRange(dateRange.value)[1],
   indicator: 'used',
 }));
 
@@ -207,8 +208,9 @@ const { result: alertResult, querying: alertQuerying, query: alertQuery } = useQ
 });
 
 watch(dateRange, (newVal) => {
-  queryParams.value.start_time = newVal[0];
-  queryParams.value.end_time = newVal[1];
+  const [startTime, endTime] = toUtcRange(newVal);
+  queryParams.value.start_time = startTime;
+  queryParams.value.end_time = endTime;
   query();
   alertQuery();
 }, { immediate: true });

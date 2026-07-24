@@ -9,6 +9,7 @@ import QueryForm from '@/components/form/QueryForm.vue';
 import RdUserSelect from '@/components/form/RdUserSelect.vue';
 import TimeRangePicker from '@/components/form/TimeRangePicker.vue';
 import { useQueryParams } from '@/composables/query';
+import { toUtcRange } from '@/utils/datetime.js';
 import AuditEventDetailDrawer from './components/AuditEventDetailDrawer.vue';
 
 const { queryParams, reset } = useQueryParams(() => ({ page: 1, size: 20 }));
@@ -29,7 +30,7 @@ const canAnalyzeCurrentFilters = computed(() => Boolean(queryParams.value.projec
 async function query() {
   loading.value = true;
   error.value = '';
-  const [start_time, end_time] = timeRange.value || [];
+  const [start_time, end_time] = toUtcRange(timeRange.value);
   try {
     const result = await auditEventsApi.fetch({
       ...queryParams.value,
@@ -68,7 +69,7 @@ function showDetail(event) {
 }
 
 function auditFilterHandoffQuery() {
-  const [startTime, endTime] = timeRange.value || [];
+  const [startTime, endTime] = toUtcRange(timeRange.value);
   return {
     ...(queryParams.value.project_id ? { audit_project_id: String(queryParams.value.project_id) } : {}),
     ...(queryParams.value.actor_user_id ? { audit_actor_user_id: String(queryParams.value.actor_user_id) } : {}),

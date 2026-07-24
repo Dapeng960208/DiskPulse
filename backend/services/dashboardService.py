@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from crud import dashboardCrud
 from services.storageTrendService import build_dashboard_trend_meta
-from utils.datetime_utils import questdb_to_system_local_naive
+from utils.datetime_utils import from_questdb_utc
+from utils.datetime_utils import utc_now
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ def _number(value) -> float:
 
 
 def _time_range():
-    end_time = datetime.now()
+    end_time = utc_now()
     start_time = datetime.combine(end_time.date() - timedelta(days=29), time.min)
     return start_time, end_time
 
@@ -115,7 +116,7 @@ def get_capacity_trend(db: Session, project_id: int | None = None):
         return []
     return [
         {
-            "timestamp": questdb_to_system_local_naive(timestamp),
+            "timestamp": from_questdb_utc(timestamp),
             "used_gb": _number(used_gb),
         }
         for timestamp, used_gb in rows

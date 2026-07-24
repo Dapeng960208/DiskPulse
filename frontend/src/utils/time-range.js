@@ -1,13 +1,4 @@
-function formatDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
-
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-}
+import { formatDateTime } from '@/utils/datetime';
 
 export function getDefaultTime(hour) {
   const end = new Date();
@@ -15,7 +6,7 @@ export function getDefaultTime(hour) {
 
   start.setTime(start.getTime() - 3600 * 1000 * hour);
 
-  return [formatDate(start), formatDate(end)];
+  return [formatDateTime(start).replace(/\//g, '-'), formatDateTime(end).replace(/\//g, '-')];
 }
 
 const SHORTCUT_DEFINITIONS = [

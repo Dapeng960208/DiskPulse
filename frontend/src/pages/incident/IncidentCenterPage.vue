@@ -18,6 +18,7 @@ import IncidentDetailDrawer from './components/IncidentDetailDrawer.vue';
 import IncidentAiSettingsDialog from './components/IncidentAiSettingsDialog.vue';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
 import { useIncidentAiSettings } from '@/composables/useIncidentAiSettings.js';
+import { formatDateTime } from '@/utils/datetime.js';
 
 const queryParams = reactive({ page: 1, size: 20, status: '', category: '' });
 const incidents = ref([]);
@@ -49,10 +50,7 @@ function updateAiSettings(nextSettings) {
 }
 
 function formatLocalDateTime(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  const pad = (part) => String(part).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return formatDateTime(value).replaceAll('/', '-');
 }
 
 function sortLatestEvidence(items) {

@@ -16,14 +16,11 @@ from models import StorageAlerts, StorageCluster, Volume
 from services.storageHealthAnalyticsService import normalize_severity
 from services import telemetryObservabilityService
 from questdb.time_contract import questdb_write_timestamp
-from utils.datetime_utils import (
-    SYSTEM_TIMEZONE,
-    to_system_local_naive,
-    to_utc_z,
-)
+from utils.datetime_utils import parse_source_datetime, to_utc_z, utc_now
 
 
 logger = get_task_logger(__name__)
+VENDOR_TIMESTAMP_TIME_ZONE = "UTC"
 
 
 def _enqueue_derived_analytics(*, component: str, succeeded_clusters: tuple[int, ...]) -> None:
@@ -56,8 +53,8 @@ def _datetime(value, default: datetime | None = None) -> datetime:
     elif isinstance(value, (int, float)):
         result = datetime.fromtimestamp(value, timezone.utc)
     else:
-        result = default or datetime.now(SYSTEM_TIMEZONE)
-    return to_system_local_naive(result)
+        result = default or utc_now()
+    return parse_source_datetime(result, VENDOR_TIMESTAMP_TIME_ZONE)
 
 
 def _utc_z(value: datetime) -> str:
@@ -307,7 +304,7 @@ def _collect_events(storage_cluster_id: int) -> int:
             ).scalar_one_or_none()
             if latest is not None:
                 latest = _datetime(latest)
-            now = _datetime(datetime.now())
+            now = utc_now()
             since = event_window_start(latest, now)
             monitor = StoragePulseMonitor(db, logger, storage_cluster_id)
             monitor.setup()
@@ -494,7 +491,7 @@ def _collect_performance(storage_cluster_id: int) -> int:
         try:
             monitor = StoragePulseMonitor(db, logger, storage_cluster_id)
             monitor.setup()
-            now = datetime.now()
+            now = utc_now()
             volume_identities = {
                 str(name): str(performance_object_id)
                 for name, performance_object_id in db.execute(

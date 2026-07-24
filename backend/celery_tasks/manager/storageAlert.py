@@ -16,6 +16,7 @@ from schemas import storageUsageSchema, groupSchema, projectsSchema, aggregateSc
 from datetime import datetime, timedelta
 from appConfig import base_config
 from utils.storageTarget import resolve_group_storage_target
+from utils.datetime_utils import utc_now
 
 
 def _group_payload(group):
@@ -48,7 +49,8 @@ class StorageAlert:
         return data
 
     def get_user_alarm_data(self, threshold: int = 80,
-                            end_time: datetime = datetime.now() - timedelta(hours=1)) -> dict:
+                            end_time: datetime | None = None) -> dict:
+        end_time = end_time or utc_now() - timedelta(hours=1)
         alarm_data = {}
         storage_usage_quest_dbs = get_high_avg_usage(
             table_prefix='storage_usage', storage_config=self.config, threshold=threshold, end_time=end_time
@@ -84,7 +86,8 @@ class StorageAlert:
             alarm_data[email].append((storage_usage_db, avg_use_ratio))
         return alarm_data
 
-    def user_alarm_hourly(self, threshold: int = 80, end_time: datetime = datetime.now() - timedelta(hours=1)):
+    def user_alarm_hourly(self, threshold: int = 80, end_time: datetime | None = None):
+        end_time = end_time or utc_now() - timedelta(hours=1)
         alarm_data = self.get_user_alarm_data(threshold=threshold, end_time=end_time)
         if len(alarm_data) == 0:
             self.logger.warning("No storage usages data")
@@ -191,7 +194,7 @@ class StorageAlert:
     def get_project_group_alarm_data(self, threshold=90, end_time: datetime | None = None) -> dict:
         alarm_data = {}
         if end_time is None:
-            end_time = datetime.now() - timedelta(days=1)
+            end_time = utc_now() - timedelta(days=1)
         storage_usage_quest_dbs = get_high_avg_usage(
             table_prefix='group', storage_config=self.config, threshold=threshold, end_time=end_time
         )
@@ -222,7 +225,7 @@ class StorageAlert:
     def group_alarm_daily(self, threshold: int = 80, end_time: datetime | None = None):
         try:
             if end_time is None:
-                end_time = datetime.now() - timedelta(days=1)
+                end_time = utc_now() - timedelta(days=1)
             alarm_data = self.get_project_group_alarm_data(threshold=threshold, end_time=end_time)
             if len(alarm_data) == 0:
                 self.logger.warning("[Alert] No group data")
@@ -380,7 +383,7 @@ class StorageAlert:
         其他每天提醒离职时间等于quit_days的用户
         """
         quit_days = self.config.back_up_quit_days if self.config.back_up_quit_days else 30
-        now = datetime.now()
+        now = utc_now()
         alarm_data = {}
         if now.weekday() == 0:
             storage_usage_dbs = self.db.query(StorageUsage).filter(StorageUsage.used > 0).join(User,
@@ -431,7 +434,7 @@ class StorageAlert:
                 related_id=related_id,
                 related_type=model.__name__,
                 related_info=related_info,
-                updated_at=datetime.now()
+                updated_at=utc_now()
             )
             alerts.append(alert)
         self.db.add_all(alerts)
@@ -514,7 +517,7 @@ class StorageAlert:
     def get_project_alarm_data(self, end_time: datetime | None = None) -> dict:
         alarm_data = {}
         if end_time is None:
-            end_time = datetime.now() - timedelta(days=7)
+            end_time = utc_now() - timedelta(days=7)
         project_quest_dbs = get_high_avg_usage(
             table_prefix='project', storage_config=self.config, threshold=0, end_time=end_time
         )
@@ -536,7 +539,7 @@ class StorageAlert:
 
     def get_system_alarm_data(self, end_time: datetime | None = None, threshold: int = 80):
         if end_time is None:
-            end_time = datetime.now() - timedelta(days=1)
+            end_time = utc_now() - timedelta(days=1)
         aggregate_quest_dbs = get_high_avg_usage(
             table_prefix='aggregate', storage_config=self.config, threshold=threshold, end_time=end_time
         )

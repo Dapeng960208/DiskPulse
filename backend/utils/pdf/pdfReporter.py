@@ -2,7 +2,9 @@
 import platform
 from io import BytesIO
 import os
-from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from utils.datetime_utils import utc_now
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -22,10 +24,14 @@ matplotlib.use('Agg')
 
 
 class PageCountCanvas(canvas.Canvas):
-    def __init__(self, company_name, *args, **kwargs):
+    def __init__(self, company_name, time_zone, *args, **kwargs):
         canvas.Canvas.__init__(self, *args, **kwargs)
         self._saved_page_states = []
         self.company_name = company_name
+        try:
+            self.time_zone = ZoneInfo(time_zone or "Asia/Shanghai")
+        except ZoneInfoNotFoundError:
+            self.time_zone = ZoneInfo("Asia/Shanghai")
         self.inch = inch * 0.75
 
     def showPage(self):
@@ -55,14 +61,16 @@ class PageCountCanvas(canvas.Canvas):
         self.rect(self.inch + 30, self.inch - 15, A4[0] - 2 * self.inch - 30, 15, fill=1, stroke=0)
         self.setFillColor(colors.black)
 
-        self.drawString(self.inch + 35, self.inch - 10, f"{datetime.now().strftime('%Y年%m月%d日')}")
+        displayed_now = utc_now().astimezone(self.time_zone)
+        self.drawString(self.inch + 35, self.inch - 10, f"{displayed_now.strftime('%Y年%m月%d日')}")
         self.drawCentredString(A4[0] / 2.0, self.inch - 10,
-                               f"{company_name}版权所有 ©2019-{datetime.now().strftime('%Y')} ")
+                               f"{company_name}版权所有 ©2019-{displayed_now.strftime('%Y')} ")
         self.drawRightString(A4[0] - self.inch - 5, self.inch - 10, f"第 {self._pageNumber} 页 共 {page_count} 页")
 
 
 class PDFReportGenerator:
-    def __init__(self, company_name: str, logo_path: str | None, title: str, sub_title: str | None = None, app: str = "ICRDB"):
+    def __init__(self, company_name: str, logo_path: str | None, title: str, sub_title: str | None = None,
+                 app: str = "ICRDB", time_zone: str | None = None):
         self._register_font()
 
         self.images = []
@@ -71,6 +79,7 @@ class PDFReportGenerator:
         self.logo_path = logo_path
         self.title = title
         self.app = app
+        self.time_zone = time_zone
         self.elements = []
         self.title_index = 1
         self.styles = getSampleStyleSheet()
@@ -169,7 +178,7 @@ class PDFReportGenerator:
         canvas.restoreState()
 
     def footer(self, *args, **kwargs):
-        return PageCountCanvas(self.company_name, *args, **kwargs)
+        return PageCountCanvas(self.company_name, self.time_zone, *args, **kwargs)
 
     def add_table(self, data, title, col_width_ratios=None, hint=None, space=10):
         if len(data) <= 1:

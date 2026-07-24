@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
-
 from sqlalchemy import asc, desc, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from models import StorageUsage, User
 from schemas import usersSchema
+from utils.datetime_utils import utc_now
 from utils.query import get_sort_column
 
 
@@ -37,7 +36,7 @@ def create_user(db: Session, user: usersSchema.UserBase | usersSchema.UserCreate
         iam_id=getattr(user, "iam_id", None),
         user_type=user.user_type,
         is_alert=user.is_alert,
-        updated_at=datetime.now(),
+        updated_at=utc_now(),
     )
     db.add(user_db)
     db.commit()
@@ -74,7 +73,7 @@ def add_ldap_user(
         user_type=2,
         is_alert=True,
         quit_days=0,
-        updated_at=datetime.now(),
+        updated_at=utc_now(),
     )
     db.add(user)
     return user
@@ -93,7 +92,7 @@ def apply_ldap_profile(
         user.email = email
     if department:
         user.department = department
-    user.updated_at = datetime.now()
+    user.updated_at = utc_now()
 
 
 def set_ldap_lifecycle(
@@ -105,7 +104,7 @@ def set_ldap_lifecycle(
     user.user_type = user_type
     if quit_days is not None:
         user.quit_days = quit_days
-    user.updated_at = datetime.now()
+    user.updated_at = utc_now()
 
 
 async def get_users(
@@ -141,7 +140,7 @@ def update_user(db: Session, user_id: int, user: usersSchema.UserUpdate):
 
     for field, value in user.model_dump(exclude_unset=True).items():
         setattr(user_db, field, value)
-    user_db.updated_at = datetime.now()
+    user_db.updated_at = utc_now()
     db.commit()
     db.refresh(user_db)
     return user_db

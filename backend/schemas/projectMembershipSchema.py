@@ -11,6 +11,9 @@ ProjectRole = Literal["reader", "editor", "project_admin"]
 AssignableProjectRole = Literal["reader", "editor"]
 
 
+from schemas.base import UTCBaseModel as BaseModel
+
+
 class ProjectMembershipCreate(BaseModel):
     user_id: int
     role: ProjectRole

@@ -10,6 +10,7 @@ from utils.mailTools.emailNotification import EmailNotification
 from sqlalchemy import and_, or_, update
 from sqlalchemy.orm import joinedload
 from appConfig import base_config
+from utils.datetime_utils import utc_now
 
 
 class RemoteFileManager:
@@ -225,7 +226,7 @@ class RemoteFileManager:
             self.logger.warnging(
                 f'User directory {user_path} not exit')
             return False, None
-        start_time = datetime.now()
+        start_time = utc_now()
         status = 10 if closed is True else 1
         self.logger.info(f"status:{status},{storage_back_up_record is None} {destination_path}")
         if storage_back_up_record is None:
@@ -247,14 +248,14 @@ class RemoteFileManager:
         # if self.move_directory(source=user_path, destination=group_back_dir) is False:
         if self.rsync_directory(source=user_path, destination=group_back_dir) is False:
             storage_back_up_record.status = 0
-            storage_back_up_record.end_time = datetime.now()
+            storage_back_up_record.end_time = utc_now()
         else:
             if self.delete_directory(path=user_path, force=False) is False:
                 storage_back_up_record.status = 0
-                storage_back_up_record.end_time = datetime.now()
+                storage_back_up_record.end_time = utc_now()
             else:
                 storage_back_up_record.status = 2
-                storage_back_up_record.end_time = datetime.now()
+                storage_back_up_record.end_time = utc_now()
         self.db.flush()
         if commit:
             self.db.commit()
@@ -273,7 +274,7 @@ class RemoteFileManager:
         return True
 
     def _delete_back_up_record(self, storage_back_up_record_id, *, destination_path):
-        start_time = datetime.now()
+        start_time = utc_now()
         self.db.execute(
             update(StorageBackUpRecord).where(
                 StorageBackUpRecord.id == storage_back_up_record_id
@@ -290,7 +291,7 @@ class RemoteFileManager:
             status = 5
         else:
             status = 3
-        end_time = datetime.now()
+        end_time = utc_now()
         self.db.execute(
             update(StorageBackUpRecord).where(
                 StorageBackUpRecord.id == storage_back_up_record_id
@@ -312,8 +313,8 @@ class RemoteFileManager:
         source_path = storage_back_up_record_db.destination_path
         destination_path = os.path.dirname(storage_back_up_record_db.source_path)
         storage_back_up_record_db.status = 7
-        storage_back_up_record_db.start_time = datetime.now()
-        storage_back_up_record_db.end_time = datetime.now()
+        storage_back_up_record_db.start_time = utc_now()
+        storage_back_up_record_db.end_time = utc_now()
         self.db.commit()
         # if self.move_directory(source=source_path, destination=destination_path) is False:
         if self.rsync_directory(source=source_path, destination=destination_path) is False:
@@ -323,7 +324,7 @@ class RemoteFileManager:
                 storage_back_up_record_db.status = 6
             else:
                 storage_back_up_record_db.status = 8
-        storage_back_up_record_db.end_time = datetime.now()
+        storage_back_up_record_db.end_time = utc_now()
         self.db.commit()
         self.change_owner(path=storage_back_up_record_db.source_path, user=storage_back_up_record_db.user.rd_username)
         self.change_permissions(path=storage_back_up_record_db.source_path, permissions=744)
@@ -408,8 +409,8 @@ class RemoteFileManager:
                 "The project team disables the user backup function. Please check the project team Settings.")
             return False
         back_up_duration = self.storage_config.back_up_duration if self.storage_config.back_up_duration else 60
-        start_time = datetime.now() - timedelta(days=back_up_duration)
-        end_time = datetime.now() - timedelta(days=back_up_duration) + timedelta(days=7)
+        start_time = utc_now() - timedelta(days=back_up_duration)
+        end_time = utc_now() - timedelta(days=back_up_duration) + timedelta(days=7)
         storage_back_up_record_dbs = self.db.query(StorageBackUpRecord).filter(StorageBackUpRecord.status == 2,
                                                                                StorageBackUpRecord.end_time.between(
                                                                                    start_time, end_time)).all()
@@ -421,7 +422,7 @@ class RemoteFileManager:
                 "No storage back up records need to be deleted")
             return False
         for storage_back_up_record in storage_back_up_records:
-            storage_back_up_record['duration'] = (datetime.now() - storage_back_up_record.get(
+            storage_back_up_record['duration'] = (utc_now() - storage_back_up_record.get(
                 'end_time')).days if storage_back_up_record.get('end_time') else 60
         data = {}
         recipient = [email.strip() for email in (self.storage_config.mail_to or "").split() if email.strip()]
@@ -440,7 +441,7 @@ class RemoteFileManager:
                 "The project team disables the user backup function. Please check the project team Settings.")
             return False
         back_up_duration = self.storage_config.back_up_duration if self.storage_config.back_up_duration else 60
-        start_time = datetime.now() - timedelta(days=back_up_duration)
+        start_time = utc_now() - timedelta(days=back_up_duration)
         storage_back_up_record_dbs = self.db.query(StorageBackUpRecord).options(
             joinedload(StorageBackUpRecord.user)
         ).filter(

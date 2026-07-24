@@ -5,7 +5,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Mapping
 
-from utils.datetime_utils import to_questdb_utc_naive
+from utils.datetime_utils import UTC, to_questdb_utc_naive
 
 
 QUESTDB_TIME_CONTRACTS: Mapping[str, str] = MappingProxyType(
@@ -23,11 +23,13 @@ QUESTDB_TIME_CONTRACTS: Mapping[str, str] = MappingProxyType(
 )
 
 
-def questdb_write_timestamp(table_name: str, value: datetime | str) -> datetime:
-    """Normalize a registered table's designated timestamp to UTC naive."""
+def questdb_write_timestamp(table_name: str, value: datetime) -> datetime:
+    """Convert an aware UTC instant to QuestDB's UTC-naive driver value."""
     if table_name not in QUESTDB_TIME_CONTRACTS:
         raise ValueError(
             f"unregistered QuestDB timestamp table: {table_name!r}; "
             "add it to QUESTDB_TIME_CONTRACTS before writing"
         )
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value):
+        raise ValueError("QuestDB timestamps must be aware UTC instants")
     return to_questdb_utc_naive(value)

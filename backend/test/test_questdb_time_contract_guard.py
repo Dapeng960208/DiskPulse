@@ -84,7 +84,7 @@ def test_registered_write_guard_accepts_only_aware_utc_instants_and_rejects_unkn
         datetime(2026, 7, 23, 6, 30, tzinfo=timezone.utc),
     ) == datetime(2026, 7, 23, 6, 30)
 
-    with pytest.raises(ValueError, match="timezone-aware"):
+    with pytest.raises(ValueError, match="aware UTC"):
         questdb_write_timestamp("storage_usages", datetime(2026, 7, 23, 14, 30))
 
     with pytest.raises(ValueError, match="unregistered QuestDB timestamp table"):

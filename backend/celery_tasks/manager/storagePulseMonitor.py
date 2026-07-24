@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
 from urllib3 import disable_warnings
 from urllib3.exceptions import InsecureRequestWarning
@@ -14,6 +13,7 @@ from services.project_access_service import ensure_reader_memberships
 from sqlalchemy import func, text, update
 from dependencies import QuestDBSession
 from questdb.time_contract import questdb_write_timestamp
+from utils.datetime_utils import normalize_utc, utc_now
 from typing import List, Dict, Any, Optional
 
 
@@ -59,7 +59,7 @@ class StoragePulseMonitor:
         self.logger = logger
         self.storage_cluster_id = storage_cluster_id
         self.snapshot = snapshot
-        self.collected_at = collected_at or datetime.now()
+        self.collected_at = normalize_utc(collected_at) if collected_at else utc_now()
         self.group_snapshots = {
             row["group_id"]: row
             for row in (snapshot or {}).get("rows", ())
@@ -98,7 +98,7 @@ class StoragePulseMonitor:
 
     def collect_postgres(self):
         """Collect and flush PostgreSQL data inside the caller's transaction."""
-        started_at = datetime.now()
+        started_at = utc_now()
         self.setup()
         self.execute_data_collection(include_questdb=False)
         self.db.flush()
@@ -283,7 +283,7 @@ class StoragePulseMonitor:
                 limit=total,
                 used=used,
                 use_ratio=round(used * 100 / total, 2) if total else 0,
-                updated_at=datetime.now(),
+                updated_at=utc_now(),
             ))
         self.logger.info(f"{self._log_prefix} Fetched {len(result)} capacity pools")
         return result
@@ -313,7 +313,7 @@ class StoragePulseMonitor:
                 limit=total,
                 used=used,
                 use_ratio=round(used * 100 / total, 2) if total else 0,
-                updated_at=datetime.now(),
+                updated_at=utc_now(),
             ))
         self.logger.info(f"{self._log_prefix} Fetched {len(result)} storage spaces")
         return result
@@ -345,7 +345,7 @@ class StoragePulseMonitor:
                 style=rec.get('security_style', ''),
                 oplocks=str(rec.get('oplocks', {}).get('enabled', False)),
                 status=rec.get('statistics', {}).get('status', ''),
-                updated_at=datetime.now(),
+                updated_at=utc_now(),
             ))
         self.logger.info(f"{self._log_prefix} Fetched {len(result)} qtrees")
         return result
@@ -508,7 +508,7 @@ class StoragePulseMonitor:
                     "used": target.used,
                     "use_ratio": target.use_ratio,
                     "soft_use_ratio": target.soft_use_ratio,
-                    "updated_at": datetime.now(),
+                    "updated_at": utc_now(),
                 })
 
         grouped_usage = self.db.query(
@@ -534,7 +534,7 @@ class StoragePulseMonitor:
                 "soft_limit": soft_limit,
                 "use_ratio": round(used * 100 / limit, 2) if limit else 0,
                 "soft_use_ratio": _calculate_use_ratio(used, soft_limit),
-                "updated_at": datetime.now(),
+                "updated_at": utc_now(),
             })
 
         self.logger.info(
@@ -586,7 +586,7 @@ class StoragePulseMonitor:
             self.storage_cluster.used = total_used
             self.storage_cluster.limit = total_limit
             self.storage_cluster.use_ratio = use_ratio
-            self.storage_cluster.updated_at = datetime.now()
+            self.storage_cluster.updated_at = utc_now()
             self.db.flush()
 
             if include_questdb:
@@ -614,7 +614,7 @@ class StoragePulseMonitor:
                      'use_ratio': item.use_ratio,
                      'updated_at': questdb_write_timestamp(
                          'storage_cluster_storage_usages',
-                         datetime.now(),
+                         utc_now(),
                      )}
                     for item in items if item.used is not None
                 ]
@@ -630,7 +630,7 @@ class StoragePulseMonitor:
                         f'{table_name}_id': str(item.id),
                         'updated_at': questdb_write_timestamp(
                             f'{table_name}_storage_usages',
-                            datetime.now(),
+                            utc_now(),
                         ),
                     }
                     if hasattr(item, 'soft_limit'):
@@ -784,7 +784,7 @@ class StoragePulseMonitor:
             else:
                 user_id = users_map.get(rd_username)
                 if not user_id:
-                    new_user = User(rd_username=rd_username, updated_at=datetime.now())
+                    new_user = User(rd_username=rd_username, updated_at=utc_now())
                     self.db.add(new_user)
                     self.db.flush()
                     user_id = new_user.id
@@ -818,7 +818,7 @@ class StoragePulseMonitor:
                     storage_cluster_id=self.storage_cluster_id,
                     user_id=user_id, group_id=group_id, limit=limit, soft_limit=soft_limit, used=used,
                     use_ratio=use_ratio, soft_use_ratio=soft_use_ratio, file_used=0, linux_path=linux_path,
-                    file_limit=0, updated_at=datetime.now()
+                    file_limit=0, updated_at=utc_now()
                 )
         except Exception as e:
             self.logger.error(f"{self._log_prefix} Failed to process quota user record: {e}")
@@ -872,7 +872,7 @@ class StoragePulseMonitor:
             else:
                 user_id = users_map.get(rd_username)
                 if not user_id:
-                    new_user = User(rd_username=rd_username, updated_at=datetime.now())
+                    new_user = User(rd_username=rd_username, updated_at=utc_now())
                     self.db.add(new_user)
                     self.db.flush()
                     user_id = new_user.id
@@ -905,7 +905,7 @@ class StoragePulseMonitor:
                     storage_cluster_id=self.storage_cluster_id,
                     user_id=user_id, group_id=group_id, limit=limit, soft_limit=soft_limit, used=used,
                     use_ratio=use_ratio, soft_use_ratio=soft_use_ratio, file_used=file_used, linux_path=linux_path,
-                    file_limit=file_limit, updated_at=datetime.now()
+                    file_limit=file_limit, updated_at=utc_now()
                 )
         except Exception as e:
             self.logger.error(f"{self._log_prefix} Failed to process quota user record: {e}")
@@ -935,7 +935,7 @@ class StoragePulseMonitor:
                 use_ratio=_calculate_use_ratio(used, limit),
                 soft_use_ratio=_calculate_use_ratio(used, soft_limit),
                 performance_object_id=quota.get('id') or quota.get('path'),
-                updated_at=datetime.now(),
+                updated_at=utc_now(),
             ))
         return spaces
 

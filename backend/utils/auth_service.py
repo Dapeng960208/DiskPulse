@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import logging
-from datetime import datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -19,6 +18,7 @@ from utils.ldap_directory import (
     list_ldap_directory_users,
 )
 from utils.security import issue_token
+from utils.datetime_utils import utc_now
 
 
 SUPERADMIN_ROLE = "superadmin"
@@ -123,7 +123,7 @@ def upsert_user_from_ldap_profile(db: Session, profile: dict) -> User:
             email=email,
             user_type=2,
             is_alert=True,
-            updated_at=datetime.now(),
+            updated_at=utc_now(),
         )
         db.add(user)
     else:
@@ -132,7 +132,7 @@ def upsert_user_from_ldap_profile(db: Session, profile: dict) -> User:
             user.email = email
         if user.user_type is None:
             user.user_type = 2
-        user.updated_at = datetime.now()
+        user.updated_at = utc_now()
 
     db.commit()
     db.refresh(user)
@@ -164,6 +164,7 @@ def build_frontend_profile(user: User) -> dict:
         "roleCodes": role_codes,
         "permissionCodes": permission_codes,
         "extensionAttributes": {"rdUsername": rd_username},
+        "time_zone": user.time_zone,
     }
 
 

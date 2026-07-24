@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 from pydantic import BaseModel, ConfigDict, field_serializer
+from utils.datetime_utils import to_utc_z
 from datetime import datetime
 from typing import Optional
+
+
+from schemas.base import UTCBaseModel as BaseModel
 
 
 class StorageAlert(BaseModel):
@@ -30,4 +34,4 @@ class StorageAlert(BaseModel):
 
     @field_serializer("updated_at", when_used="json")
     def serialize_datetime(self, value: datetime | None) -> str | None:
-        return value.strftime("%Y-%m-%d %H:%M:%S") if value else None
+        return to_utc_z(value) if value else None

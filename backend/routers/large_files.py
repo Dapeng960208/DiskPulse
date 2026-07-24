@@ -8,9 +8,9 @@ from dependencies import CurrentUserDep, get_db
 import logging
 from routers.common import handle_exceptions
 from services import project_access_service
-from datetime import datetime
 import urllib.parse
 from fastapi.responses import StreamingResponse
+from utils.datetime_utils import format_for_user_time_zone, utc_now
 
 logger = logging.getLogger('app:large-files')
 router = APIRouter(
@@ -54,8 +54,9 @@ def export_large_files(nameLike: str | None = None, user_id: int | str = Query(N
         user_id,
         group_id,
         project_access_service.accessible_project_ids(db, current_user),
+        current_user.time_zone,
     )
-    file_name = f"大文件_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    file_name = f"大文件_{format_for_user_time_zone(utc_now(), current_user.time_zone, format_string='%Y%m%d_%H%M%S')}.xlsx"
     media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     encoded_file_name = urllib.parse.quote(file_name)
     headers['filename'] = encoded_file_name

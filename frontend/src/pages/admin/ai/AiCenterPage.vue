@@ -26,6 +26,7 @@ import { useDialog } from '@/composables/dialog';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
 import DataTable from '@/components/data/DataTable.vue';
 import QueryForm from '@/components/form/QueryForm.vue';
+import { formatDateTime } from '@/utils/datetime.js';
 
 const providerOptions = [
   { value: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
@@ -318,10 +319,7 @@ function reasoningKindText(value) {
 }
 
 function formatCapabilityUpdatedAt(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  const pad = (part) => String(part).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return formatDateTime(value).replaceAll('/', '-');
 }
 
 async function refreshCapabilities(model) {

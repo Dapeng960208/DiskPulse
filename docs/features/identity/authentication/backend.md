@@ -15,7 +15,13 @@ DiskPulse 后端通过 LDAP 校验人工用户身份，登录成功后签发 JWT
   - 成功：`{"result": null}`。后端撤销当前 JWT，前端同时清理本地 token。
 - `GET /storage-pulse/api/users/current/profile`
   - 请求头：`Authorization: Bearer <token>`。
-  - 成功返回前端 store 所需字段：`id`、`avatarUrl`、`commonName`、`roleCodes`、`permissionCodes`、`extensionAttributes.rdUsername`。
+  - 成功返回前端 store 所需字段：`id`、`avatarUrl`、`commonName`、`roleCodes`、`permissionCodes`、`extensionAttributes.rdUsername`、可空的 `time_zone`。
+- `PATCH /storage-pulse/api/users/current/profile`
+  - 请求头：`Authorization: Bearer <token>`。
+  - 仅允许当前用户更新 `time_zone`；值必须是服务端 `zoneinfo` 可识别的 IANA 时区标识，否则返回 `422`。
+- `GET /storage-pulse/api/users/current/time-zones`
+  - 请求头：`Authorization: Bearer <token>`。
+  - 返回服务端可接受的 IANA 时区列表，供前端时区选择器使用。
 
 除登录和 `OPTIONS` 外，`/storage-pulse/api/**` 业务接口默认要求有效 JWT。配置、用户变更、资源变更、扩容、备份删除和回滚等高风险操作要求 `super_admin_usernames` 中配置的超级管理员。
 
@@ -50,6 +56,7 @@ DiskPulse 后端通过 LDAP 校验人工用户身份，登录成功后签发 JWT
 - 登出删除当前 JWT 的 Redis 会话；后端重启后只要 `jwt.secret_key` 和 Redis 数据未变化，会话仍然有效。
 - Redis 连接或读写失败时认证链路 fail-closed 并返回 `503`，避免把缓存故障降级成免校验。
 - 错误响应保持通用，不回显密码、token、LDAP 原始异常或敏感配置。
+- 用户主动导出的展示时区来自当前认证用户已保存的 `time_zone`，不接受客户端把时区作为可信参数传入。
 
 ## 请求与连接性能
 

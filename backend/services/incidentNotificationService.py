@@ -2,12 +2,13 @@
 """Configuration-scoped delivery for derived Incident notifications only."""
 
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import timezone
 
 from appConfig import base_config
 from models import Project, ProjectMembership, User
 from services.feishuNotificationService import FeishuNotificationService
 from utils.mailTools.emailNotification import EmailNotification
+from utils.datetime_utils import utc_now
 
 
 def resolve_recipient_usernames(
@@ -84,7 +85,7 @@ def _incident_is_currently_silenced(incident) -> bool:
         return False
     if silenced_until.tzinfo is None:
         silenced_until = silenced_until.replace(tzinfo=timezone.utc)
-    return silenced_until > datetime.now(timezone.utc)
+    return silenced_until > utc_now()
 
 
 def notify_incident(db, incident, *, event: str) -> tuple[str, ...]:

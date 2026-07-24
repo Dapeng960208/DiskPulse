@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
 from uuid import UUID, uuid4
+from utils.datetime_utils import utc_now as persistent_utc_now
 
 from requests import exceptions as requests_exceptions
 from sqlalchemy.exc import SQLAlchemyError
@@ -28,7 +29,7 @@ class TelemetryFreshness:
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return persistent_utc_now()
 
 
 def normalize_utc(value: datetime) -> datetime:

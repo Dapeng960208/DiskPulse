@@ -16,7 +16,7 @@
 | API 与请求支持 | `frontend/src/api/` | 按资源域组织的请求封装与响应处理。 |
 | 共享组件与样式 | `frontend/src/components/`、`frontend/src/styles/` | 可复用 UI、设计 token 和全局布局。 |
 
-前端只负责体验和入口控制；服务端仍是权限、项目隔离和数据校验的最终边界。详细约束见[前端设计与开发规范](../../standards/frontend/frontend-design-standard.md)，功能页面的事实来源在 `docs/features/experience/`、`docs/features/storage/`、`docs/features/ai/` 等对应专题目录。
+前端只负责体验和入口控制；服务端仍是权限、项目隔离和数据校验的最终边界。日期时间展示从当前用户 store 的 IANA 时区派生，使用 `src/utils/datetime.js`，范围请求转换为 UTC `Z`；完整边界见[UTC 时间契约](./time-contract.md)。详细约束见[前端设计与开发规范](../../standards/frontend/frontend-design-standard.md)，功能页面的事实来源在 `docs/features/experience/`、`docs/features/storage/`、`docs/features/ai/` 等对应专题目录。
 
 ## 验证入口
 

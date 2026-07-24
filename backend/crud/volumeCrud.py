@@ -15,7 +15,7 @@ from crud.configCrud import get_storage_config
 from dependencies import QuestDBSession
 from sqlalchemy import text
 from services.volumeMonitoringService import METRICS, resolve_performance_identity, validate_metrics
-from utils.datetime_utils import questdb_to_system_local_naive, to_utc_z
+from utils.datetime_utils import from_questdb_utc, to_utc_z, utc_now
 from utils.query import apply_use_ratio_range, get_sort_column
 
 
@@ -97,7 +97,7 @@ def get_volume_monitoring(db: Session, volume_id: int, start_time: datetime | No
     if volume is None:
         return None
     if start_time is None and end_time is None:
-        end_time = datetime.now()
+        end_time = utc_now()
         start_time = end_time - timedelta(hours=24)
     if start_time is None or end_time is None or start_time >= end_time:
         raise ValueError("start_time must be earlier than end_time")
@@ -147,9 +147,7 @@ def get_volume_monitoring(db: Session, volume_id: int, start_time: datetime | No
     for index, metric in enumerate(selected_metrics):
         data = [
             [
-                questdb_to_system_local_naive(row[-1]).strftime(
-                    "%Y-%m-%d %H:%M:00"
-                ),
+                to_utc_z(from_questdb_utc(row[-1])),
                 row[index],
             ]
             for row in rows

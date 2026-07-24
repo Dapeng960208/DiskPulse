@@ -13,7 +13,7 @@ from questdb.models import ProjectStorageUsage, UserStorageUsage
 from celery_worker import diskpulse_app
 from celery_tasks.manager.remoteFileManager import RemoteFileManager
 from celery.utils.log import get_task_logger
-from datetime import datetime, timedelta
+from datetime import timedelta
 from celery_tasks.manager.storageAlert import StorageAlert
 from celery_tasks.tasks.redis_lock import redis_lock
 from celery.exceptions import SoftTimeLimitExceeded
@@ -23,6 +23,7 @@ from crud import usersCrud
 from questdb.time_contract import questdb_write_timestamp
 from services import telemetryObservabilityService
 from services.audit_service import AuditContext, append_audit_event
+from utils.datetime_utils import utc_now
 logger = get_task_logger(__name__)
 
 
@@ -461,7 +462,7 @@ def storages_schedule_fetching_task(self, storage_cluster_id=None, audit_context
             if have_lock:
                 with DBSession() as db:
                     snapshot = load_collection_snapshot(db, storage_cluster_id)
-                collected_at = datetime.now()
+                collected_at = utc_now()
                 summary = run_collection_round(
                     snapshot,
                     session_factory=SessionLocal,
@@ -523,7 +524,7 @@ def user_storage_statistics_schedule_task():
             return {"status": "skipped"}
 
         started_at = time.monotonic()
-        sampled_at = datetime.now()
+        sampled_at = utc_now()
         logger.info(
             "User storage statistics task started: sampled_at=%s",
             sampled_at.isoformat(),
@@ -630,19 +631,19 @@ def user_storage_statistics_schedule_task():
 @diskpulse_app.task(soft_time_limit=120, time_limit=150, expires=1800)
 def user_storage_usage_alert_hourly():
     with DBSession() as db:
-        now = datetime.now()
+        now = utc_now()
         hour = int(now.hour)
         storage_alert = StorageAlert(db, logger)
         if hour == 8:
             storage_alert.user_alarm_hourly(threshold=80)
         else:
-            storage_alert.user_alarm_hourly(threshold=95, end_time=datetime.now() - timedelta(minutes=3))
+            storage_alert.user_alarm_hourly(threshold=95, end_time=utc_now() - timedelta(minutes=3))
 
 
 @diskpulse_app.task(soft_time_limit=300, time_limit=330, expires=1800)
 def group_storage_usage_alert_hourly():
     with DBSession() as db:
-        now = datetime.now()
+        now = utc_now()
         hour = int(now.hour)
         if hour == 8:
             storage_alert = StorageAlert(db, logger)
@@ -650,7 +651,7 @@ def group_storage_usage_alert_hourly():
             storage_alert.system_alarm_daily(threshold=80)
         else:
             storage_alert = StorageAlert(db, logger)
-            storage_alert.group_alarm_daily(threshold=95, end_time=datetime.now() - timedelta(minutes=3))
+            storage_alert.group_alarm_daily(threshold=95, end_time=utc_now() - timedelta(minutes=3))
 
 
 @diskpulse_app.task(soft_time_limit=300, time_limit=330)
