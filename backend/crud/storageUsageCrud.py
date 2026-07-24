@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from sqlalchemy.orm import Session
-from models import Group, StorageUsage
+from models import Group, StorageUsage, User
 from schemas import storageUsageSchema
 from sqlalchemy import or_, desc, asc
 from crud.questDbCrud import get_real_time_data_by_id, get_real_time_data_by_ids
@@ -21,7 +21,8 @@ def get_storage_usage_by_id(db: Session, storage_usage_id: int):
 
 def get_storage_usages(db: Session, page: int | None = None, size: int | None = None, nameLike: str | None = None,
                        prop: str | None = None,
-                       order: str | None = None, user_id: int | None = None, group_id: int | None = None,
+                       order: str | None = None, user_id: int | None = None,
+                       rd_username: str | None = None, group_id: int | None = None,
                         storage_cluster_id: int | None = None, project_id: int | None = None,
                         group_tag_id: int | None = None,
                         accessible_project_ids: set[int] | None = None,
@@ -32,6 +33,8 @@ def get_storage_usages(db: Session, page: int | None = None, size: int | None = 
         conditions.append(StorageUsage.linux_path.like(f"%{nameLike}%"))
     if user_id:
         conditions.append(StorageUsage.user_id == user_id)
+    if rd_username is not None:
+        conditions.append(StorageUsage.user.has(User.rd_username == rd_username))
     if group_id:
         conditions.append(StorageUsage.group_id == group_id)
     if (

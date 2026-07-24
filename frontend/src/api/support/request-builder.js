@@ -34,7 +34,7 @@ class RequestBuilder {
         return config;
       },
       (error) => {
-        console.error(error); // for debug
+        if (import.meta.env.DEV) console.error(error);
         return Promise.reject(error);
       },
     );

@@ -1,5 +1,5 @@
 <script setup>
-import { ElTabPane, ElTabs } from 'element-plus';
+import { ElMessage, ElTabPane, ElTabs } from 'element-plus';
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import projectApi from '@/api/project-api.js';
@@ -35,6 +35,7 @@ async function loadProject() {
     project.value = null;
     breadcrumbs.setDetailTitle(route.name, '');
     breadcrumbs.setDetailBreadcrumb(route.name, []);
+    ElMessage.error('加载项目详情失败，请刷新重试');
   }
 }
 

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -29,8 +30,11 @@ def read_projects(
     page: int = 1,
     size: int = 20,
     nameLike: str | None = None,
-    prop: str = Query(None),
-    order: str = Query(None),
+    prop: Annotated[str | None, Query(description="排序字段；省略时使用默认排序")] = None,
+    order: Annotated[
+        str | None,
+        Query(description="排序方向：ascending 或 descending"),
+    ] = None,
     status: int | None = None,
     use_ratio_min: UseRatioMinimum = None,
     use_ratio_max: UseRatioMaximum = None,

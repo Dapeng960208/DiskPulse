@@ -11,6 +11,7 @@ import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from fastapi import APIRouter, FastAPI, Response
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
@@ -58,7 +59,7 @@ from services.ai_client import AIClientError, AIClientToolCall, AICompletionResu
 from services.ai_client import AICompletionStreamEvent
 from services.ai_rate_limit import enforce_ai_rate_limit
 from services.ai_security import decrypt_secret, encrypt_secret, mask_secret
-from services.ai_tool_service import build_tool_registry, execute_tool
+from services.ai_tool_service import _input_model, build_tool_registry, execute_tool
 from utils.security import issue_token
 
 
@@ -408,6 +409,61 @@ def test_dynamic_tool_registry_only_exposes_marked_get_routes():
         tool_name="get_visible",
         arguments={"item_id": "not-an-integer"},
     )["error"] == "工具参数无效"
+
+
+def test_all_ai_exposed_route_parameter_schemas_are_unambiguous():
+    """Every AI tool field must expose one scalar contract and truthful nullability."""
+    from main import app as production_app
+
+    issues = []
+    scalar_types = {"array", "boolean", "integer", "number", "object", "string"}
+
+    for route in production_app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        metadata = route.openapi_extra or {}
+        if metadata.get("ai_exposed") is not True:
+            continue
+        tool_name = metadata.get("ai_name") or route.name
+        model, _ = _input_model(tool_name, route)
+        schema = model.model_json_schema()
+        required = set(schema.get("required") or [])
+        for field_name, field_schema in (schema.get("properties") or {}).items():
+            branches = [
+                field_schema,
+                *(field_schema.get("anyOf") or []),
+                *(field_schema.get("oneOf") or []),
+            ]
+            has_model_reference = any(
+                isinstance(branch, dict) and "$ref" in branch for branch in branches
+            )
+            field_types = {
+                branch.get("type")
+                for branch in branches
+                if isinstance(branch, dict) and branch.get("type") in scalar_types
+            }
+            non_null_types = field_types - {"null"}
+            if not non_null_types and not has_model_reference:
+                issues.append(f"{tool_name}.{field_name}: missing JSON Schema type")
+            elif len(non_null_types) > 1 and non_null_types != {"integer", "number"}:
+                issues.append(
+                    f"{tool_name}.{field_name}: incompatible types {sorted(non_null_types)}"
+                )
+            allows_null = any(
+                isinstance(branch, dict) and branch.get("type") == "null"
+                for branch in branches
+            )
+            if (
+                field_name not in required
+                and "default" in field_schema
+                and field_schema["default"] is None
+                and not allows_null
+            ):
+                issues.append(
+                    f"{tool_name}.{field_name}: defaults to null but schema rejects null"
+                )
+
+    assert issues == []
 
 
 def test_dynamic_tool_registry_filters_route_configured_response_fields():

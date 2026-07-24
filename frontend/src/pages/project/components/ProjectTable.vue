@@ -7,7 +7,7 @@ import FilterForm from '@/components/form/QueryForm.vue';
 import DataTable from '@/components/data/DataTable.vue';
 import { useQuery, useQueryParams } from '@/composables/query';
 import { hasRole } from '@/utils/authorization';
-import Progress from '@/components/form//Progress.vue';
+import Progress from '@/components/form/Progress.vue';
 import ProjectFormDialog from './ProjectFormDialog.vue';
 import UserAvatar from '@/components/data/UserAvatar.vue'
 import { useResponsiveTableColumns } from '@/composables/responsive-table-columns';

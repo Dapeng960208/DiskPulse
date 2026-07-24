@@ -198,10 +198,16 @@ const handleLogin = async () => {
 
     ElMessage.success('登录成功');
 
-    const redirect = route.query.redirect || '/';
+    // 校验 redirect 仅接受同源相对路径，防止开放重定向（含 //evil.com 协议相对 URL）
+    const rawRedirect = route.query.redirect;
+    const redirect = (typeof rawRedirect === 'string'
+      && rawRedirect.startsWith('/')
+      && !rawRedirect.startsWith('//'))
+      ? rawRedirect
+      : '/';
     router.push(redirect);
   } catch (error) {
-    console.error('Login error:', error);
+    if (import.meta.env.DEV) console.error('Login error:', error);
 
     if (error.response) {
       const status = error.response.status;
