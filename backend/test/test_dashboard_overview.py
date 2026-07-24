@@ -265,6 +265,18 @@ def test_capacity_trend_binds_aware_questdb_times_as_utc_strings(monkeypatch, pr
     assert captured["params"]["end_time"] == "2026-07-17T00:00:00Z"
 
 
+def test_dashboard_default_time_range_is_aware_utc(monkeypatch):
+    from services import dashboardService
+
+    now = datetime(2026, 7, 24, 12, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(dashboardService, "utc_now", lambda: now)
+
+    start_time, end_time = dashboardService._time_range()
+
+    assert start_time == datetime(2026, 6, 25, tzinfo=timezone.utc)
+    assert end_time == now
+
+
 def test_capacity_trend_rejects_naive_query_times(monkeypatch):
     from crud import dashboardCrud
 
