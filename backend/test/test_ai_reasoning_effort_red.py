@@ -4,7 +4,7 @@ import asyncio
 import json
 from queue import Queue
 from threading import Event
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -91,7 +91,7 @@ def _seed_model(
     )
     model.capability_status = "ready"
     model.capability_error = None
-    model.capability_updated_at = datetime(2026, 7, 23, 10, 0, 0)
+    model.capability_updated_at = datetime(2026, 7, 23, 10, 0, 0, tzinfo=timezone.utc)
     db.add(model)
     db.commit()
     db.refresh(model)
@@ -162,7 +162,9 @@ def test_reasoning_persistence_models_and_migration_contract():
         source for source in migration_sources.values()
         if "ai_conversation_name_aliases" in source
     ]
-    assert len(obfuscation_sources) == 1
+    # Later migrations may alter the same settings table; require the feature
+    # migration itself instead of treating it as the permanent Alembic head.
+    assert any("000000000024" in source for source in obfuscation_sources)
     assert "name_obfuscation_enabled" in obfuscation_sources[0]
 
 
@@ -414,7 +416,7 @@ def test_ai_models_response_exposes_default_and_reasoning_contract(db_session):
         "mandatory": False,
         "source": "official_catalog",
         "status": "ready",
-        "updated_at": "2026-07-23T10:00:00",
+        "updated_at": "2026-07-23T10:00:00+00:00",
     }
 
 

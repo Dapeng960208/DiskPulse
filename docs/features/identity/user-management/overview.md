@@ -36,7 +36,7 @@
 
 ### Celery 自动同步
 
-- Celery Beat 每 8 小时投递一次 `ldap_users_sync_schedule_task`，任务继续复用 `usersService.sync_ldap_users`，因此自动同步与人工同步使用相同的快照、匹配、生命周期和事务规则。
+- Celery Beat 每 8 小时投递一次 `ldap_users_sync_schedule_task`，任务继续复用 `usersService.sync_ldap_users`，因此自动同步与人工同步使用相同的快照、匹配和生命周期规则；人工 HTTP 请求由 Router 提交或回滚，Celery 入口使用独立会话显式提交或回滚。
 - 自动任务使用独立 PostgreSQL 会话和 Redis 非阻塞锁；同一同步仍在运行时，后续实例跳过，避免并发应用同一份用户快照。
 - Worker 或 Beat 启动时不立即执行同步，首次执行由正常的 8 小时周期触发。
 - 自动任务失败时保留原有回滚语义并向 Celery 暴露失败状态；人工 `POST /storage-pulse/api/users/sync-ldap` 入口继续保留，不改变权限和响应契约。

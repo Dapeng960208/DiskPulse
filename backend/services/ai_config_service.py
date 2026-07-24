@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from crud import aiCrud, incidentAiAgentCrud
 from models import AIConfig, AIPlatformSetting
+from router_transaction import commit_checkpoint, rollback_checkpoint
 from schemas.aiSchema import AIModelCreate, AIModelDiscoveryRequest, AIModelPatch
 from services.ai_client import (
     AIClientError,
@@ -129,7 +130,7 @@ def update_platform_settings(
         settings.name_obfuscation_enabled = enabled
     settings.updated_by = actor_id
     settings.updated_at = utc_now()
-    db.commit()
+    db.flush()
     db.refresh(settings)
     return get_platform_settings(db)
 
@@ -193,7 +194,7 @@ def refresh_model_capabilities(db: Session, model: AIConfig) -> dict:
         model.capability_status = "failed"
         model.capability_error = "模型能力获取失败"
     model.capability_updated_at = utc_now()
-    db.commit()
+    db.flush()
     db.refresh(model)
     return serialize_model(model, is_default=_default_model_id(db) == model.id)
 
@@ -284,9 +285,11 @@ def _record_model_failure(
     model_id: int | None,
     reason_code: str,
 ) -> None:
-    db.rollback()
     if audit_context is None:
+        # Non-HTTP callers own their transaction and must retain prior writes
+        # until they choose to commit or roll back at their own boundary.
         return
+    rollback_checkpoint(db)
     try:
         _append_model_audit(
             db,
@@ -296,9 +299,9 @@ def _record_model_failure(
             model_id=model_id,
             reason_code=reason_code,
         )
-        db.commit()
+        commit_checkpoint(db)
     except Exception:
-        db.rollback()
+        rollback_checkpoint(db)
 
 
 def create_model(
@@ -336,7 +339,7 @@ def create_model(
             outcome="success",
             model_id=model.id,
         )
-        db.commit()
+        db.flush()
         db.refresh(model)
     except IntegrityError as error:
         _record_model_failure(
@@ -396,7 +399,7 @@ def update_model(
             outcome="success",
             model_id=model.id,
         )
-        db.commit()
+        db.flush()
         db.refresh(model)
     except IntegrityError as error:
         _record_model_failure(
@@ -450,7 +453,7 @@ def delete_model(
             outcome="success",
             model_id=model_id,
         )
-        db.commit()
+        db.flush()
     except IntegrityError as error:
         _record_model_failure(
             db,
@@ -541,6 +544,6 @@ def test_model(
         outcome="success",
         model_id=model.id,
     )
-    db.commit()
+    db.flush()
     _refresh_dynamic_capability(db, model)
     return {"ok": True, "message": "连接成功", "reply": result_text[:500]}

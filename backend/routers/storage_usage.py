@@ -3,13 +3,14 @@
 import os.path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks, status
+from fastapi import Depends, HTTPException, Query, Request, Response, BackgroundTasks, status
 from pydantic import BeforeValidator
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
 from schemas import storageUsageSchema, commonSchema, quotaSchema, storageTrendSchema
 from crud import storageUsageCrud, usersCrud, groupCrud
 from dependencies import CurrentUserDep, UseRatioMaximum, UseRatioMinimum, get_db, require_super_admin, validate_use_ratio_range
+from routers.transactional import TransactionalAPIRouter
 from datetime import datetime, timedelta
 from utils.plot import plot_real_time_line
 from utils.common import convert_timestamp_to_datetime
@@ -18,7 +19,6 @@ from routers.common import handle_exceptions
 from services import audit_service, quotaService
 from services import project_access_service
 from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
-from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 from utils.storageTarget import resolve_group_storage_target
 from fastapi.responses import StreamingResponse
 import urllib.parse
@@ -61,7 +61,7 @@ StorageUsageRdUsernameFilter = Annotated[
 ]
 
 
-router = APIRouter(
+router = TransactionalAPIRouter(
     prefix="/storage-usages",
     tags=["storage-usages"],
     responses={404: {"description": "Not found"}},
@@ -88,7 +88,6 @@ def create_storage_usage(storage_usage: storageUsageSchema.StorageUsageCreate, b
     if not storage_usage_db:
         raise HTTPException(status_code=400, detail="Failed to create user folder")
     project_access_service.ensure_group_directory_readers(db, group_id=storage_usage_db.group_id)
-    db.commit()
     background_tasks.add_task(create_user_folder_by_storage_usage_id, logger, storage_usage_db.id)
     return storageUsageCrud.serialize_storage_usage(storage_usage_db)
 
@@ -342,7 +341,6 @@ def update_storage_usage(storage_usage_id: int, storage_usage: storageUsageSchem
         db=db, storage_usage_id=storage_usage_id, storage_usage=storage_usage
     )
     project_access_service.ensure_group_directory_readers(db, group_id=updated.group_id)
-    db.commit()
     return storageUsageCrud.serialize_storage_usage(updated)
 
 

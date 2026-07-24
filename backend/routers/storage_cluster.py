@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal, Optional
 from utils.datetime_utils import utc_now
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import Depends, HTTPException, Path, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from schemas import (
@@ -16,6 +16,7 @@ from schemas import (
 from crud import storageClusterCrud
 from crud.questDbCrud import get_storage_cluster_real_time
 from dependencies import CurrentUserDep, UseRatioMaximum, UseRatioMinimum, get_db, require_super_admin, validate_use_ratio_range
+from routers.transactional import TransactionalAPIRouter
 from services import audit_service
 from services.storageClusterService import schedule_storage_collection as _schedule_storage_collection
 from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
@@ -39,7 +40,7 @@ AI_STORAGE_CLUSTER_BLACKLIST_FIELDS = (
     "storage_user",
     "tls_verify",
 )
-router = APIRouter(
+router = TransactionalAPIRouter(
     prefix="/storage-clusters",
     tags=["storage-clusters"],
     responses={404: {"description": "Not found"}},

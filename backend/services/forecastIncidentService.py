@@ -1503,7 +1503,7 @@ def update_incident(
             "silenced_until": incident.silenced_until,
         },
     )
-    db.commit()
+    db.flush()
     db.refresh(incident)
     return incident
 
@@ -1526,7 +1526,7 @@ def add_comment(db, *, current_user, incident_id: int, content: str, audit_conte
         before={},
         after={"comment_length": len(content)},
     )
-    db.commit()
+    db.flush()
     db.refresh(timeline)
     return timeline
 
@@ -1575,6 +1575,6 @@ def create_maintenance_window(
             outcome="success",
             after_summary={"starts_at": starts_at, "ends_at": ends_at, "storage_cluster_id": storage_cluster_id},
         )
-    db.commit()
+    db.flush()
     db.refresh(window)
     return window

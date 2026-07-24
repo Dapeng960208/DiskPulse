@@ -136,5 +136,5 @@ def api_client_factory(session_factory):
 
 @pytest.fixture
 def auth_headers():
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     return {"Authorization": f"Bearer {issue_token(1)}"}

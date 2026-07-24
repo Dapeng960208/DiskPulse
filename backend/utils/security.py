@@ -83,11 +83,17 @@ def _delete_cached_token(payload: dict[str, Any]) -> None:
         ) from error
 
 
-def _jwt_secret_key() -> str:
+def validate_jwt_secret_key() -> str:
     secret = str(base_config.get("jwt.secret_key", "")).strip()
-    if len(secret) < 8 or secret.lower().startswith(("replace-with", "change-me", "changeme")):
-        raise RuntimeError("JWT_SECRET_KEY must be configured with a non-placeholder value")
+    if secret.lower().startswith(("replace-with", "change-me", "changeme")) or not secret:
+        raise RuntimeError("jwt.secret_key must be configured with a non-placeholder value")
+    if len(secret) < 32:
+        raise RuntimeError("jwt.secret_key must be at least 32 characters")
     return secret
+
+
+def _jwt_secret_key() -> str:
+    return validate_jwt_secret_key()
 
 
 def _b64encode(raw: bytes) -> str:

@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
+from fastapi import Depends, Path, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from dependencies import CurrentUserDep, get_db, require_super_admin
+from routers.transactional import TransactionalAPIRouter
 from schemas.vendorEventDefinitionSchema import (
     AssociationType,
     ReviewStatus,
@@ -18,7 +19,7 @@ from schemas.vendorEventDefinitionSchema import (
 from services import audit_service, vendorEventDefinitionService
 
 
-router = APIRouter(
+router = TransactionalAPIRouter(
     prefix="/admin/vendor-event-definitions",
     tags=["vendor-event-definitions"],
     dependencies=[Depends(require_super_admin)],

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Response
+from fastapi import Depends, HTTPException, Request, status, Response
+from routers.transactional import TransactionalAPIRouter
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from schemas import groupSchema, commonSchema, quotaSchema, storageTrendSchema
@@ -17,7 +18,7 @@ from utils.auth_service import is_super_admin
 from fastapi.responses import FileResponse
 
 logger = logging.getLogger('app:groups')
-router = APIRouter(
+router = TransactionalAPIRouter(
     prefix="/groups",
     tags=["groups"],
     responses={404: {"description": "Not found"}},
@@ -115,7 +116,6 @@ def update_group(
         raise HTTPException(status_code=404, detail="Group not found")
     updated = groupCrud.update_group(db=db, group_id=group_id, group=group)
     project_access_service.ensure_group_directory_readers(db, group_id=updated.id)
-    db.commit()
     return groupCrud.serialize_group(updated)
 
 

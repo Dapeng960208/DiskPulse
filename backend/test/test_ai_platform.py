@@ -1041,8 +1041,12 @@ def test_quota_adjustment_tools_require_admin_at_registration_and_execution(monk
 
     app.dependency_overrides[require_super_admin] = lambda: None
     app.dependency_overrides[get_db] = lambda: object()
-    from dependencies import get_current_user
+    from dependencies import get_current_user, get_write_db
     app.dependency_overrides[get_current_user] = lambda: admin
+    # AI tool execution uses the Router write boundary in addition to get_db.
+    # The unit test deliberately supplies a non-Session sentinel, so replace
+    # both dependencies rather than invoking Session.commit on that sentinel.
+    app.dependency_overrides[get_write_db] = lambda: object()
     monkeypatch.setattr(
         quotaService,
         "adjust_group_quota",

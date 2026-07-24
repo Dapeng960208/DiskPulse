@@ -92,7 +92,7 @@ def test_group_tag_routes_are_global_crud():
 
 @pytest.fixture
 def tag_api(api_client_factory, session_factory):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     session = session_factory()
     try:

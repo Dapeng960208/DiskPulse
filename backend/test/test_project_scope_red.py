@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
+from datetime import datetime, timezone
 
 import models
 
@@ -24,7 +24,7 @@ def test_ai_conversation_is_owner_scoped_without_project_binding(
 ):
     from routers import ai
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     session = session_factory()
     try:
         session.add_all(
@@ -66,7 +66,7 @@ def test_ai_accessible_storage_usage_endpoint_dynamically_filters_current_user_p
 ):
     from routers import storage_usage
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     session = session_factory()
     try:
         session.add_all(
@@ -100,7 +100,7 @@ def test_ai_accessible_storage_usage_endpoint_dynamically_filters_current_user_p
                     user_id=1,
                     group_id=1,
                     linux_path="/data/allowed/reader",
-                    updated_at=datetime.now(),
+                    updated_at=datetime.now(timezone.utc),
                 ),
                 models.StorageUsage(
                     id=2,
@@ -108,7 +108,7 @@ def test_ai_accessible_storage_usage_endpoint_dynamically_filters_current_user_p
                     user_id=2,
                     group_id=2,
                     linux_path="/data/forbidden/other",
-                    updated_at=datetime.now(),
+                    updated_at=datetime.now(timezone.utc),
                 ),
             ]
         )
@@ -132,7 +132,7 @@ def test_project_owner_can_adjust_only_project_user_directories(
     from routers import group, storage_usage
     from services import quotaService
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", [])
     session = session_factory()
     try:
@@ -167,7 +167,7 @@ def test_project_owner_can_adjust_only_project_user_directories(
                     user_id=1,
                     group_id=1,
                     linux_path="/data/owned/owner",
-                    updated_at=datetime.now(),
+                    updated_at=datetime.now(timezone.utc),
                 ),
             ]
         )

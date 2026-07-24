@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request, BackgroundTasks, status
+from fastapi import Depends, HTTPException, Query, Response, Request, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
 from schemas import storageBackUpRecordSchema, commonSchema
 from crud import storageBackUpRecordCrud, usersCrud, groupCrud
 from dependencies import get_db, require_super_admin
+from routers.transactional import TransactionalAPIRouter
 import logging
 from routers.common import delete_storage_back_up_record_by_storage_usage_id,rollback_storage_back_up_record_by_storage_usage_id
 
 logger = logging.getLogger('app:storage-usages')
-router = APIRouter(
+router = TransactionalAPIRouter(
     prefix="/storage-back-up-records",
     tags=["storage-back-up-records"],
     responses={404: {"description": "Not found"}},

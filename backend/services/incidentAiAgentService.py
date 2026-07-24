@@ -99,7 +99,7 @@ def update_settings(
     settings.iops_baseline_ratio = float(iops_baseline_ratio)
     settings.updated_by = actor_id
     incidentAiAgentCrud.replace_model_bindings(db, settings=settings, model_ids=normalized_ids)
-    db.commit()
+    db.flush()
     db.refresh(settings)
     return settings
 

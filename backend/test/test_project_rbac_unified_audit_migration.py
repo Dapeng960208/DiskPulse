@@ -39,7 +39,10 @@ def _migration_module():
 def test_unified_rbac_audit_revision_is_the_only_head_and_replaces_old_split_file():
     scripts = ScriptDirectory.from_config(_alembic_config())
 
-    assert scripts.get_heads() == [HEAD_REVISION]
+    # Later revisions extend this linear history.  Guard single-head topology
+    # and the unified-RBAC revision's presence instead of freezing head ID.
+    assert len(scripts.get_heads()) == 1
+    assert HEAD_REVISION in {revision.revision for revision in scripts.walk_revisions()}
     assert not (VERSIONS_ROOT / "000000000008_project_memberships.py").exists()
     assert TELEMETRY_MIGRATION.exists()
 

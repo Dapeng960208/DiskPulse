@@ -88,7 +88,7 @@ def seed_dashboard_data(db):
         ),
     ])
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     db.add_all([
         StorageAlerts(
             source="diskpulse",
@@ -222,8 +222,8 @@ def test_global_capacity_trend_binds_cluster_symbol_ids(monkeypatch):
     dashboardCrud.get_capacity_trend(
         db=object(),
         project_id=None,
-        start_time=datetime(2026, 6, 18),
-        end_time=datetime(2026, 7, 17),
+        start_time=datetime(2026, 6, 18, tzinfo=timezone.utc),
+        end_time=datetime(2026, 7, 17, tzinfo=timezone.utc),
     )
 
     assert captured["params"]["cluster_ids"] == ["2", "1"]
@@ -277,7 +277,7 @@ def test_dashboard_default_time_range_is_aware_utc(monkeypatch):
     assert end_time == now
 
 
-def test_capacity_trend_interprets_naive_query_times_as_system_wall_time(monkeypatch):
+def test_capacity_trend_rejects_naive_query_times(monkeypatch):
     from crud import dashboardCrud
 
     captured = {}
@@ -300,15 +300,15 @@ def test_capacity_trend_interprets_naive_query_times_as_system_wall_time(monkeyp
     )
     monkeypatch.setattr(dashboardCrud, "QuestDBSession", FakeQuestDB)
 
-    dashboardCrud.get_capacity_trend(
-        db=object(),
-        project_id=None,
-        start_time=datetime(2026, 6, 18, 8, 0),
-        end_time=datetime(2026, 7, 17, 8, 0),
-    )
+    with pytest.raises(ValueError, match="timezone-aware"):
+        dashboardCrud.get_capacity_trend(
+            db=object(),
+            project_id=None,
+            start_time=datetime(2026, 6, 18, 8, 0),
+            end_time=datetime(2026, 7, 17, 8, 0),
+        )
 
-    assert captured["params"]["start_time"] == "2026-06-18T00:00:00Z"
-    assert captured["params"]["end_time"] == "2026-07-17T00:00:00Z"
+    assert captured == {}
 
 
 def test_dashboard_service_returns_not_found_for_unknown_project(db_session):
@@ -332,9 +332,9 @@ def test_dashboard_router_validates_project_id(
             "mode": "global",
             "project_id": None,
             "project_name": None,
-            "start_time": "2026-06-18T00:00:00",
-            "end_time": "2026-07-17T00:00:00",
-            "updated_at": "2026-07-17T00:00:00",
+            "start_time": "2026-06-18T00:00:00Z",
+            "end_time": "2026-07-17T00:00:00Z",
+            "updated_at": "2026-07-17T00:00:00Z",
         },
         "summary": {
             "limit_gb": 0,

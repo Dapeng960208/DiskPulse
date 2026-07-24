@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
+from datetime import datetime, timezone
 import importlib.util
 import io
 from pathlib import Path
@@ -175,7 +175,7 @@ def test_membership_api_enforces_local_user_and_project_admin_role_boundary(
     api_client_factory,
     session_factory,
 ):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["super-admin"])
     session = session_factory()
     try:
@@ -249,7 +249,7 @@ def test_storage_collection_grants_reader_without_downgrading_existing_membershi
         linux_path="/data/project-a/alice",
         limit=10,
         used=2,
-        updated_at=datetime.now(),
+        updated_at=datetime.now(timezone.utc),
     )
 
     monitor.sync_data_to_postgres(
@@ -301,8 +301,8 @@ def test_existing_directory_users_are_added_as_readers_without_downgrading_roles
     db_session.flush()
     db_session.add_all(
         [
-            models.StorageUsage(user_id=11, group_id=11, linux_path="/data/project-directory-members/reader", updated_at=datetime.now()),
-            models.StorageUsage(user_id=12, group_id=11, linux_path="/data/project-directory-members/editor", updated_at=datetime.now()),
+            models.StorageUsage(user_id=11, group_id=11, linux_path="/data/project-directory-members/reader", updated_at=datetime.now(timezone.utc)),
+            models.StorageUsage(user_id=12, group_id=11, linux_path="/data/project-directory-members/editor", updated_at=datetime.now(timezone.utc)),
             models.ProjectMembership(project_id=11, user_id=12, role="editor"),
         ]
     )
@@ -340,7 +340,7 @@ def test_directory_owner_membership_cannot_be_removed_while_directory_exists(db_
     db_session.flush()
     db_session.add_all(
         [
-            models.StorageUsage(user_id=22, group_id=21, linux_path="/data/protected-directory/owner", updated_at=datetime.now()),
+            models.StorageUsage(user_id=22, group_id=21, linux_path="/data/protected-directory/owner", updated_at=datetime.now(timezone.utc)),
             models.ProjectMembership(project_id=21, user_id=22, role="reader"),
         ]
     )

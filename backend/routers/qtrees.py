@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from fastapi import APIRouter, Depends, HTTPException,status,Response
+from fastapi import Depends, HTTPException,status,Response
+from routers.transactional import TransactionalAPIRouter
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -19,7 +20,7 @@ AI_STORAGE_CLUSTER_BLACKLIST_FIELDS = (
     "storage_user",
     "tls_verify",
 )
-router = APIRouter(
+router = TransactionalAPIRouter(
     prefix="/qtrees",
     tags=["qtrees"],
     responses={404: {"description": "Not found"}},

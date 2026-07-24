@@ -2,18 +2,18 @@
 
 ## 错误内容
 
-`pnpm test` 和扩展前端测试曾保留既有失败：操作按钮测试桩、LDAP 旧入口断言、AI Chat 缺 active Pinia、授权 mock 缺少 `getToken`，以及对 Windows CRLF 敏感的静态断言。共享契约变化后没有同步测试替身，使全量测试无法稳定充当回归门禁。
+`pnpm test` 和扩展前端测试曾保留既有失败：操作按钮测试桩、LDAP 旧入口断言、AI Chat 缺 active Pinia、授权 mock 缺少 `getToken`，以及对 Windows CRLF 敏感的静态断言。共享契约变化后没有同步测试替身，使全量测试无法稳定充当回归门禁。2026-07-24 的存储集群健康分析测试还使用会渲染全部 slot 的 `ElTabPane` stub，提前触发本应惰性加载的异步面板；卸载后该导入可能访问 `users-api.js`，导致并行全量运行偶发 `CrudApi extends BaseApi` 初始化错误。
 
 ## 解决方案
 
-同步公共组件 stub、Pinia 插件、认证 mock、排序预期和行为断言；删除对已废弃入口及源码形态的依赖。修复后必须重新运行全量测试与覆盖率，不能只依赖聚焦测试。
+同步公共组件 stub、Pinia 插件、认证 mock、排序预期和行为断言；删除对已废弃入口及源码形态的依赖。对于 lazy tab，测试只应 stub 异步子面板而不应让测试用 pane 触发不活跃 tab 的导入。修复后必须重新运行全量测试与覆盖率，不能只依赖聚焦测试。
 
 ## 备注
 
 - 分类：`frontend`
-- 出现次数：11
+- 出现次数：14
 - 首次出现：2026-07-20 导航信息架构会话
-- 最近出现：2026-07-24 Main 分支代码审查问题修复会话
+- 最近出现：2026-07-24 `2026-07-24-router-transactions-startup-security` 主线组件化同步
 - 出现记录：`sessions/2026-07-20-navigation-information-architecture/errors.md`
 - 出现记录：`sessions/2026-07-20-project-usage-reader-default/errors.md`
 - 出现记录：`sessions/2026-07-20-realtime-layout-audit/errors.md`；`detail-capacity-prediction-navigation.test.js` 在收集阶段经由 `AppHeader.vue -> users-api.js` 报 `CrudApi` 基类为 `undefined`，与本次实时布局变更无关。
@@ -26,3 +26,6 @@
 - 出现记录：`sessions/2026-07-24-event-audit-incident-noise/errors.md`；扩展 Vitest 的 `content-spacing-contract.test.js` 仍以既有页面矩阵 `27/30` 失败，审计研判跳转、项目滚动和布局用例均通过，与本次变更无关。
 - 出现记录：`sessions/2026-07-24-code-review-fixes/errors.md`；时间范围 RED 验证同时运行存储集群健康分析全文件，既有的关联类型列宽和响应式 class 两项断言仍失败；时间范围组件及页面上限契约的精确测试均已通过。
 - 出现记录：`sessions/2026-07-24-merge-duplicate-routes/errors.md`；`pnpm run test:coverage` 仍被页面矩阵 27/30、列表操作权限、AI 审计交互、存储集群健康分析断言及 `CrudApi extends BaseApi` 异步 rejection 阻断；路由聚焦测试与构建均通过。
+- 出现记录：`sessions/2026-07-24-router-transactions-startup-security/errors.md`；全量 `pnpm test` 的页面矩阵、列表菜单、AI 表单与系统事件窄屏契约均已同步当前实现；另将 inactive lazy tab 显式 stub，消除卸载后的异步 API 导入，`pnpm test` 和 `pnpm test:coverage` 均恢复通过。
+- 出现记录：`sessions/2026-07-24-router-transactions-startup-security/errors.md`；最终同步 UTC 时间主线后，`auth-login.test.js` 的用户 API mock 缺少 `updateCurrentProfile`，`page-coverage-gaps.test.js` 仍传递旧格式时间范围，造成 1 个失败与 1 个未处理 rejection；按用户指示暂不在本任务处理。
+- 出现记录：`sessions/2026-07-24-router-transactions-startup-security/errors.md`；同步 `625a57b` 的存储集群详情页组件化后，旧的父页面健康分析测试仍断言已迁移到子组件的 DOM 和 API 调用，19 项中 15 项失败；按用户指示暂不在本任务处理。

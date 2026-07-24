@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -135,7 +135,7 @@ def seed_quota_target(db, *, storage_type="netapp", volume_target=False):
             limit=50,
             used=10,
             use_ratio=20,
-            updated_at=datetime.now(),
+            updated_at=datetime.now(timezone.utc),
         )
     )
     db.commit()
@@ -936,7 +936,7 @@ def test_isilon_client_updates_existing_quota_with_mutable_fields_only():
 def quota_api(api_client_factory, session_factory, monkeypatch):
     from routers import group, storage_usage
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     session = session_factory()
     try:

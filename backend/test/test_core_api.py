@@ -25,13 +25,13 @@ from utils.security import issue_token
 from middleware.correlation import CorrelationIdMiddleware
 
 
-NOW = "2026-06-30T10:00:00"
+NOW = "2026-06-30T10:00:00+00:00"
 
 
 class TestCoreApi:
     @pytest.fixture(autouse=True)
     def setup(self, api_client_factory, session_factory):
-        base_config.set("jwt.secret_key", "test-secret")
+        base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
         base_config.set("super_admin_usernames", ["alice"])
         self.SessionLocal = session_factory
         self.client = api_client_factory(

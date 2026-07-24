@@ -62,7 +62,7 @@ def _client(api_client_factory, user_id):
 
 @pytest.fixture
 def admin_api(api_client_factory, session_factory):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     _seed_users(
         session_factory,
@@ -296,7 +296,7 @@ def test_username_conflicts_roll_back_all_changes(
 
 
 def test_sync_requires_super_admin(api_client_factory, session_factory, monkeypatch):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     _seed_users(
         session_factory,
@@ -420,7 +420,7 @@ def test_user_service_crud_success_conflict_and_not_found(admin_api):
     assert deleted.status_code == 204
 
 
-def test_user_service_create_rolls_back_integrity_error(monkeypatch):
+def test_user_service_create_converts_integrity_error_without_transaction_control(monkeypatch):
     db = Mock()
     data = usersSchema.UserCreate(rd_username="conflict")
     monkeypatch.setattr(
@@ -438,12 +438,12 @@ def test_user_service_create_rolls_back_integrity_error(monkeypatch):
         usersService.create_user(db, data)
 
     assert error.value.status_code == 409
-    db.rollback.assert_called_once_with()
+    db.rollback.assert_not_called()
 
 
-def test_user_sync_converts_integrity_error_and_rolls_back(monkeypatch):
+def test_user_sync_converts_integrity_error_without_transaction_control(monkeypatch):
     db = Mock()
-    db.commit.side_effect = IntegrityError("insert", {}, RuntimeError("duplicate"))
+    db.flush.side_effect = IntegrityError("insert", {}, RuntimeError("duplicate"))
     monkeypatch.setattr(
         ldap_directory,
         "list_ldap_directory_users",
@@ -455,7 +455,7 @@ def test_user_sync_converts_integrity_error_and_rolls_back(monkeypatch):
         usersService.sync_ldap_users(db)
 
     assert error.value.status_code == 409
-    db.rollback.assert_called_once_with()
+    db.rollback.assert_not_called()
 
 
 def test_ldap_config_defaults_and_secure_transport_variants(tmp_path):

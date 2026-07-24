@@ -12,6 +12,7 @@ from alembic.config import Config
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_PATH = BACKEND_ROOT / "migrate" / "versions" / "000000000013_capacity_prediction_governance.py"
+GOVERNANCE_REVISION = "000000000013"
 
 
 def _migration():
@@ -22,10 +23,15 @@ def _migration():
     return module
 
 
-def test_capacity_prediction_governance_chain_has_the_current_alembic_head():
+def test_capacity_prediction_governance_chain_remains_on_the_single_alembic_head():
     scripts = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
 
-    assert scripts.get_heads() == ["000000000016"]
+    # New migrations may extend the linear chain.  Keep this contract focused
+    # on the governance revision being retained beneath one current head.
+    assert len(scripts.get_heads()) == 1
+    assert GOVERNANCE_REVISION in {
+        revision.revision for revision in scripts.walk_revisions()
+    }
 
 
 @pytest.mark.parametrize("dialect_name", ("sqlite", "postgresql", "mysql"))

@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Query, Request, status
+from sqlalchemy.orm import Session
 from database import SessionLocal
 from questdb.database import QuestDBSessionLocal, questdb_engine
 from crud import usersCrud
@@ -22,6 +23,20 @@ class DBSession:
 
 def get_db(request: Request):
     return request.state.db
+
+
+def get_write_db(db: Session = Depends(get_db)):
+    """Expose the request session with a Router-owned write transaction."""
+    try:
+        yield db
+    except BaseException:
+        db.rollback()
+        raise
+    else:
+        db.commit()
+
+
+WriteDBDep = Annotated[Session, Depends(get_write_db, scope="function")]
 
 
 PUBLIC_AUTH_PATHS = {

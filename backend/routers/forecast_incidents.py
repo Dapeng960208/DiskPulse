@@ -2,11 +2,12 @@
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
+from fastapi import Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy.orm import Session
 
 from crud import forecastIncidentCrud, incidentAiAgentCrud
 from dependencies import CurrentUserDep, get_db, require_super_admin
+from routers.transactional import TransactionalAPIRouter
 from schemas.forecastIncidentSchema import (
     AnomalyOut,
     AnomalyPage,
@@ -42,7 +43,7 @@ from schemas.capacityPredictionSchema import (
 )
 
 
-router = APIRouter(prefix="/v1", tags=["forecast-incidents"])
+router = TransactionalAPIRouter(prefix="/v1", tags=["forecast-incidents"])
 AI_INCIDENT_RESPONSE_BLACKLIST_FIELDS = ("assigned_user_id",)
 DBDep = Annotated[Session, Depends(get_db)]
 
@@ -77,7 +78,6 @@ def update_incident_ai_settings(
         outcome="success",
         after_summary={"enabled": settings.enabled, "model_ids": payload.model_ids},
     )
-    db.commit()
     return IncidentAiSettingsOut(**incidentAiAgentService.settings_out(db, settings))
 
 
@@ -206,7 +206,6 @@ def create_resource_capacity_prediction_plan(
         resource_id=plan.id, project_id=plan.project_id, outcome="success",
         after_summary={"asset_type": asset_type, "asset_id": asset_id, "capacity_delta": payload.capacity_delta},
     )
-    db.commit()
     db.refresh(plan)
     return CapacityPredictionPlanOut.model_validate(plan)
 
@@ -230,7 +229,6 @@ def update_capacity_prediction_settings(
         phase="result", action="capacity_prediction_visibility.update", resource_type="capacity_prediction_settings",
         resource_id=1, outcome="success", after_summary={"user_visible": payload.user_visible},
     )
-    db.commit()
     return CapacityPredictionVisibilityOut(visible=settings.user_visible)
 
 
@@ -273,7 +271,6 @@ def create_capacity_prediction_candidate(
         outcome="success",
         after_summary={"version": candidate.version, "ai_model_id": candidate.ai_model_id},
     )
-    db.commit()
     db.refresh(candidate)
     return CapacityPredictionCandidateOut.model_validate(candidate)
 
@@ -303,7 +300,6 @@ def activate_capacity_prediction_candidate(
         outcome="success",
         after_summary={"version": candidate.version, "ai_model_id": candidate.ai_model_id},
     )
-    db.commit()
     db.refresh(candidate)
     return CapacityPredictionCandidateOut.model_validate(candidate)
 

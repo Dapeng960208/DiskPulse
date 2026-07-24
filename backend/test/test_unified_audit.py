@@ -335,7 +335,7 @@ def test_audit_event_list_serializes_numeric_resource_ids_as_strings(
     from routers import audit_events
     from utils.security import issue_token
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["audit-admin"])
     session = session_factory()
     try:
@@ -380,7 +380,7 @@ def test_audit_event_list_resolves_actor_resource_and_indirect_project_associati
     from routers import audit_events
     from utils.security import issue_token
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["audit-admin"])
     session = session_factory()
     try:
@@ -443,7 +443,7 @@ def test_project_admin_cannot_enumerate_other_projects_through_shared_resource_a
     from routers import audit_events
     from utils.security import issue_token
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", [])
     session = session_factory()
     try:
@@ -498,7 +498,7 @@ def test_audit_event_detail_is_available_only_within_the_authorized_project_scop
     from models import ProjectMembership
     from utils.security import issue_token
 
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", [])
     session = session_factory()
     try:

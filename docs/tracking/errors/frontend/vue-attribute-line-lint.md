@@ -10,7 +10,8 @@
 
 ## 备注
 
-- 出现次数：3
+- 出现次数：4
 - 2026-07-23，`2026-07-23-incident-ai-agent`：新增 AI 设置对话框时出现；已按属性换行修复，`pnpm lint` 通过。
 - 2026-07-24，`2026-07-24-unified-time-range-picker`：`IncidentAiSettingsDialog.vue:28` 仍触发 `vue/first-attribute-linebreak`；该文件不属于本次范围选择器改动，未跨范围修改。
 - 2026-07-24，`2026-07-24-merge-duplicate-routes`：全量 `pnpm run lint` 仍在 `IncidentAiSettingsDialog.vue:28` 触发 `vue/first-attribute-linebreak`；该文件不属于本次路由合并范围，未跨范围修改。
+- 2026-07-24，`2026-07-24-router-transactions-startup-security`：全量 `pnpm lint` 再次在同一处触发该规则；已按当前组件格式将首个属性与标签保持同一行。

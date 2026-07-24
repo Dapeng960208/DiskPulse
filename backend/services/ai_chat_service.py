@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from appConfig import base_config
 from crud import aiCrud
 from models import AIConversation, AIAuditLog, AIMessage, Group, StorageUsage, User
+from router_transaction import commit_checkpoint, rollback_checkpoint
 from services.audit_service import AuditContext, append_audit_event, redact_audit_payload
 from services import ai_quota_confirmation_service
 from utils.datetime_utils import utc_now
@@ -499,7 +500,7 @@ def create_conversation(
             outcome="success",
             after_summary={"model_id": selected_model_id},
         )
-    db.commit()
+    db.flush()
     db.refresh(conversation)
     return serialize_conversation(conversation)
 
@@ -547,7 +548,7 @@ def delete_conversation(
             before_summary={"model_id": conversation.model_id},
         )
     db.delete(conversation)
-    db.commit()
+    db.flush()
 
 
 def _conversation_or_404(db: Session, conversation_id: int, user_id: int) -> AIConversation:
@@ -667,13 +668,13 @@ def _finish_audit(
     audit.error_message = error_message
     audit.finished_at = utc_now()
     audit.updated_at = utc_now()
-    db.commit()
+    commit_checkpoint(db)
 
 
 def _persist_running_audit(db: Session, audit: AIAuditLog, detail: list[dict]) -> None:
     audit.detail_payload = json.dumps(detail, ensure_ascii=False)
     audit.updated_at = utc_now()
-    db.commit()
+    commit_checkpoint(db)
 
 
 def _terminal_message(
@@ -916,7 +917,7 @@ def stream_message(
             metadata={"model_id": model.id},
         )
     # Persist the recoverable user turn and audit before any SSE bytes leave the process.
-    db.commit()
+    commit_checkpoint(db)
     db.refresh(user_message)
     db.refresh(assistant)
     db.refresh(conversation)
@@ -1524,7 +1525,7 @@ def stream_message(
             type(error).__name__,
         )
         # A failed flush poisons the Session; reload the durable audit after rollback.
-        db.rollback()
+        rollback_checkpoint(db)
         audit = aiCrud.get_audit(db, audit_id)
         assistant = db.get(AIMessage, assistant_id)
         conversation = aiCrud.get_conversation(db, conversation_id, user_id)

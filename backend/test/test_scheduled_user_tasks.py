@@ -3,7 +3,7 @@ import importlib
 import json
 import sys
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -104,7 +104,7 @@ def test_ldap_task_serializes_result_and_closes_its_session(monkeypatch):
     json.dumps(actual)
     sync.assert_called_once_with(db)
     db.close.assert_called_once_with()
-    db.commit.assert_not_called()
+    db.commit.assert_called_once_with()
     assert exits[-1] == ("exited", "ldap_users_sync_schedule_task_lock", 28800)
     info = _log_text(task_logger, "info").lower()
     assert "started" in info
@@ -229,17 +229,12 @@ def test_user_storage_task_aggregates_rows_with_one_consistent_sample_time(
     storages = importlib.import_module("celery_tasks.tasks.storages")
     _seed_usage_rows(session_factory)
     quest = _QuestSession()
-    sampled_at = datetime(2026, 7, 17, 9, 0, 0)
-
-    class FixedDatetime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return sampled_at
+    sampled_at = datetime(2026, 7, 17, 9, 0, 0, tzinfo=timezone.utc)
 
     monkeypatch.setattr(storages, "redis_lock", _lock(True, []))
     monkeypatch.setattr(storages, "SessionLocal", session_factory)
     monkeypatch.setattr(storages, "QuestDBSessionLocal", Mock(return_value=quest))
-    monkeypatch.setattr(storages, "datetime", FixedDatetime)
+    monkeypatch.setattr(storages, "utc_now", lambda: sampled_at)
     task_logger = Mock()
     monkeypatch.setattr(storages, "logger", task_logger)
 
@@ -264,7 +259,7 @@ def test_user_storage_task_aggregates_rows_with_one_consistent_sample_time(
     assert samples[20].use_ratio == 0
     assert samples[20].soft_use_ratio == 0
     assert {sample.updated_at for sample in samples.values()} == {
-        sampled_at - timedelta(hours=8)
+        sampled_at.replace(tzinfo=None)
     }
     with session_factory() as db:
         totals = dict(db.query(User.id, User.storage_used).all())

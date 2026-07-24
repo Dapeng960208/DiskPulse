@@ -30,14 +30,10 @@ def create_group_tag(db: Session, *, data: groupTagSchema.GroupTagWrite) -> Grou
     group_tag = GroupTag(name=data.name)
     try:
         db.add(group_tag)
-        db.commit()
+        db.flush()
         db.refresh(group_tag)
     except IntegrityError as error:
-        db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Group tag name already exists") from error
-    except Exception:
-        db.rollback()
-        raise
     return group_tag
 
 
@@ -52,14 +48,10 @@ def update_group_tag(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Group tag name already exists")
     group_tag.name = data.name
     try:
-        db.commit()
+        db.flush()
         db.refresh(group_tag)
     except IntegrityError as error:
-        db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Group tag name already exists") from error
-    except Exception:
-        db.rollback()
-        raise
     return group_tag
 
 
@@ -69,10 +61,6 @@ def delete_group_tag(db: Session, *, group_tag_id: int) -> None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Group tag has linked group")
     try:
         db.delete(group_tag)
-        db.commit()
+        db.flush()
     except IntegrityError as error:
-        db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Group tag has linked group") from error
-    except Exception:
-        db.rollback()
-        raise

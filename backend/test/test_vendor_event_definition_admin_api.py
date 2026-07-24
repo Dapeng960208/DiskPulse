@@ -19,7 +19,7 @@ def _user(db, *, user_id: int, username: str):
 
 
 def _client(api_client_factory, *, user_id: int, admin_username: str = "admin"):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", [admin_username])
     return api_client_factory(
         [vendor_event_definitions.router],
@@ -90,7 +90,7 @@ def test_vendor_event_definition_admin_api_rejects_unauthenticated_requests(
     path,
     json_body,
 ):
-    base_config.set("jwt.secret_key", "test-secret")
+    base_config.set("jwt.secret_key", "test-jwt-secret-key-for-unit-tests-32")
     base_config.set("super_admin_usernames", ["admin"])
     client = api_client_factory([vendor_event_definitions.router])
 

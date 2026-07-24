@@ -17,7 +17,9 @@ from services import storageHealthAnalyticsService
 
 START = datetime(2026, 7, 20, 16, 0, tzinfo=timezone.utc)
 END = datetime(2026, 7, 20, 18, 0, tzinfo=timezone.utc)
-EVENT_AT = datetime(2026, 7, 21, 1, 5)
+# The historical fixture was Shanghai wall time; store the equivalent UTC
+# instant so the event remains inside the UTC query range below.
+EVENT_AT = datetime(2026, 7, 20, 17, 5, tzinfo=timezone.utc)
 
 
 def _contract_module(name: str):

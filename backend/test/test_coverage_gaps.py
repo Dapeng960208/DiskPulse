@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -21,7 +21,7 @@ from schemas.storageClusterSchema import StorageClusterUpdate
 from schemas.storageUsageSchema import StorageUsageCreate, StorageUsageUpdate
 
 
-NOW = datetime(2026, 7, 15, 10, 0)
+NOW = datetime(2026, 7, 15, 10, 0, tzinfo=timezone.utc)
 
 
 def seed_storage_graph(db):

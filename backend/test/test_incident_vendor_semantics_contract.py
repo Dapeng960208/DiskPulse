@@ -114,6 +114,7 @@ def test_incident_and_ai_diagnosis_expose_chinese_gap_and_safe_vendor_evidence_s
                 official_reference_url="https://docs.netapp.com/test/events/disk.offline",
                 version_scope="ONTAP test fixture",
                 review_status="reviewed",
+                recommended_solution_zh="检查磁盘状态并按 NetApp 官方流程更换或恢复。",
             ),
             _incident(incident_id=1, correlation_key="legacy:netapp:disk.offline"),
             _alert(
@@ -210,6 +211,7 @@ def test_incident_detail_batches_vendor_alerts_and_reviewed_semantics_without_le
                 official_reference_url="https://docs.netapp.com/test/events/disk.offline",
                 version_scope="ONTAP test fixture",
                 review_status="reviewed",
+                recommended_solution_zh="检查磁盘状态并按 NetApp 官方流程更换或恢复。",
             ),
             _definition_model()(
                 storage_type="netapp",
@@ -228,6 +230,7 @@ def test_incident_detail_batches_vendor_alerts_and_reviewed_semantics_without_le
                 official_reference_url="https://infohub.delltechnologies.com/test/events/100000001",
                 version_scope="OneFS test fixture",
                 review_status="reviewed",
+                recommended_solution_zh="检查节点故障状态并按 Dell 官方流程恢复。",
                 is_active=False,
             ),
             _incident(incident_id=3, correlation_key="batch:vendor:evidence"),
