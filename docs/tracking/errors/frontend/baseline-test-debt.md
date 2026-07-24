@@ -11,7 +11,7 @@
 ## 备注
 
 - 分类：`frontend`
-- 出现次数：10
+- 出现次数：11
 - 首次出现：2026-07-20 导航信息架构会话
 - 最近出现：2026-07-24 Main 分支代码审查问题修复会话
 - 出现记录：`sessions/2026-07-20-navigation-information-architecture/errors.md`
@@ -25,3 +25,4 @@
 - 出现记录：`sessions/2026-07-24-unified-time-range-picker/errors.md`；`storage-cluster-health-analytics.test.js` 的两项既有断言仍与页面当前实现不一致：关联类型列最小宽度期望为 120、实际为 50，且系统事件低频列缺少期望的响应式 class。与统一时间范围选择器无关。
 - 出现记录：`sessions/2026-07-24-event-audit-incident-noise/errors.md`；扩展 Vitest 的 `content-spacing-contract.test.js` 仍以既有页面矩阵 `27/30` 失败，审计研判跳转、项目滚动和布局用例均通过，与本次变更无关。
 - 出现记录：`sessions/2026-07-24-code-review-fixes/errors.md`；时间范围 RED 验证同时运行存储集群健康分析全文件，既有的关联类型列宽和响应式 class 两项断言仍失败；时间范围组件及页面上限契约的精确测试均已通过。
+- 出现记录：`sessions/2026-07-24-merge-duplicate-routes/errors.md`；`pnpm run test:coverage` 仍被页面矩阵 27/30、列表操作权限、AI 审计交互、存储集群健康分析断言及 `CrudApi extends BaseApi` 异步 rejection 阻断；路由聚焦测试与构建均通过。
