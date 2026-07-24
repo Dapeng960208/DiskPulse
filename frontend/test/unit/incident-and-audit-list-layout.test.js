@@ -2,8 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const incidentPage = 'src/pages/incident/IncidentCenterPage.vue';
+const auditDetailPage = 'src/pages/admin/audit/AuditEventDetailPage.vue';
 const auditPage = 'src/pages/admin/audit/AuditEventListPage.vue';
 const auditDrawer = 'src/pages/admin/audit/components/AuditEventDetailDrawer.vue';
+const projectAuditTab = 'src/pages/project/components/ProjectAuditTab.vue';
 
 function sourceFor(file) {
   return readFileSync(file, 'utf8');
@@ -45,7 +47,7 @@ describe('事件中心和统一操作审计列表布局', () => {
     const drawerSource = sourceFor(auditDrawer);
 
     expect(listSource).toContain("import AuditEventDetailDrawer from './components/AuditEventDetailDrawer.vue';");
-    expect(listSource).not.toContain("import { useRouter } from 'vue-router';");
+    expect(listSource).toContain("import { useRouter } from 'vue-router';");
     expect(listSource).not.toContain('router.push(`/admin/audit-events/${event.id}`)');
     expect(listSource).toContain('<AuditEventDetailDrawer');
     expect(drawerSource).toContain('<ElDrawer');
@@ -53,5 +55,23 @@ describe('事件中心和统一操作审计列表布局', () => {
     expect(drawerSource).toContain('变更前摘要');
     expect(drawerSource).toContain('变更后摘要');
     expect(drawerSource).toContain('附加元数据');
+  });
+  it('provides gated audit-analysis handoffs that pass only ids or filters to AI chat', () => {
+    const listSource = sourceFor(auditPage);
+    const drawerSource = sourceFor(auditDrawer);
+    const detailSource = sourceFor(auditDetailPage);
+    const projectSource = sourceFor(projectAuditTab);
+
+    expect(listSource).toContain('AI 研判当前筛选');
+    expect(listSource).toContain('canAnalyzeCurrentFilters');
+    expect(listSource).toContain('audit_project_id');
+    expect(listSource).toContain('audit_start_time');
+    expect(listSource).toContain("name: 'AIChat'");
+    expect(drawerSource).toContain("defineEmits(['update:modelValue', 'analyze'])");
+    expect(drawerSource).toContain('AI 研判');
+    expect(detailSource).toContain('AI 研判');
+    expect(detailSource).toContain('audit_event_id');
+    expect(projectSource).toContain('AI 研判本项目审计');
+    expect(projectSource).toContain('audit_project_id');
   });
 });
