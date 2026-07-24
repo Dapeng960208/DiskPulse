@@ -15,12 +15,13 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from appConfig import base_config
-from dependencies import get_db, require_super_admin
+from dependencies import get_current_user, get_db, require_super_admin
 from models import AIConfig, AIConversation, AIAuditLog, AIMessage, User
 from routers import (
     aggregate,
     ai,
     ai_admin,
+    audit_events,
     config,
     forecast_incidents,
     group,
@@ -255,6 +256,42 @@ def test_cluster_analysis_tools_are_super_admin_only_at_registration_and_executi
         arguments={},
         current_user=reader,
     ) == {"ok": False, "error": "系统管理工具仅限超级管理员"}
+
+
+def test_audit_tools_register_as_read_only_and_execute_with_request_user(db_session, monkeypatch):
+    from services import audit_service
+
+    app = FastAPI()
+    app.include_router(audit_events.router)
+    reader = User(id=101, username="reader", rd_username="reader", email="reader@example.com")
+    calls = []
+    app.dependency_overrides[get_db] = lambda: db_session
+    app.dependency_overrides[get_current_user] = lambda: reader
+    monkeypatch.setattr(
+        audit_service,
+        "list_visible_audit_events",
+        lambda _db, **kwargs: calls.append(kwargs) or ([], 0),
+    )
+    monkeypatch.setattr(audit_service, "serialize_audit_events", lambda *_args, **_kwargs: [])
+
+    registry = build_tool_registry(app, current_user=reader)
+
+    assert {
+        name: (registry[name].route_path, registry[name].method, registry[name].system_management)
+        for name in ("list_audit_events", "get_audit_event")
+    } == {
+        "list_audit_events": ("/v1/audit-events", "GET", False),
+        "get_audit_event": ("/v1/audit-events/{event_id}", "GET", False),
+    }
+    assert execute_tool(
+        app=app,
+        registry=registry,
+        tool_name="list_audit_events",
+        arguments={"project_id": 7, "page": 1, "size": 20},
+        current_user=reader,
+    ) == {"ok": True, "data": {"items": [], "total": 0}}
+    assert calls[0]["current_user"] is reader
+    assert calls[0]["project_id"] == 7
 
 
 def test_system_management_tools_require_super_admin_for_registry_and_execution(monkeypatch):

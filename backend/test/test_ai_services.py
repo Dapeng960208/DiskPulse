@@ -559,6 +559,51 @@ def test_tool_trace_keeps_only_safe_failure_reasons_visible():
     assert hidden == {"ok": False, "error": "工具请求失败，请稍后重试"}
 
 
+def test_stream_appends_audit_analysis_contract_after_custom_model_prompt(db_session, monkeypatch):
+    seed_user(db_session)
+    configured = seed_model(db_session)
+    configured.system_prompt = "custom model instruction"
+    conversation = AIConversation(user_id=1, model_id=configured.id, title="audit analysis")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    monkeypatch.setattr(
+        ai_chat_service,
+        "build_tool_registry",
+        lambda *_args, **_kwargs: {
+            "list_audit_events": SimpleNamespace(system_management=False),
+            "get_audit_event": SimpleNamespace(system_management=False),
+        },
+    )
+    monkeypatch.setattr(ai_chat_service, "tool_definitions", lambda *_args, **_kwargs: [])
+
+    def provider_stream(_model, messages, **_kwargs):
+        system_prompt = messages[0]["content"]
+        assert "custom model instruction" in system_prompt
+        assert "list_audit_events" in system_prompt
+        assert "get_audit_event" in system_prompt
+        assert "operation_id" in system_prompt
+        assert "研判依据" in system_prompt
+        assert "限制与数据缺口" in system_prompt
+        yield AICompletionStreamEvent(kind="delta", text="analysis")
+        yield AICompletionStreamEvent(kind="completed", text="analysis", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+
+    events = list(
+        ai_chat_service.stream_message(
+            app=FastAPI(),
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=1,
+            content="analyze audit event",
+        )
+    )
+
+    assert next(data for event, data in events if event == "completed")["message"]["content"] == "analysis"
+
+
 def test_stream_instructs_the_provider_to_clarify_ambiguous_goals_before_using_tools(
     db_session, monkeypatch
 ):
