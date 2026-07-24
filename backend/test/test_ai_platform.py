@@ -26,9 +26,11 @@ from routers import (
     forecast_incidents,
     group,
     group_tag,
+    large_files,
     projects,
     qtrees,
     storage_back_up_records,
+    storage_alerts,
     storage_cluster,
     storage_usage,
     users,
@@ -248,6 +250,123 @@ def test_user_project_and_group_tools_configure_privacy_blacklists(monkeypatch):
     expected_group_blacklist = expected_project_blacklist | {"alert_cc_user_ids", "associated_mail_groups"}
     for tool_name in ("list_groups", "get_group", "get_group_realtime"):
         assert registry[tool_name].blacklist_fields == expected_group_blacklist
+
+
+def test_sensitive_ai_tools_have_response_blacklists_or_are_not_registered(monkeypatch):
+    app = FastAPI()
+    for router in (
+        aggregate.router,
+        ai_admin.router,
+        audit_events.router,
+        config.router,
+        forecast_incidents.router,
+        large_files.router,
+        qtrees.router,
+        storage_alerts.router,
+        storage_back_up_records.router,
+        storage_cluster.router,
+        storage_usage.router,
+        volumes.router,
+    ):
+        app.include_router(router)
+
+    original_get = base_config.get
+
+    def configured_get(key, default=None):
+        return ["ai-admin"] if key == "super_admin_usernames" else original_get(key, default)
+
+    monkeypatch.setattr(base_config, "get", configured_get)
+    admin = User(id=101, username="ai-admin", rd_username="ai-admin")
+    registry = build_tool_registry(app, current_user=admin)
+
+    user_directory_blacklist = frozenset(
+        {
+            "access",
+            "alert_cc_user_ids",
+            "associated_mail_groups",
+            "back_path",
+            "device",
+            "gid",
+            "in_charge_user",
+            "in_charge_user_id",
+            "inode",
+            "linux_path",
+            "user",
+            "user_id",
+        }
+    )
+    audit_blacklist = frozenset(
+        {"actor", "actor_user_id", "after_summary", "before_summary", "metadata", "resource"}
+    )
+    storage_alert_blacklist = frozenset({"description", "related_info"})
+    storage_config_blacklist = frozenset(
+        {
+            "back_up_dir",
+            "company",
+            "domain_name",
+            "file_manage_host",
+            "file_manage_port",
+            "file_manage_user",
+            "group_expand",
+            "mail_host",
+            "mail_port",
+            "mail_to",
+            "mail_user",
+            "person_expand",
+        }
+    )
+    storage_cluster_blacklist = frozenset(
+        {
+            "isilon_session_cache_mode",
+            "isilon_session_cache_path",
+            "protocol",
+            "storage_host",
+            "storage_port",
+            "storage_user",
+            "tls_verify",
+        }
+    )
+    ai_model_blacklist = frozenset(
+        {
+            "api_key_configured",
+            "api_key_masked",
+            "base_url",
+            "capability_error",
+            "created_by",
+            "system_prompt",
+            "updated_by",
+        }
+    )
+
+    for tool_name in ("list_storage_usages", "get_storage_usage", "get_storage_usage_realtime"):
+        assert registry[tool_name].blacklist_fields == user_directory_blacklist
+    for tool_name in ("list_audit_events", "get_audit_event"):
+        assert registry[tool_name].blacklist_fields == audit_blacklist
+    assert registry["list_incidents"].blacklist_fields == frozenset({"assigned_user_id"})
+    assert registry["list_storage_alerts"].blacklist_fields == storage_alert_blacklist
+    assert registry["get_storage_config"].blacklist_fields == storage_config_blacklist
+    for tool_name in ("list_ai_models", "create_ai_model", "update_ai_model"):
+        assert registry[tool_name].blacklist_fields == ai_model_blacklist
+    for tool_name in (
+        "list_storage_clusters",
+        "create_storage_cluster",
+        "get_storage_cluster",
+        "update_storage_cluster",
+        "get_storage_cluster_realtime",
+        "list_aggregates",
+        "get_aggregate",
+        "get_aggregate_realtime",
+        "update_aggregate",
+        "list_volumes",
+        "get_volume",
+        "get_volume_realtime",
+        "list_qtrees",
+        "get_qtree",
+        "get_qtree_realtime",
+    ):
+        assert registry[tool_name].blacklist_fields == storage_cluster_blacklist
+
+    assert {"list_large_files", "list_storage_backup_records"}.isdisjoint(registry)
 
 
 def test_cluster_analysis_tools_are_super_admin_only_at_registration_and_execution(monkeypatch):
