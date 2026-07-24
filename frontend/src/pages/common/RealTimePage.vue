@@ -213,7 +213,7 @@ watch(dateRange, (newVal) => {
   alertQuery();
 }, { immediate: true });
 // Watch queryParams for changes deeply
-watch(() => queryParams, () => {
+watch(queryParams, () => {
   query();
   alertQuery();
 }, { deep: true });
