@@ -20,6 +20,7 @@ from models import (
     Project,
     StorageCluster,
 )
+from router_transaction import rollback_checkpoint
 from services import audit_service, forecastIncidentService, project_access_service
 from services.ai_client import AIClientError, chat_completion
 from utils.auth_service import is_super_admin
@@ -671,7 +672,7 @@ def create_capacity_prediction_candidate(db, *, version: str, ai_model_id: int) 
             CapacityPredictionCandidate(version=version, ai_model_id=ai_model_id, enabled=False),
         )
     except IntegrityError as error:
-        db.rollback()
+        rollback_checkpoint(db)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="capacity prediction version already exists",
@@ -723,7 +724,7 @@ def record_capacity_prediction_evaluation(
             ),
         )
     except IntegrityError as error:
-        db.rollback()
+        rollback_checkpoint(db)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="candidate evaluation window already exists",

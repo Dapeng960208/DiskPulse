@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from crud import aiCrud, incidentAiAgentCrud
 from models import AIConfig, AIPlatformSetting
+from router_transaction import commit_checkpoint, rollback_checkpoint
 from schemas.aiSchema import AIModelCreate, AIModelDiscoveryRequest, AIModelPatch
 from services.ai_client import (
     AIClientError,
@@ -283,7 +284,7 @@ def _record_model_failure(
     model_id: int | None,
     reason_code: str,
 ) -> None:
-    db.rollback()
+    rollback_checkpoint(db)
     if audit_context is None:
         return
     try:
@@ -295,9 +296,9 @@ def _record_model_failure(
             model_id=model_id,
             reason_code=reason_code,
         )
-        db.commit()
+        commit_checkpoint(db)
     except Exception:
-        db.rollback()
+        rollback_checkpoint(db)
 
 
 def create_model(

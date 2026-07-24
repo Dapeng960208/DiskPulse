@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from crud import vendorEventDefinitionCrud
 from models import VendorEventDefinition
+from router_transaction import commit_checkpoint, rollback_checkpoint
 from schemas.vendorEventDefinitionSchema import validate_reviewed_definition_values
 from services.audit_service import AuditContext, append_audit_event
 
@@ -600,7 +601,7 @@ def _record_failure(
     definition_id: int | None,
     reason_code: str,
 ) -> None:
-    db.rollback()
+    rollback_checkpoint(db)
     if audit_context is None:
         return
     try:
@@ -612,9 +613,9 @@ def _record_failure(
             definition_id=definition_id,
             reason_code=reason_code,
         )
-        db.commit()
+        commit_checkpoint(db)
     except Exception:
-        db.rollback()
+        rollback_checkpoint(db)
 
 
 def create_definition(

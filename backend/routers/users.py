@@ -13,6 +13,7 @@ from dependencies import (
 )
 from routers.transactional import TransactionalAPIRouter
 from schemas import commonSchema, usersSchema
+from router_transaction import commit_checkpoint
 from services import audit_service, usersService
 from utils.auth_service import build_frontend_profile, login_user
 from utils.security import decode_token, revoke_token
@@ -51,7 +52,7 @@ def login(payload: usersSchema.LoginIn, request: Request, db: DBDep) -> dict:
             outcome="denied",
             reason_code="invalid_credentials",
         )
-        db.commit()
+        commit_checkpoint(db)
         raise
 
     actor_user_id = int(decode_token(result["token"])["sub"])

@@ -13,6 +13,7 @@ from urllib3.exceptions import InsecureRequestWarning
 
 from appConfig import base_config
 from models import AuditEvent, Group, Project, Qtree, StorageAlerts, StorageUsage, Volume
+from router_transaction import commit_checkpoint, rollback_checkpoint
 from schemas.quotaSchema import QuotaAdjustmentRequest, QuotaAdjustmentResponse
 from services.audit_service import AuditContext, append_audit_event, serialize_audit_event
 from services.storageAlertRuleService import resolve_recipient_usernames
@@ -460,7 +461,7 @@ def _execute_adjustment_locked(
             },
         )
         # Keep a durable pre-device record even if the target is unavailable.
-        db.commit()
+        commit_checkpoint(db)
     client = None
     verification_source = "post_write_readback"
     try:
@@ -494,7 +495,7 @@ def _execute_adjustment_locked(
                 outcome="failure",
                 reason_code="quota_adjustment_rejected",
             )
-            db.commit()
+            commit_checkpoint(db)
         raise
     except (requests.Timeout, requests.ConnectionError) as error:
         try:
@@ -513,7 +514,7 @@ def _execute_adjustment_locked(
                     resource_type=audit_resource_type, resource_id=resource_id, project_id=project_id,
                     outcome="failure", reason_code="quota_outcome_unknown",
                 )
-                db.commit()
+                commit_checkpoint(db)
             raise _quota_http_error(
                 status.HTTP_502_BAD_GATEWAY,
                 "quota_outcome_unknown",
@@ -528,7 +529,7 @@ def _execute_adjustment_locked(
                     resource_type=audit_resource_type, resource_id=resource_id, project_id=project_id,
                     outcome="failure", reason_code="quota_outcome_unknown",
                 )
-                db.commit()
+                commit_checkpoint(db)
             raise _quota_http_error(
                 status.HTTP_502_BAD_GATEWAY,
                 "quota_outcome_unknown",
@@ -549,7 +550,7 @@ def _execute_adjustment_locked(
                 outcome="failure",
                 reason_code="quota_device_rejected",
             )
-            db.commit()
+            commit_checkpoint(db)
         if native_response is None:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -576,7 +577,7 @@ def _execute_adjustment_locked(
                 outcome="failure",
                 reason_code="quota_device_unavailable",
             )
-            db.commit()
+            commit_checkpoint(db)
         logger.error(
             "Quota device update failed cluster_id=%s resource_type=%s resource_id=%s error_type=%s",
             cluster.id,
@@ -630,9 +631,9 @@ def _execute_adjustment_locked(
             },
         )
     try:
-        db.commit()
+        commit_checkpoint(db)
     except Exception:
-        db.rollback()
+        rollback_checkpoint(db)
         logger.critical(
             "Quota device update succeeded but local sync failed cluster_id=%s resource_type=%s resource_id=%s",
             cluster.id,
@@ -778,7 +779,7 @@ def _reconcile_quota(
                     resource_type=audit_resource_type, resource_id=resource.id, project_id=project_id,
                     outcome="failure", reason_code="quota_device_unavailable",
                 )
-                db.commit()
+                commit_checkpoint(db)
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Storage quota reconciliation failed") from error
         finally:
             if client is not None:
@@ -801,7 +802,7 @@ def _reconcile_quota(
                 after_summary={"hard_limit": hard_limit, "soft_limit": soft_limit},
                 metadata={"storage_type": storage_type, "verification_source": "manual_reconciliation"},
             )
-        db.commit()
+        commit_checkpoint(db)
         return result
 
 

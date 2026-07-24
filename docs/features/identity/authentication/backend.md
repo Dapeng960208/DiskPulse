@@ -23,7 +23,7 @@ DiskPulse 后端通过 LDAP 校验人工用户身份，登录成功后签发 JWT
 
 运行配置统一来自本地 `backend/config.yml`，结构参考可提交的 `backend/config.example.yml`。真实配置和密码文件由 `.gitignore` 排除，不读取 `.env` 或运行时环境变量。
 
-- `jwt.secret_key`：JWT HMAC 密钥，必须使用非空、非占位、长度至少 8 的值。
+- `jwt.secret_key`：JWT HMAC 密钥，必须使用非空、非占位、长度至少 32 个字符的值；应用通过 `create_app()` 在启动前校验，失败时不输出密钥内容。
 - `jwt.access_ttl_minutes`：JWT 和 Redis 会话的共同有效期，默认 `10080` 分钟（7 天）。
 - `redis.host`、`redis.port`：认证会话复用 Redis DB 7；Redis 不可用时登录和鉴权返回 `503`，不会绕过会话校验。
 - `ldap.uri`：LDAP 服务地址。`ldap://` 必须配合 `ldap.starttls: true`；也可使用 `ldaps://`。
@@ -35,6 +35,7 @@ DiskPulse 后端通过 LDAP 校验人工用户身份，登录成功后签发 JWT
 - `ldap.user_department_attribute`：用户部门属性，默认 `department`；目录字段不同时必须在本地真实 `backend/config.yml` 中调整。
 - `ldap.user_extra_filters`：额外 LDAP filter 列表，默认排除 computer 和 group。
 - `super_admin_usernames`：超级管理员 `rd_username` 的 YAML 列表。
+- `application.cors_origins`：credentials 固定启用时只能配置明确来源，不能包含 `*`；该组合在应用启动前拒绝。
 
 超级管理员还可通过“用户信息管理”页面把完整 LDAP 用户快照同步到系统用户表。同步生命周期、公共用户保护和失败回滚规则见[用户信息管理](../user-management/overview.md)。
 

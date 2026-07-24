@@ -2,6 +2,7 @@
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Query, Request, status
+from sqlalchemy.orm import Session
 from database import SessionLocal
 from questdb.database import QuestDBSessionLocal, questdb_engine
 from crud import usersCrud
@@ -35,7 +36,7 @@ def get_write_db(request: Request):
         db.commit()
 
 
-WriteDBDep = Annotated[object, Depends(get_write_db, scope="function")]
+WriteDBDep = Annotated[Session, Depends(get_write_db, scope="function")]
 
 
 PUBLIC_AUTH_PATHS = {

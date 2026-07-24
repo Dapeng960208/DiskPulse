@@ -1,6 +1,7 @@
 application:
   mode: dev
   company_name: DiskPulse
+  # credentials 固定启用；来源必须是明确的协议/主机/端口，不能使用 "*"。
   cors_origins:
     - http://localhost:5173
     - http://127.0.0.1:5173
@@ -45,6 +46,7 @@ ai:
   chat_rate_limit_per_minute: 10
 
 jwt:
+  # 部署时替换为独立的非占位随机密钥，长度至少 32 个字符。
   secret_key: change-me-with-a-random-secret
   access_ttl_minutes: 10080
 

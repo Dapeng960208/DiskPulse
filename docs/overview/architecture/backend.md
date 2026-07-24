@@ -14,11 +14,13 @@ Frontend / Client
     v
 FastAPI: backend/main.py
     |
-    +-- routers/*                # API 路由
+    +-- routers/*                # API 路由与 HTTP 写事务边界
     |       |
-    |       +-- crud/*           # 查询和写入逻辑
-    |               |
-    |               +-- models.py
+    |       +-- services/*       # 领域编排、权限与错误转换
+    |       |       |
+    |       |       +-- crud/*   # 表级查询和写入逻辑
+    |       |               |
+    |       |               +-- models.py
     |
     +-- crud/questDbCrud.py      # QuestDB 查询
     |
@@ -53,7 +55,7 @@ FastAPI: backend/main.py
 | `storage_back_up_records` | `/storage-back-up-records` | 备份记录和回滚 |
 | `large_files` | `/large-files` | 大文件扫描结果 |
 
-请求级 PostgreSQL session 由 `db_session_middleware` 创建并关闭，业务代码通过 `dependencies.get_db()` 获取。
+请求级 PostgreSQL session 由 `db_session_middleware` 创建并关闭，业务代码通过 `dependencies.get_db()` 获取。所有 POST、PUT、PATCH、DELETE 路由使用 `TransactionalAPIRouter` 注入的函数级 `get_write_db()`：成功路径提交一次，异常路径回滚并保留原响应错误。需要分段持久化的 AI、配额和厂商事件流程通过 `router_transaction` 检查点执行提交或回滚，避免 Service 直接操作 session 事务。Service 在 HTTP 路径仅执行 `flush`；Celery 和脚本在各自入口管理独立事务。
 
 ## 4. 配置
 
@@ -69,6 +71,8 @@ FastAPI: backend/main.py
 | `storage` | Isilon 会话缓存等存储客户端运行开关；不保存设备协议或 TLS 校验配置 |
 
 真实 `backend/config.yml` 和 LDAP 密码文件不得提交；仓库只保留 `backend/config.example.yml` 与无敏感值的 `backend/config.test.yml`。相对密码文件路径以 YAML 所在目录为基准，PostgreSQL 和 QuestDB URL 由加载器集中生成并转义凭据。AI Provider Key 由独立的 `ai.config_secret_key` 加密；聊天限流和认证会话复用 `redis.host`、`redis.port` 并固定使用 DB 7，认证会话 key 使用 `diskpulse:auth:*` 命名空间。
+
+应用通过 `create_app()` 在注册路由或执行可选迁移前校验安全配置：`jwt.secret_key` 必须为非占位且至少 32 个字符；CORS credentials 固定启用时，`application.cors_origins` 只能列出明确来源，不能包含 `*`。校验失败只返回配置键与规则，不输出配置值。
 
 设备访问协议和 TLS 证书校验分别保存在 `storage_clusters.protocol`、`storage_clusters.tls_verify`，由每个集群独立配置。新建集群默认 `https/true`；迁移前已有集群回填为 `https/false`，保持原连接行为。HTTP 下 TLS 校验不适用，设备凭据会以明文传输，只应在可信隔离网络中使用。存储 API 连接或请求失败会中止并回滚当前集群采集，避免将失败误判为空数据。
 
