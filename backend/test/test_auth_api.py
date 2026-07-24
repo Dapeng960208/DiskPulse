@@ -50,6 +50,53 @@ def test_login_issues_frontend_compatible_token_and_upserts_user(api_client_fact
     assert account["roleCodes"] == ["superadmin"]
     assert account["permissionCodes"] == [["*", "*", "*"]]
     assert account["extensionAttributes"]["rdUsername"] == "alice"
+    assert account["time_zone"] is None
+
+
+def test_current_user_can_save_a_valid_iana_timezone_but_cannot_submit_invalid_values(api_client_factory):
+    base_config.set("jwt.secret_key", "test-secret")
+    client = api_client_factory([users.router], authenticated=False)
+
+    with patch("utils.auth_service.ldap_authenticate", return_value=_profile()):
+        token = client.post(
+            "/storage-pulse/api/users/login",
+            json={"username": "alice", "password": "secret-password"},
+        ).json()["result"]["token"]
+
+    headers = {"Authorization": f"Bearer {token}"}
+    saved = client.patch(
+        "/storage-pulse/api/users/current/profile",
+        json={"time_zone": "America/Los_Angeles"},
+        headers=headers,
+    )
+    invalid = client.patch(
+        "/storage-pulse/api/users/current/profile",
+        json={"time_zone": "not/a-time-zone"},
+        headers=headers,
+    )
+    profile = client.get("/storage-pulse/api/users/current/profile", headers=headers)
+
+    assert saved.status_code == 200
+    assert saved.json()["result"]["time_zone"] == "America/Los_Angeles"
+    assert invalid.status_code == 422
+    assert profile.json()["result"]["time_zone"] == "America/Los_Angeles"
+
+
+def test_authenticated_user_can_list_supported_iana_timezones(api_client_factory):
+    base_config.set("jwt.secret_key", "test-secret")
+    client = api_client_factory([users.router], authenticated=False)
+    current_user = models.User(id=7, rd_username="alice", username="Alice Zhang")
+    token = issue_token(current_user.id)
+
+    with patch("dependencies.usersCrud.get_user_by_id", return_value=current_user):
+        response = client.get(
+            "/storage-pulse/api/users/current/time-zones",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    assert "Asia/Shanghai" in response.json()["result"]
+    assert "America/Los_Angeles" in response.json()["result"]
 
 
 def test_access_token_defaults_to_seven_days(token_redis):
