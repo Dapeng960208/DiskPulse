@@ -83,6 +83,24 @@ def test_incident_admission_keeps_only_urgent_cluster_evidence():
         now=UTC_NOW,
     ) is False
     assert analytics.should_admit_incident(
+        _envelope(
+            source="anomaly_observation",
+            severity="critical",
+            value={"severity": "critical", "metric": "iops", "incident_eligible": True},
+        ),
+        category="performance_contention",
+        now=UTC_NOW,
+    ) is False
+    assert analytics.should_admit_incident(
+        _envelope(
+            source="anomaly_observation",
+            severity="critical",
+            value={"severity": "critical", "metric": "latency", "incident_eligible": True},
+        ),
+        category="performance_contention",
+        now=UTC_NOW,
+    ) is True
+    assert analytics.should_admit_incident(
         _envelope(source="telemetry_quality", severity="critical"),
         category="telemetry_blindspot",
         now=UTC_NOW,
