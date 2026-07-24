@@ -48,7 +48,7 @@ API Key 和会话别名原值均使用 `cryptography` 的 Fernet 加密，密钥
 
 不同 Provider 保留原生语义：OpenAI、OpenRouter、部分 Ollama GPT-OSS、部分 GLM、Kimi 和混元模型使用原生强度档位；Ollama 其他思考模型、DeepSeek、通义千问、豆包及部分国内模型使用原生开关；官方未声明可调能力的模型返回 `none`。系统不把思考预算或开关近似成虚假的强度档位。
 
-`claude_code` 通过 Claude Agent SDK 调用，只注册 DiskPulse 动态 MCP 工具，并禁用文件、Shell 等 Claude Code 内置工具；工具执行继续使用当前登录用户的认证、权限、项目隔离、配额确认和审计边界。
+`claude_code` 通过 Claude Agent SDK 调用，只注册 DiskPulse 动态 MCP 工具，并禁用文件、Shell 等 Claude Code 内置工具；工具执行继续使用当前登录用户的认证、权限、项目隔离、配额确认和审计边界。适配器等待每个 SDK 输出时都使用统一的 `ai.request_timeout_seconds`，超时会中断并断开客户端，避免流式请求永久占用工作线程。
 
 ## 5. 对话与 SSE
 

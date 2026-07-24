@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 import json
-from queue import Queue
+from queue import Empty, Queue
 from threading import Event, Lock, Thread
 from typing import Any, Iterator
 
@@ -294,6 +294,7 @@ def claude_code_completion_stream(
     reasoning: str = "auto",
     tool_handler: Any = None,
     on_tool_result: Any = None,
+    timeout_seconds: float = 60,
 ) -> Iterator[AICompletionStreamEvent]:
     output: Queue = Queue()
     state = _ClientState()
@@ -316,7 +317,12 @@ def claude_code_completion_stream(
     finished = False
     try:
         while True:
-            item = output.get()
+            try:
+                # Bound every wait for SDK output so a provider that never
+                # finishes cannot pin the HTTP stream and its worker forever.
+                item = output.get(timeout=max(float(timeout_seconds), 0.001))
+            except Empty as error:
+                raise AIClientError("Claude Code 调用超时") from error
             if isinstance(item, _ToolRequest):
                 try:
                     if tool_handler is None:

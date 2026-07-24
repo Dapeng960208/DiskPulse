@@ -500,6 +500,7 @@ def test_model(
                     registry={},
                     current_user=None,
                     user_id=None,
+                    timeout_seconds=_timeout(),
                 )
             )
             result_text = events[-1].text

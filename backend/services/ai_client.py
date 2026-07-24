@@ -685,6 +685,7 @@ def chat_completion_stream(
                 reasoning=reasoning,
                 tool_handler=tool_handler,
                 on_tool_result=on_tool_result,
+                timeout_seconds=_timeout(),
             )
         elif provider_protocol(config) == "claude":
             yield from _claude_stream(

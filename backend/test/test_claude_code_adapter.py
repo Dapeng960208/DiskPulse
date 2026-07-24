@@ -279,3 +279,48 @@ def test_claude_code_adapter_respects_max_turns_limit():
         # Verify max_turns is set to prevent infinite loops
         assert options["max_turns"] == 4
         assert options["strict_mcp_config"] is True
+
+
+def test_claude_code_stream_times_out_and_cancels_stalled_sdk_worker():
+    import models
+
+    from services.ai_client import AIClientError
+    from services.claude_code_adapter import claude_code_completion_stream
+
+    config = models.AIConfig(
+        id=1,
+        name="test-claude",
+        provider="claude_code",
+        model="claude-opus-4-8",
+        api_key_encrypted="encrypted_key",
+    )
+    state = MagicMock()
+
+    class StalledThread:
+        def __init__(self, **_kwargs):
+            pass
+
+        def start(self):
+            pass
+
+        def join(self, timeout=None):
+            pass
+
+    with (
+        patch("services.claude_code_adapter.Thread", StalledThread),
+        patch("services.claude_code_adapter._ClientState", return_value=state),
+        pytest.raises(AIClientError, match="Claude Code 调用超时"),
+    ):
+        list(
+            claude_code_completion_stream(
+                config,
+                [{"role": "user", "content": "hello"}],
+                app=None,
+                registry={},
+                current_user=None,
+                user_id=None,
+                timeout_seconds=0.01,
+            )
+        )
+
+    state.cancel.assert_called_once_with()
