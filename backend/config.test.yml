@@ -53,7 +53,7 @@ ai:
   chat_rate_limit_per_minute: 10
 
 jwt:
-  secret_key: test-secret
+  secret_key: test-jwt-secret-key-for-unit-tests-32
   access_ttl_minutes: 10080
 
 ldap:
