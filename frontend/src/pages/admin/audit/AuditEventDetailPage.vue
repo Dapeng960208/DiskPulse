@@ -74,6 +74,11 @@ async function loadEvent() {
   }
 }
 
+function analyzeEvent() {
+  if (!event.value?.id) return;
+  router.push({ name: 'AIChat', query: { audit_event_id: String(event.value.id) } });
+}
+
 onMounted(loadEvent);
 </script>
 
@@ -83,7 +88,13 @@ onMounted(loadEvent);
       <div>
         <h2>审计事件 #{{ route.params.id }}</h2>
       </div>
-      <ElButton @click="router.push('/admin/audit-events')">返回审计</ElButton>
+      <div class="page-heading__actions">
+        <ElButton
+          :disabled="!hasEvent"
+          type="primary"
+          @click="analyzeEvent">AI 研判</ElButton>
+        <ElButton @click="router.push('/admin/audit-events')">返回审计</ElButton>
+      </div>
     </div>
     <ElDescriptions
       v-if="hasEvent"
@@ -131,6 +142,7 @@ onMounted(loadEvent);
 <style scoped>
 .audit-event-detail-page { display: grid; gap: var(--spacing-md); }
 .page-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing-md); }
+.page-heading__actions { display: flex; gap: var(--spacing-sm); }
 .page-heading h2 { margin: 0 0 4px; color: var(--text-primary); font-size: var(--font-size-xl); }
 .page-heading p { margin: 0; color: var(--text-secondary); }
 pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-size-sm); }

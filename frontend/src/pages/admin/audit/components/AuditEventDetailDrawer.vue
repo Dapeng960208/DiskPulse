@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { ElDescriptions, ElDescriptionsItem, ElDrawer, ElEmpty, ElTag } from 'element-plus';
+import { ElButton, ElDescriptions, ElDescriptionsItem, ElDrawer, ElEmpty, ElTag } from 'element-plus';
 import auditEventsApi from '@/api/audit-events-api.js';
 import AccessibleResourceLink from '@/components/basic/AccessibleResourceLink.vue';
 import {
@@ -18,7 +18,7 @@ const props = defineProps({
   modelValue: { type: Boolean, default: false },
   event: { type: Object, default: null },
 });
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'analyze']);
 const detail = ref(null);
 const loading = ref(false);
 const error = ref('');
@@ -86,6 +86,10 @@ async function load() {
   } finally {
     loading.value = false;
   }
+}
+
+function analyzeCurrentEvent() {
+  if (current.value.id) emit('analyze', current.value);
 }
 
 watch(() => [props.event?.id, visible.value], load, { immediate: true });
@@ -187,6 +191,12 @@ watch(() => [props.event?.id, visible.value], load, { immediate: true });
     <p
       v-if="error"
       class="audit-event-detail-drawer__error">{{ error }}</p>
+    <template #footer>
+      <ElButton
+        :disabled="!current.id"
+        type="primary"
+        @click="analyzeCurrentEvent">AI 研判</ElButton>
+    </template>
   </ElDrawer>
 </template>
 

@@ -1,6 +1,7 @@
 <script setup>
-import { onMounted, ref } from 'vue';
-import { ElDatePicker, ElFormItem, ElInput, ElOption, ElSelect } from 'element-plus';
+import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { ElButton, ElDatePicker, ElFormItem, ElInput, ElOption, ElSelect } from 'element-plus';
 import auditEventsApi from '@/api/audit-events-api.js';
 import AuditEventTable from '@/components/audit/AuditEventTable.vue';
 import ProjectSelect from '@/components/form/ProjectSelect.vue';
@@ -10,6 +11,7 @@ import { useQueryParams } from '@/composables/query';
 import AuditEventDetailDrawer from './components/AuditEventDetailDrawer.vue';
 
 const { queryParams, reset } = useQueryParams(() => ({ page: 1, size: 20 }));
+const router = useRouter();
 const timeRange = ref([]);
 const events = ref([]);
 const total = ref(0);
@@ -17,6 +19,11 @@ const loading = ref(false);
 const error = ref('');
 const selectedEvent = ref(null);
 const detailVisible = ref(false);
+const hasCompleteTimeRange = computed(() => {
+  const [startTime, endTime] = timeRange.value || [];
+  return Boolean(startTime && endTime);
+});
+const canAnalyzeCurrentFilters = computed(() => Boolean(queryParams.value.project_id) || hasCompleteTimeRange.value);
 
 async function query() {
   loading.value = true;
@@ -57,6 +64,27 @@ function updatePagination(next) {
 function showDetail(event) {
   selectedEvent.value = event;
   detailVisible.value = true;
+}
+
+function auditFilterHandoffQuery() {
+  const [startTime, endTime] = timeRange.value || [];
+  return {
+    ...(queryParams.value.project_id ? { audit_project_id: String(queryParams.value.project_id) } : {}),
+    ...(queryParams.value.actor_user_id ? { audit_actor_user_id: String(queryParams.value.actor_user_id) } : {}),
+    ...(queryParams.value.action ? { audit_action: queryParams.value.action } : {}),
+    ...(queryParams.value.outcome ? { audit_outcome: queryParams.value.outcome } : {}),
+    ...(startTime && endTime ? { audit_start_time: startTime, audit_end_time: endTime } : {}),
+  };
+}
+
+function analyzeCurrentFilters() {
+  if (!canAnalyzeCurrentFilters.value) return;
+  router.push({ name: 'AIChat', query: auditFilterHandoffQuery() });
+}
+
+function analyzeEvent(event) {
+  if (!event?.id) return;
+  router.push({ name: 'AIChat', query: { audit_event_id: String(event.id) } });
 }
 
 onMounted(query);
@@ -112,6 +140,12 @@ onMounted(query);
           start-placeholder="开始时间"
           end-placeholder="结束时间" />
       </ElFormItem>
+      <template #actions>
+        <ElButton
+          plain
+          :disabled="!canAnalyzeCurrentFilters"
+          @click="analyzeCurrentFilters">AI 研判当前筛选</ElButton>
+      </template>
     </QueryForm>
     <AuditEventTable
       class="audit-event-list-page__table"
@@ -124,7 +158,8 @@ onMounted(query);
       @show-detail="showDetail" />
     <AuditEventDetailDrawer
       v-model="detailVisible"
-      :event="selectedEvent" />
+      :event="selectedEvent"
+      @analyze="analyzeEvent" />
   </section>
 </template>
 

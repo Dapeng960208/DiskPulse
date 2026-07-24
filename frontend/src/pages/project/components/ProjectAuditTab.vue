@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { useRouter } from 'vue-router';
+import { ElButton, ElMessage } from 'element-plus';
 import auditEventsApi from '@/api/audit-events-api.js';
 import AuditEventTable from '@/components/audit/AuditEventTable.vue';
 
@@ -12,6 +13,7 @@ const props = defineProps({
 });
 
 const events = ref([]);
+const router = useRouter();
 const total = ref(0);
 const loading = ref(false);
 const error = ref('');
@@ -43,11 +45,22 @@ function updatePagination(next) {
   loadEvents();
 }
 
+function analyzeProjectAudit() {
+  if (!Number.isInteger(props.projectId) || props.projectId < 1) return;
+  router.push({ name: 'AIChat', query: { audit_project_id: String(props.projectId) } });
+}
+
 onMounted(loadEvents);
 </script>
 
 <template>
   <section class="project-audit-tab">
+    <div class="project-audit-tab__actions">
+      <ElButton
+        plain
+        type="primary"
+        @click="analyzeProjectAudit">AI 研判本项目审计</ElButton>
+    </div>
     <AuditEventTable
       :events="events"
       :loading="loading"
@@ -65,6 +78,12 @@ onMounted(loadEvents);
   flex-direction: column;
   min-height: 0;
   height: 100%;
+}
+
+.project-audit-tab__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--spacing-sm);
 }
 
 .project-audit-tab :deep(.data-table-card) {

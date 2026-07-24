@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import {
   ElButton,
   ElEmpty,
@@ -30,8 +31,22 @@ const activeTurnId = ref(null);
 const autoFollowMessages = ref(true);
 const messageScroll = ref();
 const currentUser = useCurrentUser();
+const route = useRoute();
+const router = useRouter();
 let abortController = null;
 let activePrompt = '';
+
+const AUDIT_OUTCOMES = new Set(['success', 'denied', 'failure']);
+const AUDIT_HANDOFF_KEYS = [
+  'audit_event_id',
+  'audit_project_id',
+  'audit_actor_user_id',
+  'audit_action',
+  'audit_outcome',
+  'audit_start_time',
+  'audit_end_time',
+];
+const AUDIT_EVENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const activeConversation = computed(() => conversations.value.find((item) => item.id === activeConversationId.value));
 const selectedModel = computed(() => models.value.find((item) => item.id === selectedModelId.value));
@@ -81,6 +96,66 @@ const reasoningUnavailableText = computed(() => {
   return '';
 });
 
+function queryText(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function positiveQueryId(value) {
+  const normalized = String(queryText(value) || '').trim();
+  return /^\d+$/.test(normalized) && Number(normalized) > 0 ? normalized : null;
+}
+
+function validAuditTime(value) {
+  const normalized = String(queryText(value) || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(normalized)) return null;
+  return Number.isNaN(Date.parse(normalized.replace(' ', 'T'))) ? null : normalized;
+}
+
+function auditDraftFromQuery(query) {
+  const hasAuditHandoff = AUDIT_HANDOFF_KEYS.some((key) => Object.hasOwn(query, key));
+  if (!hasAuditHandoff) return null;
+  const eventId = String(queryText(query.audit_event_id) || '').trim();
+  const projectId = positiveQueryId(query.audit_project_id);
+  const actorUserId = positiveQueryId(query.audit_actor_user_id);
+  const action = String(queryText(query.audit_action) || '').trim();
+  const outcome = String(queryText(query.audit_outcome) || '').trim();
+  const startTime = validAuditTime(query.audit_start_time);
+  const endTime = validAuditTime(query.audit_end_time);
+  const hasFilter = [projectId, actorUserId, action, outcome, query.audit_start_time, query.audit_end_time]
+    .some((value) => value != null && String(queryText(value) || '').trim() !== '');
+  const hasPartialTimeRange = Boolean(query.audit_start_time) !== Boolean(query.audit_end_time);
+  const invalidFilter = hasPartialTimeRange
+    || (Boolean(query.audit_start_time) && (!startTime || !endTime))
+    || Boolean(query.audit_actor_user_id) && !actorUserId
+    || Boolean(query.audit_action) && (!action || action.length > 128)
+    || Boolean(query.audit_outcome) && !AUDIT_OUTCOMES.has(outcome);
+
+  if (eventId) {
+    if (!AUDIT_EVENT_ID_PATTERN.test(eventId) || hasFilter) return '';
+    return `请研判审计事件 ${eventId}。请先调用 get_audit_event 查询详情；如需确认影响范围或执行结果，再使用当前已授权的只读工具交叉核验。请按“研判依据、排查建议、解决方案、限制与数据缺口”回答。`;
+  }
+  if (invalidFilter || (!projectId && !(startTime && endTime))) return '';
+  const filters = [
+    projectId && `项目 ID=${projectId}`,
+    actorUserId && `用户 ID=${actorUserId}`,
+    action && `操作=${action}`,
+    outcome && `结果=${outcome}`,
+    startTime && `开始=${startTime}`,
+    endTime && `结束=${endTime}`,
+  ].filter(Boolean).join('；');
+  return `请研判以下审计筛选范围：${filters}。请先调用 list_audit_events 查询，再按需调用 get_audit_event 下钻关键事件；可使用当前已授权的只读工具核验。请按“研判依据、排查建议、解决方案、限制与数据缺口”回答。`;
+}
+
+function consumeAuditHandoff() {
+  const draft = auditDraftFromQuery(route.query || {});
+  if (draft === null) return false;
+  void router.replace({ name: 'AIChat', query: {} });
+  if (!draft) return false;
+  startNewConversation();
+  content.value = draft;
+  return true;
+}
+
 async function loadInitial() {
   try {
     const [availableModels, conversationItems] = await Promise.all([
@@ -92,6 +167,7 @@ async function loadInitial() {
     selectedModelId.value = models.value.find((item) => item.is_default)?.id
       || models.value[0]?.id
       || null;
+    if (consumeAuditHandoff()) return;
     if (conversations.value.length) await openConversation(conversations.value[0].id);
   } catch {
     ElMessage.error('AI 助手加载失败');
