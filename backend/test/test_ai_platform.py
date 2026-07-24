@@ -646,7 +646,6 @@ def test_registered_system_management_crud_tools_are_admin_only(monkeypatch):
         "create_ai_model": ("/admin/ai-models", "POST"),
         "update_ai_model": ("/admin/ai-models/{model_id}", "PATCH"),
         "get_storage_config": ("/config/storage", "GET"),
-        "list_storage_backup_records": ("/storage-back-up-records/", "GET"),
         "adjust_group_quota": ("/groups/{group_id}/quota", "PATCH"),
         "adjust_storage_usage_quota": ("/storage-usages/{storage_usage_id}/quota", "PATCH"),
         "get_storage_cluster_realtime": ("/storage-clusters/{storage_cluster_id}/realtime", "GET"),
