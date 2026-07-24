@@ -6,6 +6,7 @@ import StorageClusterDetailPage from '@/pages/admin/storage-cluster/StorageClust
 import storageClusterDetailSource from '@/pages/admin/storage-cluster/StorageClusterDetailPage.vue?raw';
 
 const initialRange = ['2026-07-01 00:00:00', '2026-07-02 00:00:00'];
+const initialUtcRange = ['2026-06-30T16:00:00Z', '2026-07-01T16:00:00Z'];
 const storageClusterApi = vi.hoisted(() => ({
   fetchById: vi.fn(),
   fetchStorageRealTimeDataById: vi.fn(),
@@ -279,8 +280,8 @@ describe('storage cluster health analytics page', () => {
     expect(wrapper.findAllComponents({ name: 'TimeRangePicker' })).toHaveLength(1);
     expect(wrapper.get('[data-testid="filter-actions"] [data-testid="analytics-export"]').exists()).toBe(true);
     expect(storageClusterApi.fetchCapacityChange).toHaveBeenCalledWith(42, {
-      start_time: initialRange[0],
-      end_time: initialRange[1],
+      start_time: initialUtcRange[0],
+      end_time: initialUtcRange[1],
     });
     expect(storageClusterApi.fetchTopLatency).not.toHaveBeenCalled();
     expect(storageClusterApi.fetchErrorSeverity).not.toHaveBeenCalled();
@@ -386,8 +387,8 @@ describe('storage cluster health analytics page', () => {
     await wrapper.findComponent({ name: 'TimeRangePicker' }).vm.$emit('update:modelValue', nextRange);
     await flushPromises();
     expect(storageClusterApi.fetchTopLatency).toHaveBeenLastCalledWith(42, {
-      start_time: nextRange[0],
-      end_time: nextRange[1],
+      start_time: '2026-07-02T16:00:00Z',
+      end_time: '2026-07-03T16:00:00Z',
       object_type: 'volume',
       limit: 10,
     });
@@ -442,8 +443,8 @@ describe('storage cluster health analytics page', () => {
     await selectTab(wrapper, 'performance');
 
     expect(storageClusterApi.fetchTopLatency).toHaveBeenLastCalledWith(42, {
-      start_time: initialRange[0],
-      end_time: initialRange[1],
+      start_time: initialUtcRange[0],
+      end_time: initialUtcRange[1],
       object_type: 'volume',
       limit: 10,
     });
@@ -478,8 +479,8 @@ describe('storage cluster health analytics page', () => {
     await wrapper.get('.storage-health-filter').findComponent({ name: 'FilterForm' }).vm.$emit('query');
     await flushPromises();
     expect(storageClusterApi.fetchTopLatency).toHaveBeenLastCalledWith(42, {
-      start_time: initialRange[0],
-      end_time: initialRange[1],
+      start_time: initialUtcRange[0],
+      end_time: initialUtcRange[1],
       object_type: 'volume',
       limit: 50,
     });
@@ -689,8 +690,8 @@ describe('storage cluster health analytics page', () => {
     await selectTab(wrapper, 'faults');
 
     expect(storageClusterApi.fetchSystemEvents).toHaveBeenLastCalledWith(42, {
-      start_time: initialRange[0],
-      end_time: initialRange[1],
+      start_time: initialUtcRange[0],
+      end_time: initialUtcRange[1],
       page: 1,
       page_size: 20,
     });
@@ -706,8 +707,8 @@ describe('storage cluster health analytics page', () => {
     await flushPromises();
 
     expect(storageClusterApi.fetchSystemEvents).toHaveBeenLastCalledWith(42, {
-      start_time: initialRange[0],
-      end_time: initialRange[1],
+      start_time: initialUtcRange[0],
+      end_time: initialUtcRange[1],
       keyword: 'quota',
       severity: 'warning',
       page: 1,
@@ -723,8 +724,8 @@ describe('storage cluster health analytics page', () => {
     await flushPromises();
 
     expect(storageClusterApi.fetchSystemEvents).toHaveBeenLastCalledWith(42, {
-      start_time: initialRange[0],
-      end_time: initialRange[1],
+      start_time: initialUtcRange[0],
+      end_time: initialUtcRange[1],
       keyword: 'quota',
       severity: 'warning',
       page: 2,
@@ -734,8 +735,8 @@ describe('storage cluster health analytics page', () => {
     await eventFilter.vm.$emit('reset');
     await flushPromises();
     expect(storageClusterApi.fetchSystemEvents).toHaveBeenLastCalledWith(42, {
-      start_time: initialRange[0],
-      end_time: initialRange[1],
+      start_time: initialUtcRange[0],
+      end_time: initialUtcRange[1],
       page: 1,
       page_size: 20,
     });
@@ -762,8 +763,8 @@ describe('storage cluster health analytics page', () => {
     await dropdown().vm.$emit('command', 'current:csv');
     await flushPromises();
     expect(storageClusterApi.exportAnalytics).toHaveBeenNthCalledWith(1, 42, {
-      start_time: initialRange[0],
-      end_time: initialRange[1],
+      start_time: initialUtcRange[0],
+      end_time: initialUtcRange[1],
       section: 'capacity',
       format: 'csv',
     });
@@ -774,8 +775,8 @@ describe('storage cluster health analytics page', () => {
     await dropdown().vm.$emit('command', 'current:pdf');
     await flushPromises();
     expect(storageClusterApi.exportAnalytics).toHaveBeenNthCalledWith(2, 42, {
-      start_time: initialRange[0],
-      end_time: initialRange[1],
+      start_time: initialUtcRange[0],
+      end_time: initialUtcRange[1],
       section: 'latency',
       format: 'pdf',
     });
@@ -784,8 +785,8 @@ describe('storage cluster health analytics page', () => {
     await dropdown().vm.$emit('command', 'severity:csv');
     await flushPromises();
     expect(storageClusterApi.exportAnalytics).toHaveBeenNthCalledWith(3, 42, {
-      start_time: initialRange[0],
-      end_time: initialRange[1],
+      start_time: initialUtcRange[0],
+      end_time: initialUtcRange[1],
       section: 'severity',
       format: 'csv',
     });
@@ -793,8 +794,8 @@ describe('storage cluster health analytics page', () => {
     await dropdown().vm.$emit('command', 'all:excel');
     await flushPromises();
     expect(storageClusterApi.exportAnalytics).toHaveBeenNthCalledWith(4, 42, {
-      start_time: initialRange[0],
-      end_time: initialRange[1],
+      start_time: initialUtcRange[0],
+      end_time: initialUtcRange[1],
       section: 'all',
       format: 'excel',
     });
