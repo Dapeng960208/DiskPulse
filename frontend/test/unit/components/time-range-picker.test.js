@@ -50,4 +50,20 @@ describe('TimeRangePicker', () => {
 
     expect(wrapper.emitted('update:modelValue')).toEqual([[nextRange]]);
   });
+
+  it('filters shortcuts that exceed a page-specific maximum range', () => {
+    const wrapper = mount(TimeRangePicker, {
+      props: {
+        modelValue: [],
+        maxDays: 180,
+      },
+      global: { stubs: { ElDatePicker } },
+    });
+    const labels = wrapper
+      .findComponent({ name: 'ElDatePicker' })
+      .attributes('data-shortcut-labels');
+
+    expect(labels).toContain('6个月内');
+    expect(labels).not.toContain('1年内');
+  });
 });

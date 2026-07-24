@@ -16,6 +16,7 @@
 - 为滚动事件关联状态迁移回填每个关联键的最新历史 Incident，并覆盖同时间证据按 ID 稳定决胜。
 - 为 Claude Code SDK 输出队列应用统一请求超时，超时后取消客户端并释放流式工作线程。
 - 阻止窗口外迟到证据覆盖前向关联游标，保留历史事件的同时确保后续实时证据继续归入最新事件。
+- 为共享时间选择器增加页面级最大天数，并将集群健康分析快捷范围限制为后端支持的 180 天。
 
 ## 验证
 
@@ -27,8 +28,13 @@
   - 结果：162 passed，存在 1 条待后续修复的取消协程未等待警告。
 - `cd backend; ..\.venv\Scripts\python.exe -m pytest test/test_forecast_incident_center.py -q`
   - 结果：48 passed。
+- `cd frontend; pnpm exec vitest run test/unit/components/time-range-picker.test.js --coverage.enabled=false`
+  - 结果：2 passed。
+- `cd frontend; pnpm exec vitest run test/unit/pages/storage-cluster-health-analytics.test.js -t "renders the shared time filter inside each time-based analysis tab content" --coverage.enabled=false`
+  - 结果：1 passed，17 skipped。
 
 ## 未验证范围与风险
 
 - 其余审查问题仍在修复中。
+- `storage-cluster-health-analytics.test.js` 全文件仍有 2 条既有表格断言失败，与本次时间范围修复无关，已登记到错误事实库。
 - 尚未运行本会话全部聚焦测试的汇总验证。

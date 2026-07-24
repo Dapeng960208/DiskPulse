@@ -11,9 +11,9 @@
 ## 备注
 
 - 分类：`frontend`
-- 出现次数：9
+- 出现次数：10
 - 首次出现：2026-07-20 导航信息架构会话
-- 最近出现：2026-07-24 统一时间范围选择器会话
+- 最近出现：2026-07-24 Main 分支代码审查问题修复会话
 - 出现记录：`sessions/2026-07-20-navigation-information-architecture/errors.md`
 - 出现记录：`sessions/2026-07-20-project-usage-reader-default/errors.md`
 - 出现记录：`sessions/2026-07-20-realtime-layout-audit/errors.md`；`detail-capacity-prediction-navigation.test.js` 在收集阶段经由 `AppHeader.vue -> users-api.js` 报 `CrudApi` 基类为 `undefined`，与本次实时布局变更无关。
@@ -24,3 +24,4 @@
 - 出现记录：`sessions/2026-07-23-ai-model-reasoning-effort/errors.md`；`pnpm run test:coverage` 再次被非 AI 基线失败阻断，包括页面矩阵 27/30、列表动作权限 4 个断言、存储集群健康分析 2 个断言，以及 `CrudApi extends BaseApi` 异步 rejection。
 - 出现记录：`sessions/2026-07-24-unified-time-range-picker/errors.md`；`storage-cluster-health-analytics.test.js` 的两项既有断言仍与页面当前实现不一致：关联类型列最小宽度期望为 120、实际为 50，且系统事件低频列缺少期望的响应式 class。与统一时间范围选择器无关。
 - 出现记录：`sessions/2026-07-24-event-audit-incident-noise/errors.md`；扩展 Vitest 的 `content-spacing-contract.test.js` 仍以既有页面矩阵 `27/30` 失败，审计研判跳转、项目滚动和布局用例均通过，与本次变更无关。
+- 出现记录：`sessions/2026-07-24-code-review-fixes/errors.md`；时间范围 RED 验证同时运行存储集群健康分析全文件，既有的关联类型列宽和响应式 class 两项断言仍失败；时间范围组件及页面上限契约的精确测试均已通过。

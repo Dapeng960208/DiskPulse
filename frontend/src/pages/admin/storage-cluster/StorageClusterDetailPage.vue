@@ -426,7 +426,10 @@ onBeforeMount(() => {
             <ElFormItem
               label="时间范围"
               class="analytics-date-range query-form-field--date-range">
-              <TimeRangePicker v-model="dateRange" />
+              <!-- Storage health analytics endpoints reject ranges over 180 days. -->
+              <TimeRangePicker
+                v-model="dateRange"
+                :max-days="180" />
             </ElFormItem>
             <template #actions>
               <ElDropdown @command="handleExport">
@@ -530,7 +533,10 @@ onBeforeMount(() => {
             <ElFormItem
               label="时间范围"
               class="analytics-date-range query-form-field--date-range">
-              <TimeRangePicker v-model="dateRange" />
+              <!-- Keep every time-based analytics tab on the backend range contract. -->
+              <TimeRangePicker
+                v-model="dateRange"
+                :max-days="180" />
             </ElFormItem>
             <ElFormItem
               label="展示条数"
@@ -648,7 +654,10 @@ onBeforeMount(() => {
             <ElFormItem
               label="时间范围"
               class="analytics-date-range query-form-field--date-range">
-              <TimeRangePicker v-model="dateRange" />
+              <!-- Keep every time-based analytics tab on the backend range contract. -->
+              <TimeRangePicker
+                v-model="dateRange"
+                :max-days="180" />
             </ElFormItem>
             <template #actions>
               <ElDropdown @command="handleExport">

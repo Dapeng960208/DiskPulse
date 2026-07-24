@@ -1,16 +1,21 @@
 <script setup>
+import { computed } from 'vue';
 import { ElDatePicker } from 'element-plus';
 import { getShortcuts } from '@/utils/time-range';
 
-defineProps({
+const props = defineProps({
   modelValue: {
     type: Array,
     default: () => [],
   },
+  maxDays: {
+    type: Number,
+    default: undefined,
+  },
 });
 
 const emit = defineEmits(['update:modelValue']);
-const shortcuts = getShortcuts();
+const shortcuts = computed(() => getShortcuts(props.maxDays));
 </script>
 
 <template>

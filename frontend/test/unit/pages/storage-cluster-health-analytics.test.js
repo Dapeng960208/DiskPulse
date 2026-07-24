@@ -48,7 +48,10 @@ const passthrough = (name, tag = 'div') => defineComponent({
 
 const TimeRangePicker = defineComponent({
   name: 'TimeRangePicker',
-  props: { modelValue: { type: Array, default: () => [] } },
+  props: {
+    modelValue: { type: Array, default: () => [] },
+    maxDays: { type: Number, default: undefined },
+  },
   emits: ['update:modelValue'],
   setup() {
     return () => h('input', { 'data-testid': 'analytics-date-range' });
@@ -327,6 +330,7 @@ describe('storage cluster health analytics page', () => {
 
     expect(tabs.find('.storage-health-filter').exists()).toBe(true);
     expect(filter.exists()).toBe(true);
+    expect(datePicker.props('maxDays')).toBe(180);
     expect(wrapper.findComponent({ name: 'StorageTrendChart' }).props()).toMatchObject({
       indicator: 'used',
       unit: 'TB',
