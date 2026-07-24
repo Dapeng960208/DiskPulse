@@ -26,8 +26,10 @@ from services.ai_client import (
 )
 from services.ai_config_service import (
     get_default_chat_model,
+    get_name_obfuscation_state,
     list_models as list_configured_models,
 )
+from services.ai_name_obfuscation_service import NameObfuscationError, prepare_name_obfuscator
 from services.ai_reasoning_service import validate_reasoning
 from services.ai_tool_service import build_tool_registry, execute_tool, tool_definitions
 from services.incidentAiService import render_restricted_diagnosis
@@ -570,16 +572,18 @@ def _historical_visibility(
     return visibility
 
 
-def _history(db: Session, conversation_id: int, *, current_user: User | None) -> list[dict]:
+def _history(
+    db: Session,
+    conversation_id: int,
+    *,
+    current_user: User | None,
+    minimum_message_id: int | None = None,
+) -> list[dict]:
     # Fetch the newest bounded window cheaply, then restore provider-facing chronology.
-    rows = list(
-        db.scalars(
-            select(AIMessage)
-            .where(AIMessage.conversation_id == conversation_id)
-            .order_by(AIMessage.id.desc())
-            .limit(20)
-        )
-    )
+    statement = select(AIMessage).where(AIMessage.conversation_id == conversation_id)
+    if minimum_message_id is not None:
+        statement = statement.where(AIMessage.id >= minimum_message_id)
+    rows = list(db.scalars(statement.order_by(AIMessage.id.desc()).limit(20)))
     audits_by_message = _audits_by_message(db, conversation_id)
     project_ids = accessible_project_ids(db, current_user) if current_user is not None else set()
     history = []
@@ -739,8 +743,9 @@ def _tool_argument_repair_instruction(error: AIClientToolArgumentsError) -> dict
     }
 
 
-def _tool_call_key(call: AIClientToolCall) -> str:
-    return f"{call.name}:{json.dumps(_json_safe(call.arguments), ensure_ascii=False, sort_keys=True, separators=(',', ':'))}"
+def _tool_call_key(call: AIClientToolCall, arguments: dict | None = None) -> str:
+    value = call.arguments if arguments is None else arguments
+    return f"{call.name}:{json.dumps(_json_safe(value), ensure_ascii=False, sort_keys=True, separators=(',', ':'))}"
 
 
 def _tool_failure_repair_instruction(tool_names: list[str]) -> dict:
@@ -917,7 +922,20 @@ def stream_message(
     audit_id = audit.id
     trace_id = audit.trace_id
     conversation_id = conversation.id
+    name_obfuscator = None
     try:
+        name_obfuscation_enabled, name_obfuscation_epoch = get_name_obfuscation_state(db)
+        if name_obfuscation_enabled:
+            obfuscation_user = current_user or db.get(User, user_id)
+            if obfuscation_user is None:
+                raise NameObfuscationError("名称混淆用户上下文不可用")
+            name_obfuscator = prepare_name_obfuscator(
+                db,
+                conversation=conversation,
+                current_user=obfuscation_user,
+                current_message_id=user_message.id,
+                epoch=name_obfuscation_epoch,
+            )
         yield "user_message", {
             "turn_id": turn_id,
             "message": serialize_message(user_message),
@@ -936,8 +954,13 @@ def stream_message(
         protocol = provider_protocol(model)
         tools = tool_definitions(registry, protocol)
 
+        claude_code_tool_results: dict[str, tuple[dict, dict]] = {}
+
         def execute_claude_code_tool(tool_name: str, arguments: dict) -> dict:
             nonlocal confirmation_pending, confirmation_tool_name
+            executed_arguments = (
+                name_obfuscator.restore_value(arguments) if name_obfuscator is not None else arguments
+            )
             if ai_quota_confirmation_service.is_quota_write_tool(tool_name):
                 definition = registry.get(tool_name)
                 if definition is None:
@@ -947,38 +970,52 @@ def stream_message(
                         ai_quota_confirmation_service.prepare_confirmation(
                             db,
                             definition=definition,
-                            arguments=arguments,
+                            arguments=executed_arguments,
                             user_id=user_id,
                             conversation_id=conversation.id,
                             audit=audit,
                         )
                     )
                     confirmation_tool_name = tool_name
-                    return {
+                    result = {
                         "ok": True,
                         "data": {
                             "confirmation_required": confirmation_pending,
                         },
                     }
                 except HTTPException as error:
-                    return {"ok": False, "error": str(error.detail)}
-            return execute_tool(
-                app=app,
-                registry=registry,
-                tool_name=tool_name,
-                arguments=arguments,
-                user_id=user_id,
-                current_user=current_user,
-            )
+                    result = {"ok": False, "error": str(error.detail)}
+            else:
+                result = execute_tool(
+                    app=app,
+                    registry=registry,
+                    tool_name=tool_name,
+                    arguments=executed_arguments,
+                    user_id=user_id,
+                    current_user=current_user,
+                )
+            claude_code_tool_results[_tool_call_key(
+                AIClientToolCall(tool_id="claude-code", name=tool_name, arguments=arguments)
+            )] = (executed_arguments, result)
+            if name_obfuscator is None:
+                return result
+            provider_result = name_obfuscator.obfuscate_value(result)
+            name_obfuscator.persist()
+            return provider_result
 
         def record_claude_code_tool(tool_name: str, arguments: dict, result: dict) -> None:
             audit.tool_call_count += 1
-            if result.get("ok") is False:
+            tool_key = _tool_call_key(AIClientToolCall(tool_id="claude-code", name=tool_name, arguments=arguments))
+            executed_arguments, displayable_result = claude_code_tool_results.get(
+                tool_key,
+                (name_obfuscator.restore_value(arguments) if name_obfuscator is not None else arguments, result),
+            )
+            if displayable_result.get("ok") is False:
                 audit.tool_failed_count += 1
-            display_result, truncated = _display_tool_result(result)
+            display_result, truncated = _display_tool_result(displayable_result)
             definition = registry.get(tool_name)
             visibility = (
-                _tool_visibility(db, definition, arguments, result)
+                _tool_visibility(db, definition, executed_arguments, displayable_result)
                 if definition is not None
                 else _unknown_visibility()
             )
@@ -992,11 +1029,11 @@ def stream_message(
                     "sequence": audit.tool_call_count,
                     "iteration": 1,
                     "tool_name": tool_name,
-                    "arguments": _redact_sensitive(_json_safe(arguments)),
+                    "arguments": _redact_sensitive(_json_safe(executed_arguments)),
                     "status": (
                         "awaiting_confirmation"
                         if needs_confirmation
-                        else ("succeeded" if result.get("ok") is True else "failed")
+                        else ("succeeded" if displayable_result.get("ok") is True else "failed")
                     ),
                     "elapsed_ms": None,
                     "result": display_result,
@@ -1009,7 +1046,22 @@ def stream_message(
         system_messages = [{"role": "system", "content": model.system_prompt or SYSTEM_PROMPT}]
         if any(item.system_management for item in registry.values()):
             system_messages.append({"role": "system", "content": _SYSTEM_MANAGEMENT_PROMPT})
-        messages = [*system_messages, *_history(db, conversation.id, current_user=current_user)]
+        messages = [
+            *system_messages,
+            *_history(
+                db,
+                conversation.id,
+                current_user=current_user,
+                minimum_message_id=(
+                    conversation.name_obfuscation_from_message_id
+                    if name_obfuscator is not None
+                    else None
+                ),
+            ),
+        ]
+        if name_obfuscator is not None:
+            messages = name_obfuscator.obfuscate_messages(messages)
+            name_obfuscator.persist()
         audit_analysis_prompt_added = False
         # Bound recursive model/tool turns independently of the number of tools per turn.
         max_iterations = int(base_config.get("ai.chat_tool_max_iterations", 4))
@@ -1018,6 +1070,7 @@ def stream_message(
             repair_attempts = 0
             while True:
                 streamed_text: list[str] = []
+                stream_restorer = name_obfuscator.stream_restorer() if name_obfuscator is not None else None
                 try:
                     provider_kwargs = {"tools": tools}
                     if reasoning != "auto":
@@ -1037,12 +1090,22 @@ def stream_message(
                         if event.kind == "delta" and event.text:
                             if confirmation_pending is not None:
                                 continue
-                            streamed_text.append(event.text)
-                            emitted_text.append(event.text)
+                            display_text = stream_restorer.feed(event.text) if stream_restorer else event.text
+                            if not display_text:
+                                continue
+                            streamed_text.append(display_text)
+                            emitted_text.append(display_text)
                             if not diagnosis_payloads:
-                                yield "delta", {"turn_id": turn_id, "text": event.text}
+                                yield "delta", {"turn_id": turn_id, "text": display_text}
                         elif event.kind == "completed":
                             completion = event
+                    if stream_restorer is not None:
+                        trailing_text = stream_restorer.flush()
+                        if trailing_text:
+                            streamed_text.append(trailing_text)
+                            emitted_text.append(trailing_text)
+                            if not diagnosis_payloads:
+                                yield "delta", {"turn_id": turn_id, "text": trailing_text}
                     if completion is None:
                         raise AIClientError("AI 流式响应未正常结束")
                     break
@@ -1076,7 +1139,10 @@ def stream_message(
                 final_text = "配额调整已生成安全预览，请在五分钟内确认或取消。"
                 break
             if not calls:
-                raw_text = "".join(emitted_text) or completion.text or "".join(streamed_text)
+                completion_text = completion.text or ""
+                if name_obfuscator is not None and completion_text:
+                    completion_text = name_obfuscator.restore_text(completion_text)
+                raw_text = "".join(emitted_text) or completion_text or "".join(streamed_text)
                 if diagnosis_payloads:
                     final_text = render_restricted_diagnosis(
                         model_text=raw_text,
@@ -1093,12 +1159,17 @@ def stream_message(
                 audit_tool_called = audit_tool_called or call.name in _AUDIT_TOOL_NAMES
                 audit.tool_call_count += 1
                 call_id = f"{audit.id}:{iteration}:{sequence}"
+                executed_arguments = (
+                    name_obfuscator.restore_value(call.arguments)
+                    if name_obfuscator is not None
+                    else call.arguments
+                )
                 trace_entry = {
                     "call_id": call_id,
                     "sequence": sequence,
                     "iteration": iteration,
                     "tool_name": call.name,
-                    "arguments": _redact_sensitive(_json_safe(call.arguments)),
+                    "arguments": _redact_sensitive(_json_safe(executed_arguments)),
                     "status": "running",
                     "elapsed_ms": None,
                     "truncated": False,
@@ -1122,7 +1193,7 @@ def stream_message(
                         confirmation_pending = ai_quota_confirmation_service.prepare_confirmation(
                             db,
                             definition=registry[call.name],
-                            arguments=call.arguments,
+                            arguments=executed_arguments,
                             user_id=user_id,
                             conversation_id=conversation.id,
                             audit=audit,
@@ -1131,7 +1202,7 @@ def stream_message(
                     except HTTPException as error:
                         result = {"ok": False, "error": str(error.detail)}
                 else:
-                    cache_key = _tool_call_key(call)
+                    cache_key = _tool_call_key(call, executed_arguments)
                     cached_result = successful_tool_results.get(cache_key)
                     if cached_result is not None:
                         result = cached_result
@@ -1142,7 +1213,7 @@ def stream_message(
                             app=app,
                             registry=registry,
                             tool_name=call.name,
-                            arguments=call.arguments,
+                            arguments=executed_arguments,
                             user_id=user_id,
                             current_user=current_user,
                         )
@@ -1162,7 +1233,7 @@ def stream_message(
                 definition = registry.get(call.name)
                 # Review fix: unknown provider tool names must complete as safe failed calls.
                 visibility = (
-                    _tool_visibility(db, definition, call.arguments, result)
+                    _tool_visibility(db, definition, executed_arguments, result)
                     if definition is not None
                     else _unknown_visibility()
                 )
@@ -1199,7 +1270,10 @@ def stream_message(
                     }
                     final_text = "配额调整已生成安全预览，请在五分钟内确认或取消。"
                     break
-                messages.extend(_provider_tool_messages(protocol, call, result))
+                provider_result = name_obfuscator.obfuscate_value(result) if name_obfuscator is not None else result
+                if name_obfuscator is not None:
+                    name_obfuscator.persist()
+                messages.extend(_provider_tool_messages(protocol, call, provider_result))
                 if call.name == "get_incident_diagnosis" and result.get("ok") is True:
                     messages.append(
                         {
@@ -1242,15 +1316,26 @@ def stream_message(
             try:
                 if not diagnosis_payloads:
                     summary_completion = None
+                    summary_restorer = name_obfuscator.stream_restorer() if name_obfuscator is not None else None
                     summary_messages = [*messages, _tool_free_summary_instruction(recovery["reason"])]
                     for event in chat_completion_stream(model, summary_messages, tools=[]):
                         if event.kind == "delta" and event.text:
-                            summary_text.append(event.text)
-                            yield "delta", {"turn_id": turn_id, "text": event.text}
+                            display_text = summary_restorer.feed(event.text) if summary_restorer else event.text
+                            if display_text:
+                                summary_text.append(display_text)
+                                yield "delta", {"turn_id": turn_id, "text": display_text}
                         elif event.kind == "completed":
                             summary_completion = event
+                    if summary_restorer is not None:
+                        trailing_text = summary_restorer.flush()
+                        if trailing_text:
+                            summary_text.append(trailing_text)
+                            yield "delta", {"turn_id": turn_id, "text": trailing_text}
                     if not summary_text and summary_completion is not None and summary_completion.text:
-                        summary_text.append(summary_completion.text)
+                        completion_text = summary_completion.text
+                        if name_obfuscator is not None:
+                            completion_text = name_obfuscator.restore_text(completion_text)
+                        summary_text.append(completion_text)
             except Exception:
                 degraded_error_message = f"{degraded_error_message}；无工具总结调用失败"
             if diagnosis_payloads:

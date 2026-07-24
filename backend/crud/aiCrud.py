@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from models import AIConfig, AIConversation, AIAuditLog, AIMessage
+from models import AIConfig, AIConversation, AIAuditLog, AIConversationNameAlias, AIMessage
 
 
 def list_models(db: Session, *, available_only: bool = False) -> list[AIConfig]:
@@ -59,6 +59,33 @@ def add_audit(db: Session, audit: AIAuditLog) -> AIAuditLog:
     db.add(audit)
     db.flush()
     return audit
+
+
+def list_conversation_name_aliases(
+    db: Session,
+    *,
+    conversation_id: int,
+    epoch: int,
+) -> list[AIConversationNameAlias]:
+    return list(
+        db.scalars(
+            select(AIConversationNameAlias)
+            .where(
+                AIConversationNameAlias.conversation_id == conversation_id,
+                AIConversationNameAlias.epoch == epoch,
+            )
+            .order_by(AIConversationNameAlias.id)
+        )
+    )
+
+
+def add_conversation_name_alias(
+    db: Session,
+    alias: AIConversationNameAlias,
+) -> AIConversationNameAlias:
+    db.add(alias)
+    db.flush()
+    return alias
 
 
 def list_audits(

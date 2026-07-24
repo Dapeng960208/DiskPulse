@@ -107,6 +107,7 @@ class MessageCreate(BaseModel):
 
 class AIPlatformSettingsPatch(BaseModel):
     default_chat_model_id: int | None = Field(default=None, ge=1)
+    name_obfuscation_enabled: bool | None = None
 
 
 class QuotaConfirmationDecision(BaseModel):

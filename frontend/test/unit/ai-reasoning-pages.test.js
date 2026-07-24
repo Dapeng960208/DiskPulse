@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { commonDirectives } from '../helpers/mount';
 
-const { aiApi, currentUser, messageApi, router } = vi.hoisted(() => ({
+const { aiApi, currentUser, messageApi, messageBox, router } = vi.hoisted(() => ({
   currentUser: {
     avatarUrl: '',
     displayName: '当前用户',
@@ -13,6 +13,9 @@ const { aiApi, currentUser, messageApi, router } = vi.hoisted(() => ({
     error: vi.fn(),
     success: vi.fn(),
     warning: vi.fn(),
+  },
+  messageBox: {
+    confirm: vi.fn(),
   },
   router: { push: vi.fn(), replace: vi.fn() },
   aiApi: {
@@ -49,6 +52,7 @@ vi.mock('vue-router', () => ({
 vi.mock('element-plus', async (importOriginal) => ({
   ...(await importOriginal()),
   ElMessage: messageApi,
+  ElMessageBox: messageBox,
 }));
 
 const { default: AiChatPage } = await import('@/pages/ai/AiChatPage.vue');
@@ -116,6 +120,16 @@ const OptionStub = {
   template: '<span v-bind="$attrs" :label="label" :value="value">{{ label }}</span>',
 };
 
+const SwitchStub = {
+  name: 'ElSwitch',
+  inheritAttrs: false,
+  props: {
+    modelValue: { type: Boolean, default: false },
+  },
+  emits: ['update:modelValue'],
+  template: '<button v-bind="$attrs" :aria-checked="modelValue" @click="$emit(\'update:modelValue\', !modelValue)" />',
+};
+
 const DataTable = {
   name: 'DataTable',
   props: {
@@ -160,6 +174,7 @@ function mountAiCenter() {
         ElFormItem: FormItemStub,
         ElOption: OptionStub,
         ElSelect: SelectStub,
+        ElSwitch: SwitchStub,
         ElTableColumn: TableColumnStub,
         ElTabs: passthrough('ElTabs'),
         ElTabPane: passthrough('ElTabPane'),
@@ -489,7 +504,7 @@ describe('AI center default model and capability management', () => {
       capability_updated_at: '2026-07-23T10:20:30',
     };
     aiApi.listAdminModels.mockResolvedValue([currentAdminModel]);
-    aiApi.getAiSettings.mockResolvedValue({ default_chat_model_id: 2 });
+    aiApi.getAiSettings.mockResolvedValue({ default_chat_model_id: 2, name_obfuscation_enabled: true });
     aiApi.updateAiSettings.mockResolvedValue({ default_chat_model_id: 2 });
     aiApi.refreshModelCapabilities.mockResolvedValue({
       model_id: 2,
@@ -558,6 +573,20 @@ describe('AI center default model and capability management', () => {
     expect(wrapper.vm.form.base_url).toBe('https://tokenhub.tencentmaas.com/v1');
 
     expect(wrapper.get('.model-base-url').attributes()).not.toHaveProperty('disabled');
+  });
+
+  it('lets an administrator disable name obfuscation only after confirmation', async () => {
+    messageBox.confirm.mockResolvedValue();
+    const wrapper = mountAiCenter();
+    await flushPromises();
+
+    expect(wrapper.vm.nameObfuscationEnabled).toBe(true);
+    await wrapper.vm.saveNameObfuscation(false);
+
+    expect(messageBox.confirm).toHaveBeenCalledOnce();
+    expect(aiApi.updateAiSettings).toHaveBeenCalledWith({
+      name_obfuscation_enabled: false,
+    });
   });
 
   it('keeps a manually entered model as the default and auto-discovers one when the identifier is blank', async () => {

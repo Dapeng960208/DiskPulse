@@ -4,6 +4,7 @@ import json
 import io
 import logging
 from pathlib import Path
+import re
 
 import pytest
 import sqlalchemy as sa
@@ -16,7 +17,19 @@ from sqlalchemy import select
 
 from appConfig import base_config
 from dependencies import get_current_user, get_db, require_super_admin
-from models import AIConfig, AIConversation, AIAuditLog, AIMessage, User
+from models import (
+    AIConfig,
+    AIConversation,
+    AIConversationNameAlias,
+    AIAuditLog,
+    AIMessage,
+    Group,
+    GroupTag,
+    Project,
+    ProjectMembership,
+    StorageCluster,
+    User,
+)
 from routers import (
     aggregate,
     ai,
@@ -116,6 +129,235 @@ def test_ai_secret_is_encrypted_and_masked():
     assert "sk-example" not in encrypted
     assert decrypt_secret(encrypted) == "sk-example-123456"
     assert mask_secret("sk-example-123456") == "sk-e****3456"
+
+
+def test_platform_settings_enable_name_obfuscation_by_default(db_session):
+    settings = ai_config_service.get_platform_settings(db_session)
+
+    assert settings["name_obfuscation_enabled"] is True
+
+
+def test_name_obfuscation_alias_is_encrypted_and_survives_resource_deletion(db_session):
+    from services.ai_name_obfuscation_service import prepare_name_obfuscator
+
+    base_config.set("ai.config_secret_key", "test-ai-config-secret-key")
+    user = _seed_user(db_session)
+    model = _seed_model(db_session)
+    project_name = "项目-待删除"
+    project = Project(id=102, name=project_name)
+    root_project = Project(id=103, name="项目")
+    conversation = AIConversation(user_id=user.id, model_id=model.id, title="别名续聊")
+    db_session.add_all([
+        project,
+        root_project,
+        ProjectMembership(project_id=project.id, user_id=user.id, role="reader"),
+        ProjectMembership(project_id=root_project.id, user_id=user.id, role="reader"),
+        conversation,
+    ])
+    db_session.commit()
+    message = AIMessage(conversation_id=conversation.id, role="user", content=project_name)
+    db_session.add(message)
+    db_session.commit()
+
+    obfuscator = prepare_name_obfuscator(
+        db_session,
+        conversation=conversation,
+        current_user=user,
+        current_message_id=message.id,
+        epoch=1,
+    )
+    alias = obfuscator.obfuscate_text(project_name)
+    overlapping_text = f"{project_name} 归属 {root_project.name}"
+    obfuscated_overlapping_text = obfuscator.obfuscate_text(overlapping_text)
+    obfuscator.persist()
+    stored = db_session.scalar(select(AIConversationNameAlias))
+
+    assert alias.startswith("项目-")
+    assert obfuscator.restore_text(obfuscated_overlapping_text) == overlapping_text
+    assert project_name not in stored.original_value_encrypted
+    assert decrypt_secret(stored.original_value_encrypted) == project_name
+
+    db_session.delete(project)
+    db_session.commit()
+    resumed = prepare_name_obfuscator(
+        db_session,
+        conversation=conversation,
+        current_user=user,
+        current_message_id=message.id,
+        epoch=1,
+    )
+
+    assert resumed.obfuscate_text(project_name) == alias
+    assert resumed.restore_text(alias) == project_name
+
+
+def test_name_obfuscation_switch_is_partial_and_new_enablement_starts_next_epoch(db_session):
+    user = _seed_user(db_session)
+    model = _seed_model(db_session)
+
+    initial = ai_config_service.update_platform_settings(
+        db_session,
+        default_chat_model_id=model.id,
+        actor_id=user.id,
+    )
+    disabled = ai_config_service.update_platform_settings(
+        db_session,
+        actor_id=user.id,
+        name_obfuscation_enabled=False,
+    )
+    enabled = ai_config_service.update_platform_settings(
+        db_session,
+        actor_id=user.id,
+        name_obfuscation_enabled=True,
+    )
+
+    assert initial["default_chat_model_id"] == model.id
+    assert disabled["default_chat_model_id"] == model.id
+    assert disabled["name_obfuscation_enabled"] is False
+    assert enabled["default_chat_model_id"] == model.id
+    assert enabled["name_obfuscation_enabled"] is True
+    assert ai_config_service.get_name_obfuscation_state(db_session) == (True, 2)
+
+
+def test_name_obfuscation_failure_prevents_provider_call(db_session, monkeypatch):
+    from services.ai_name_obfuscation_service import NameObfuscationError
+
+    user = _seed_user(db_session)
+    model = _seed_model(db_session)
+    conversation = AIConversation(user_id=user.id, model_id=model.id, title="安全失败")
+    db_session.add(conversation)
+    db_session.commit()
+    provider_calls = []
+
+    def broken_obfuscator(*_args, **_kwargs):
+        raise NameObfuscationError("映射不可用")
+
+    def provider_stream(*_args, **_kwargs):
+        provider_calls.append(True)
+        yield AICompletionStreamEvent(kind="completed", text="不应调用", tool_calls=[])
+
+    monkeypatch.setattr(ai_chat_service, "prepare_name_obfuscator", broken_obfuscator)
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+
+    events = list(
+        ai_chat_service.stream_message(
+            app=FastAPI(),
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=user.id,
+            current_user=user,
+            content="映射故障时不发送",
+        )
+    )
+
+    assert provider_calls == []
+    assert events[-1][0] == "error"
+
+
+def test_chat_obfuscates_nested_tool_names_and_restores_tool_execution_and_sse(
+    db_session,
+    monkeypatch,
+):
+    user = _seed_user(db_session)
+    model = _seed_model(db_session)
+    conversation = AIConversation(user_id=user.id, model_id=model.id, title="名称混淆")
+    project = Project(id=101, name="项目-星河")
+    cluster = StorageCluster(id=201, name="集群-北斗", storage_type="netapp")
+    group_tag = GroupTag(id=251, name="研发标签")
+    group = Group(
+        id=301,
+        project_id=project.id,
+        storage_cluster_id=cluster.id,
+        group_tag_id=group_tag.id,
+        name="项目组-研发",
+        enable_monitoring=False,
+    )
+    membership = ProjectMembership(project_id=project.id, user_id=user.id, role="reader")
+    db_session.add_all([conversation, project, cluster, group_tag, group, membership])
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    app = FastAPI()
+    router = APIRouter()
+    executed_arguments = []
+
+    @router.get(
+        "/resources/{resource_name}",
+        openapi_extra={
+            "ai_exposed": True,
+            "ai_name": "get_named_resource",
+            "ai_description": "查询命名资源",
+        },
+    )
+    def get_named_resource(resource_name: str):
+        executed_arguments.append(resource_name)
+        return {
+            "data": {
+                "name": project.name,
+                "children": [
+                    {
+                        "name": cluster.name,
+                        "used_ratio": 16.03,
+                        "children": [{"name": group.name, "used": 0.01}],
+                    }
+                ],
+            }
+        }
+
+    app.include_router(router)
+    provider_requests = []
+
+    def provider_stream(_model, messages, *, tools=None):
+        provider_requests.append(messages)
+        serialized = json.dumps(messages, ensure_ascii=False)
+        project_alias = re.search(r"项目-[A-Z0-9]{4,}", serialized)
+        if len(provider_requests) == 1:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[
+                    AIClientToolCall(
+                        tool_id="named-resource",
+                        name="get_named_resource",
+                        arguments={"resource_name": project_alias.group(0) if project_alias else "项目-UNKNOWN"},
+                    )
+                ],
+                stop_reason="tool_calls",
+            )
+            return
+        assert "used_ratio" in serialized and "16.03" in serialized
+        assert "used" in serialized and "0.01" in serialized
+        cluster_alias = re.search(r"集群-[A-Z0-9]{4,}", serialized)
+        response_text = f"{project_alias.group(0)} 的关联资源是 {cluster_alias.group(0)}"
+        yield AICompletionStreamEvent(kind="delta", text=response_text[:7])
+        yield AICompletionStreamEvent(kind="delta", text=response_text[7:])
+        yield AICompletionStreamEvent(kind="completed", text="", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    events = list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=user.id,
+            current_user=user,
+            content=f"请查询 {project.name} 的关联资源",
+        )
+    )
+
+    provider_payloads = [json.dumps(messages, ensure_ascii=False) for messages in provider_requests]
+    assert all(project.name not in payload for payload in provider_payloads)
+    assert all(cluster.name not in payload for payload in provider_payloads)
+    assert all(group.name not in payload for payload in provider_payloads)
+    assert executed_arguments == [project.name]
+    assert all(
+        re.search(r"(?:项目|集群)-[A-Z0-9]{4,}", data["text"]) is None
+        for event, data in events
+        if event == "delta"
+    )
+    tool_finished = next(data for event, data in events if event == "tool_call_finished")
+    assert tool_finished["result"]["data"]["children"][0]["name"] == cluster.name
+    completed = next(data for event, data in events if event == "completed")
+    assert completed["message"]["content"] == f"{project.name} 的关联资源是 {cluster.name}"
 
 
 def test_rate_limit_uses_fixed_window_and_returns_retry_after():
@@ -1508,6 +1750,15 @@ def _ai_migration():
     return module
 
 
+def _name_obfuscation_migration():
+    path = Path(__file__).resolve().parents[1] / "migrate" / "versions" / "000000000024_ai_name_obfuscation.py"
+    spec = importlib.util.spec_from_file_location("ai_name_obfuscation_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_ai_migration_compiles_for_supported_dialects():
     for dialect_name in ("sqlite", "postgresql", "mysql"):
         migration = _ai_migration()
@@ -1521,6 +1772,56 @@ def test_ai_migration_compiles_for_supported_dialects():
         migration.upgrade()
         sql = output.getvalue().lower()
         assert all(table in sql for table in ("ai_configs", "ai_conversations", "ai_messages", "ai_audit_logs"))
+
+
+@pytest.mark.parametrize("dialect_name", ("sqlite", "postgresql", "mysql"))
+def test_name_obfuscation_migration_compiles_for_supported_dialects(dialect_name):
+    migration = _name_obfuscation_migration()
+    output = io.StringIO()
+    migration.op = Operations(
+        MigrationContext.configure(
+            dialect_name=dialect_name,
+            opts={"as_sql": True, "output_buffer": output},
+        )
+    )
+
+    migration.upgrade()
+
+    sql = output.getvalue().lower()
+    assert migration.revision == "000000000024"
+    assert migration.down_revision == "000000000023"
+    assert "ai_conversation_name_aliases" in sql
+    assert "name_obfuscation_enabled" in sql
+
+
+def test_name_obfuscation_migration_upgrades_and_downgrades_sqlite():
+    migration = _name_obfuscation_migration()
+    metadata = sa.MetaData()
+    sa.Table("ai_platform_settings", metadata, sa.Column("id", sa.Integer(), primary_key=True))
+    sa.Table("ai_conversations", metadata, sa.Column("id", sa.Integer(), primary_key=True))
+
+    with sa.create_engine("sqlite://").begin() as connection:
+        metadata.create_all(connection)
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        inspector = sa.inspect(connection)
+
+        assert {
+            "name_obfuscation_enabled",
+            "name_obfuscation_epoch",
+        } <= {column["name"] for column in inspector.get_columns("ai_platform_settings")}
+        assert {
+            "name_obfuscation_epoch",
+            "name_obfuscation_from_message_id",
+        } <= {column["name"] for column in inspector.get_columns("ai_conversations")}
+        assert "ai_conversation_name_aliases" in inspector.get_table_names()
+
+        migration.downgrade()
+        inspector.clear_cache()
+        assert "ai_conversation_name_aliases" not in inspector.get_table_names()
+        assert "name_obfuscation_enabled" not in {
+            column["name"] for column in inspector.get_columns("ai_platform_settings")
+        }
 
 
 def test_ai_migration_adopts_complete_create_all_schema():

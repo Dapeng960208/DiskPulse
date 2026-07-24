@@ -28,6 +28,9 @@ from services.audit_service import AuditContext, append_audit_event
 from services.ai_security import decrypt_secret, encrypt_secret, mask_secret
 
 
+_UNSET = object()
+
+
 def _platform_settings(db: Session) -> AIPlatformSetting | None:
     return db.get(AIPlatformSetting, 1)
 
@@ -79,18 +82,32 @@ def get_platform_settings(db: Session) -> dict:
         "default_chat_model_id": (
             settings.default_chat_model_id if settings is not None else None
         ),
+        "name_obfuscation_enabled": (
+            bool(settings.name_obfuscation_enabled) if settings is not None else True
+        ),
         "updated_by": settings.updated_by if settings is not None else None,
         "created_at": settings.created_at if settings is not None else None,
         "updated_at": settings.updated_at if settings is not None else None,
     }
 
 
+def get_name_obfuscation_state(db: Session) -> tuple[bool, int]:
+    settings = _platform_settings(db)
+    if settings is None:
+        return True, 1
+    return bool(settings.name_obfuscation_enabled), max(1, int(settings.name_obfuscation_epoch or 1))
+
+
 def update_platform_settings(
     db: Session,
-    default_chat_model_id: int | None,
-    actor_id: int,
+    default_chat_model_id: int | None | object = _UNSET,
+    actor_id: int | None = None,
+    *,
+    name_obfuscation_enabled: bool | object = _UNSET,
 ) -> dict:
-    if default_chat_model_id is not None:
+    if actor_id is None:
+        raise ValueError("actor_id is required")
+    if default_chat_model_id is not _UNSET and default_chat_model_id is not None:
         model = aiCrud.get_model(db, default_chat_model_id)
         if model is None or not model.enabled or not model.enable_chat:
             raise HTTPException(
@@ -101,7 +118,14 @@ def update_platform_settings(
     if settings is None:
         settings = AIPlatformSetting(id=1)
         db.add(settings)
-    settings.default_chat_model_id = default_chat_model_id
+    if default_chat_model_id is not _UNSET:
+        settings.default_chat_model_id = default_chat_model_id
+    if name_obfuscation_enabled is not _UNSET:
+        enabled = bool(name_obfuscation_enabled)
+        was_enabled = True if settings.name_obfuscation_enabled is None else bool(settings.name_obfuscation_enabled)
+        if enabled and not was_enabled:
+            settings.name_obfuscation_epoch = max(1, int(settings.name_obfuscation_epoch or 1)) + 1
+        settings.name_obfuscation_enabled = enabled
     settings.updated_by = actor_id
     settings.updated_at = datetime.now()
     db.commit()

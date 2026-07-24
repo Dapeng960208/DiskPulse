@@ -29,14 +29,21 @@ describe('AI reasoning mock runtime contract', () => {
     const superadmin = await gateway.login('demo-superadmin', DEMO_PASSWORD);
 
     expect(await gateway.request('get', '/admin/ai-settings', undefined, superadmin.token))
-      .toEqual({ default_chat_model_id: 1 });
+      .toEqual({ default_chat_model_id: 1, name_obfuscation_enabled: true });
 
     expect(await gateway.request(
       'patch',
       '/admin/ai-settings',
       { default_chat_model_id: 3 },
       superadmin.token,
-    )).toEqual({ default_chat_model_id: 3 });
+    )).toEqual({ default_chat_model_id: 3, name_obfuscation_enabled: true });
+
+    expect(await gateway.request(
+      'patch',
+      '/admin/ai-settings',
+      { name_obfuscation_enabled: false },
+      superadmin.token,
+    )).toEqual({ default_chat_model_id: 3, name_obfuscation_enabled: false });
 
     const refreshed = await gateway.request(
       'post',
