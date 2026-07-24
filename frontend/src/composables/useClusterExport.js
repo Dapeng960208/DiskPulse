@@ -1,5 +1,6 @@
 import { ElMessage } from 'element-plus';
 import storageClusterApi from '@/api/storage-cluster-api';
+import { toUtcRange } from '@/utils/datetime.js';
 
 /**
  * 存储集群分析报告导出composable
@@ -27,11 +28,12 @@ export function useClusterExport({ clusterId, dateRange, defaultSection }) {
   async function handleExport(command) {
     const [scope, format] = command.split(':');
     const section = scope === 'current' ? defaultSection : scope;
+    const [start_time, end_time] = toUtcRange(dateRange.value);
 
     try {
       const response = await storageClusterApi.exportAnalytics(clusterId.value, {
-        start_time: dateRange.value?.[0],
-        end_time: dateRange.value?.[1],
+        start_time,
+        end_time,
         section,
         format,
       });

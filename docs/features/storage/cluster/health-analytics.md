@@ -60,7 +60,7 @@ OneFS event list 外层记录中的 `events[]` 按单条设备事件展开；eve
 | 系统事件详情 | `GET /storage-pulse/api/storage-clusters/{storage_cluster_id}/analytics/system-events/{event_id}` |
 | 导出 | `GET /storage-pulse/api/storage-clusters/{storage_cluster_id}/analytics/export` |
 
-除存储分布外，所有健康分析列表接口接受 `start_time` 和 `end_time`。页面始终显式传入两者；AI 工具或其他 API 调用未提供其中任一项时，服务端以另一端或当前 UTC 时刻补足最近 24 小时范围。开始时间必须早于结束时间，范围不得超过 180 天。性能接口支持对象类型和 `limit` 参数，数量默认 10、最多 100；页面提供 10、20、50、100 四档，并可多选 P95、平均、最大、读、写延迟、IOPS 和吞吐量，默认只选 P95。页面还提供“对象”多选，用于在当前已返回的 Top-N 存储空间内本地对比；未选对象时显示全部返回结果，选择对象后图表与表格同步收窄，不增加接口参数或跨 Top-N 查询。性能图对长对象名截断横轴标签并保留悬停提示，图表标题与标签区域保留独立空间。系统事件接口支持 `keyword`（事件代码、对象标识/名称或内容）、`severity=critical|error|warning|info`、`page` 和 `page_size`；默认 `page=1&page_size=20`，单页最多 100 条，返回 `data`、`total`、`page`、`page_size`。过滤条件在数据库分页和 `total` 统计前生效。事件详情接口同时校验事件属于路径中的集群，并只返回规范化日志和关联目录的安全字段。无数据时返回空集合和可空汇总值，不把无数据表示成故障。
+除存储分布外，所有健康分析列表接口接受 `start_time` 和 `end_time`。页面始终显式传入两者，并将用户时区的本地墙上时间转换为带 `Z` 的 RFC 3339 UTC 边界；接口拒绝无时区的时间参数。AI 工具或其他 API 调用未提供其中任一项时，服务端以另一端或当前 UTC 时刻补足最近 24 小时范围。开始时间必须早于结束时间，范围不得超过 180 天。性能接口支持对象类型和 `limit` 参数，数量默认 10、最多 100；页面提供 10、20、50、100 四档，并可多选 P95、平均、最大、读、写延迟、IOPS 和吞吐量，默认只选 P95。页面还提供“对象”多选，用于在当前已返回的 Top-N 存储空间内本地对比；未选对象时显示全部返回结果，选择对象后图表与表格同步收窄，不增加接口参数或跨 Top-N 查询。性能图对长对象名截断横轴标签并保留悬停提示，图表标题与标签区域保留独立空间。系统事件接口支持 `keyword`（事件代码、对象标识/名称或内容）、`severity=critical|error|warning|info`、`page` 和 `page_size`；默认 `page=1&page_size=20`，单页最多 100 条，返回 `data`、`total`、`page`、`page_size`。过滤条件在数据库分页和 `total` 统计前生效。事件详情接口同时校验事件属于路径中的集群，并只返回规范化日志和关联目录的安全字段。无数据时返回空集合和可空汇总值，不把无数据表示成故障。
 
 容量变化接口遵守[容量单位 API 契约](../../../standards/backend/capacity-unit-contract.md)中的存储集群健康分析单位规则。
 

@@ -18,6 +18,7 @@ import LoadingCharts from '@/common/charts/LoadingCharts.vue';
 import DataTable from '@/components/data/DataTable.vue';
 import storageClusterApi from '@/api/storage-cluster-api';
 import { useClusterExport } from '@/composables/useClusterExport';
+import { toUtcRange } from '@/utils/datetime.js';
 
 const props = defineProps({
   clusterId: { type: Number, required: true },
@@ -82,10 +83,11 @@ const { handleExport } = useClusterExport({
 async function load() {
   if (!props.clusterId) return;
   loading.value = true;
+  const [start_time, end_time] = toUtcRange(localDateRange.value);
   try {
     latency.value = await storageClusterApi.fetchTopLatency(props.clusterId, {
-      start_time: localDateRange.value?.[0],
-      end_time: localDateRange.value?.[1],
+      start_time,
+      end_time,
       object_type: 'volume',
       limit: performanceLimit.value,
     });

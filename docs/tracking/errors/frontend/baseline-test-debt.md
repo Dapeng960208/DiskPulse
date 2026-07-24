@@ -11,9 +11,9 @@
 ## 备注
 
 - 分类：`frontend`
-- 出现次数：14
+- 出现次数：15
 - 首次出现：2026-07-20 导航信息架构会话
-- 最近出现：2026-07-24 `2026-07-24-router-transactions-startup-security` 主线组件化同步
+- 最近出现：2026-07-24 `2026-07-24-storage-health-analytics-utc-range` 时间范围回归验证
 - 出现记录：`sessions/2026-07-20-navigation-information-architecture/errors.md`
 - 出现记录：`sessions/2026-07-20-project-usage-reader-default/errors.md`
 - 出现记录：`sessions/2026-07-20-realtime-layout-audit/errors.md`；`detail-capacity-prediction-navigation.test.js` 在收集阶段经由 `AppHeader.vue -> users-api.js` 报 `CrudApi` 基类为 `undefined`，与本次实时布局变更无关。
@@ -29,3 +29,4 @@
 - 出现记录：`sessions/2026-07-24-router-transactions-startup-security/errors.md`；全量 `pnpm test` 的页面矩阵、列表菜单、AI 表单与系统事件窄屏契约均已同步当前实现；另将 inactive lazy tab 显式 stub，消除卸载后的异步 API 导入，`pnpm test` 和 `pnpm test:coverage` 均恢复通过。
 - 出现记录：`sessions/2026-07-24-router-transactions-startup-security/errors.md`；最终同步 UTC 时间主线后，`auth-login.test.js` 的用户 API mock 缺少 `updateCurrentProfile`，`page-coverage-gaps.test.js` 仍传递旧格式时间范围，造成 1 个失败与 1 个未处理 rejection；按用户指示暂不在本任务处理。
 - 出现记录：`sessions/2026-07-24-router-transactions-startup-security/errors.md`；同步 `625a57b` 的存储集群详情页组件化后，旧的父页面健康分析测试仍断言已迁移到子组件的 DOM 和 API 调用，19 项中 15 项失败；按用户指示暂不在本任务处理。
+- 出现记录：`sessions/2026-07-24-storage-health-analytics-utc-range/errors.md`；旧的父页面测试继续以 `shallowMount` 自动桩替代异步分析页签，18 项中 15 项没有挂载实际子组件而失败；本次新增的直接页签测试已覆盖 UTC 请求契约。

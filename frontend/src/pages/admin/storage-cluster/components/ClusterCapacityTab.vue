@@ -16,6 +16,7 @@ import StorageTrendChart from '@/components/dashboard/StorageTrendChart.vue';
 import LoadingCharts from '@/common/charts/LoadingCharts.vue';
 import storageClusterApi from '@/api/storage-cluster-api';
 import { formatCapacity } from '@/utils/capacity';
+import { toUtcRange } from '@/utils/datetime.js';
 import { useClusterExport } from '@/composables/useClusterExport';
 
 const props = defineProps({
@@ -52,10 +53,11 @@ const { handleExport } = useClusterExport({
 async function load() {
   if (!props.clusterId) return;
   loading.value = true;
+  const [start_time, end_time] = toUtcRange(localDateRange.value);
   try {
     capacity.value = await storageClusterApi.fetchCapacityChange(props.clusterId, {
-      start_time: localDateRange.value?.[0],
-      end_time: localDateRange.value?.[1],
+      start_time,
+      end_time,
     });
   } catch {
     capacity.value = { data: [] };

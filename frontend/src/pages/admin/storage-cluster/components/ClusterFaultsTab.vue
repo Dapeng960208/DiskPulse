@@ -22,6 +22,7 @@ import DataTable from '@/components/data/DataTable.vue';
 import TableActionButton from '@/components/basic/TableActionButton.vue';
 import storageClusterApi from '@/api/storage-cluster-api';
 import { useClusterExport } from '@/composables/useClusterExport';
+import { toUtcRange } from '@/utils/datetime.js';
 
 const props = defineProps({
   clusterId: { type: Number, required: true },
@@ -87,14 +88,17 @@ function vendorEventRecommendedSolution(event) {
   return event.recommended_solution_zh || '暂无可核验官方方案';
 }
 
-const systemEventQueryParams = () => ({
-  start_time: localDateRange.value?.[0],
-  end_time: localDateRange.value?.[1],
-  ...(systemEventFilters.keyword.trim() ? { keyword: systemEventFilters.keyword.trim() } : {}),
-  ...(systemEventFilters.severity ? { severity: systemEventFilters.severity } : {}),
-  page: systemEventPagination.page,
-  page_size: systemEventPagination.pageSize,
-});
+function systemEventQueryParams() {
+  const [start_time, end_time] = toUtcRange(localDateRange.value);
+  return {
+    start_time,
+    end_time,
+    ...(systemEventFilters.keyword.trim() ? { keyword: systemEventFilters.keyword.trim() } : {}),
+    ...(systemEventFilters.severity ? { severity: systemEventFilters.severity } : {}),
+    page: systemEventPagination.page,
+    page_size: systemEventPagination.pageSize,
+  };
+}
 
 function applySystemEventResponse(response) {
   systemEvents.value = response || { data: [] };
@@ -106,15 +110,16 @@ function applySystemEventResponse(response) {
 async function load() {
   if (!props.clusterId) return;
   loading.value = true;
+  const [start_time, end_time] = toUtcRange(localDateRange.value);
   try {
     const [severityResponse, faultResponse, eventResponse] = await Promise.all([
       storageClusterApi.fetchErrorSeverity(props.clusterId, {
-        start_time: localDateRange.value?.[0],
-        end_time: localDateRange.value?.[1],
+        start_time,
+        end_time,
       }),
       storageClusterApi.fetchRepeatedFaults(props.clusterId, {
-        start_time: localDateRange.value?.[0],
-        end_time: localDateRange.value?.[1],
+        start_time,
+        end_time,
       }),
       storageClusterApi.fetchSystemEvents(props.clusterId, systemEventQueryParams()),
     ]);
