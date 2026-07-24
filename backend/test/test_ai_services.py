@@ -604,6 +604,83 @@ def test_stream_appends_audit_analysis_contract_after_custom_model_prompt(db_ses
     assert next(data for event, data in events if event == "completed")["message"]["content"] == "analysis"
 
 
+def test_stream_can_collect_audit_list_then_event_detail_in_multiple_tool_rounds(db_session, monkeypatch):
+    seed_user(db_session)
+    configured = seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, title="audit evidence")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+    app = FastAPI()
+    router = APIRouter()
+    invocations = []
+
+    @router.get(
+        "/v1/audit-events",
+        openapi_extra={"ai_exposed": True, "ai_name": "list_audit_events", "ai_description": "list audit events"},
+    )
+    def list_audit_events(project_id: int, page: int = 1, size: int = 20):
+        invocations.append(("list", project_id, page, size))
+        return {"content": [{"id": "0f8fad5b-d9cb-469f-a165-70867728950e"}], "total": 1}
+
+    @router.get(
+        "/v1/audit-events/{event_id}",
+        openapi_extra={"ai_exposed": True, "ai_name": "get_audit_event", "ai_description": "get audit event"},
+    )
+    def get_audit_event(event_id: str):
+        invocations.append(("detail", event_id))
+        return {"id": event_id, "operation_id": "operation-1", "outcome": "success"}
+
+    app.include_router(router)
+    rounds = {"count": 0}
+
+    def provider_stream(_model, _messages, **_kwargs):
+        rounds["count"] += 1
+        if rounds["count"] == 1:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[AIClientToolCall(
+                    tool_id="audit-list",
+                    name="list_audit_events",
+                    arguments={"project_id": 7, "page": 1, "size": 20},
+                )],
+                stop_reason="tool_calls",
+            )
+        elif rounds["count"] == 2:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[AIClientToolCall(
+                    tool_id="audit-detail",
+                    name="get_audit_event",
+                    arguments={"event_id": "0f8fad5b-d9cb-469f-a165-70867728950e"},
+                )],
+                stop_reason="tool_calls",
+            )
+        else:
+            yield AICompletionStreamEvent(kind="delta", text="audit analysis")
+            yield AICompletionStreamEvent(kind="completed", text="audit analysis", tool_calls=[], stop_reason="final")
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    events = list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=1,
+            content="analyze audit events for project 7",
+        )
+    )
+
+    assert invocations == [
+        ("list", 7, 1, 20),
+        ("detail", "0f8fad5b-d9cb-469f-a165-70867728950e"),
+    ]
+    assert [data["tool_name"] for event, data in events if event == "tool_call_finished"] == [
+        "list_audit_events",
+        "get_audit_event",
+    ]
+
+
 def test_stream_instructs_the_provider_to_clarify_ambiguous_goals_before_using_tools(
     db_session, monkeypatch
 ):

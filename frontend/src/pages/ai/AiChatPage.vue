@@ -107,8 +107,22 @@ function positiveQueryId(value) {
 
 function validAuditTime(value) {
   const normalized = String(queryText(value) || '').trim();
-  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(normalized)) return null;
-  return Number.isNaN(Date.parse(normalized.replace(' ', 'T'))) ? null : normalized;
+  const matched = normalized.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+  if (!matched) return null;
+
+  const [year, month, day, hour, minute, second] = matched.slice(1).map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  if (
+    parsed.getUTCFullYear() !== year
+    || parsed.getUTCMonth() !== month - 1
+    || parsed.getUTCDate() !== day
+    || parsed.getUTCHours() !== hour
+    || parsed.getUTCMinutes() !== minute
+    || parsed.getUTCSeconds() !== second
+  ) {
+    return null;
+  }
+  return normalized;
 }
 
 function auditDraftFromQuery(query) {

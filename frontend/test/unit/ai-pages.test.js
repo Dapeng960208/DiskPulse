@@ -130,6 +130,21 @@ describe('AI pages interactions', () => {
     expect(router.replace).toHaveBeenCalledWith({ name: 'AIChat', query: {} });
   });
 
+  it('rejects impossible audit filter dates instead of creating a list-analysis draft', async () => {
+    route.query = {
+      audit_project_id: '7',
+      audit_start_time: '2026-02-30 17:00:00',
+      audit_end_time: '2026-02-30 18:00:00',
+    };
+    const wrapper = shallowMount(AiChatPage);
+    await flushPromises();
+
+    expect(wrapper.vm.content).toBe('');
+    expect(aiApi.createConversation).not.toHaveBeenCalled();
+    expect(aiApi.streamMessage).not.toHaveBeenCalled();
+    expect(router.replace).toHaveBeenCalledWith({ name: 'AIChat', query: {} });
+  });
+
   it('ignores stale events, deletes conversations, and retries failures', async () => {
     aiApi.streamMessage.mockImplementation(async (_id, _content, { onEvent }) => {
       onEvent({ event: 'user_message', data: { message: { id: 1, role: 'user', content: '容量？' }, conversation: { id: 10, title: '容量？', model_id: 1 } } });
