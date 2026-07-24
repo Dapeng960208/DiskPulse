@@ -665,6 +665,10 @@ def test_tool_registry_provider_shapes_and_failure_responses():
     def error_route():
         raise HTTPException(status_code=418, detail="不可用")
 
+    @router.get("/server-error", openapi_extra={"ai_exposed": True, "ai_name": "server_error_tool"})
+    def server_error_route():
+        raise HTTPException(status_code=500, detail="database password must not be exposed")
+
     @router.get("/text", openapi_extra={"ai_exposed": True, "ai_name": "text_tool"})
     def text_route():
         return PlainTextResponse("plain")
@@ -677,6 +681,12 @@ def test_tool_registry_provider_shapes_and_failure_responses():
         "data": {"items": [1, 2], "total": 2},
     }
     assert execute_tool(app=app, registry=registry, tool_name="error_tool", arguments={})["error"] == "工具请求失败（HTTP 418）"
+    server_error = execute_tool(app=app, registry=registry, tool_name="server_error_tool", arguments={})
+    assert server_error == {
+        "ok": False,
+        "error": "查询服务内部错误（HTTP 500）：参数已通过接口校验，无法通过调整参数修复，请稍后重试或联系管理员。",
+    }
+    assert ai_chat_service._display_tool_result(server_error) == (server_error, False)
     assert execute_tool(app=app, registry=registry, tool_name="text_tool", arguments={})["error"] == "工具返回了非 JSON 响应"
     assert _unwrap([1]) == [1]
     assert _unwrap({"data": {"value": 1}}) == {"value": 1}
@@ -835,7 +845,7 @@ def test_tool_iteration_limit_completes_as_degraded_and_persists_recovery_metada
     original_get = base_config.get
 
     def configured_get(key, default=None):
-        return 1 if key == "ai.max_tool_iterations" else original_get(key, default)
+        return 1 if key == "ai.chat_tool_max_iterations" else original_get(key, default)
 
     monkeypatch.setattr(ai_chat_service.base_config, "get", configured_get)
     invocations = []
