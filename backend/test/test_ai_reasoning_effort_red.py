@@ -133,6 +133,8 @@ def test_reasoning_persistence_models_and_migration_contract():
     assert set(AIPlatformSetting.__table__.columns.keys()) >= {
         "id",
         "default_chat_model_id",
+        "name_obfuscation_enabled",
+        "name_obfuscation_epoch",
         "updated_by",
         "created_at",
         "updated_at",
@@ -146,14 +148,22 @@ def test_reasoning_persistence_models_and_migration_contract():
     assert "reasoning" in AIMessage.__table__.columns
 
     versions_dir = Path(__file__).resolve().parents[1] / "migrate" / "versions"
-    migration_sources = [
-        path.read_text(encoding="utf-8")
+    migration_sources = {
+        path.name: path.read_text(encoding="utf-8")
         for path in versions_dir.glob("*.py")
         if "ai_platform_settings" in path.read_text(encoding="utf-8")
+    }
+    reasoning_sources = [
+        source for source in migration_sources.values() if "capability_cache" in source
     ]
-    assert len(migration_sources) == 1
-    assert "capability_cache" in migration_sources[0]
-    assert "reasoning" in migration_sources[0]
+    assert len(reasoning_sources) == 1
+    assert "reasoning" in reasoning_sources[0]
+    obfuscation_sources = [
+        source for source in migration_sources.values()
+        if "ai_conversation_name_aliases" in source
+    ]
+    assert len(obfuscation_sources) == 1
+    assert "name_obfuscation_enabled" in obfuscation_sources[0]
 
 
 @pytest.mark.parametrize(
@@ -424,6 +434,10 @@ def test_admin_can_set_default_model_and_omitted_model_uses_it(
         "/storage-pulse/api/admin/ai-settings",
         json={"default_chat_model_id": model.id},
     )
+    obfuscation_disabled = client.patch(
+        "/storage-pulse/api/admin/ai-settings",
+        json={"name_obfuscation_enabled": False},
+    )
     created = client.post(
         "/storage-pulse/api/ai/conversations",
         json={"title": "默认模型对话"},
@@ -431,8 +445,13 @@ def test_admin_can_set_default_model_and_omitted_model_uses_it(
 
     assert initial.status_code == 200
     assert initial.json()["default_chat_model_id"] is None
+    assert initial.json()["name_obfuscation_enabled"] is True
     assert updated.status_code == 200
     assert updated.json()["default_chat_model_id"] == model.id
+    assert updated.json()["name_obfuscation_enabled"] is True
+    assert obfuscation_disabled.status_code == 200
+    assert obfuscation_disabled.json()["default_chat_model_id"] == model.id
+    assert obfuscation_disabled.json()["name_obfuscation_enabled"] is False
     assert created.status_code == 201
     assert created.json()["model_id"] == model.id
 

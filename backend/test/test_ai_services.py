@@ -725,7 +725,7 @@ def test_stream_instructs_the_provider_to_clarify_ambiguous_goals_before_using_t
     assert completed["message"]["content"] == "请问需要分析哪个集群和时间范围？"
 
 
-def test_stream_history_replaces_unattributed_assistant_turn_with_safe_placeholder(db_session, monkeypatch):
+def test_stream_history_excludes_unprotected_turns_when_name_obfuscation_starts(db_session, monkeypatch):
     seed_user(db_session)
     configured = seed_model(db_session)
     conversation = AIConversation(user_id=1, model_id=configured.id, title="历史消息")
@@ -755,11 +755,9 @@ def test_stream_history_replaces_unattributed_assistant_turn_with_safe_placehold
     )
     list(stream)
 
-    assert captured_messages[-3:] == [
-        {"role": "user", "content": "之前的问题"},
-        {"role": "assistant", "content": ai_chat_service._HIDDEN_HISTORY_CONTENT},
-        {"role": "user", "content": "当前问题"},
-    ]
+    assert captured_messages[-1] == {"role": "user", "content": "当前问题"}
+    assert not any(item.get("content") == "之前的问题" for item in captured_messages)
+    assert not any(item.get("content") == "之前的回答" for item in captured_messages)
 
 
 def test_claude_tool_message_format_and_missing_resources(db_session):

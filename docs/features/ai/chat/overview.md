@@ -18,12 +18,13 @@
 AI 持久化包含：
 
 - `ai_configs`：Provider、模型、温度、Token 上限、启用状态、加密后的 API Key，以及模型推理能力缓存、获取状态、脱敏错误和刷新时间。
-- `ai_platform_settings`：全局默认聊天模型。初始值可以为空；默认模型必须保持启用且允许聊天。
-- `ai_conversations`：用户、模型、标题和时间戳。
+- `ai_platform_settings`：全局默认聊天模型和默认开启的 `name_obfuscation_enabled` 开关；默认模型可以为空且必须保持启用、允许聊天。内部保护代次只在管理员从关闭重新开启时递增。
+- `ai_conversations`：用户、模型、标题、时间戳以及当前名称保护代次和该代次首条消息 ID。
+- `ai_conversation_name_aliases`：按会话和保护代次保存的资源名别名、资源类别与经 Fernet 加密的原值；别名不含真实名称或内部 ID。
 - `ai_messages`：会话内用户与助手消息；用户消息同时保存本次选择的 `reasoning`，用于恢复会话内的推理设置。
 - `ai_audit_logs`：请求状态、工具调用计数、脱敏摘要、Trace ID 和错误摘要。
 
-API Key 使用 `cryptography` 的 Fernet 加密，密钥由独立的 `ai.config_secret_key` 派生。管理接口只返回掩码和是否已配置，不返回明文或密文。审计只保存消息长度、所选推理值、实际发送值、响应长度和工具名称/状态，不保存原始提问、工具参数、工具结果或 Provider 返回的思维链；聊天历史和页面也不展示思维链。配额确认例外仅在所属审计中保留白名单预览字段、最终决定和 `ok`/限长可读错误，以便会话重载恢复卡片，不保留 Redis 中的执行参数或设备完整返回。
+API Key 和会话别名原值均使用 `cryptography` 的 Fernet 加密，密钥由独立的 `ai.config_secret_key` 派生。管理接口只返回 API Key 掩码和是否已配置，不返回明文或密文。名称混淆只覆盖当前用户授权范围内的项目、用户账号、存储集群、项目组、项目组标签、容量池、存储空间、Qtree 和主机名称；邮箱、IP、路径和凭据不纳入此层。Provider 输入中的系统提示、消息、工具参数和工具结果会递归替换为类别别名，包含 `children` 等嵌套结构；数值指标保持原值。工具执行、SSE、持久化消息和审计轨迹在服务端还原为原值。映射加密、解密、加载或保存失败时，在 Provider 调用前关闭式失败，绝不回退发送真实名称。审计不保存原始提问或 Provider 思维链；工具参数和结果只保留已脱敏、限长的原值展示字段，聊天历史和页面也不展示思维链。配额确认例外仅在所属审计中保留白名单预览字段、最终决定和 `ok`/限长可读错误，以便会话重载恢复卡片，不保留 Redis 中的执行参数或设备完整返回。
 
 ## 3. 运行配置
 
@@ -63,7 +64,7 @@ API Key 使用 `cryptography` 的 Fernet 加密，密钥由独立的 `ai.config_
 
 同步和流式消息请求都接受每条消息的 `reasoning`。默认值 `auto`；其他值只能是能力契约声明的 `on`、`off` 或 `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`。服务端在发送前按当前能力再次校验，能力已过期或值不受支持时返回 `422`，不向 Provider 发送近似值。
 
-流式接口事件顺序由下列固定事件组成：`accepted`、`user_message`、`status`、`tool_call_started`、`tool_call_finished`、`delta`、`completed`、`error`、`cancelled`。客户端必须先收到 `accepted`，终态必须是最后一个已知事件；违反该顺序或截断时保留部分输出并进入可重试失败态。服务端保存最近 20 条历史；首条用户消息会自动生成最多 32 字的会话标题。
+流式接口事件顺序由下列固定事件组成：`accepted`、`user_message`、`status`、`tool_call_started`、`tool_call_finished`、`delta`、`completed`、`error`、`cancelled`。客户端必须先收到 `accepted`，终态必须是最后一个已知事件；违反该顺序或截断时保留部分输出并进入可重试失败态。服务端保存最近 20 条历史；首条用户消息会自动生成最多 32 字的会话标题。名称混淆启用时，服务端会缓冲跨 `delta` 分片的别名，确认可还原后才输出，避免页面短暂出现半截别名；Provider 无流式文本的回退和降级总结也使用同一还原规则。
 
 配额调整工具会先返回待确认卡片；用户确认后，卡片必须基于确认接口的实际结果显示“配额调整成功”或可读失败原因，不得只结束等待状态。确认、失败或取消后的安全终态会随所属会话历史恢复，因此刷新页面不会丢失扩容结果。配额值的默认规则见[配额](../../storage/quota/overview.md)。
 
@@ -97,7 +98,7 @@ API Key 使用 `cryptography` 的 Fernet 加密，密钥由独立的 `ai.config_
 - `GET /admin/ai-audits/{id}`
 - `GET /admin/ai-audits/conversations/{conversation_id}`
 
-超级管理员通过 `PATCH /admin/ai-settings` 设置全局默认聊天模型。默认模型必须启用且允许聊天；停用或删除当前默认模型会返回 `409`，必须先更换默认模型。创建模型、修改 Provider/Base URL/API Key/模型标识或连接测试成功时会刷新能力，也可以手动调用刷新接口。刷新失败不阻止保存配置，但该模型只能使用 `auto`。
+超级管理员通过 `PATCH /admin/ai-settings` 局部设置全局默认聊天模型和 `name_obfuscation_enabled`。默认模型必须启用且允许聊天；停用或删除当前默认模型会返回 `409`，必须先更换默认模型。名称混淆默认开启；关闭只影响之后发起的消息，重新开启从当前新消息建立新保护代次，旧的未保护历史不会发送给 Provider。创建模型、修改 Provider/Base URL/API Key/模型标识或连接测试成功时会刷新能力，也可以手动调用刷新接口。刷新失败不阻止保存配置，但该模型只能使用 `auto`。
 
 模型标识可以留空。手工填写时直接作为该配置的默认模型标识；留空时服务端通过 `POST /admin/ai-models/discover` 获取 Provider 模型列表，并使用返回的第一个可用标识创建或更新配置。发现接口只向超级管理员开放，返回去重、限量后的 `models` 和 `default_model`，不回显 API Key 或 Provider 原始元数据。
 

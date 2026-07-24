@@ -603,7 +603,7 @@ const alerts = incidents.map((incident, index) => ({
       iops_baseline_ratio: 0.05,
       updated_at: '2026-07-23T06:45:00Z',
     },
-    aiPlatformSettings: { default_chat_model_id: 1 },
+    aiPlatformSettings: { default_chat_model_id: 1, name_obfuscation_enabled: true },
     capacityPredictionSettings: { visible: true },
     capacityPredictionPlans: [
       withCapacity({ id: 1, asset_type: 'storage_usage', asset_id: '101', project_id: 1, effective_at: '2026-08-01T00:00:00Z', capacity_delta: 80, reason: 'Mock 演示容量计划', created_at: '2026-07-18T09:00:00Z' }),
@@ -1228,7 +1228,12 @@ export function createMockGateway() {
     }
     if (path === '/admin/ai-settings') {
       if (verb === 'patch') {
-        state.aiPlatformSettings.default_chat_model_id = body?.default_chat_model_id ?? null;
+        if (Object.hasOwn(body || {}, 'default_chat_model_id')) {
+          state.aiPlatformSettings.default_chat_model_id = body.default_chat_model_id ?? null;
+        }
+        if (Object.hasOwn(body || {}, 'name_obfuscation_enabled')) {
+          state.aiPlatformSettings.name_obfuscation_enabled = body.name_obfuscation_enabled === true;
+        }
       }
       return { ...state.aiPlatformSettings };
     }

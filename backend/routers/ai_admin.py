@@ -42,8 +42,8 @@ def update_settings(
 ):
     return ai_config_service.update_platform_settings(
         db,
-        payload.default_chat_model_id,
-        current_user.id,
+        actor_id=current_user.id,
+        **payload.model_dump(exclude_unset=True),
     )
 
 

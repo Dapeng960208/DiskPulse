@@ -53,6 +53,7 @@ const total = ref(0);
 const loading = ref(false);
 const editingId = ref(null);
 const defaultModelId = ref(null);
+const nameObfuscationEnabled = ref(true);
 const settingsSubmitting = ref(false);
 const auditQuery = reactive({ page: 1, size: 20, status: '' });
 const form = reactive({
@@ -98,6 +99,7 @@ async function loadAiSettings() {
   if (typeof aiApi.getAiSettings !== 'function') return;
   const settings = await aiApi.getAiSettings();
   defaultModelId.value = settings.default_chat_model_id ?? null;
+  nameObfuscationEnabled.value = settings.name_obfuscation_enabled ?? true;
 }
 
 async function saveDefaultModel() {
@@ -155,6 +157,37 @@ function resetForm() {
   });
   discoveredModels.value = [];
   modelDiscoveryStatus.value = 'idle';
+}
+
+async function saveNameObfuscation(enabled) {
+  if (settingsSubmitting.value) return;
+  if (!enabled) {
+    try {
+      await ElMessageBox.confirm(
+        '关闭后，后续 AI 对话会向模型发送真实资源名称。确定继续吗？',
+        '关闭 AI 名称混淆',
+        {
+          type: 'warning',
+          confirmButtonText: '确认关闭',
+          cancelButtonText: '保持开启',
+        },
+      );
+    } catch {
+      nameObfuscationEnabled.value = true;
+      return;
+    }
+  }
+  settingsSubmitting.value = true;
+  try {
+    const settings = await aiApi.updateAiSettings({ name_obfuscation_enabled: enabled });
+    nameObfuscationEnabled.value = settings.name_obfuscation_enabled ?? enabled;
+    ElMessage.success(enabled ? 'AI 名称混淆已开启' : 'AI 名称混淆已关闭');
+  } catch {
+    nameObfuscationEnabled.value = !enabled;
+    ElMessage.error('AI 名称混淆设置保存失败');
+  } finally {
+    settingsSubmitting.value = false;
+  }
 }
 
 function applyProviderPreset(provider) {
@@ -358,6 +391,22 @@ onMounted(async () => {
             @click="saveDefaultModel">
             保存默认模型
           </ElButton>
+        </div>
+        <div class="ai-name-obfuscation">
+          <div>
+            <strong>AI 名称混淆</strong>
+            <span>Provider 仅接收资源别名；关闭只影响后续消息。</span>
+          </div>
+          <div class="ai-name-obfuscation__control">
+            <span
+              v-if="settingsSubmitting"
+              aria-live="polite">保存中…</span>
+            <ElSwitch
+              v-model="nameObfuscationEnabled"
+              aria-label="AI 名称混淆"
+              :disabled="settingsSubmitting"
+              @change="saveNameObfuscation" />
+          </div>
         </div>
         <DataTable :data="models">
           <ElTableColumn
@@ -672,6 +721,33 @@ onMounted(async () => {
   color: var(--text-tertiary);
   font-size: 12px;
 }
+.ai-name-obfuscation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+.ai-name-obfuscation > div:first-child {
+  display: flex;
+  flex: 1;
+  min-width: 180px;
+  flex-direction: column;
+  gap: 2px;
+}
+.ai-name-obfuscation span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.ai-name-obfuscation__control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .model-discovery {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -696,6 +772,13 @@ onMounted(async () => {
   .ai-default-model {
     align-items: stretch;
     flex-direction: column;
+  }
+  .ai-name-obfuscation {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .ai-name-obfuscation__control {
+    justify-content: flex-end;
   }
   .ai-default-model__select {
     width: 100%;

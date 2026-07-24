@@ -1033,6 +1033,8 @@ class AIConversation(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     model_id = Column(Integer, ForeignKey("ai_configs.id"), nullable=False, index=True)
     title = Column(String(255), nullable=False, default="新对话")
+    name_obfuscation_epoch = Column(Integer, nullable=True)
+    name_obfuscation_from_message_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
 
@@ -1074,11 +1076,46 @@ class AIPlatformSetting(Base):
         nullable=True,
         index=True,
     )
+    name_obfuscation_enabled = Column(Boolean, nullable=False, default=True)
+    name_obfuscation_epoch = Column(Integer, nullable=False, default=1)
     updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
 
     default_chat_model = relationship("AIConfig", foreign_keys=[default_chat_model_id])
+
+
+class AIConversationNameAlias(Base):
+    __tablename__ = "ai_conversation_name_aliases"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "epoch",
+            "alias",
+            name="uq_ai_conversation_name_alias",
+        ),
+        Index(
+            "ix_ai_conversation_name_alias_context",
+            "conversation_id",
+            "epoch",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    conversation_id = Column(
+        Integer,
+        ForeignKey("ai_conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    epoch = Column(Integer, nullable=False)
+    alias = Column(String(64), nullable=False)
+    entity_kind = Column(String(32), nullable=False)
+    original_value_encrypted = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+    conversation = relationship("AIConversation", foreign_keys=[conversation_id])
 
 
 class AIAuditLog(Base):
