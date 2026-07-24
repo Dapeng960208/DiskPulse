@@ -127,6 +127,12 @@ class _VendorEventSession:
         return None
 
 
+def test_incident_ai_review_queue_drain_tolerates_session_adapter_without_info():
+    from celery_tasks.tasks import forecast_incidents as tasks
+
+    assert tasks._drain_incident_ai_review_ids(SimpleNamespace()) == set()
+
+
 def test_vendor_info_and_warning_events_stay_in_system_events_without_creating_incidents(monkeypatch):
     from celery_tasks.tasks import forecast_incidents as tasks
     from crud import forecastIncidentCrud, vendorEventDefinitionCrud
