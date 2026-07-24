@@ -8,6 +8,7 @@ describe('storage cluster resource tab scrolling', () => {
   it('uses shared table scrolling while keeping the pager reachable', () => {
     const page = source('src/pages/admin/storage-cluster/StorageClusterDetailPage.vue');
     const resourceTab = source('src/pages/admin/storage-cluster/components/ClusterResourceListTab.vue');
+    const distributionTab = source('src/pages/admin/storage-cluster/components/ClusterDistributionTab.vue');
     const dataTable = source('src/components/data/DataTable.vue');
 
     expect(page).toContain('class="storage-health-page__card"');
@@ -18,7 +19,7 @@ describe('storage cluster resource tab scrolling', () => {
     expect(page).toMatch(/\.storage-health-page__tabs :deep\(\.el-tab-pane\) \{\r?\n  display: flex;\r?\n  flex: 1 1 auto;\r?\n  flex-direction: column;\r?\n  min-height: 0;\r?\n  height: 100%;/);
     expect(resourceTab).toMatch(/\.cluster-resource-list-tab \{\r?\n  display: flex;\r?\n  flex: 1 1 auto;\r?\n  flex-direction: column;\r?\n  min-height: 0;\r?\n  height: 100%;/);
     expect(resourceTab).toMatch(/\.cluster-resource-list-tab :deep\(\.data-table-card\) \{\r?\n  flex: 1 1 auto;\r?\n  min-height: 0;\r?\n  height: auto;/);
-    expect(page).toMatch(/\.analytics-chart-stage \{\r?\n  display: flex;\r?\n  flex: 1 1 auto;\r?\n  min-height: 0;\r?\n  height: 100%;/);
+    expect(distributionTab).toMatch(/\.analytics-chart-stage \{\r?\n  display: flex;\r?\n  flex: 1 1 auto;\r?\n  min-height: 0;\r?\n  height: 100%;/);
     expect(dataTable).toMatch(/\.table-wrapper \{\r?\n  flex: 1 1 auto;\r?\n  min-height: 0;\r?\n  overflow: auto;/);
     expect(dataTable.indexOf('class="pagination-bottom"'))
       .toBeGreaterThan(dataTable.indexOf('class="table-wrapper flex-1"'));

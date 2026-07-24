@@ -3,7 +3,9 @@ import { resolve } from 'node:path';
 
 const timeRangePages = [
   'src/pages/common/RealTimePage.vue',
-  'src/pages/admin/storage-cluster/StorageClusterDetailPage.vue',
+  'src/pages/admin/storage-cluster/components/ClusterCapacityTab.vue',
+  'src/pages/admin/storage-cluster/components/ClusterPerformanceTab.vue',
+  'src/pages/admin/storage-cluster/components/ClusterFaultsTab.vue',
   'src/pages/admin/volume/VolumeMonitoringPage.vue',
   'src/pages/admin/audit/AuditEventListPage.vue',
 ];
