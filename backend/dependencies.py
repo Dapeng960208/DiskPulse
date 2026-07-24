@@ -24,9 +24,8 @@ def get_db(request: Request):
     return request.state.db
 
 
-def get_write_db(request: Request):
+def get_write_db(db: Session = Depends(get_db)):
     """Expose the request session with a Router-owned write transaction."""
-    db = request.state.db
     try:
         yield db
     except BaseException:

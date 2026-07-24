@@ -294,7 +294,10 @@ def test_migrations_create_structure_without_seeding_catalog(monkeypatch, tmp_pa
     monkeypatch.setattr(base_config, "get_sqlalchemy_database_url", lambda: database_url)
 
     command.stamp(ALEMBIC_CONFIG, "000000000015")
-    command.upgrade(ALEMBIC_CONFIG, "head")
+    # This test starts from the vendor-catalog baseline rather than a full
+    # application schema.  Stop at its compatibility revision so unrelated
+    # later migrations do not require tables absent from this fixture.
+    command.upgrade(ALEMBIC_CONFIG, "000000000018")
 
     engine = sa.create_engine(database_url)
     try:

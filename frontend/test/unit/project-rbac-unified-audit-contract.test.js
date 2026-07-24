@@ -26,6 +26,7 @@ vi.mock('@/stores/breadcrumbs', () => ({ useBreadcrumbs: () => breadcrumbs }));
 vi.mock('@/utils/authorization', () => ({ hasRole: () => false }));
 vi.mock('vue-router', () => ({
   useRoute: () => ({ name: 'ProjectDetail', params: { id: '7' } }),
+  useRouter: () => ({ push: () => {}, replace: () => {} }),
 }));
 vi.mock('@/api/support/base-request', () => ({ default: {} }));
 

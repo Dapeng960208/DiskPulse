@@ -11,6 +11,7 @@
 ## 备注
 
 - 分类：`backend`
-- 出现次数：1
+- 出现次数：2
 - 首次出现：2026-07-20 近三日代码审查修复会话
 - 出现记录：`sessions/2026-07-20-recent-code-review-remediation/errors.md`
+- 最近出现：2026-07-24，`2026-07-24-router-transactions-startup-security`：四个迁移契约测试仍把 `000000000016` 或 `000000000022` 写死为当前 head；改为验证单一 head 与受保护修订的可达性。

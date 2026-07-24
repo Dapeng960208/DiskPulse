@@ -50,5 +50,6 @@ cd backend
 ## 兼容性与验证
 
 - PostgreSQL 迁移默认兼容 SQLite、PostgreSQL 与 MySQL；使用方言无关的 SQLAlchemy 类型、绑定参数和 DDL/DML 表达式。必须分支时，明确每个方言的兼容策略。
+- 仅用于历史 PostgreSQL 数据修复的迁移可以在非 PostgreSQL 方言显式跳过，但必须在迁移内注明数据前提、不可移植 SQL 原因和 SQLite 结构验证不应执行该修复的原因；不得用跳过掩盖应跨方言兼容的结构变更。
 - 涉及迁移时验证迁移链可应用；涉及方言差异时补 SQLite、PostgreSQL、MySQL 的 SQL 编译或参数绑定回归，或明确未验证风险。
 - 涉及列表、分析、搜索或统计性能时，测试分页、过滤、索引或物化读取路径，防止回退到详情级深加载。

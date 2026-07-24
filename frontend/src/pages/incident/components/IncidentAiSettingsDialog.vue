@@ -24,8 +24,7 @@
         {{ error }}
       </ElAlert>
       <ElForm label-width="140px">
-        <ElFormItem
-          label="启用 AI 代理">
+        <ElFormItem label="启用 AI 代理">
           <ElSwitch
             :model-value="settings.enabled"
             @update:model-value="$emit('update:settings', { ...settings, enabled: $event })" />

@@ -284,9 +284,11 @@ def _record_model_failure(
     model_id: int | None,
     reason_code: str,
 ) -> None:
-    rollback_checkpoint(db)
     if audit_context is None:
+        # Non-HTTP callers own their transaction and must retain prior writes
+        # until they choose to commit or roll back at their own boundary.
         return
+    rollback_checkpoint(db)
     try:
         _append_model_audit(
             db,

@@ -19,6 +19,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # The repair depends on PostgreSQL time-zone conversion and UPDATE FROM.
+    # SQLite structure checks have no legacy PostgreSQL timestamp data to fix.
+    if op.get_bind().dialect.name != "postgresql":
+        return
+
     op.execute(
         """
         UPDATE incident_evidence AS evidence

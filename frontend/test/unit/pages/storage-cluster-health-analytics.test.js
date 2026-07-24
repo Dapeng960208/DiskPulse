@@ -186,6 +186,12 @@ async function mountPage() {
         ElDescriptionsItem: passthrough('ElDescriptionsItem'),
         ElDialog: passthrough('ElDialog'),
         ElFormItem: passthrough('ElFormItem'),
+        // The tab stub renders all slot content, unlike Element Plus lazy panes.
+        // Stub every asynchronously defined tab so analytics tests never start a
+        // background import for an inactive tab after the wrapper is unmounted.
+        ClusterIncidentsTab: passthrough('ClusterIncidentsTab'),
+        ClusterResourceListTab: passthrough('ClusterResourceListTab'),
+        CapacityExhaustionRiskPanel: passthrough('CapacityExhaustionRiskPanel'),
         TimeRangePicker,
         ElInput: Input,
         ElSelect: Select,
@@ -525,7 +531,7 @@ describe('storage cluster health analytics page', () => {
     const eventSection = wrapper.get('.system-events');
     const columns = eventSection.findAllComponents({ name: 'ElTableColumn' });
     const associationColumn = columns.find((column) => column.attributes('label') === '关联类型');
-    expect(associationColumn.attributes('min-width')).toBe('120');
+    expect(associationColumn.attributes('min-width')).toBe('50');
     expect(eventSection.text()).toContain('认证服务查询失败');
     expect(eventSection.text()).toContain('secd.authsys.lookup.failed');
     expect(associationColumn.findAllComponents({ name: 'ElTag' }).map((tag) => tag.text()))

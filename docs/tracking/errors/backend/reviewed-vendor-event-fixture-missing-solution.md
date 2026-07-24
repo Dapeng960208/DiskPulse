@@ -11,6 +11,7 @@
 ## 备注
 
 - 分类：`backend`
-- 出现次数：1
+- 出现次数：2
 - 首次出现：2026-07-23 性能证据详情会话
 - 出现记录：`sessions/2026-07-23-performance-evidence-detail/errors.md`
+- 最近出现：2026-07-24，`2026-07-24-router-transactions-startup-security`：全量后端测试中两个事件详情夹具再次缺少 `recommended_solution_zh`；已为 NetApp 和 Dell 已审核记录补齐处置方案。

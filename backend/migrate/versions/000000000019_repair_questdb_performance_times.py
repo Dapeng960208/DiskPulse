@@ -21,6 +21,13 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # This historical repair uses PostgreSQL interval, regexp and UPDATE FROM
+    # syntax.  SQLite is used only to verify schema migrations, where these
+    # PostgreSQL-derived records cannot exist, so it must not execute the data
+    # repair there.
+    if op.get_bind().dialect.name != "postgresql":
+        return
+
     op.execute(
         r"""
         UPDATE anomaly_observations

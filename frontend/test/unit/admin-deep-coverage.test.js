@@ -490,7 +490,10 @@ describe('admin settings, AI and users coverage', () => {
     await button(wrapper, '新增模型').trigger('click');
     const inputs = wrapper.findAllComponents({ name: 'ElInput' });
     await inputs[0].vm.$emit('update:modelValue', '新模型');
-    await inputs[3].vm.$emit('update:modelValue', 'gpt-test');
+    const modelSelect = wrapper.findAllComponents({ name: 'ElSelect' }).find(
+      (component) => component.props('placeholder') === '留空时保存后自动获取',
+    );
+    await modelSelect.vm.$emit('update:modelValue', 'gpt-test');
     await button(wrapper, '创建模型').trigger('click');
     await flushPromises();
     expect(mocks.aiApi.createModel).toHaveBeenCalledWith(expect.objectContaining({ name: '新模型', model: 'gpt-test' }));

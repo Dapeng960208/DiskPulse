@@ -45,8 +45,8 @@ function directDeclarations(block) {
 const hasOuterPaddingDeclaration = (source) =>
   /(^|[;\s])padding(?:-(?:top|right|bottom|left))?\s*:/m.test(source);
 
-// Review source: the incident center route expanded the active page set without updating this matrix.
-// Resolution: list the route explicitly so additions remain intentional and the exact-count contract stays useful.
+// Redirect-only capacity prediction routes do not load page components. Keep the
+// matrix limited to real route imports so component-count changes stay explicit.
 const expectedInUsePageComponents = [
   '@/pages/admin/aggregate/AggregateDetailPage.vue',
   '@/pages/admin/aggregate/AggregateListPage.vue',
@@ -66,9 +66,6 @@ const expectedInUsePageComponents = [
   '@/pages/admin/volume/VolumeListPage.vue',
   '@/pages/ai/AiChatPage.vue',
   '@/pages/alert/AlertListPage.vue',
-  '@/pages/capacity-prediction/CapacityPredictionDetailPage.vue',
-  '@/pages/capacity-prediction/CapacityPredictionDetailPage.vue',
-  '@/pages/capacity-prediction/CapacityPredictionListPage.vue',
   '@/pages/dashboard/DashboardPage.vue',
   '@/pages/group-tag/GroupTagListPage.vue',
   '@/pages/group/GroupDetailPage.vue',
@@ -144,7 +141,7 @@ describe('shared page layout spacing contract', () => {
 });
 
 describe('in-use routed page matrix', () => {
-  it('covers exactly the 30 approved page components and excludes inactive shells', () => {
+  it('covers exactly the 27 approved page components and excludes inactive shells', () => {
     const routesSource = readFrontendSource('src/router/routes.js');
     const routedComponents = [...routesSource.matchAll(
       /component:\s*\(\)\s*=>\s*import\(['"](@\/pages\/[^'"]+\.vue)['"]\)/g,
@@ -153,7 +150,7 @@ describe('in-use routed page matrix', () => {
       .filter((component) => !excludedPageComponents.includes(component))
       .sort();
 
-    expect(inUseComponents).toHaveLength(30);
+    expect(inUseComponents).toHaveLength(27);
     expect(inUseComponents).toEqual(expectedInUsePageComponents);
     expect(routedComponents.filter((component) => excludedPageComponents.includes(component)).sort())
       .toEqual([...excludedPageComponents].sort());

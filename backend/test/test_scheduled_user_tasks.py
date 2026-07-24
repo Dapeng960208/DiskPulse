@@ -104,7 +104,7 @@ def test_ldap_task_serializes_result_and_closes_its_session(monkeypatch):
     json.dumps(actual)
     sync.assert_called_once_with(db)
     db.close.assert_called_once_with()
-    db.commit.assert_not_called()
+    db.commit.assert_called_once_with()
     assert exits[-1] == ("exited", "ldap_users_sync_schedule_task_lock", 28800)
     info = _log_text(task_logger, "info").lower()
     assert "started" in info

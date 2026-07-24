@@ -36,7 +36,7 @@ describe('role-aware list actions', () => {
     expect(actions).toContain('class="list-row-actions"');
     expect(actions.indexOf('详情')).toBeLessThan(actions.indexOf('<ElDropdown'));
     if (source === groupSource || source === usageSource) {
-    expect(actions).toMatch(/<ElDropdown[\s\S]*?v-if="hasRole\('disk-monitor:admin'\) \|\| canAdjustQuota\(row\) \|\| predictionEnabled"/);
+      expect(actions).toMatch(/<ElDropdown[\s\S]*?v-if="hasRole\('disk-monitor:admin'\) \|\| canAdjustQuota\(row\)"/);
     }
     expect(actions).toContain('aria-label="更多操作"');
   });
@@ -63,7 +63,7 @@ describe('role-aware list actions', () => {
 
     expect(usageSource).toContain('function canAdjustQuota(row)');
     expect(usageSource).toContain('row?.capabilities?.adjust_quota === true');
-    expect(actions).toMatch(/v-if="hasRole\('disk-monitor:admin'\) \|\| canAdjustQuota\(row\) \|\| predictionEnabled"/);
+    expect(actions).toMatch(/v-if="hasRole\('disk-monitor:admin'\) \|\| canAdjustQuota\(row\)"/);
   });
 
   it('does not render user-directory quota adjustment for an admin without resource capability', () => {
@@ -72,11 +72,11 @@ describe('role-aware list actions', () => {
     expect(actions).toMatch(/<ElDropdownItem\s+v-if="canAdjustQuota\(row\)"[\s\S]*?>\s*调整配额/);
   });
 
-  it('keeps capacity prediction and quota adjustment in the usage more-actions menu', () => {
+  it('keeps quota adjustment as the sole usage more-action', () => {
     const actions = actionColumn(usageSource);
 
-    expect(actions).toContain('容量预测');
     expect(actions).toContain('调整配额');
+    expect(actions).not.toContain('容量预测');
     expect(actions).not.toContain('编辑');
     expect(actions).not.toContain('删除');
   });

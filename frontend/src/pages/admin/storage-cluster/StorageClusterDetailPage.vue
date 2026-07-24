@@ -799,6 +799,8 @@ onBeforeMount(() => {
                 <ElTableColumn
                   label="来源"
                   min-width="50"
+                  class-name="mobile-hidden tablet-hidden"
+                  label-class-name="mobile-hidden tablet-hidden"
                   prop="source" />
                 <ElTableColumn
                   label="级别"
@@ -838,6 +840,8 @@ onBeforeMount(() => {
                 <ElTableColumn
                   label="事件对象"
                   min-width="50"
+                  class-name="mobile-hidden tablet-hidden"
+                  label-class-name="mobile-hidden tablet-hidden"
                   prop="object_name">
                   <template #default="{ row }">
                     <span :title="row.object_id && row.object_id !== row.object_name ? `原始标识：${row.object_id}` : undefined">
@@ -848,6 +852,8 @@ onBeforeMount(() => {
                 <ElTableColumn
                   label="内容"
                   min-width="300"
+                  class-name="mobile-hidden tablet-hidden"
+                  label-class-name="mobile-hidden tablet-hidden"
                   prop="description"
                   show-overflow-tooltip />
                 <ElTableColumn

@@ -2,16 +2,16 @@
 
 ## 错误内容
 
-`pnpm test` 和扩展前端测试曾保留既有失败：操作按钮测试桩、LDAP 旧入口断言、AI Chat 缺 active Pinia、授权 mock 缺少 `getToken`，以及对 Windows CRLF 敏感的静态断言。共享契约变化后没有同步测试替身，使全量测试无法稳定充当回归门禁。
+`pnpm test` 和扩展前端测试曾保留既有失败：操作按钮测试桩、LDAP 旧入口断言、AI Chat 缺 active Pinia、授权 mock 缺少 `getToken`，以及对 Windows CRLF 敏感的静态断言。共享契约变化后没有同步测试替身，使全量测试无法稳定充当回归门禁。2026-07-24 的存储集群健康分析测试还使用会渲染全部 slot 的 `ElTabPane` stub，提前触发本应惰性加载的异步面板；卸载后该导入可能访问 `users-api.js`，导致并行全量运行偶发 `CrudApi extends BaseApi` 初始化错误。
 
 ## 解决方案
 
-同步公共组件 stub、Pinia 插件、认证 mock、排序预期和行为断言；删除对已废弃入口及源码形态的依赖。修复后必须重新运行全量测试与覆盖率，不能只依赖聚焦测试。
+同步公共组件 stub、Pinia 插件、认证 mock、排序预期和行为断言；删除对已废弃入口及源码形态的依赖。对于 lazy tab，测试只应 stub 异步子面板而不应让测试用 pane 触发不活跃 tab 的导入。修复后必须重新运行全量测试与覆盖率，不能只依赖聚焦测试。
 
 ## 备注
 
 - 分类：`frontend`
-- 出现次数：11
+- 出现次数：12
 - 首次出现：2026-07-20 导航信息架构会话
 - 最近出现：2026-07-24 Main 分支代码审查问题修复会话
 - 出现记录：`sessions/2026-07-20-navigation-information-architecture/errors.md`
@@ -26,3 +26,4 @@
 - 出现记录：`sessions/2026-07-24-event-audit-incident-noise/errors.md`；扩展 Vitest 的 `content-spacing-contract.test.js` 仍以既有页面矩阵 `27/30` 失败，审计研判跳转、项目滚动和布局用例均通过，与本次变更无关。
 - 出现记录：`sessions/2026-07-24-code-review-fixes/errors.md`；时间范围 RED 验证同时运行存储集群健康分析全文件，既有的关联类型列宽和响应式 class 两项断言仍失败；时间范围组件及页面上限契约的精确测试均已通过。
 - 出现记录：`sessions/2026-07-24-merge-duplicate-routes/errors.md`；`pnpm run test:coverage` 仍被页面矩阵 27/30、列表操作权限、AI 审计交互、存储集群健康分析断言及 `CrudApi extends BaseApi` 异步 rejection 阻断；路由聚焦测试与构建均通过。
+- 出现记录：`sessions/2026-07-24-router-transactions-startup-security/errors.md`；全量 `pnpm test` 的页面矩阵、列表菜单、AI 表单与系统事件窄屏契约均已同步当前实现；另将 inactive lazy tab 显式 stub，消除卸载后的异步 API 导入，`pnpm test` 和 `pnpm test:coverage` 均恢复通过。

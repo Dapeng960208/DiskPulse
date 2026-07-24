@@ -55,7 +55,7 @@ FastAPI: backend/main.py
 | `storage_back_up_records` | `/storage-back-up-records` | 备份记录和回滚 |
 | `large_files` | `/large-files` | 大文件扫描结果 |
 
-请求级 PostgreSQL session 由 `db_session_middleware` 创建并关闭，业务代码通过 `dependencies.get_db()` 获取。所有 POST、PUT、PATCH、DELETE 路由使用 `TransactionalAPIRouter` 注入的函数级 `get_write_db()`：成功路径提交一次，异常路径回滚并保留原响应错误。需要分段持久化的 AI、配额和厂商事件流程通过 `router_transaction` 检查点执行提交或回滚，避免 Service 直接操作 session 事务。Service 在 HTTP 路径仅执行 `flush`；Celery 和脚本在各自入口管理独立事务。
+请求级 PostgreSQL session 由 `db_session_middleware` 创建并关闭，业务代码通过 `dependencies.get_db()` 获取。所有 POST、PUT、PATCH、DELETE 路由使用 `TransactionalAPIRouter` 注入的函数级 `get_write_db()`：成功路径提交一次，异常路径回滚并保留原响应错误。需要分段持久化的 AI、配额和厂商事件流程通过 `router_transaction` 检查点执行提交或回滚，避免 Service 直接操作 session 事务。AI SSE 路由以 `@skip_write_transaction` 排除通用函数级事务，并在首事件、完成、取消和异常处写入短检查点，避免 response 流开始前提交而使认证对象脱离 session。Service 在 HTTP 路径仅执行 `flush`；Celery 和脚本在各自入口管理独立事务。
 
 ## 4. 配置
 

@@ -46,7 +46,10 @@ def _migration_module():
 def test_vendor_event_association_revision_precedes_the_compatibility_head():
     scripts = ScriptDirectory.from_config(_alembic_config())
 
-    assert scripts.get_heads() == [HEAD_REVISION]
+    # Subsequent migrations are allowed to extend this linear chain.  The
+    # compatibility sequence itself must remain reachable below one head.
+    assert len(scripts.get_heads()) == 1
+    assert HEAD_REVISION in {revision.revision for revision in scripts.walk_revisions()}
     assert scripts.get_revision(REVISION).down_revision == PREVIOUS_REVISION
     assert scripts.get_revision(COMPATIBILITY_REVISION).down_revision == REVISION
     assert (

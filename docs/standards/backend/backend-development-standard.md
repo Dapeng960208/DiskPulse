@@ -33,6 +33,7 @@
 - 存储容量接口必须遵守[容量单位 API 契约](./capacity-unit-contract.md)：保留 GB 原始字段、返回字段级 `capacity` 显示单位，并为曲线返回 `data_unit`。
 - 输入校验放 Pydantic schema；跨资源、权限、数据库存在性校验放 dependency 或 service。
 - Router 只做 HTTP 参数、权限依赖、响应组装和 HTTP 写事务边界；不得定义 Pydantic `BaseModel`，不得直接导入 SQLAlchemy/model，不得执行表级查询或写入。写路由必须通过 `TransactionalAPIRouter` 注入的 `get_write_db` 依赖管理事务。
+- 返回 `StreamingResponse` 的写路由不得套用通用函数级事务；使用 `@skip_write_transaction` 显式排除，并在首事件、成功结束、取消和失败处通过 Router 事务检查点完成短事务，禁止跨模型调用持有 session。
 - 领域写操作的权限判断只能有一个权威入口。Service 已执行资源级授权时，Router 不得再复制一套更严格或不同条件的角色预检；如需提前拒绝，只能复用同一授权函数并覆盖角色矩阵测试。
 - Service 负责领域编排、权限后置校验、跨表组合和错误转换。HTTP 路径的 Service 只能 `flush` 获取标识或触发约束错误，不得直接 `commit` 或 `rollback`；Celery、脚本等非 HTTP 调用者在自己的入口显式管理事务。
 - 表级 `select/get/list/exists/create/update/delete/add/count` 必须放到 CRUD 文件，不在 router 或 service 重写表级 SQL。

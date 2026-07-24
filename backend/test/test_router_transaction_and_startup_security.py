@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from appConfig import base_config
 from main import create_app
-from routers.transactional import TransactionalAPIRouter
+from routers.transactional import TransactionalAPIRouter, skip_write_transaction
 
 
 class RecordingSession:
@@ -71,6 +71,22 @@ def test_router_read_does_not_open_a_write_transaction() -> None:
 
     session = RecordingSession()
     response = _client_for(router, session).get("/transactions/read")
+
+    assert response.status_code == 200
+    assert session.commits == 0
+    assert session.rollbacks == 0
+
+
+def test_router_can_exclude_streaming_write_from_request_transaction() -> None:
+    router = TransactionalAPIRouter(prefix="/transactions")
+
+    @router.post("/stream")
+    @skip_write_transaction
+    def stream():
+        return {"ok": True}
+
+    session = RecordingSession()
+    response = _client_for(router, session).post("/transactions/stream")
 
     assert response.status_code == 200
     assert session.commits == 0
