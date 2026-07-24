@@ -448,6 +448,69 @@ def test_out_of_order_evidence_does_not_move_last_evidence_at_backwards(db_sessi
     assert result.incident.last_evidence_at == latest_at
 
 
+def test_late_evidence_outside_window_does_not_replace_forward_correlation_cursor(
+    db_session,
+):
+    import models
+    from services import forecastIncidentService as analytics
+
+    db_session.add_all([
+        models.StorageCluster(id=7, name="cluster-7", storage_type="netapp"),
+        models.Project(id=1, name="project-alpha"),
+    ])
+    db_session.commit()
+    current = analytics.TelemetryEnvelope(
+        asset_ref=_asset(),
+        source="storage_alert",
+        source_ref="cursor-order:current",
+        observed_at=UTC_NOW,
+        collected_at=UTC_NOW,
+        metric_or_event="vendor_event",
+        value={"severity": "warning"},
+        quality="good",
+    )
+    current_result = analytics.correlate_incident(
+        db_session,
+        current,
+        category="device_fault",
+    )
+    late_at = UTC_NOW - timedelta(hours=5)
+    late_result = analytics.correlate_incident(
+        db_session,
+        current.model_copy(
+            update={
+                "source_ref": "cursor-order:late",
+                "observed_at": late_at,
+                "collected_at": late_at,
+            }
+        ),
+        category="device_fault",
+    )
+
+    assert late_result.created is True
+    assert late_result.incident.id != current_result.incident.id
+    state = db_session.get(
+        models.IncidentCorrelationState,
+        current_result.incident.correlation_key,
+    )
+    assert state.incident_id == current_result.incident.id
+    assert state.last_evidence_at == UTC_NOW
+
+    next_at = UTC_NOW + timedelta(minutes=5)
+    next_result = analytics.correlate_incident(
+        db_session,
+        current.model_copy(
+            update={
+                "source_ref": "cursor-order:next",
+                "observed_at": next_at,
+                "collected_at": next_at,
+            }
+        ),
+        category="device_fault",
+    )
+    assert next_result.incident.id == current_result.incident.id
+
+
 @pytest.mark.parametrize("next_status", ["investigating", "resolved"])
 def test_invalid_state_transition_is_a_conflict(next_status):
     from services import forecastIncidentService as analytics

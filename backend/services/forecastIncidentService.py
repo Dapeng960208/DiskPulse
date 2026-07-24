@@ -1263,12 +1263,15 @@ def correlate_incident(db, envelope: TelemetryEnvelope, *, category: str) -> Cor
             incident.severity = "critical"
             severity_escalated = True
     _append_evidence(db, incident, envelope)
-    state.incident_id = incident.id
-    state.last_evidence_at = (
-        observed_at
-        if state.last_evidence_at is None
-        else max(_utc(state.last_evidence_at), observed_at)
-    )
+    # A historical observation outside the rolling window may create its own
+    # Incident, but it must not redirect subsequent real-time evidence to that
+    # older Incident. Only forward-moving evidence advances the cursor.
+    if (
+        state.last_evidence_at is None
+        or observed_at >= _utc(state.last_evidence_at)
+    ):
+        state.incident_id = incident.id
+        state.last_evidence_at = observed_at
     db.flush()
     return CorrelationResult(
         incident=incident,
