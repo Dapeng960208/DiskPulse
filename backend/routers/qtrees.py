@@ -10,6 +10,15 @@ from services.storageTrendService import build_storage_trend_meta, format_trend_
 from datetime import datetime
 import logging
 logger = logging.getLogger('app:qtrees')
+AI_STORAGE_CLUSTER_BLACKLIST_FIELDS = (
+    "isilon_session_cache_mode",
+    "isilon_session_cache_path",
+    "protocol",
+    "storage_host",
+    "storage_port",
+    "storage_user",
+    "tls_verify",
+)
 router = APIRouter(
     prefix="/qtrees",
     tags=["qtrees"],
@@ -38,6 +47,7 @@ def create_qtree(
         "ai_system_management": True,
         "ai_name": "list_qtrees",
         "ai_description": "分页查询 Qtree（NetApp）",
+        "ai_blacklist_fields": AI_STORAGE_CLUSTER_BLACKLIST_FIELDS,
     },
 )
 def read_qtrees(page: int, size: int, nameLike: str | None = None, prop: str | None = None,
@@ -59,6 +69,7 @@ def read_qtrees(page: int, size: int, nameLike: str | None = None, prop: str | N
         "ai_system_management": True,
         "ai_name": "get_qtree",
         "ai_description": "查询指定 Qtree（NetApp）",
+        "ai_blacklist_fields": AI_STORAGE_CLUSTER_BLACKLIST_FIELDS,
     },
 )
 def read_qtree(qtree_id: int, db: Session = Depends(get_db)):
@@ -76,6 +87,7 @@ def read_qtree(qtree_id: int, db: Session = Depends(get_db)):
         "ai_system_management": True,
         "ai_name": "get_qtree_realtime",
         "ai_description": "查询 Qtree（NetApp）实时容量趋势",
+        "ai_blacklist_fields": AI_STORAGE_CLUSTER_BLACKLIST_FIELDS,
     },
 )
 def read_qtree_realtime_data(qtree_id: int, start_time: datetime | None = None,

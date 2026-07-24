@@ -43,6 +43,7 @@ from schemas.capacityPredictionSchema import (
 
 
 router = APIRouter(prefix="/v1", tags=["forecast-incidents"])
+AI_INCIDENT_RESPONSE_BLACKLIST_FIELDS = ("assigned_user_id",)
 DBDep = Annotated[Session, Depends(get_db)]
 
 
@@ -504,6 +505,7 @@ def list_anomalies(
         "ai_system_management": True,
         "ai_name": "list_incidents",
         "ai_description": "分页查询存储集群故障分析事件",
+        "ai_blacklist_fields": AI_INCIDENT_RESPONSE_BLACKLIST_FIELDS,
     },
 )
 def list_incidents(

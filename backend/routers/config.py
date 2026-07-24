@@ -11,6 +11,20 @@ router = APIRouter(
     tags=["config"],
     responses={404: {"description": "Not found"}},
 )
+AI_STORAGE_CONFIG_BLACKLIST_FIELDS = (
+    "back_up_dir",
+    "company",
+    "domain_name",
+    "file_manage_host",
+    "file_manage_port",
+    "file_manage_user",
+    "group_expand",
+    "mail_host",
+    "mail_port",
+    "mail_to",
+    "mail_user",
+    "person_expand",
+)
 
 
 @router.get(
@@ -22,6 +36,7 @@ router = APIRouter(
         "ai_system_management": True,
         "ai_name": "get_storage_config",
         "ai_description": "查询存储系统设置",
+        "ai_blacklist_fields": AI_STORAGE_CONFIG_BLACKLIST_FIELDS,
     },
 )
 def read_storage_config(db: Session = Depends(get_db)):

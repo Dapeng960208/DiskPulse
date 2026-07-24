@@ -23,6 +23,20 @@ import urllib.parse
 from routers.common import create_user_folder_by_storage_usage_id, back_up_user_storage_usage_by_storage_usage_id
 
 logger = logging.getLogger('app:storage-usages')
+AI_STORAGE_USAGE_BLACKLIST_FIELDS = (
+    "access",
+    "alert_cc_user_ids",
+    "associated_mail_groups",
+    "back_path",
+    "device",
+    "gid",
+    "in_charge_user",
+    "in_charge_user_id",
+    "inode",
+    "linux_path",
+    "user",
+    "user_id",
+)
 router = APIRouter(
     prefix="/storage-usages",
     tags=["storage-usages"],
@@ -55,7 +69,7 @@ def create_storage_usage(storage_usage: storageUsageSchema.StorageUsageCreate, b
     return storageUsageCrud.serialize_storage_usage(storage_usage_db)
 
 
-@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_storage_usages", "ai_description": "分页查询用户目录和存储使用情况"})
+@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_storage_usages", "ai_description": "分页查询用户目录和存储使用情况", "ai_blacklist_fields": AI_STORAGE_USAGE_BLACKLIST_FIELDS})
 @handle_exceptions
 def read_storage_usages(page: int | None = 1, size: int | None = 20, nameLike: str | None = None,
                          prop: str | None = None,
@@ -130,7 +144,7 @@ def export_storage_usages(export_type: str = 'pdf', nameLike: str | None = None,
     return StreamingResponse(content, media_type=media_type, headers=headers)
 
 
-@router.get("/{storage_usage_id}", response_model=storageUsageSchema.StorageUsage, openapi_extra={"ai_exposed": True, "ai_name": "get_storage_usage", "ai_description": "查询指定用户目录或存储使用记录"})
+@router.get("/{storage_usage_id}", response_model=storageUsageSchema.StorageUsage, openapi_extra={"ai_exposed": True, "ai_name": "get_storage_usage", "ai_description": "查询指定用户目录或存储使用记录", "ai_blacklist_fields": AI_STORAGE_USAGE_BLACKLIST_FIELDS})
 def read_storage_usage(
     storage_usage_id: int,
     current_user: CurrentUserDep,
@@ -166,7 +180,7 @@ def back_up_storage_usage(storage_usage_id: int, background_tasks: BackgroundTas
     return Response(status_code=status.HTTP_200_OK)
 
 
-@router.get("/{storage_usage_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_storage_usage_realtime", "ai_description": "查询用户目录实时容量趋势"})
+@router.get("/{storage_usage_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_storage_usage_realtime", "ai_description": "查询用户目录实时容量趋势", "ai_blacklist_fields": AI_STORAGE_USAGE_BLACKLIST_FIELDS})
 def read_storage_usage_realtime_data(storage_usage_id: int, start_time: datetime | None = None,
                                      end_time: datetime | None = None,
                                      indicator: storageTrendSchema.StorageUsageTrendIndicator = 'used',

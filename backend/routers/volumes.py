@@ -8,6 +8,15 @@ from crud import volumeCrud
 from dependencies import UseRatioMaximum, UseRatioMinimum, get_db, require_super_admin, validate_use_ratio_range
 from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
 
+AI_STORAGE_CLUSTER_BLACKLIST_FIELDS = (
+    "isilon_session_cache_mode",
+    "isilon_session_cache_path",
+    "protocol",
+    "storage_host",
+    "storage_port",
+    "storage_user",
+    "tls_verify",
+)
 router = APIRouter(
     prefix="/volumes",
     tags=["volumes"],
@@ -36,6 +45,7 @@ def create_volume(
         "ai_system_management": True,
         "ai_name": "list_volumes",
         "ai_description": "分页查询存储空间",
+        "ai_blacklist_fields": AI_STORAGE_CLUSTER_BLACKLIST_FIELDS,
     },
 )
 def read_volumes(page: int | None = 1, size: int | None = 20, nameLike: str | None = None, prop: str | None = None,
@@ -57,6 +67,7 @@ def read_volumes(page: int | None = 1, size: int | None = 20, nameLike: str | No
         "ai_system_management": True,
         "ai_name": "get_volume",
         "ai_description": "查询指定存储空间",
+        "ai_blacklist_fields": AI_STORAGE_CLUSTER_BLACKLIST_FIELDS,
     },
 )
 def read_volume(volume_id: int, db: Session = Depends(get_db)):
@@ -66,7 +77,7 @@ def read_volume(volume_id: int, db: Session = Depends(get_db)):
     return db_volume
 
 
-@router.get("/{volume_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_system_management": True, "ai_name": "get_volume_realtime", "ai_description": "查询存储空间实时容量趋势"})
+@router.get("/{volume_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_system_management": True, "ai_name": "get_volume_realtime", "ai_description": "查询存储空间实时容量趋势", "ai_blacklist_fields": AI_STORAGE_CLUSTER_BLACKLIST_FIELDS})
 def read_volume_realtime_data(volume_id: int, start_time: datetime | None = None,
                               end_time: datetime | None = None,
                               indicator: storageTrendSchema.TrendIndicator = 'used', db: Session = Depends(get_db)):

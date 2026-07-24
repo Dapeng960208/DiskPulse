@@ -12,6 +12,14 @@ from services import audit_service
 
 router = APIRouter(prefix="/v1/audit-events", tags=["audit-events"])
 DBDep = Annotated[Session, Depends(get_db)]
+AI_AUDIT_RESPONSE_BLACKLIST_FIELDS = (
+    "actor",
+    "actor_user_id",
+    "after_summary",
+    "before_summary",
+    "metadata",
+    "resource",
+)
 
 
 @router.get(
@@ -20,6 +28,7 @@ DBDep = Annotated[Session, Depends(get_db)]
     openapi_extra={
         "ai_exposed": True,
         "ai_name": "list_audit_events",
+        "ai_blacklist_fields": AI_AUDIT_RESPONSE_BLACKLIST_FIELDS,
         "ai_description": (
             "审计研判专用只读工具：先确认项目或完整时间范围，再在当前用户的项目权限范围内"
             "按筛选条件查询统一审计事件。调用任一审计工具后的最终答复必须区分事实、推断和"
@@ -63,6 +72,7 @@ def list_audit_events(
     openapi_extra={
         "ai_exposed": True,
         "ai_name": "get_audit_event",
+        "ai_blacklist_fields": AI_AUDIT_RESPONSE_BLACKLIST_FIELDS,
         "ai_description": (
             "审计研判专用只读工具：在当前用户的项目权限范围内查询一条统一审计事件详情。"
             "优先根据列表结果下钻；以 operation_id、trace_id 或 request_id 配对同一操作的"

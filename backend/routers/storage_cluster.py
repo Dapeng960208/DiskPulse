@@ -29,6 +29,15 @@ from services.storageHealthAnalyticsService import (
     validate_time_range,
 )
 
+AI_STORAGE_CLUSTER_BLACKLIST_FIELDS = (
+    "isilon_session_cache_mode",
+    "isilon_session_cache_path",
+    "protocol",
+    "storage_host",
+    "storage_port",
+    "storage_user",
+    "tls_verify",
+)
 router = APIRouter(
     prefix="/storage-clusters",
     tags=["storage-clusters"],
@@ -76,6 +85,7 @@ def _require_storage_cluster(db: Session, storage_cluster_id: int) -> None:
         "ai_system_management": True,
         "ai_name": "list_storage_clusters",
         "ai_description": "分页查询存储集群",
+        "ai_blacklist_fields": AI_STORAGE_CLUSTER_BLACKLIST_FIELDS,
     },
 )
 def read_storage_clusters(
@@ -104,6 +114,7 @@ def read_storage_clusters(
         "ai_system_management": True,
         "ai_name": "create_storage_cluster",
         "ai_description": "创建存储集群",
+        "ai_blacklist_fields": AI_STORAGE_CLUSTER_BLACKLIST_FIELDS,
     },
 )
 def create_storage_cluster(
@@ -130,6 +141,7 @@ def create_storage_cluster(
         "ai_system_management": True,
         "ai_name": "get_storage_cluster",
         "ai_description": "查询指定存储集群",
+        "ai_blacklist_fields": AI_STORAGE_CLUSTER_BLACKLIST_FIELDS,
     },
 )
 def read_storage_cluster(storage_cluster_id: int, db: Session = Depends(get_db)):
@@ -147,6 +159,7 @@ def read_storage_cluster(storage_cluster_id: int, db: Session = Depends(get_db))
         "ai_system_management": True,
         "ai_name": "update_storage_cluster",
         "ai_description": "更新存储集群",
+        "ai_blacklist_fields": AI_STORAGE_CLUSTER_BLACKLIST_FIELDS,
     },
 )
 def update_storage_cluster(
@@ -193,6 +206,7 @@ def delete_storage_cluster(
         "ai_system_management": True,
         "ai_name": "get_storage_cluster_realtime",
         "ai_description": "查询存储集群实时容量趋势",
+        "ai_blacklist_fields": AI_STORAGE_CLUSTER_BLACKLIST_FIELDS,
     },
 )
 def read_storage_cluster_realtime(

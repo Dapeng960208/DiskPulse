@@ -8,6 +8,15 @@ from dependencies import CurrentUserDep, get_db, require_super_admin
 from schemas.aiSchema import AIModelCreate, AIModelDiscoveryRequest, AIModelPatch, AIPlatformSettingsPatch
 from services import ai_audit_service, ai_config_service, audit_service
 
+AI_MODEL_RESPONSE_BLACKLIST_FIELDS = (
+    "api_key_configured",
+    "api_key_masked",
+    "base_url",
+    "capability_error",
+    "created_by",
+    "system_prompt",
+    "updated_by",
+)
 
 router = APIRouter(
     prefix="/admin",
@@ -23,6 +32,7 @@ router = APIRouter(
         "ai_system_management": True,
         "ai_name": "list_ai_models",
         "ai_description": "查询 AI 模型配置",
+        "ai_blacklist_fields": AI_MODEL_RESPONSE_BLACKLIST_FIELDS,
     },
 )
 def models(_current_user: CurrentUserDep, db: Session = Depends(get_db)):
@@ -55,6 +65,7 @@ def update_settings(
         "ai_system_management": True,
         "ai_name": "create_ai_model",
         "ai_description": "创建 AI 模型配置",
+        "ai_blacklist_fields": AI_MODEL_RESPONSE_BLACKLIST_FIELDS,
     },
 )
 def create_model(
@@ -89,6 +100,7 @@ def discover_models(payload: AIModelDiscoveryRequest, _current_user: CurrentUser
         "ai_system_management": True,
         "ai_name": "update_ai_model",
         "ai_description": "更新 AI 模型配置",
+        "ai_blacklist_fields": AI_MODEL_RESPONSE_BLACKLIST_FIELDS,
     },
 )
 def update_model(

@@ -19,12 +19,6 @@ router = APIRouter(
 @router.get(
     "/",
     response_model=commonSchema.ResponseModel,
-    openapi_extra={
-        "ai_exposed": True,
-        "ai_system_management": True,
-        "ai_name": "list_storage_backup_records",
-        "ai_description": "分页查询离职备份记录",
-    },
 )
 def read_storage_back_up_records(page: int | None = 1, size: int | None = 20, nameLike: str | None = None,
                                  prop: str | None = None,

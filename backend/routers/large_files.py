@@ -20,7 +20,7 @@ router = APIRouter(
 )
 
 
-@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_large_files", "ai_description": "分页查询大文件"})
+@router.get("/", response_model=commonSchema.ResponseModel)
 @handle_exceptions
 def read_large_files(page: int | None = 1, size: int | None = 20, nameLike: str | None = None,
                      prop: str | None = None,

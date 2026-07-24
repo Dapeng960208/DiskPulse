@@ -19,9 +19,10 @@ router = APIRouter(
     tags=["storage-alerts"],
     responses={404: {"description": "Not found"}},
 )
+AI_STORAGE_ALERT_BLACKLIST_FIELDS = ("description", "related_info")
 
 
-@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_storage_alerts", "ai_description": "分页查询存储告警"})
+@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_storage_alerts", "ai_description": "分页查询存储告警", "ai_blacklist_fields": AI_STORAGE_ALERT_BLACKLIST_FIELDS})
 @handle_exceptions
 async def read_storage_alerts(page: int | None = 1, size: int | None = 20, nameLike: str | None = None,
                               prop: str | None = None, alert_type: str | None = None,
