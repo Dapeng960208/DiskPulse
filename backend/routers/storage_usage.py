@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 # -*- coding: utf-8 -*-
 import os.path
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, Query, Request, Response, BackgroundTasks, status
+from pydantic import BeforeValidator
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
 from schemas import storageUsageSchema, commonSchema, quotaSchema, storageTrendSchema
@@ -17,7 +19,6 @@ from routers.common import handle_exceptions
 from services import audit_service, quotaService
 from services import project_access_service
 from services.storageTrendService import build_storage_trend_meta, format_trend_data, resolve_trend_indicator, trend_data_unit
-from services.storageTrendService import build_storage_trend_meta, resolve_trend_indicator
 from utils.storageTarget import resolve_group_storage_target
 from fastapi.responses import StreamingResponse
 import urllib.parse
@@ -38,6 +39,27 @@ AI_STORAGE_USAGE_BLACKLIST_FIELDS = (
     "user",
     "user_id",
 )
+
+
+def _empty_string_to_none(value: object) -> object:
+    return None if value == "" else value
+
+
+StorageUsageUserIdFilter = Annotated[
+    int | None,
+    BeforeValidator(_empty_string_to_none),
+    Query(description="用户数字 ID；按研发用户名查询请使用 rd_username，二者不可同时提供"),
+]
+StorageUsageRdUsernameFilter = Annotated[
+    str | None,
+    Query(
+        min_length=1,
+        max_length=100,
+        description="研发用户名（精确匹配）；与 user_id 二选一",
+    ),
+]
+
+
 router = TransactionalAPIRouter(
     prefix="/storage-usages",
     tags=["storage-usages"],
@@ -73,16 +95,21 @@ def create_storage_usage(storage_usage: storageUsageSchema.StorageUsageCreate, b
 @handle_exceptions
 def read_storage_usages(page: int | None = 1, size: int | None = 20, nameLike: str | None = None,
                          prop: str | None = None,
-                         order: str | None = None, user_id: int | str = Query(None), group_id: int | None = None,
+                         order: str | None = None, user_id: StorageUsageUserIdFilter = None,
+                         rd_username: StorageUsageRdUsernameFilter = None, group_id: int | None = None,
                          storage_cluster_id: int | None = None, project_id: int | None = None,
                          group_tag_id: int | None = None, use_ratio_min: UseRatioMinimum = None,
                          use_ratio_max: UseRatioMaximum = None, current_user: CurrentUserDep = None,
                          db: Session = Depends(get_db)):
-    if user_id == "":
-        user_id = None
+    if user_id is not None and rd_username is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="user_id 与 rd_username 不能同时提供",
+        )
     use_ratio_min, use_ratio_max = validate_use_ratio_range(use_ratio_min, use_ratio_max)
     storage_usages, total = storageUsageCrud.get_storage_usages(db=db, page=page, size=size, nameLike=nameLike,
                                                                  prop=prop, order=order, user_id=user_id,
+                                                                 rd_username=rd_username,
                                                                  group_id=group_id, storage_cluster_id=storage_cluster_id,
                                                                   project_id=project_id,
                                                                   group_tag_id=group_tag_id,

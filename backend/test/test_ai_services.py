@@ -401,6 +401,89 @@ def test_stream_reuses_successful_tool_results_and_repairs_failed_calls(db_sessi
     assert provider_tools[-1] == []
 
 
+def test_stream_disables_tools_after_non_retryable_server_error(db_session, monkeypatch):
+    """A backend 5xx must not invite the model to guess parameters and call again."""
+    seed_user(db_session)
+    configured = seed_model(db_session)
+    conversation = AIConversation(user_id=1, model_id=configured.id, title="容量查询")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+
+    app = FastAPI()
+    invocations = []
+
+    @app.get(
+        "/capacity",
+        openapi_extra={
+            "ai_exposed": True,
+            "ai_name": "list_capacity",
+            "ai_description": "查询容量",
+        },
+    )
+    def capacity(project_id: int):
+        invocations.append(project_id)
+        raise HTTPException(status_code=500, detail="database failure")
+
+    provider_messages = []
+    provider_tools = []
+
+    def provider_stream(_model, messages, **kwargs):
+        provider_messages.append(messages)
+        provider_tools.append(kwargs["tools"])
+        if len(provider_messages) == 1:
+            yield AICompletionStreamEvent(
+                kind="completed",
+                tool_calls=[
+                    AIClientToolCall(
+                        tool_id="capacity-1",
+                        name="list_capacity",
+                        arguments={"project_id": 9},
+                    ),
+                    AIClientToolCall(
+                        tool_id="capacity-2",
+                        name="list_capacity",
+                        arguments={"project_id": 10},
+                    ),
+                ],
+                stop_reason="tool_calls",
+            )
+            return
+        yield AICompletionStreamEvent(kind="delta", text="查询服务暂时不可用。")
+        yield AICompletionStreamEvent(
+            kind="completed",
+            text="查询服务暂时不可用。",
+            tool_calls=[],
+            stop_reason="final",
+        )
+
+    monkeypatch.setattr(ai_chat_service, "chat_completion_stream", provider_stream)
+    events = list(
+        ai_chat_service.stream_message(
+            app=app,
+            db=db_session,
+            conversation_id=conversation.id,
+            user_id=1,
+            content="查询项目 9 的容量",
+        )
+    )
+
+    completed = next(data for event, data in events if event == "completed")
+    assert completed["message"]["content"] == "查询服务暂时不可用。"
+    assert invocations == [9]
+    assert provider_tools[0]
+    assert provider_tools[1] == []
+    tool_results = [
+        json.loads(message["content"])
+        for message in provider_messages[1]
+        if message.get("role") == "tool"
+    ]
+    assert tool_results
+    assert all(result["retryable"] is False for result in tool_results)
+    provider_context = json.dumps(provider_messages[1], ensure_ascii=False)
+    assert "本轮不要再次调用" in provider_context
+
+
 def test_stream_persists_live_tool_trace_with_distinct_call_ids_and_truncated_results(db_session, monkeypatch):
     seed_user(db_session)
     configured = seed_model(db_session)
@@ -810,7 +893,12 @@ def test_tool_registry_provider_shapes_and_failure_responses():
     server_error = execute_tool(app=app, registry=registry, tool_name="server_error_tool", arguments={})
     assert server_error == {
         "ok": False,
-        "error": "查询服务内部错误（HTTP 500）：参数已通过接口校验，无法通过调整参数修复，请稍后重试或联系管理员。",
+        "error": (
+            "查询服务内部错误（HTTP 500）：服务端未能完成查询，不能据此判断参数缺失；"
+            "请勿调整参数或在本轮重试该工具。请基于已有结果回答，或建议稍后重试/联系管理员。"
+        ),
+        "error_type": "server_error",
+        "retryable": False,
     }
     assert ai_chat_service._display_tool_result(server_error) == (server_error, False)
     assert execute_tool(app=app, registry=registry, tool_name="text_tool", arguments={})["error"] == "工具返回了非 JSON 响应"

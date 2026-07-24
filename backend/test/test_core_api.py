@@ -878,6 +878,32 @@ class TestCoreApi:
         assert list_response.status_code == 200
         assert list_response.json()["total"] == 1
 
+        invalid_user_id_response = self.client.get(
+            "/storage-pulse/api/storage-usages/",
+            params={"user_id": "alice"},
+        )
+        assert invalid_user_id_response.status_code == 422
+
+        username_response = self.client.get(
+            "/storage-pulse/api/storage-usages/",
+            params={"rd_username": "alice"},
+        )
+        assert username_response.status_code == 200
+        assert username_response.json()["total"] == 1
+
+        missing_username_response = self.client.get(
+            "/storage-pulse/api/storage-usages/",
+            params={"rd_username": "missing"},
+        )
+        assert missing_username_response.status_code == 200
+        assert missing_username_response.json()["total"] == 0
+
+        conflicting_user_filters_response = self.client.get(
+            "/storage-pulse/api/storage-usages/",
+            params={"user_id": 1, "rd_username": "alice"},
+        )
+        assert conflicting_user_filters_response.status_code == 422
+
         update_response = self.client.put(
             "/storage-pulse/api/storage-usages/1",
             json={

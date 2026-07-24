@@ -44,7 +44,8 @@ logger = logging.getLogger(__name__)
 SYSTEM_PROMPT = """你是 DiskPulse AI 助手。你只能使用已授权的只读工具查询数据。
 不得编造工具结果，不得请求或泄露密码、令牌、密钥及个人敏感信息。
 工具调用成功后应优先依据已获得的结果回答；同一工具使用相同参数成功后不得再次查询。
-工具因参数或请求失败时，可先修改参数重试；无法补齐时仍须使用已有成功或空结果回答并明确数据缺口。
+工具因参数校验或请求错误失败时，可先修改参数重试；标记 retryable=false 的失败不得在本轮重试。
+无法补齐时仍须使用已有成功或空结果回答并明确数据缺口。
 调用工具前先确认用户目标。请求涉及多个事项时，先拆分为可执行任务；若资源范围、时间范围、期望操作或完成标准不明确，先提出简短的澄清问题，不要调用工具，也不要自行假设补齐。
 目标明确后，先用简短、可验证的说明告知查询或执行范围，再按最少必要步骤调用工具，直至完成目标或明确报告数据缺口。
 回答应简洁、准确，并在数据不足时明确说明。"""
@@ -154,7 +155,14 @@ def _display_tool_result(result: object) -> tuple[object, bool]:
         if isinstance(error, str) and (
             error in _SAFE_TOOL_ERRORS or error.startswith(_SAFE_TOOL_ERROR_PREFIXES)
         ):
-            return {"ok": False, "error": error}, False
+            display = {"ok": False, "error": error}
+            error_type = payload.get("error_type")
+            retryable = payload.get("retryable")
+            if isinstance(error_type, str):
+                display["error_type"] = error_type
+            if isinstance(retryable, bool):
+                display["retryable"] = retryable
+            return display, False
         return {"ok": False, "error": "工具请求失败，请稍后重试"}, False
     safe = _redact_sensitive(payload)
     encoded = json.dumps(safe, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -761,6 +769,18 @@ def _tool_failure_repair_instruction(tool_names: list[str]) -> dict:
     }
 
 
+def _non_retryable_tool_failure_instruction(tool_names: list[str]) -> dict:
+    names = "、".join(dict.fromkeys(name.strip()[:128] or "未知工具" for name in tool_names))
+    return {
+        "role": "system",
+        "content": (
+            f"系统校验：工具 {names} 返回不可重试的服务端错误，失败调用没有产生可用数据。"
+            "本轮不要再次调用任何工具，也不要通过猜测或修改参数规避该错误。"
+            "请严格基于已经获得的结果回答，并明确说明当前数据缺口。"
+        ),
+    }
+
+
 def _reused_tool_result_summary_instruction() -> dict:
     return {
         "role": "system",
@@ -909,6 +929,7 @@ def stream_message(
     )
     tool_trace: list[dict] = []
     successful_tool_results: dict[str, dict] = {}
+    non_retryable_tool_results: dict[str, dict] = {}
     diagnosis_payloads: list[dict] = []
     emitted_text: list[str] = []
     final_text = ""
@@ -962,7 +983,10 @@ def stream_message(
             executed_arguments = (
                 name_obfuscator.restore_value(arguments) if name_obfuscator is not None else arguments
             )
-            if ai_quota_confirmation_service.is_quota_write_tool(tool_name):
+            blocked_result = non_retryable_tool_results.get(tool_name)
+            if blocked_result is not None:
+                result = blocked_result
+            elif ai_quota_confirmation_service.is_quota_write_tool(tool_name):
                 definition = registry.get(tool_name)
                 if definition is None:
                     return {"ok": False, "error": f"工具 {tool_name} 未获授权"}
@@ -995,6 +1019,8 @@ def stream_message(
                     user_id=user_id,
                     current_user=current_user,
                 )
+            if result.get("retryable") is False:
+                non_retryable_tool_results.setdefault(tool_name, result)
             claude_code_tool_results[_tool_call_key(
                 AIClientToolCall(tool_id="claude-code", name=tool_name, arguments=arguments)
             )] = (executed_arguments, result)
@@ -1154,6 +1180,7 @@ def stream_message(
                     final_text = raw_text
                 break
             failed_tool_names: list[str] = []
+            non_retryable_failure_seen = False
             reused_successful_result = False
             audit_tool_called = False
             for sequence, call in enumerate(calls, start=1):
@@ -1203,23 +1230,30 @@ def stream_message(
                     except HTTPException as error:
                         result = {"ok": False, "error": str(error.detail)}
                 else:
-                    cache_key = _tool_call_key(call, executed_arguments)
-                    cached_result = successful_tool_results.get(cache_key)
-                    if cached_result is not None:
-                        result = cached_result
-                        reused_result = True
-                        reused_successful_result = True
+                    blocked_result = non_retryable_tool_results.get(call.name)
+                    if blocked_result is not None:
+                        result = blocked_result
                     else:
-                        result = execute_tool(
-                            app=app,
-                            registry=registry,
-                            tool_name=call.name,
-                            arguments=executed_arguments,
-                            user_id=user_id,
-                            current_user=current_user,
-                        )
-                        if result.get("ok") is True:
-                            successful_tool_results[cache_key] = result
+                        cache_key = _tool_call_key(call, executed_arguments)
+                        cached_result = successful_tool_results.get(cache_key)
+                        if cached_result is not None:
+                            result = cached_result
+                            reused_result = True
+                            reused_successful_result = True
+                        else:
+                            result = execute_tool(
+                                app=app,
+                                registry=registry,
+                                tool_name=call.name,
+                                arguments=executed_arguments,
+                                user_id=user_id,
+                                current_user=current_user,
+                            )
+                            if result.get("ok") is True:
+                                successful_tool_results[cache_key] = result
+                    if result.get("retryable") is False:
+                        non_retryable_tool_results.setdefault(call.name, result)
+                        non_retryable_failure_seen = True
                 if (
                     call.name == "get_incident_diagnosis"
                     and result.get("ok") is True
@@ -1298,12 +1332,18 @@ def stream_message(
                 )
                 audit_analysis_prompt_added = True
             if failed_tool_names:
-                tool_failure_repairs += 1
-                if tool_failure_repairs > _MAX_TOOL_CALL_FAILURE_REPAIRS:
-                    recovery = dict(_RECOVERY_BY_REASON["tool_call_failed"])
-                    degraded_error_message = "AI 工具调用连续失败"
-                    break
-                messages.append(_tool_failure_repair_instruction(failed_tool_names))
+                if non_retryable_failure_seen:
+                    messages.append(
+                        _non_retryable_tool_failure_instruction(failed_tool_names)
+                    )
+                    tools = []
+                else:
+                    tool_failure_repairs += 1
+                    if tool_failure_repairs > _MAX_TOOL_CALL_FAILURE_REPAIRS:
+                        recovery = dict(_RECOVERY_BY_REASON["tool_call_failed"])
+                        degraded_error_message = "AI 工具调用连续失败"
+                        break
+                    messages.append(_tool_failure_repair_instruction(failed_tool_names))
             elif reused_successful_result:
                 messages.append(_reused_tool_result_summary_instruction())
                 tools = []

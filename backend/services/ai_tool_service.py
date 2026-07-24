@@ -289,8 +289,8 @@ def _safe_http_error(status_code: int, body: object) -> str:
         return "数据源暂时不可用，请稍后重试"
     if 500 <= status_code <= 599:
         return (
-            f"查询服务内部错误（HTTP {status_code}）：参数已通过接口校验，"
-            "无法通过调整参数修复，请稍后重试或联系管理员。"
+            f"查询服务内部错误（HTTP {status_code}）：服务端未能完成查询，不能据此判断参数缺失；"
+            "请勿调整参数或在本轮重试该工具。请基于已有结果回答，或建议稍后重试/联系管理员。"
         )
     return f"工具请求失败（HTTP {status_code}）"
 
@@ -321,7 +321,10 @@ async def _execute(
     except ValueError:
         return {"ok": False, "error": "工具返回了非 JSON 响应"}
     if response.status_code >= 400:
-        return {"ok": False, "error": _safe_http_error(response.status_code, body)}
+        result = {"ok": False, "error": _safe_http_error(response.status_code, body)}
+        if 500 <= response.status_code <= 599:
+            result.update({"error_type": "server_error", "retryable": False})
+        return result
     data = _filter_blacklisted_fields(_unwrap(body), definition.blacklist_fields)
     return {"ok": True, "data": data}
 
@@ -350,4 +353,9 @@ def execute_tool(
         effective_user_id = current_user.id if current_user is not None else user_id
         return asyncio.run(_execute(app=app, definition=definition, payload=payload, user_id=effective_user_id))
     except Exception:
-        return {"ok": False, "error": "工具执行失败"}
+        return {
+            "ok": False,
+            "error": "工具执行失败",
+            "error_type": "internal_error",
+            "retryable": False,
+        }
