@@ -21,6 +21,30 @@ vi.mock('@/layouts/AppLayout.vue', () => ({
 const { default: routes } = await import('@/router/routes');
 
 describe('router/routes and app shell', () => {
+  it('uses one root layout route for every workspace route', () => {
+    const rootLayoutRoutes = routes.filter(
+      (route) => route.path === '/' && route.component?.name === 'AppLayout',
+    );
+
+    expect(rootLayoutRoutes).toHaveLength(1);
+    expect(rootLayoutRoutes[0].children.map((route) => route.name)).toEqual(
+      expect.arrayContaining([
+        'Dashboard',
+        'Usages',
+        'UsagesDetail',
+        'UsageCapacityPrediction',
+        'CapacityPredictions',
+        'Projects',
+        'ProjectDetail',
+        'Groups',
+        'GroupDetail',
+        'GroupCapacityPrediction',
+        'Alerts',
+        'AIChat',
+      ]),
+    );
+  });
+
   it('defines active public and admin routes', () => {
     const loginRoute = routes.find((route) => route.name === 'Login');
     const adminRoute = routes.find((route) => route.path === '/admin');
