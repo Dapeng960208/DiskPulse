@@ -35,6 +35,7 @@ class AIToolDefinition:
     parameters: tuple[ToolParameter, ...]
     method: str = "GET"
     system_management: bool = False
+    blacklist_fields: frozenset[str] = frozenset()
 
 
 _READ_ONLY_METHODS = {"GET"}
@@ -118,6 +119,18 @@ def _route_method(route: APIRoute, *, system_management: bool) -> str | None:
     return matching_methods[0] if len(matching_methods) == 1 else None
 
 
+def _blacklist_fields(name: str, meta: dict[str, Any]) -> frozenset[str]:
+    value = meta.get("ai_blacklist_fields", ())
+    if value is None:
+        return frozenset()
+    if not isinstance(value, (list, tuple, set, frozenset)):
+        raise RuntimeError(f"AI 工具 {name} 的 ai_blacklist_fields 必须是字段名列表")
+    fields = frozenset(field.strip() for field in value if isinstance(field, str) and field.strip())
+    if len(fields) != len(value):
+        raise RuntimeError(f"AI 工具 {name} 的 ai_blacklist_fields 包含无效字段名")
+    return fields
+
+
 def build_tool_registry(app: FastAPI, *, current_user: User | None = None) -> dict[str, AIToolDefinition]:
     registry: dict[str, AIToolDefinition] = {}
     for route in app.routes:
@@ -145,6 +158,7 @@ def build_tool_registry(app: FastAPI, *, current_user: User | None = None) -> di
             parameters=parameters,
             method=method,
             system_management=system_management,
+            blacklist_fields=_blacklist_fields(name, meta),
         )
     return registry
 
@@ -198,6 +212,20 @@ def _unwrap(body: object) -> object:
         data = body.get("data")
         return {"items": data, **(body.get("meta") or {})} if isinstance(data, list) else data
     return body.get("data", body)
+
+
+def _filter_blacklisted_fields(value: object, blacklist_fields: frozenset[str]) -> object:
+    if not blacklist_fields:
+        return value
+    if isinstance(value, list):
+        return [_filter_blacklisted_fields(item, blacklist_fields) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _filter_blacklisted_fields(item, blacklist_fields)
+            for key, item in value.items()
+            if key not in blacklist_fields
+        }
+    return value
 
 
 def _safe_http_error(status_code: int, body: object) -> str:
@@ -261,7 +289,8 @@ async def _execute(
         return {"ok": False, "error": "工具返回了非 JSON 响应"}
     if response.status_code >= 400:
         return {"ok": False, "error": _safe_http_error(response.status_code, body)}
-    return {"ok": True, "data": _unwrap(body)}
+    data = _filter_blacklisted_fields(_unwrap(body), definition.blacklist_fields)
+    return {"ok": True, "data": data}
 
 
 def execute_tool(

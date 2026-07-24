@@ -111,6 +111,8 @@ OpenAI 兼容 Provider 使用 `GET /models` 的 `data[].id`，Ollama 使用 `GET
 
 常规工具仍以业务路由为唯一参数契约：只有 `GET` 且显式设置 `openapi_extra.ai_exposed=true` 的路由才对登录用户注册。路由自身及其 `Depends` 依赖链中的 Path、Query 参数都会生成 Pydantic 模型，并使用 `extra="forbid"` 拒绝模型擅自增加的参数；可选 Query 参数保留路由的默认行为。存储集群健康分析的 `start_time`、`end_time` 会明确暴露给模型，任一缺省时在服务端按请求时刻补足最近 24 小时范围。
 
+AI 暴露路由可在 `openapi_extra` 通过 `ai_blacklist_fields` 声明响应字段黑名单。该配置必须是非空字符串字段名的列表；工具注册时校验配置，执行成功响应在归一化后递归过滤黑名单字段，随后才会写入 Provider 上下文。用户工具将用户响应模型中除 `rd_username` 外的全部字段加入黑名单；项目和项目组查询工具分别移除负责人、负责人 ID、收件人及项目组通知关联字段。黑名单配置错误会阻止工具注册，不能静默降级为返回原始响应。
+
 系统管理工具必须同时声明 `ai_exposed=true` 和 `ai_system_management=true`。只有 `is_super_admin(current_user)` 为真时才会注册，允许的方法限定为 `GET`、`POST`、`PUT`、`PATCH`、`DELETE`；不会按 `/admin` 或其他路径名称自动推断权限。
 
 当前系统管理工具包括存储集群、容量池、存储空间、项目组标签、用户和 AI 模型配置的非删除已授权操作，以及存储设置和离职备份记录的只读查询。项目组与用户目录的限额调整工具仅对超级管理员注册，继续复用原有配额 PATCH 路由、请求校验、设备写入和通知逻辑。全部删除工具、创建用户、创建容量池、创建/更新存储空间、Qtree（NetApp）写工具、存储设置更新及 AI 审计查询均不注册。

@@ -15,9 +15,15 @@ router = APIRouter(
     tags=["projects"],
     responses={404: {"description": "Not found"}},
 )
+AI_PROJECT_USER_BLACKLIST_FIELDS = (
+    "in_charge_user",
+    "in_charge_user_id",
+    "recipients",
+    "recipient_ids",
+)
 
 
-@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_projects", "ai_description": "分页查询项目"})
+@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_projects", "ai_description": "分页查询项目", "ai_blacklist_fields": AI_PROJECT_USER_BLACKLIST_FIELDS})
 def read_projects(
     current_user: CurrentUserDep,
     page: int = 1,
@@ -127,7 +133,7 @@ def read_project_storage_usage_by_id(
     )
 
 
-@router.get("/{project_id}", response_model=projectsSchema.Project, openapi_extra={"ai_exposed": True, "ai_name": "get_project", "ai_description": "查询指定项目"})
+@router.get("/{project_id}", response_model=projectsSchema.Project, openapi_extra={"ai_exposed": True, "ai_name": "get_project", "ai_description": "查询指定项目", "ai_blacklist_fields": AI_PROJECT_USER_BLACKLIST_FIELDS})
 def read_project_by_id(project_id: int, current_user: CurrentUserDep, db: Session = Depends(get_db)):
     project_access_service.require_project_permission(db, current_user, project_id, "reader")
     project_db = projectsCrud.get_project_by_id(db=db, id=project_id)

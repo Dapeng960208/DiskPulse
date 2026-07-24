@@ -21,6 +21,14 @@ router = APIRouter(
     tags=["groups"],
     responses={404: {"description": "Not found"}},
 )
+AI_GROUP_USER_BLACKLIST_FIELDS = (
+    "in_charge_user",
+    "in_charge_user_id",
+    "recipients",
+    "recipient_ids",
+    "associated_mail_groups",
+    "alert_cc_user_ids",
+)
 
 
 @router.post("/", response_model=groupSchema.Group)
@@ -32,7 +40,7 @@ def create_group(
     return groupCrud.serialize_group(groupCrud.create_group(db=db, group=group))
 
 
-@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_groups", "ai_description": "分页查询项目组"})
+@router.get("/", response_model=commonSchema.ResponseModel, openapi_extra={"ai_exposed": True, "ai_name": "list_groups", "ai_description": "分页查询项目组", "ai_blacklist_fields": AI_GROUP_USER_BLACKLIST_FIELDS})
 def read_groups(page: int | None = 1, size: int | None = 20, nameLike: str | None = None, prop: str | None = None,
                 order: str | None = None, qtree_id: int | None = None,
                 volume_id: int | None = None, project_id: int | None = None,
@@ -62,7 +70,7 @@ def read_groups(page: int | None = 1, size: int | None = 20, nameLike: str | Non
     )
 
 
-@router.get("/{group_id}", response_model=groupSchema.Group, openapi_extra={"ai_exposed": True, "ai_name": "get_group", "ai_description": "查询指定项目组"})
+@router.get("/{group_id}", response_model=groupSchema.Group, openapi_extra={"ai_exposed": True, "ai_name": "get_group", "ai_description": "查询指定项目组", "ai_blacklist_fields": AI_GROUP_USER_BLACKLIST_FIELDS})
 def read_group(group_id: int, current_user: CurrentUserDep, db: Session = Depends(get_db)):
     db_group = project_access_service.require_group_permission(db, current_user, group_id)
 
@@ -72,7 +80,7 @@ def read_group(group_id: int, current_user: CurrentUserDep, db: Session = Depend
     )
 
 
-@router.get("/{group_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_group_realtime", "ai_description": "查询项目组实时容量趋势"})
+@router.get("/{group_id}/realtime", response_model=commonSchema.ResponseStorageUsageModel, openapi_extra={"ai_exposed": True, "ai_name": "get_group_realtime", "ai_description": "查询项目组实时容量趋势", "ai_blacklist_fields": AI_GROUP_USER_BLACKLIST_FIELDS})
 def read_group_realtime_data(group_id: int, start_time: datetime | None = None, end_time: datetime | None = None,
                              indicator: storageTrendSchema.TrendIndicator = 'used', current_user: CurrentUserDep = None,
                              db: Session = Depends(get_db)):

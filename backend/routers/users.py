@@ -24,6 +24,12 @@ router = APIRouter(
 )
 DBDep = Annotated[Session, Depends(get_db)]
 AdminDep = Annotated[None, Depends(require_super_admin)]
+AI_USER_RESPONSE_BLACKLIST_FIELDS = tuple(
+    sorted(
+        (set(usersSchema.User.model_fields) | set(usersSchema.User.model_computed_fields))
+        - {"rd_username"}
+    )
+)
 
 
 @router.post("/login")
@@ -103,6 +109,7 @@ def create_user(user: usersSchema.UserCreate, _admin: AdminDep, db: DBDep):
         "ai_system_management": True,
         "ai_name": "list_users",
         "ai_description": "分页查询用户",
+        "ai_blacklist_fields": AI_USER_RESPONSE_BLACKLIST_FIELDS,
     },
 )
 async def read_users(
@@ -138,6 +145,7 @@ async def read_users(
         "ai_system_management": True,
         "ai_name": "get_user",
         "ai_description": "查询指定用户",
+        "ai_blacklist_fields": AI_USER_RESPONSE_BLACKLIST_FIELDS,
     },
 )
 def read_user(user_id: int, _admin: AdminDep, db: DBDep):
@@ -152,6 +160,7 @@ def read_user(user_id: int, _admin: AdminDep, db: DBDep):
         "ai_system_management": True,
         "ai_name": "update_user",
         "ai_description": "更新用户",
+        "ai_blacklist_fields": AI_USER_RESPONSE_BLACKLIST_FIELDS,
     },
 )
 def update_user(
