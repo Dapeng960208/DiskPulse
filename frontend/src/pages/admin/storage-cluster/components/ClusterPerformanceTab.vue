@@ -23,6 +23,7 @@ import { toUtcRange } from '@/utils/datetime.js';
 const props = defineProps({
   clusterId: { type: Number, required: true },
   dateRange: { type: Array, required: true },
+  active: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(['update:dateRange']);
@@ -34,9 +35,14 @@ const localDateRange = computed({
 
 const latency = ref({ supported: true, data: [] });
 const loading = ref(false);
+const loadedRangeKey = ref('');
 const performanceLimit = ref(10);
 const selectedPerformanceObjects = ref([]);
 const selectedPerformanceMetrics = ref(['p95_latency']);
+
+function rangeKey() {
+  return props.dateRange.join('|');
+}
 
 const performanceMetricOptions = [
   { key: 'p95_latency', label: 'P95 延迟', unit: 'ms' },
@@ -91,6 +97,7 @@ async function load() {
       object_type: 'volume',
       limit: performanceLimit.value,
     });
+    loadedRangeKey.value = rangeKey();
   } catch {
     latency.value = { supported: true, data: [] };
     ElMessage.error('加载性能数据失败，请稍后重试');
@@ -112,7 +119,12 @@ function reset() {
 }
 
 watch(() => props.clusterId, load, { immediate: true });
-watch(() => props.dateRange, load);
+watch(() => props.dateRange, () => {
+  if (props.active) load();
+});
+watch(() => props.active, (active) => {
+  if (active && loadedRangeKey.value !== rangeKey()) load();
+});
 watch(performanceObjectOptions, (options) => {
   const availableValues = new Set(options.map((option) => option.value));
   selectedPerformanceObjects.value = selectedPerformanceObjects.value.filter(

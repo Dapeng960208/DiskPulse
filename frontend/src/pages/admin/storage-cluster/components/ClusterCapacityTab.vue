@@ -23,6 +23,7 @@ const props = defineProps({
   clusterId: { type: Number, required: true },
   clusterName: { type: String, default: '' },
   dateRange: { type: Array, required: true },
+  active: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(['update:dateRange']);
@@ -34,6 +35,11 @@ const localDateRange = computed({
 
 const capacity = ref({ data: [] });
 const loading = ref(false);
+const loadedRangeKey = ref('');
+
+function rangeKey() {
+  return props.dateRange.join('|');
+}
 
 const capacityData = computed(() => capacity.value?.data || []);
 const capacityChartData = computed(() => capacityData.value.map((item) => [item.updated_at, Number(item.used)]));
@@ -59,6 +65,7 @@ async function load() {
       start_time,
       end_time,
     });
+    loadedRangeKey.value = rangeKey();
   } catch {
     capacity.value = { data: [] };
     ElMessage.error('加载容量趋势失败，请稍后重试');
@@ -77,7 +84,12 @@ function reset() {
 }
 
 watch(() => props.clusterId, load, { immediate: true });
-watch(() => props.dateRange, load);
+watch(() => props.dateRange, () => {
+  if (props.active) load();
+});
+watch(() => props.active, (active) => {
+  if (active && loadedRangeKey.value !== rangeKey()) load();
+});
 </script>
 
 <template>

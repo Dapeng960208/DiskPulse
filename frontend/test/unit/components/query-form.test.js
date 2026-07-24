@@ -60,10 +60,19 @@ describe('QueryForm progressive filter toolbar', () => {
 
   it('marks every second-level date-time range as a double-width field', () => {
     const realtime = readFileSync(resolve(process.cwd(), 'src/pages/common/RealTimePage.vue'), 'utf8');
-    const storageHealth = readFileSync(resolve(process.cwd(), 'src/pages/admin/storage-cluster/StorageClusterDetailPage.vue'), 'utf8');
+    const storageHealthTabs = [
+      'ClusterCapacityTab.vue',
+      'ClusterPerformanceTab.vue',
+      'ClusterFaultsTab.vue',
+    ].map((fileName) => readFileSync(
+      resolve(process.cwd(), `src/pages/admin/storage-cluster/components/${fileName}`),
+      'utf8',
+    ));
 
     expect(realtime).toMatch(/label="时间范围"\s+class="query-form-field--date-range"[\s\S]*?<TimeRangePicker/);
-    expect(storageHealth).toMatch(/label="时间范围"\s+class="analytics-date-range query-form-field--date-range"[\s\S]*?<TimeRangePicker/);
+    storageHealthTabs.forEach((source) => {
+      expect(source).toMatch(/label="时间范围"\s+class="analytics-date-range query-form-field--date-range"[\s\S]*?<TimeRangePicker/);
+    });
   });
 
   it('keeps primary fields visible and toggles advanced fields against active chips', async () => {

@@ -1,5 +1,5 @@
 import { defineComponent, h } from 'vue';
-import { flushPromises, shallowMount } from '@vue/test-utils';
+import { flushPromises, mount, shallowMount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -274,6 +274,7 @@ const stubs = {
   ElTableColumn: TableColumn,
   ElTabs: Tabs,
   ElTabPane: passthrough('ElTabPane'),
+  TimeRangePicker: passthrough('TimeRangePicker'),
   ElTag: Tag,
   StorageAlertRuleForm: FormStub,
   UserFormDialog,
@@ -286,11 +287,12 @@ const stubs = {
   DiskUsage: passthrough('DiskUsage'),
   PieCharts: passthrough('PieCharts'),
   BarStackChart: passthrough('BarStackChart'),
+  CapacityExhaustionRiskPanel: passthrough('CapacityExhaustionRiskPanel'),
 };
 
 const mounted = [];
-const mountPage = async (component) => {
-  const wrapper = shallowMount(component, {
+const mountPage = async (component, { fullMount = false } = {}) => {
+  const wrapper = (fullMount ? mount : shallowMount)(component, {
     global: {
       plugins: [createPinia()],
       stubs,
@@ -298,6 +300,7 @@ const mountPage = async (component) => {
     },
   });
   mounted.push(wrapper);
+  if (fullMount) await vi.dynamicImportSettled();
   await flushPromises();
   return wrapper;
 };
@@ -561,22 +564,25 @@ describe('admin settings, AI and users coverage', () => {
 describe('storage cluster detail coverage', () => {
   it('covers tabs, filters, pagination, export and successful loaders', async () => {
     const { default: Page } = await import('@/pages/admin/storage-cluster/StorageClusterDetailPage.vue');
-    const wrapper = await mountPage(Page);
+    const wrapper = await mountPage(Page, { fullMount: true });
     const tabs = wrapper.findComponent({ name: 'ElTabs' });
     expect(mocks.storageClusterApi.fetchCapacityChange).toHaveBeenCalledWith(42, expect.any(Object));
 
     await tabs.vm.$emit('update:modelValue', 'distribution');
+    await vi.dynamicImportSettled();
     await flushPromises();
     expect(mocks.aggregateApi.fetchAggregateTrees).toHaveBeenCalledWith({ storage_cluster_id: 42 });
 
     mocks.storageClusterApi.fetchTopLatency.mockResolvedValueOnce({ supported: false, data: [] });
     await tabs.vm.$emit('update:modelValue', 'performance');
+    await vi.dynamicImportSettled();
     await flushPromises();
     const performanceFilter = wrapper.findAllComponents({ name: 'FilterForm' }).at(0);
     await performanceFilter.vm.$emit('reset');
     await flushPromises();
 
     await tabs.vm.$emit('update:modelValue', 'faults');
+    await vi.dynamicImportSettled();
     await flushPromises();
     const filters = wrapper.findAllComponents({ name: 'FilterForm' });
     const eventFilter = filters.at(-1);
@@ -612,21 +618,24 @@ describe('storage cluster detail coverage', () => {
   it('covers detail loader and export error branches', async () => {
     mocks.storageClusterApi.fetchCapacityChange.mockRejectedValueOnce(new Error('capacity'));
     const { default: Page } = await import('@/pages/admin/storage-cluster/StorageClusterDetailPage.vue');
-    const wrapper = await mountPage(Page);
+    const wrapper = await mountPage(Page, { fullMount: true });
     expect(mocks.error).toHaveBeenCalledWith('加载容量趋势失败，请稍后重试');
 
     mocks.aggregateApi.fetchAggregateTrees.mockRejectedValueOnce(new Error('distribution'));
     await wrapper.findComponent({ name: 'ElTabs' }).vm.$emit('update:modelValue', 'distribution');
+    await vi.dynamicImportSettled();
     await flushPromises();
     expect(mocks.error).toHaveBeenCalledWith('加载存储分布失败，请稍后重试');
 
     mocks.storageClusterApi.fetchTopLatency.mockRejectedValueOnce(new Error('performance'));
     await wrapper.findComponent({ name: 'ElTabs' }).vm.$emit('update:modelValue', 'performance');
+    await vi.dynamicImportSettled();
     await flushPromises();
     expect(mocks.error).toHaveBeenCalledWith('加载性能数据失败，请稍后重试');
 
     mocks.storageClusterApi.fetchErrorSeverity.mockRejectedValueOnce(new Error('faults'));
     await wrapper.findComponent({ name: 'ElTabs' }).vm.$emit('update:modelValue', 'faults');
+    await vi.dynamicImportSettled();
     await flushPromises();
     expect(mocks.error).toHaveBeenCalledWith('加载故障数据失败，请稍后重试');
 

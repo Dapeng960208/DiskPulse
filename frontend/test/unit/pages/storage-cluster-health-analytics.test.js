@@ -1,9 +1,11 @@
 import { defineComponent, h } from 'vue';
-import { flushPromises, shallowMount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { vi } from 'vitest';
 import StorageClusterDetailPage from '@/pages/admin/storage-cluster/StorageClusterDetailPage.vue';
 import storageClusterDetailSource from '@/pages/admin/storage-cluster/StorageClusterDetailPage.vue?raw';
+import clusterPerformanceTabSource from '@/pages/admin/storage-cluster/components/ClusterPerformanceTab.vue?raw';
+import clusterFaultsTabSource from '@/pages/admin/storage-cluster/components/ClusterFaultsTab.vue?raw';
 
 const initialRange = ['2026-07-01 00:00:00', '2026-07-02 00:00:00'];
 const initialUtcRange = ['2026-06-30T16:00:00Z', '2026-07-01T16:00:00Z'];
@@ -121,8 +123,9 @@ let tableRow;
 
 const TableColumn = defineComponent({
   name: 'ElTableColumn',
-  setup(_, { slots }) {
-    return () => h('div', [slots.header?.(), slots.default?.({ row: tableRow })]);
+  inheritAttrs: false,
+  setup(_, { attrs, slots }) {
+    return () => h('div', attrs, [slots.header?.(), slots.default?.({ row: tableRow })]);
   },
 });
 
@@ -172,7 +175,7 @@ const FilterForm = defineComponent({
 });
 
 async function mountPage() {
-  const wrapper = shallowMount(StorageClusterDetailPage, {
+  const wrapper = mount(StorageClusterDetailPage, {
     attachTo: document.body,
     global: {
       plugins: [createPinia()],
@@ -181,6 +184,7 @@ async function mountPage() {
       },
       stubs: {
         FilterForm,
+        QueryForm: FilterForm,
         StorageClusterSelect: passthrough('StorageClusterSelect'),
         ElCard: passthrough('ElCard'),
         ElDescriptions: passthrough('ElDescriptions'),
@@ -221,6 +225,7 @@ async function mountPage() {
       },
     },
   });
+  await vi.dynamicImportSettled();
   await flushPromises();
   mountedWrapper = wrapper;
   return wrapper;
@@ -228,6 +233,7 @@ async function mountPage() {
 
 async function selectTab(wrapper, name) {
   await wrapper.findComponent({ name: 'ElTabs' }).vm.$emit('update:modelValue', name);
+  await vi.dynamicImportSettled();
   await flushPromises();
 }
 
@@ -332,10 +338,10 @@ describe('storage cluster health analytics page', () => {
     });
     const wrapper = await mountPage();
     const tabs = wrapper.get('[data-testid="analytics-tabs"]');
-    const filter = wrapper.get('[data-tab="capacity"] .storage-health-filter');
+    const filter = wrapper.get('[data-tab="capacity"] .capacity-filter');
     const datePicker = filter.findComponent({ name: 'TimeRangePicker' });
 
-    expect(tabs.find('.storage-health-filter').exists()).toBe(true);
+    expect(tabs.find('.capacity-filter').exists()).toBe(true);
     expect(filter.exists()).toBe(true);
     expect(datePicker.props('maxDays')).toBe(180);
     expect(wrapper.findComponent({ name: 'StorageTrendChart' }).props()).toMatchObject({
@@ -347,16 +353,16 @@ describe('storage cluster health analytics page', () => {
 
     await selectTab(wrapper, 'performance');
 
-    expect(wrapper.get('[data-tab="performance"] .storage-health-filter').exists()).toBe(true);
+    expect(wrapper.get('[data-tab="performance"] .performance-filter').exists()).toBe(true);
     expect(wrapper.get('[data-tab="performance"] .performance-limit').exists()).toBe(true);
 
     await selectTab(wrapper, 'faults');
 
-    expect(wrapper.get('[data-tab="faults"] .storage-health-filter').exists()).toBe(true);
+    expect(wrapper.get('[data-tab="faults"] .faults-filter').exists()).toBe(true);
 
     await selectTab(wrapper, 'distribution');
 
-    expect(wrapper.find('.storage-health-filter').exists()).toBe(false);
+    expect(wrapper.find('.capacity-filter, .performance-filter, .faults-filter').exists()).toBe(false);
     expect(wrapper.findComponent({ name: 'DiskUsage' }).attributes('height')).toBe('100%');
   });
 
@@ -476,7 +482,7 @@ describe('storage cluster health analytics page', () => {
 
     await wrapper.get('.performance-limit').findComponent({ name: 'ElSelect' })
       .vm.$emit('update:modelValue', 50);
-    await wrapper.get('.storage-health-filter').findComponent({ name: 'FilterForm' }).vm.$emit('query');
+    await wrapper.get('.performance-filter').findComponent({ name: 'FilterForm' }).vm.$emit('query');
     await flushPromises();
     expect(storageClusterApi.fetchTopLatency).toHaveBeenLastCalledWith(42, {
       start_time: initialUtcRange[0],
@@ -485,7 +491,7 @@ describe('storage cluster health analytics page', () => {
       limit: 50,
     });
 
-    await wrapper.get('.storage-health-filter').findComponent({ name: 'FilterForm' }).vm.$emit('reset');
+    await wrapper.get('.performance-filter').findComponent({ name: 'FilterForm' }).vm.$emit('reset');
     await flushPromises();
     expect(wrapper.get('.performance-limit').findComponent({ name: 'ElSelect' }).props('modelValue')).toBe(10);
     expect(wrapper.get('.performance-metrics').findComponent({ name: 'ElSelect' }).props('modelValue')).toEqual(['p95_latency']);
@@ -614,28 +620,23 @@ describe('storage cluster health analytics page', () => {
 
     await selectTab(wrapper, 'faults');
 
-    const assertCompactColumn = (columns, label) => {
-      const column = columns.find((candidate) => candidate.attributes('label') === label);
-      expect(column, `${label} column`).toBeDefined();
-      expect(column.attributes('class-name')).toContain('mobile-hidden');
-      expect(column.attributes('class-name')).toContain('tablet-hidden');
-      expect(column.attributes('label-class-name')).toContain('mobile-hidden');
-      expect(column.attributes('label-class-name')).toContain('tablet-hidden');
+    const assertCompactColumn = (label) => {
+      const marker = clusterFaultsTabSource.indexOf(`label="${label}"`);
+      const start = clusterFaultsTabSource.lastIndexOf('<ElTableColumn', marker);
+      const end = clusterFaultsTabSource.indexOf('/>', marker);
+      const column = clusterFaultsTabSource.slice(start, end);
+      expect(column, `${label} column`).toContain('class-name="mobile-hidden tablet-hidden"');
+      expect(column).toContain('label-class-name="mobile-hidden tablet-hidden"');
     };
 
     const repeatedSection = wrapper.get('.fault-grid');
-    const repeatedColumns = repeatedSection.findAllComponents({ name: 'ElTableColumn' });
-    ['来源', '日志摘要', '首次发生'].forEach((label) => assertCompactColumn(repeatedColumns, label));
-    const repeatedAction = repeatedColumns.find((column) => column.attributes('label') === '操作');
-    expect(repeatedAction.attributes('fixed')).toBe('right');
-    expect(repeatedAction.find('.list-row-actions').exists()).toBe(true);
+    ['来源', '日志摘要', '首次发生'].forEach(assertCompactColumn);
+    expect(repeatedSection.find('.list-row-actions').exists()).toBe(true);
 
     const systemEventSection = wrapper.get('.system-events');
-    const systemEventColumns = systemEventSection.findAllComponents({ name: 'ElTableColumn' });
-    ['来源', '事件对象', '内容'].forEach((label) => assertCompactColumn(systemEventColumns, label));
-    const systemEventAction = systemEventColumns.find((column) => column.attributes('label') === '操作');
-    expect(systemEventAction.attributes('fixed')).toBe('right');
-    expect(systemEventAction.find('.list-row-actions').exists()).toBe(true);
+    ['来源', '事件对象', '内容'].forEach(assertCompactColumn);
+    expect(systemEventSection.find('.list-row-actions').exists()).toBe(true);
+    expect(clusterFaultsTabSource).toMatch(/label="操作"[\s\S]*?fixed="right"/);
   });
 
   it('keeps pending or unknown vendor semantics visibly unclassified in the list and detail', async () => {
@@ -812,7 +813,9 @@ describe('storage cluster health analytics page', () => {
   });
 
   it('uses the shared data table without page-level table style overrides', () => {
-    expect(storageClusterDetailSource.match(/<DataTable\b/g)).toHaveLength(3);
+    expect(storageClusterDetailSource).not.toMatch(/<DataTable\b|<ElTable\b|<ElPagination\b/);
+    expect(clusterPerformanceTabSource).toMatch(/<DataTable\b/);
+    expect(clusterFaultsTabSource).toMatch(/<DataTable\b/);
     expect(storageClusterDetailSource).not.toMatch(/<ElTable\b|<ElPagination\b/);
     expect(storageClusterDetailSource).not.toMatch(/\.table-wrap\b|:deep\(\.el-table/);
   });

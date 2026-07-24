@@ -4,6 +4,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const loginMock = vi.fn();
 const fetchProfileMock = vi.fn();
+const updateCurrentProfileMock = vi.fn();
 const setTokenMock = vi.fn();
 const pushMock = vi.fn();
 const mockEnabledMock = vi.fn();
@@ -12,6 +13,7 @@ vi.mock('@/api/users-api', () => ({
   default: {
     login: loginMock,
     fetchProfile: fetchProfileMock,
+    updateCurrentProfile: updateCurrentProfileMock,
   },
 }));
 
@@ -100,6 +102,7 @@ describe('LoginPage LDAP flow', () => {
     setActivePinia(createPinia());
     loginMock.mockReset();
     fetchProfileMock.mockReset();
+    updateCurrentProfileMock.mockReset();
     setTokenMock.mockReset();
     pushMock.mockReset();
     mockEnabledMock.mockReset();
@@ -139,6 +142,7 @@ describe('LoginPage LDAP flow', () => {
         roleCodes: ['superadmin'],
         permissionCodes: [['*', '*', '*']],
         extensionAttributes: { rdUsername: 'superadmin' },
+        time_zone: 'Asia/Shanghai',
       },
     });
 

@@ -8,7 +8,7 @@ import {
   ElTabPane,
   ElTabs,
 } from 'element-plus';
-import { defineAsyncComponent, onBeforeMount, ref, watch } from 'vue';
+import { KeepAlive, defineAsyncComponent, onBeforeMount, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import storageClusterApi from '@/api/storage-cluster-api';
 import { useQuery } from '@/composables/query';
@@ -112,19 +112,24 @@ onBeforeMount(() => {
         <ElTabPane
           label="容量趋势"
           name="capacity">
-          <ClusterCapacityTab
-            v-if="activeTab === 'capacity' && clusterId"
-            v-model:date-range="dateRange"
-            :cluster-id="clusterId"
-            :cluster-name="infoResult?.name" />
+          <KeepAlive>
+            <ClusterCapacityTab
+              v-if="activeTab === 'capacity' && clusterId"
+              v-model:date-range="dateRange"
+              :active="activeTab === 'capacity'"
+              :cluster-id="clusterId"
+              :cluster-name="infoResult?.name" />
+          </KeepAlive>
         </ElTabPane>
 
         <ElTabPane
           label="存储分布"
           name="distribution">
-          <ClusterDistributionTab
-            v-if="activeTab === 'distribution' && clusterId"
-            :cluster-id="clusterId" />
+          <KeepAlive>
+            <ClusterDistributionTab
+              v-if="activeTab === 'distribution' && clusterId"
+              :cluster-id="clusterId" />
+          </KeepAlive>
         </ElTabPane>
 
         <ElTabPane
@@ -158,20 +163,26 @@ onBeforeMount(() => {
         <ElTabPane
           label="性能分析"
           name="performance">
-          <ClusterPerformanceTab
-            v-if="activeTab === 'performance' && clusterId"
-            v-model:date-range="dateRange"
-            :cluster-id="clusterId" />
+          <KeepAlive>
+            <ClusterPerformanceTab
+              v-if="activeTab === 'performance' && clusterId"
+              v-model:date-range="dateRange"
+              :active="activeTab === 'performance'"
+              :cluster-id="clusterId" />
+          </KeepAlive>
         </ElTabPane>
 
         <ElTabPane
           label="故障分析"
           name="faults">
-          <ClusterFaultsTab
-            v-if="activeTab === 'faults' && clusterId"
-            v-model:date-range="dateRange"
-            :cluster-id="clusterId"
-            @open-system-event-detail="openSystemEventDetail" />
+          <KeepAlive>
+            <ClusterFaultsTab
+              v-if="activeTab === 'faults' && clusterId"
+              v-model:date-range="dateRange"
+              :active="activeTab === 'faults'"
+              :cluster-id="clusterId"
+              @open-system-event-detail="openSystemEventDetail" />
+          </KeepAlive>
         </ElTabPane>
         <ElTabPane
           label="耗尽风险"

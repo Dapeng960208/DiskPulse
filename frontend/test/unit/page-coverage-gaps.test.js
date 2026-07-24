@@ -1,5 +1,5 @@
 import { defineComponent, h } from 'vue';
-import { flushPromises, shallowMount } from '@vue/test-utils';
+import { flushPromises, mount, shallowMount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -346,16 +346,18 @@ const commonStubs = {
 };
 
 const mountPage = async (component, options = {}) => {
-  const wrapper = shallowMount(component, {
+  const { fullMount = false, ...mountOptions } = options;
+  const wrapper = (fullMount ? mount : shallowMount)(component, {
     attachTo: document.body,
-    ...options,
+    ...mountOptions,
     global: {
       plugins: [createPinia()],
-      stubs: { ...commonStubs, ...(options.global?.stubs || {}) },
-      directives: { loading: () => {}, ...(options.global?.directives || {}) },
+      stubs: { ...commonStubs, ...(mountOptions.global?.stubs || {}) },
+      directives: { loading: () => {}, ...(mountOptions.global?.directives || {}) },
     },
   });
   mountedWrappers.push(wrapper);
+  if (fullMount) await vi.dynamicImportSettled();
   await flushPromises();
   return wrapper;
 };
@@ -740,7 +742,7 @@ describe('real-time page coverage gaps', () => {
     await wrapper.findComponent({ name: 'StorageUsageSelect' }).vm.$emit('update:modelValue', [1, 2]);
     await wrapper.findComponent({ name: 'FilterForm' }).vm.$emit('query');
     await wrapper.findComponent({ name: 'FilterForm' }).vm.$emit('reset');
-    await wrapper.findComponent({ name: 'TimeRangePicker' }).vm.$emit('update:modelValue', ['2026-07-03', '2026-07-04']);
+    await wrapper.findComponent({ name: 'TimeRangePicker' }).vm.$emit('update:modelValue', ['2026-07-03 00:00:00', '2026-07-04 00:00:00']);
     await flushPromises();
     expect(mocks.storageUsageApi.fetchStorageRealTimeDataById).toHaveBeenCalledWith(2, expect.objectContaining({ indicator: 'used' }));
     expect(mocks.storageUsageApi.fetchStorageRealTimeDataById).toHaveBeenCalledWith(1, expect.objectContaining({ indicator: 'alert_ratio' }));
@@ -766,21 +768,24 @@ describe('real-time page coverage gaps', () => {
 describe('storage cluster detail error coverage', () => {
   it('shows API errors for analytics tabs, events, and export while keeping the UI usable', async () => {
     mocks.storageClusterApi.fetchCapacityChange.mockRejectedValueOnce(new Error('capacity'));
-    const wrapper = await mountPage(StorageClusterDetailPage);
+    const wrapper = await mountPage(StorageClusterDetailPage, { fullMount: true });
     expect(mocks.error).toHaveBeenCalledWith('加载容量趋势失败，请稍后重试');
 
     mocks.aggregateApi.fetchAggregateTrees.mockRejectedValueOnce(new Error('distribution'));
     await wrapper.findComponent({ name: 'ElTabs' }).vm.$emit('update:modelValue', 'distribution');
+    await vi.dynamicImportSettled();
     await flushPromises();
     expect(mocks.error).toHaveBeenCalledWith('加载存储分布失败，请稍后重试');
 
     mocks.storageClusterApi.fetchTopLatency.mockRejectedValueOnce(new Error('performance'));
     await wrapper.findComponent({ name: 'ElTabs' }).vm.$emit('update:modelValue', 'performance');
+    await vi.dynamicImportSettled();
     await flushPromises();
     expect(mocks.error).toHaveBeenCalledWith('加载性能数据失败，请稍后重试');
 
     mocks.storageClusterApi.fetchErrorSeverity.mockRejectedValueOnce(new Error('faults'));
     await wrapper.findComponent({ name: 'ElTabs' }).vm.$emit('update:modelValue', 'faults');
+    await vi.dynamicImportSettled();
     await flushPromises();
     expect(mocks.error).toHaveBeenCalledWith('加载故障数据失败，请稍后重试');
 
@@ -800,8 +805,9 @@ describe('storage cluster detail error coverage', () => {
 
   it('supports analytics pagination, reset, fallback filenames, and invalid route ids', async () => {
     mocks.storageClusterApi.fetchSystemEvents.mockResolvedValue({ data: [], total: 45, page: 1, page_size: 20 });
-    const wrapper = await mountPage(StorageClusterDetailPage);
+    const wrapper = await mountPage(StorageClusterDetailPage, { fullMount: true });
     await wrapper.findComponent({ name: 'ElTabs' }).vm.$emit('update:modelValue', 'faults');
+    await vi.dynamicImportSettled();
     await flushPromises();
     const eventTable = wrapper.find('.system-events').findComponent({ name: 'DataTable' });
     await eventTable.vm.$emit('update:pagination', {
@@ -817,6 +823,7 @@ describe('storage cluster detail error coverage', () => {
     expect(mocks.storageClusterApi.fetchSystemEvents).toHaveBeenLastCalledWith(42, expect.objectContaining({ page: 1, page_size: 50 }));
 
     await wrapper.findComponent({ name: 'ElTabs' }).vm.$emit('update:modelValue', 'performance');
+    await vi.dynamicImportSettled();
     await wrapper.findComponent({ name: 'FilterForm' }).vm.$emit('reset');
     await flushPromises();
     expect(wrapper.findComponent({ name: 'ElSelect' }).exists()).toBe(true);
@@ -830,7 +837,7 @@ describe('storage cluster detail error coverage', () => {
 
     wrapper.unmount();
     mocks.route.params = { id: 'not-a-number' };
-    const invalidWrapper = await mountPage(StorageClusterDetailPage);
+    const invalidWrapper = await mountPage(StorageClusterDetailPage, { fullMount: true });
     expect(mocks.storageClusterApi.fetchById).not.toHaveBeenCalledWith(NaN);
     expect(invalidWrapper.find('.storage-health-page').exists()).toBe(true);
   });

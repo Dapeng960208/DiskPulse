@@ -27,6 +27,7 @@ import { toUtcRange } from '@/utils/datetime.js';
 const props = defineProps({
   clusterId: { type: Number, required: true },
   dateRange: { type: Array, required: true },
+  active: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(['update:dateRange', 'openSystemEventDetail']);
@@ -41,8 +42,13 @@ const faults = ref({ data: [] });
 const systemEvents = ref({ data: [] });
 const loading = ref(false);
 const loadingSystemEvents = ref(false);
+const loadedRangeKey = ref('');
 const systemEventFilters = reactive({ keyword: '', severity: '' });
 const systemEventPagination = reactive({ page: 1, pageSize: 20, total: 0 });
+
+function rangeKey() {
+  return props.dateRange.join('|');
+}
 
 const faultData = computed(() => faults.value?.data || []);
 const systemEventData = computed(() => systemEvents.value?.data || []);
@@ -126,6 +132,7 @@ async function load() {
     severity.value = severityResponse;
     faults.value = faultResponse;
     applySystemEventResponse(eventResponse);
+    loadedRangeKey.value = rangeKey();
   } catch {
     severity.value = { counts: {}, total: 0, sources: {} };
     faults.value = { data: [] };
@@ -188,7 +195,12 @@ const { handleExport } = useClusterExport({
 });
 
 watch(() => props.clusterId, load, { immediate: true });
-watch(() => props.dateRange, load);
+watch(() => props.dateRange, () => {
+  if (props.active) load();
+});
+watch(() => props.active, (active) => {
+  if (active && loadedRangeKey.value !== rangeKey()) load();
+});
 </script>
 
 <template>
@@ -344,6 +356,8 @@ watch(() => props.dateRange, load);
           @update:pagination="updateSystemEventPagination">
           <ElTableColumn
             label="来源"
+            class-name="mobile-hidden tablet-hidden"
+            label-class-name="mobile-hidden tablet-hidden"
             min-width="50"
             prop="source" />
           <ElTableColumn
@@ -383,6 +397,8 @@ watch(() => props.dateRange, load);
           </ElTableColumn>
           <ElTableColumn
             label="事件对象"
+            class-name="mobile-hidden tablet-hidden"
+            label-class-name="mobile-hidden tablet-hidden"
             min-width="50"
             prop="object_name">
             <template #default="{ row }">
@@ -393,6 +409,8 @@ watch(() => props.dateRange, load);
           </ElTableColumn>
           <ElTableColumn
             label="内容"
+            class-name="mobile-hidden tablet-hidden"
+            label-class-name="mobile-hidden tablet-hidden"
             min-width="300"
             prop="description"
             show-overflow-tooltip />
